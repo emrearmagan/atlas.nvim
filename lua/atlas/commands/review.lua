@@ -1,12 +1,13 @@
-local M = {}
-
 local config = require("atlas.config")
+local diff = require("atlas.pulls.diffv2")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 local ui_utils = require("atlas.ui.shared.utils")
 local request_scope = require("atlas.core.requests")
+
+local M = {}
 
 local requests = request_scope.new()
 
@@ -37,9 +38,8 @@ local function format_preview(pr, details)
 	}
 end
 
----@param root string
 ---@param info AtlasTarget|nil
-local function open_repository(root, info)
+local function open_repository(info)
 	if not info then
 		no_repository()
 		return
@@ -100,11 +100,7 @@ local function open_repository(root, info)
 				if not pr then
 					return
 				end
-				require("atlas.pulls.diff").open_pr({
-					provider = provider,
-					ref = pr,
-					root = root,
-				}, function(err)
+				diff.open_pr(pr, function(err)
 					if err then
 						notify.error("Unable to open diff: " .. tostring(err), { vim_notify = true })
 					end
@@ -114,12 +110,21 @@ local function open_repository(root, info)
 	end)
 end
 
----@param value string|nil
-function M.open(value)
+---@param url string|nil
+function M.open(url)
 	requests.cancel()
 	requests = request_scope.new()
-	if value then
-		require("atlas.pulls.diff").open_pull_request(value)
+	if url then
+		local target, err = providers.resolve(url)
+		if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
+			notify.error(err or "Expected a pull request URL", { vim_notify = true })
+			return
+		end
+		diff.open_pr(target, function(open_err)
+			if open_err then
+				notify.error(open_err, { vim_notify = true })
+			end
+		end)
 		return
 	end
 	requests.run(function(done)
@@ -132,7 +137,7 @@ function M.open(value)
 		requests.run(function(done)
 			return git.local_repository(root, done)
 		end, function(info)
-			open_repository(root, info)
+			open_repository(info)
 		end)
 	end)
 end

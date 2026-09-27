@@ -389,41 +389,36 @@ local function ensure_repository(pr, repo_path, on_progress, on_done)
 end
 
 ---@param pr PullRequest
+---@param root string|nil
 ---@param on_done fun(root: string|nil)
 ---@return AtlasRequestScope
-local function current_repo_path(pr, on_done)
+local function current_repo_path(pr, root, on_done)
 	local scope = requests.new()
-	local target = providers.resolve(pr.link.html)
-	if not target then
-		on_done(nil)
-		return scope
-	end
 	scope.run(function(done)
-		return git.repo_root(nil, done)
-	end, function(root)
-		if not root then
+		return git.repo_root(root, done)
+	end, function(repo_path)
+		if not repo_path then
 			on_done(nil)
 			return
 		end
 		scope.run(function(done)
-			return git.local_repository(root, done)
+			return git.local_repository(repo_path, done)
 		end, function(current)
 			local matches = current
-				and current.provider == target.provider
-				and current.host:lower() == target.host:lower()
-				and tostring(current.repo_full_name):lower() == tostring(pr.repo_full_name):lower()
-			on_done(matches and root or nil)
+				and current.provider == pr.provider
+				and current.repo_full_name:lower() == pr.repo_full_name:lower()
+			on_done(matches and repo_path or nil)
 		end)
 	end)
 	return scope
 end
 
 ---@param pr PullRequest
----@param preferred_root string|nil
+---@param root string|nil
 ---@param on_progress fun(message: string)
----@param on_done fun(source: AtlasDiffSource|nil, err: string|nil)
+---@param on_done fun(source: { root: string, base_revision: string, head_revision: string }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.prepare_diff(pr, preferred_root, on_progress, on_done)
+function M.prepare_diff(pr, root, on_progress, on_done)
 	local base, head, revision_err = M.pr_diff_revisions(pr)
 	if not base or not head then
 		on_done(nil, revision_err)
@@ -434,23 +429,19 @@ function M.prepare_diff(pr, preferred_root, on_progress, on_done)
 	local function prepare(repo_path)
 		scope.run(function(done)
 			return ensure_repository(pr, repo_path, on_progress, done)
-		end, function(root, err)
-			if not root then
-				on_done(nil, err)
+		end, function(path, err)
+			if not path then
+				on_done(nil, err or "Unable to load pull request repository")
 				return
 			end
-			on_done({ root = root, base_revision = base, head_revision = head }, nil)
+			on_done({ root = path, base_revision = base, head_revision = head }, nil)
 		end)
 	end
-	if preferred_root then
-		prepare(preferred_root)
-		return scope
-	end
 	scope.run(function(done)
-		return current_repo_path(pr, done)
-	end, function(root)
-		if root then
-			prepare(root)
+		return current_repo_path(pr, root, done)
+	end, function(repo_path)
+		if repo_path then
+			prepare(repo_path)
 			return
 		end
 		local mapped_path = M.resolve_repo_path_for_pr(pr, { require_existing = true })

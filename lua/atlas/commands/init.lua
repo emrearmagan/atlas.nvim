@@ -1,10 +1,12 @@
-local M = {}
-
+local diff = require("atlas.pulls.diffv2")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local pipelines = require("atlas.commands.pipelines")
 local providers = require("atlas.providers")
+local review = require("atlas.commands.review")
 local ui_utils = require("atlas.ui.utils")
+
+local M = {}
 
 ---@class AtlasCommand
 ---@field name string
@@ -71,6 +73,27 @@ local function with_argument(args, prompt, callback)
 	vim.ui.input({ prompt = prompt }, function(input)
 		if input and vim.trim(input) ~= "" then
 			callback(vim.trim(input))
+		end
+	end)
+end
+
+---@param value string
+local function open_diff(value)
+	local separator = value:find("...", 1, true)
+	if not separator then
+		review.open(value)
+		return
+	end
+
+	local base = vim.trim(value:sub(1, separator - 1))
+	local head = vim.trim(value:sub(separator + 3))
+	if base == "" or head == "" then
+		notify.error("Expected an explicit base...head range", { vim_notify = true })
+		return
+	end
+	diff.open_range({ base = base, head = head }, function(open_err)
+		if open_err then
+			notify.error(open_err, { vim_notify = true })
 		end
 	end)
 end
@@ -168,17 +191,14 @@ M.register({
 
 M.register({
 	name = "diff",
-	description = "Open native AtlasDiff",
-	complete = function(arglead, args)
-		return require("atlas.pulls.diff").complete(arglead, args)
-	end,
+	description = "Open a Git range or pull request diff",
 	run = function(args)
 		local value = vim.trim(table.concat(args, " "))
 		if value == "" then
 			notify.error("Usage: :Atlas diff <base...head|pull-request-url>", { vim_notify = true })
 			return
 		end
-		require("atlas.pulls.diff").open_argument(value)
+		open_diff(value)
 	end,
 })
 
@@ -196,7 +216,7 @@ M.register({
 	name = "review",
 	description = "Open or pick a pull request review",
 	run = function(args)
-		require("atlas.commands.review").open(args[1])
+		review.open(args[1])
 	end,
 })
 

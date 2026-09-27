@@ -27,7 +27,7 @@ local cached_version = nil
 ---@field token integer
 
 ---@class AtlasStatuslineOptions
----@field help_key string|fun(): string|nil
+---@field help_key? string|fun(): string|nil
 ---@field show_version boolean|nil
 ---@field left_padding integer|nil
 

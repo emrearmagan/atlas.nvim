@@ -1,7 +1,7 @@
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
-local diff = require("atlas.pulls.diff")
+local diff = require("atlas.pulls.diffv2")
 local pipelines = require("atlas.pulls.pipelines")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
@@ -280,11 +280,7 @@ local function open_diff(state)
 	end
 	local commit = selection.commit
 	if commit then
-		if not commit.parent then
-			notify.warn("This commit has no local parent to compare")
-			return
-		end
-		diff.open_range({ root = root, base = commit.parent, head = commit.hash }, function(err)
+		diff.open_commit({ root = root, commit = commit.hash }, function(err)
 			if err then
 				notify.error(err)
 			end

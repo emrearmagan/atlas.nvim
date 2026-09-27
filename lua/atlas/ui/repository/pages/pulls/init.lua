@@ -1,5 +1,5 @@
 local opener = require("atlas.commands.open")
-local review = require("atlas.commands.review")
+local diff = require("atlas.pulls.diffv2")
 local resolver = require("atlas.core.keymaps")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
@@ -293,7 +293,11 @@ function M.open(opts)
 			function()
 				local pr = current(state)
 				if pr then
-					review.open(pr.link.html)
+					diff.open_pr(pr, function(err)
+						if err then
+							state.statusline:notify("error", err)
+						end
+					end)
 				end
 			end,
 		},

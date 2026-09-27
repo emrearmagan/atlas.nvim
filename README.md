@@ -396,7 +396,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas pulls [provider]` - Open a pull-request provider dashboard
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
-- `:Atlas diff <target>` - Open a Git range or pull request in native AtlasDiff; a target is required
+- `:Atlas diff <target>` - Open a Git range or pull request with the configured diff viewer; a target is required
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
