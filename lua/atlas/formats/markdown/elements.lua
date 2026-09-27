@@ -252,9 +252,12 @@ function M.block.code(lines, index, opts)
 		body[1] = ""
 	end
 
+	local code_language = opts.language_aliases and opts.language_aliases[language] or language
+
 	local preview = code_preview.render({
 		lines = body,
-		language = language,
+		language = code_language ~= "" and code_language or opts.language,
+		file_path = opts.file_path,
 		show_line_numbers = false,
 		padding = 2,
 		background_hl_group = opts.hl and opts.hl.code or highlight_groups.code,

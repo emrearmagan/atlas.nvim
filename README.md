@@ -40,7 +40,6 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   "emrearmagan/atlas.nvim",
   dependencies = {
     "nvim-tree/nvim-web-devicons", -- optional but recommended
-    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
   },

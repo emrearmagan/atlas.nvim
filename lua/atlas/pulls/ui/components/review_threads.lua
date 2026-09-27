@@ -278,6 +278,8 @@ local function comment_item(comment, opts, is_root)
 		right_text = marker,
 		content = text,
 		markdown = not is_deleted,
+		file_path = comment.inline and comment.inline.path,
+		language_aliases = comment.inline and { suggestion = vim.filetype.match({ filename = comment.inline.path }) },
 		children = {},
 		footer_items = footer_items,
 		line_map = { comment = comment, entity_kind = "comment" },

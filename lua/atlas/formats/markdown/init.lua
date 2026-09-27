@@ -91,7 +91,7 @@ end
 ---Parse Markdown into display lines, highlights and link/image targets.
 ---Width affects tables, rules and code blocks. The UI wraps ordinary text.
 ---@param source string
----@param opts? { width?: integer, hl?: table<string, string> }
+---@param opts? { width?: integer, hl?: table<string, string>, language?: string, file_path?: string, language_aliases?: table<string, string> }
 ---@return { lines: string[], highlights: AtlasMarkdownHighlight[], targets: AtlasMarkdownTarget[] }
 function M.parse(source, opts)
 	opts = opts or {}

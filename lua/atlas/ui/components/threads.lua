@@ -19,6 +19,9 @@ local markdown = require("atlas.formats.markdown")
 ---@field right_text string|nil Right-aligned text (e.g. timestamp, hash)
 ---@field content string|nil Body text (may contain newlines)
 ---@field markdown boolean|nil
+---@field language string|nil
+---@field file_path string|nil
+---@field language_aliases table<string, string>|nil
 ---@field footer_items AtlasThreadFooterItem[]|nil
 ---@field children AtlasThreadItem[]|nil Nested replies
 ---@field meta table|nil Arbitrary metadata passed through
@@ -315,7 +318,13 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	local prefix_width = vim.api.nvim_strwidth(body_prefix)
 	local content_width = math.max(10, width - prefix_width - opts.padding_x)
 
-	local content = item.markdown and markdown.parse(item.content, { width = content_width })
+	local content = item.markdown
+			and markdown.parse(item.content, {
+				width = content_width,
+				language = item.language,
+				file_path = item.file_path,
+				language_aliases = item.language_aliases,
+			})
 		or { lines = utils.sanitize_lines(item.content) }
 
 	local max = opts.content_max_lines

@@ -258,11 +258,26 @@ describe("Markdown parsing", function()
 			has_span(result, span(line, 0, #result.lines[line + 1], "PreviewBackground"))
 		end
 
-		for _, case in ipairs({ { "json,title=demo", "json" }, { "c++ linenos", "c++" }, { "{r}", "" } }) do
-			local block = markdown.parse("```" .. case[1] .. "\nsource\n```")
+		for _, case in ipairs({
+			{ "json,title=demo", "json", "json" },
+			{ "c++ linenos", "c++", "c++" },
+			{ "{r}", "lua", "" },
+			{ "custom", "lua", "custom" },
+			{ "", "lua", "" },
+		}) do
+			local block = markdown.parse("```" .. case[1] .. "\nsource\n```", {
+				language = "lua",
+				file_path = "source.py",
+				language_aliases = { custom = "lua" },
+			})
 			assert.equal(case[2], received.language)
-			assert.equal(case[2], block.lines[1]:match("^%s*(.-)%s*$"))
+			assert.equal("source.py", received.file_path)
+			assert.equal(case[3], block.lines[1]:match("^%s*(.-)%s*$"))
+			has_span(block, span(1, 6, 11, "@keyword.lua"))
 		end
+		markdown.parse("```\nsource\n```", { file_path = "source.lua" })
+		assert.is_nil(received.language)
+		assert.equal("source.lua", received.file_path)
 	end)
 
 	it("keeps the remainder of an unclosed fence as code", function()

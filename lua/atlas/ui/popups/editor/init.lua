@@ -136,10 +136,10 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-editor", { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 
-	local name = string.format("atlas://editor/%s.md", key)
+	local name = string.format("atlas://editor/%s", key)
 	pcall(vim.api.nvim_buf_set_name, buf, name)
 
 	local lines = vim.split(utils.normalize_newlines(opts.initial_text), "\n", { plain = true })
