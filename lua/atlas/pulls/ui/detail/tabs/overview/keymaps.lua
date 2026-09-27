@@ -48,17 +48,11 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		item("ui.toggle_fold", {
-			desc = "Toggle description or pipeline",
+			desc = "Toggle description",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = detail.line_map[lnum]
-				if entry and entry.kind == "pipeline" and entry.pipeline and state.toggle_pipeline(entry.pipeline) then
-					refresh()
-				elseif entry and entry.kind == "description" then
-					state.description_expanded = not state.description_expanded
-					refresh()
-				end
+				state.description_expanded = not state.description_expanded
+				refresh()
 			end,
 		})
 	)

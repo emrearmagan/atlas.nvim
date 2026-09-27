@@ -349,9 +349,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			column_key = "label",
 			leaf_prefix = "",
 			show_indicator = false,
-			is_expanded = function(row)
-				return state.is_pipeline_expanded(row.pipeline)
-			end,
+			default_expanded = true,
 		},
 		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
