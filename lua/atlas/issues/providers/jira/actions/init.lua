@@ -7,7 +7,6 @@ local notify = require("atlas.core.notify")
 ---| AtlasIssueActionId
 ---| "reporter"
 ---| "delete_issue"
----| "edit_issue"
 ---| "open_project"
 ---| "search_jql"
 

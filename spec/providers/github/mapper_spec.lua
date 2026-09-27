@@ -36,11 +36,12 @@ describe("GitHub issue mapping", function()
 		}
 	end
 
-	it("maps only supplemental issue details", function()
+	it("maps editable issue details without issue identity fields", function()
 		local details = issue_mapper.to_issue_details(vim.tbl_extend("force", issue_raw(), {
 			body = "Description",
 		}))
 
+		assert.equal("My issue", details.title)
 		assert.equal("Description", details.description)
 		assert.is_nil(details.repo_full_name)
 		assert.is_nil(details.number)
@@ -50,6 +51,7 @@ describe("GitHub issue mapping", function()
 	it("maps GitHub milestone progress and sub-issues", function()
 		local raw = issue_raw()
 		raw.milestone = {
+			number = 7,
 			title = "v1",
 			progressPercentage = 50,
 			openIssues = { totalCount = 1 },
@@ -59,6 +61,7 @@ describe("GitHub issue mapping", function()
 
 		local details = issue_mapper.to_issue_details(raw)
 
+		assert.equal(7, details.milestone.number)
 		assert.equal(50, details.milestone.progress_percentage)
 		assert.equal(1, details.milestone.open_issues)
 		assert.equal(1, details.milestone.closed_issues)

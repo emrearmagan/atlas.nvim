@@ -489,6 +489,33 @@ end
 
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function edit_issue(ctx, done)
+	local issue = assert(ctx.issue)
+	---@cast issue GitLabIssue
+
+	notify.loading(string.format("Loading %s...", issue.key))
+	issues_api.fetch_issue(issue, { force_refresh = true }, function(details, err)
+		if err or details == nil then
+			local message = err or "Issue not found"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+
+		notify.clear()
+		require("atlas.issues.create.gitlab.issue").open({
+			project_path = issue.project_path,
+			issue = issue,
+			details = details,
+			on_done = function(result, edit_err)
+				done(result and { issue_key = result.key } or nil, edit_err)
+			end,
+		})
+	end)
+end
+
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(ctx, done)
 	local resolved = ctx.project_path or ""
 	if resolved == "" and has_issue(ctx) then
@@ -677,6 +704,13 @@ register({
 	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
+})
+register({
+	id = "edit_issue",
+	label = "Edit Issue",
+	icon = icons.action("edit"),
+	is_available = has_issue,
+	run = edit_issue,
 })
 register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
 

@@ -56,6 +56,7 @@ local function milestone(raw)
 	end
 	return {
 		title = title,
+		number = tonumber(raw.number),
 		progress_percentage = tonumber(raw.progressPercentage),
 		open_issues = tonumber((raw.openIssues or {}).totalCount),
 		closed_issues = tonumber((raw.closedIssues or {}).totalCount),
@@ -160,6 +161,7 @@ function M.to_issue_details(raw, fallback_slug)
 
 	---@type GitHubIssueDetails
 	local details = {
+		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.body) or "",
 		assignees = assignees(github_mapping.connection_nodes(raw.assignees)),
 		labels = labels(github_mapping.connection_nodes(raw.labels)),

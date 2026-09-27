@@ -12,6 +12,7 @@ local utils = require("atlas.issues.actions.utils")
 ---| "transition"
 ---| "assign"
 ---| "create_issue"
+---| "edit_issue"
 ---| "search"
 ---| "edit_search"
 ---| "browse_issue"

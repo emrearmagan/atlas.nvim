@@ -375,6 +375,32 @@ local function create_issue(ctx, done)
 	})
 end
 
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function edit_issue(ctx, done)
+	local issue = assert(ctx.issue)
+	---@cast issue GitHubIssue
+
+	notify.loading(string.format("Loading %s...", issue.key))
+	issues_api.get_issue(issue.key, function(details, err)
+		if err or not details then
+			local message = err or "Failed to load issue"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+
+		require("atlas.issues.create.github.issue").open({
+			repo_slug = issue.repo_full_name,
+			issue = issue,
+			details = details,
+			on_done = function(result, save_err)
+				done(result and { issue_key = issue.key } or nil, save_err)
+			end,
+		})
+	end, { force_refresh = true })
+end
+
 ---@param opts {
 --- title: string,
 --- include_all: boolean,
@@ -671,6 +697,15 @@ register({
 	run = toggle_subscription,
 })
 register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
+register({
+	id = "edit_issue",
+	label = "Edit Issue",
+	icon = icons.action("edit"),
+	is_available = function(ctx)
+		return ctx.issue ~= nil, "No issue selected"
+	end,
+	run = edit_issue,
+})
 register(actions.copy_issue_url)
 
 ---@param id AtlasGitHubIssueActionId

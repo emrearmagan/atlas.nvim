@@ -5,6 +5,7 @@
 ---@field is_pinned boolean
 
 ---@class GitHubIssueMilestone : IssueMilestone
+---@field number integer|nil
 ---@field progress_percentage number|nil
 ---@field open_issues integer|nil
 ---@field closed_issues integer|nil

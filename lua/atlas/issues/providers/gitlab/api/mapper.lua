@@ -44,7 +44,8 @@ local function milestone(raw)
 	if title == nil then
 		return nil
 	end
-	return { title = title }
+	local id = json.safe_str(raw.id) or ""
+	return { id = tonumber(id:match("([^/]+)$")), title = title }
 end
 
 ---@param state string|nil
@@ -133,6 +134,7 @@ function M.to_issue_details(raw)
 
 	---@type IssueDetails
 	return {
+		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.description) or "",
 		assignees = assignees(json.safe_table(raw.assignees).nodes or raw.assignees),
 		labels = labels(json.safe_table(raw.labels).nodes or raw.labels),

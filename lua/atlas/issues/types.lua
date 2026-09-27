@@ -25,6 +25,7 @@
 ---@field is_subscribed boolean|nil
 
 ---@class IssueDetails
+---@field title string|nil
 ---@field description string
 ---@field assignees AtlasUser[]
 ---@field labels IssueLabel[]
@@ -43,6 +44,7 @@
 --------------------------------------------------------------------------------
 
 ---@class IssueMilestone
+---@field id integer|nil
 ---@field title string
 
 --------------------------------------------------------------------------------
