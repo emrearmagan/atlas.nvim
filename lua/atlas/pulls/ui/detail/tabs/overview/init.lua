@@ -417,9 +417,17 @@ local function render_description(details, width, lines, spans, line_map)
 		return
 	end
 
-	local block = markdown.parse(desc_text, {
-		width = math.max(1, width - PADDING_X * 2),
-	})
+	local block
+	if state.view_mode == "raw" then
+		block = {
+			lines = vim.split(utils.normalize_newlines(desc_text), "\n", { plain = true }),
+			highlights = {},
+		}
+	else
+		block = markdown.parse(desc_text, {
+			width = math.max(1, width - PADDING_X * 2),
+		})
+	end
 	local last_styled_line = -1
 	for _, span in ipairs(block.highlights) do
 		last_styled_line = math.max(last_styled_line, span.line)

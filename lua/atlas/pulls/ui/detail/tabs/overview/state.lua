@@ -3,11 +3,13 @@ local request_scope = require("atlas.core.requests")
 ---@class PullsOverviewState
 ---@field reviewers PullsReviewer[]|"loading"|string|nil
 ---@field description_expanded boolean
+---@field view_mode "markdown"|"raw"
 ---@field collapsed_pipelines table<PullsPipeline, boolean>
 ---@field requests AtlasRequestScope
 local M = {
 	reviewers = nil,
 	description_expanded = false,
+	view_mode = "markdown",
 	collapsed_pipelines = {},
 	requests = request_scope.new(),
 }

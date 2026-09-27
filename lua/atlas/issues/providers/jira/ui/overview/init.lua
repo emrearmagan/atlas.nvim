@@ -23,26 +23,7 @@ function M.render(_issue, details, width)
 	local line_map = {}
 	local raw_description = details.raw_description
 
-	local label = "Description"
-	local mode_text = state.view_mode == "raw" and "Raw (m)" or "Markdown (m)"
-	local chip = " " .. mode_text .. " "
-	local gap = math.max(1, width - PADDING_X - #label - #chip)
-	local header_line = PADDING .. label .. string.rep(" ", gap) .. chip
-
-	table.insert(lines, header_line)
-	local hline = #lines - 1
-	table.insert(spans, {
-		line = hline,
-		start_col = PADDING_X,
-		end_col = PADDING_X + #label,
-		hl_group = "AtlasTextMuted",
-	})
-	table.insert(spans, {
-		line = hline,
-		start_col = #header_line - #chip,
-		end_col = #header_line,
-		hl_group = "AtlasChipActive",
-	})
+	utils.push(lines, spans, "Description", "AtlasTextMuted", PADDING_X)
 
 	if state.view_mode == "raw" then
 		local raw_text = type(raw_description) == "table" and vim.inspect(raw_description)
@@ -68,7 +49,7 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.activate(buf, refresh)
-	local keys = keymaps.resolve("issues.toggle_description_mode")
+	local keys = keymaps.resolve("ui.toggle_description_mode")
 	if keys then
 		help.register("Panel", {
 			{
@@ -86,7 +67,7 @@ end
 
 ---@param buf integer
 function M.deactivate(buf)
-	local keys = keymaps.resolve("issues.toggle_description_mode")
+	local keys = keymaps.resolve("ui.toggle_description_mode")
 	if keys then
 		help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
 	end

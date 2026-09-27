@@ -10,6 +10,7 @@ local detail = require("atlas.issues.ui.detail.state")
 local conversation = require("atlas.issues.ui.detail.tabs.conversation.state")
 
 local PADDING_X = 1
+local view_mode = "markdown"
 
 ---@param _issue Issue
 ---@param details IssueDetails|nil
@@ -28,6 +29,10 @@ function M.render(_issue, details, width)
 	local description = details.description or ""
 	if description == "" then
 		utils.push(lines, spans, "No description", "AtlasTextMuted", PADDING_X)
+	elseif view_mode == "raw" then
+		for _, line in ipairs(vim.split(utils.normalize_newlines(description), "\n", { plain = true })) do
+			utils.push(lines, spans, line, nil, PADDING_X)
+		end
 	else
 		local block = markdown.parse(description, {
 			width = math.max(1, width - 2 * PADDING_X),
@@ -41,6 +46,21 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.activate(buf, refresh)
+	local toggle_keys = keymaps.resolve("ui.toggle_description_mode")
+	if toggle_keys then
+		help.register("Detail", {
+			{
+				key = #toggle_keys == 1 and toggle_keys[1] or toggle_keys,
+				desc = "Toggle description mode",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					view_mode = view_mode == "raw" and "markdown" or "raw"
+					refresh()
+				end,
+			},
+		}, { index = 212, buffer = buf })
+	end
+
 	local provider = detail.provider
 	local core = provider and provider.capabilities.core
 	local update_description = core and core.update_description
@@ -108,9 +128,11 @@ end
 
 ---@param buf integer
 function M.deactivate(buf)
-	local keys = keymaps.resolve("ui.comments.edit")
-	if keys then
-		help.remove("Detail", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
+	for _, action in ipairs({ "ui.toggle_description_mode", "ui.comments.edit" }) do
+		local keys = keymaps.resolve(action)
+		if keys then
+			help.remove("Detail", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
+		end
 	end
 end
 
