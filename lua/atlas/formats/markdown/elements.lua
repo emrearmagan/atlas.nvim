@@ -1,6 +1,7 @@
 local code_preview = require("atlas.ui.components.code_preview")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
 local icons = require("atlas.ui.shared.icons")
+local utils = require("atlas.ui.shared.utils")
 
 local M = { inline = {}, block = {} }
 
@@ -218,6 +219,33 @@ function M.join(fragments)
 	return table.concat(display_parts)
 end
 
+-- Wrap display text, keeping each fragment's styling and link target.
+function M.wrap(fragments, width)
+	local content = M.join(fragments)
+	if not width or vim.fn.strdisplaywidth(content) <= width then
+		return { fragments }
+	end
+
+	local lines, offsets = utils.wrap_line(content, width)
+	local rows = {}
+	for index, line in ipairs(lines) do
+		local row = {}
+		local offset = 0
+		local first, last = offsets[index], offsets[index] + #line
+		for _, fragment in ipairs(fragments) do
+			local finish = offset + #fragment.text
+			if finish > first and offset < last then
+				row[#row + 1] = vim.tbl_extend("force", fragment, {
+					text = fragment.text:sub(math.max(1, first - offset + 1), last - offset),
+				})
+			end
+			offset = finish
+		end
+		rows[#rows + 1] = row
+	end
+	return rows
+end
+
 --   ```lua
 --   print(1)
 --   ```
@@ -367,12 +395,21 @@ local callout_styles = {
 	CAUTION = { icon = "󰳦", hl = "panel_error" },
 }
 
+local function quote_rows(row, width, bar_style)
+	local rows = M.wrap(row, width and math.max(1, width - 2))
+	for _, wrapped in ipairs(rows) do
+		wrapped.hl = row.hl
+		table.insert(wrapped, 1, { text = "▎ ", style = bar_style })
+	end
+	return rows
+end
+
 --   > [!TIP] Try this
 --   > Use **x**
 --
 --   ▎ 󰌶  Try this
 --   ▎ Use x
-function M.block.callout(lines, index)
+function M.block.callout(lines, index, opts)
 	local kind, title = lines[index]:match("^>%s?%[!(%u+)%]%s*(.*)$")
 	local style = callout_styles[kind]
 	if not style then
@@ -385,9 +422,9 @@ function M.block.callout(lines, index)
 
 	local heading = M.parse_inline(title)
 	heading.hl = style.hl
-	table.insert(heading, 1, { text = "▎ " .. style.icon .. "  " })
+	table.insert(heading, 1, { text = style.icon .. "  " })
 
-	local rows = { heading }
+	local rows = quote_rows(heading, opts.width)
 	index = index + 1
 
 	while index <= #lines do
@@ -396,10 +433,7 @@ function M.block.callout(lines, index)
 			break
 		end
 
-		local row = M.parse_inline(content)
-		table.insert(row, 1, { text = "▎ ", style = style.hl })
-
-		rows[#rows + 1] = row
+		vim.list_extend(rows, quote_rows(M.parse_inline(content), opts.width, style.hl))
 		index = index + 1
 	end
 
@@ -472,7 +506,7 @@ end
 
 -- > **Note**
 -- ▎ Note
-function M.block.quote(lines, index)
+function M.block.quote(lines, index, opts)
 	local content = lines[index]:match("^>%s?(.*)$")
 	if not content then
 		return
@@ -480,9 +514,8 @@ function M.block.quote(lines, index)
 
 	local row = M.parse_inline(content)
 	row.hl = "quote"
-	table.insert(row, 1, { text = "▎ ", style = "quote_bar" })
 
-	return { row }, index + 1
+	return quote_rows(row, opts.width, "quote_bar"), index + 1
 end
 
 -- Hello **world**

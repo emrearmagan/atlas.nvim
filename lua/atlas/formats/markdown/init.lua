@@ -89,7 +89,7 @@ local function append_row(result, row, opts)
 end
 
 ---Parse Markdown into display lines, highlights and link/image targets.
----Width affects tables, rules and code blocks. The UI wraps ordinary text.
+---Width affects tables, rules, code blocks and quotes/callouts. The UI wraps ordinary text.
 ---@param source string
 ---@param opts? { width?: integer, hl?: table<string, string>, language?: string, file_path?: string, language_aliases?: table<string, string> }
 ---@return { lines: string[], highlights: AtlasMarkdownHighlight[], targets: AtlasMarkdownTarget[] }

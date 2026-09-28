@@ -535,7 +535,7 @@ function M.wrap_line(text, max_dw)
 		end
 
 		local last_space = nil
-		local half = math.floor(cut * 0.5)
+		local half = math.max(1, math.floor(cut * 0.5))
 		for i = cut, half, -1 do
 			if strcharpart(remaining, i - 1, 1, true) == " " then
 				last_space = i

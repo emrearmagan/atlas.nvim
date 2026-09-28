@@ -98,102 +98,12 @@ local function fit_columns(widths, minimums, width)
 	return padding
 end
 
--- Slice by byte offsets.
-local function slice(fragments, first, last)
-	local result = {}
-	local offset = 0
-
-	for _, fragment in ipairs(fragments) do
-		local finish = offset + #fragment.text
-
-		if finish >= first and offset < last then
-			local content = fragment.text:sub(math.max(1, first - offset), math.min(#fragment.text, last - offset))
-			result[#result + 1] = {
-				text = content,
-				style = fragment.style,
-				background_style = fragment.background_style,
-				url = fragment.url,
-			}
-		end
-
-		offset = finish
-		if offset >= last then
-			break
-		end
-	end
-
-	return result
-end
-
--- { { text = "Hello " }, { text = "world", style = "strong" } }, width 5.
--- Two rows, "Hello" and "world".
--- The column width must fit its widest character.
-local function wrap(fragments, width)
-	local content = elements.join(fragments)
-	if vim.fn.strdisplaywidth(content) <= width then
-		return { fragments }
-	end
-
-	local characters = {}
-	for first, character, next_byte in content:gmatch("()([%z\1-\127\194-\244][\128-\191]*)()") do
-		characters[#characters + 1] = {
-			first = first,
-			last = next_byte - 1,
-			width = vim.fn.strdisplaywidth(character),
-			space = character:match("%s") ~= nil,
-		}
-	end
-
-	local rows = {}
-	local first = 1
-
-	while first <= #characters do
-		local position = first
-		local used_width = 0
-		local last_space
-
-		while position <= #characters do
-			local character = characters[position]
-			if character.space then
-				last_space = position
-			end
-
-			if used_width + character.width > width then
-				break
-			end
-
-			used_width = used_width + character.width
-			position = position + 1
-		end
-
-		local last = position - 1
-		if position <= #characters and last_space then
-			last = last_space - 1
-			position = last_space + 1
-
-			while last >= first and characters[last].space do
-				last = last - 1
-			end
-			while position <= #characters and characters[position].space do
-				position = position + 1
-			end
-		end
-
-		if last >= first then
-			rows[#rows + 1] = slice(fragments, characters[first].first, characters[last].last)
-		end
-		first = position
-	end
-
-	return rows
-end
-
 -- A cell containing "one two" at width 3 produces aligned "one"/"two" rows.
 local function layout_row(cells, column_widths, alignment, cell_padding, fill)
 	local wrapped_cells = {}
 	local height = 1
 	for column, width in ipairs(column_widths) do
-		wrapped_cells[column] = wrap(cells[column], width)
+		wrapped_cells[column] = elements.wrap(cells[column], width)
 		height = math.max(height, #wrapped_cells[column])
 	end
 

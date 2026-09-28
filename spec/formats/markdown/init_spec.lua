@@ -565,6 +565,33 @@ describe("Markdown parsing", function()
 		has_span(result, span(0, 0, #"▎ 󰋽  Read this", "AtlasMarkdownNote"))
 	end)
 
+	it("keeps quote and callout bars, styles and link targets on wrapped rows", function()
+		for _, callout in ipairs({ false, true }) do
+			local source = "> **caféabcdefghijklmno** [abcdefghijklmnop](https://example.com)"
+			if callout then
+				source = "> [!NOTE]\n" .. source
+			end
+			local first_line = callout and 1 or 0
+			local bar_group = callout and "AtlasMarkdownNote" or "AtlasMarkdownQuoteBar"
+			local result = markdown.parse(source, { width = 14 })
+			local rendered = markdown.render(source, { width = 16, padding = 1 })
+			for index, text in ipairs({ "caféabcdefgh", "ijklmno", "abcdefghijkl", "mnop" }) do
+				local line = first_line + index - 1
+				local group = index <= 2 and "AtlasMarkdownStrong" or "AtlasMarkdownLink"
+				assert.equals("▎ " .. text, result.lines[line + 1])
+				assert.equals(" ▎ " .. text, rendered.lines[line + 1])
+				has_span(result, span(line, 0, #"▎ ", bar_group))
+				has_span(result, span(line, #"▎ ", #"▎ " + #text, group))
+				has_span(rendered, span(line, 1, #" ▎ ", bar_group))
+				has_span(rendered, span(line, #" ▎ ", #" ▎ " + #text, group))
+			end
+			assert.same({
+				target("link", "https://example.com", first_line + 2, #"▎ ", #"▎ abcdefghijkl"),
+				target("link", "https://example.com", first_line + 3, #"▎ ", #"▎ mnop"),
+			}, result.targets)
+		end
+	end)
+
 	it("keeps callout bars across empty quoted lines without coloring body text", function()
 		assert.are.same({
 			lines = { "▎ 󰋽  Note", "▎ first", "▎ ", "▎ last" },
@@ -803,8 +830,6 @@ describe("Markdown parsing", function()
 			"**你好🌍abc**",
 			"### one **two three**",
 			"  1. **one two three**",
-			"> **one two three**",
-			"> [!NOTE]\n> one two three",
 		}) do
 			assert.are.same(markdown.parse(source), markdown.parse(source, { width = 3 }))
 		end
