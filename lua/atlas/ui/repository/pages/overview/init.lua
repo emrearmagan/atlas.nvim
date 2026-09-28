@@ -18,6 +18,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field statusline AtlasStatusline
 ---@field group integer
 ---@field refresh_keys string[]
+---@field browser_keys string[]
 
 ---@type table<integer, RepositoryOverview>
 local states = {}
@@ -108,6 +109,7 @@ function M.open(opts)
 		spinner = spinner.create(),
 		group = vim.api.nvim_create_augroup("AtlasRepositoryOverview" .. opts.buf, { clear = true }),
 		refresh_keys = resolver.resolve("ui.refresh") or {},
+		browser_keys = resolver.resolve("ui.open_in_browser") or {},
 	}
 	states[state.buf] = state
 	state.spinner.on_tick = function()
@@ -133,6 +135,16 @@ function M.open(opts)
 				end,
 				opts = { nowait = true, silent = true },
 			},
+			{
+				key = state.browser_keys,
+				desc = "Open repository in browser",
+				callback = function()
+					if state.repo.html_url then
+						vim.ui.open(state.repo.html_url)
+					end
+				end,
+				opts = { nowait = true, silent = true },
+			},
 		}, { buffer = buf })
 	end
 	render(state)
@@ -147,7 +159,7 @@ function M.close(buf)
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
 	for _, buffer in ipairs({ state.buf, state.sidebar_buf }) do
-		help.remove("Overview", { { key = state.refresh_keys } }, { buffer = buffer })
+		help.remove("Overview", { { key = state.refresh_keys }, { key = state.browser_keys } }, { buffer = buffer })
 	end
 	if utils.window.valid(state.win) then
 		vim.wo[state.win].wrap = false

@@ -229,7 +229,6 @@ function M.open(opts)
 			render(state)
 		end
 	end
-	vim.bo[state.buf].filetype = "atlas.repository"
 	vim.wo[state.win].cursorline = true
 	vim.wo[state.win].wrap = false
 	local actions = {

@@ -83,7 +83,6 @@ local function load(state, id)
 	state.requests = requests.new()
 	state.selected_id = id
 	state.release = "loading"
-	vim.bo[state.buf].filetype = "atlas.repository"
 	state.spinner:start()
 	state.statusline:notify("loading", "Loading release...")
 	render(state)

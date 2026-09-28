@@ -43,7 +43,7 @@ function M.render(environments, width, expanded)
 		local count = #environment.deployments
 		add(environment.name, "AtlasColumnHeader")
 		if #environment.deployments == 0 then
-			add("   No deployment in loaded history", "AtlasTextMuted")
+			add("   No deployments found.", "AtlasTextMuted")
 		end
 
 		if not expanded[environment.id] then
