@@ -192,15 +192,17 @@ function M.open(request)
 		return state.items[state.index]
 	end
 
-	local function draw_preview()
-		local width = vim.api.nvim_win_get_width(preview_win) - vim.fn.getwininfo(preview_win)[1].textoff
+	---@param buf integer
+	---@param win integer
+	local function draw_preview(buf, win)
+		local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
 		local result = markdown.parse(table.concat(state.preview_lines, "\n"), { width = width })
-		vim.bo[preview_buf].modifiable = true
-		vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, result.lines)
-		vim.bo[preview_buf].modifiable = false
-		vim.api.nvim_buf_clear_namespace(preview_buf, namespace, 0, -1)
+		vim.bo[buf].modifiable = true
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+		vim.bo[buf].modifiable = false
+		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
 		for _, span in ipairs(result.highlights) do
-			vim.api.nvim_buf_set_extmark(preview_buf, namespace, span.line, span.start_col, {
+			vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
 				end_col = span.end_col,
 				hl_group = span.hl_group,
 			})
@@ -208,7 +210,7 @@ function M.open(request)
 	end
 
 	local function render_preview()
-		if not preview_buf or not request.preview_item then
+		if not preview_buf or not preview_win or not request.preview_item then
 			return
 		end
 		cancel(state.preview)
@@ -216,7 +218,7 @@ function M.open(request)
 		local generation = state.preview_generation
 		local item = current_item()
 		state.preview_lines = item and { "Loading..." } or {}
-		draw_preview()
+		draw_preview(preview_buf, preview_win)
 		if not item then
 			return
 		end
@@ -226,7 +228,7 @@ function M.open(request)
 					return
 				end
 				state.preview_lines = value.lines
-				draw_preview()
+				draw_preview(preview_buf, preview_win)
 				if preview_win and vim.api.nvim_win_is_valid(preview_win) then
 					vim.api.nvim_set_option_value("number", false, { win = preview_win })
 					vim.api.nvim_set_option_value("relativenumber", false, { win = preview_win })
@@ -467,8 +469,8 @@ function M.open(request)
 				picker_layout = layout()
 				resize(picker_layout)
 				render(false)
-				if preview_buf then
-					draw_preview()
+				if preview_buf and preview_win then
+					draw_preview(preview_buf, preview_win)
 				end
 			end
 		end,

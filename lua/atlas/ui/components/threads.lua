@@ -92,7 +92,7 @@ end
 
 ---@param _ AtlasThreadItem
 ---@param author string
----@return string
+---@return string|nil
 local function default_author_hl(_, author)
 	local normalized = vim.trim(author):lower()
 	if normalized == "" or normalized == "unknown" or normalized == "none" or normalized == "unassigned" then
@@ -435,6 +435,7 @@ end
 local function render_item(lines, spans, line_map, item, depth, branch_prefix, is_last, opts, width)
 	local linked = opts.mode == "linked"
 	local show_connectors = opts.show_connectors
+	---@cast show_connectors boolean
 	local pfx = compute_prefixes(depth, branch_prefix, is_last, opts.padding_x, show_connectors)
 
 	if depth == 0 then
@@ -498,6 +499,7 @@ function M.render(items, width, opts)
 
 	local is_linked = opts.mode == "linked"
 	local padding_x = opts.padding_x
+	---@cast padding_x integer
 	local pad = string.rep(" ", padding_x)
 
 	for idx, item in ipairs(list) do

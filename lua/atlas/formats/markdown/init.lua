@@ -112,19 +112,18 @@ function M.parse(source, opts)
 	local index = 1
 
 	while index <= #lines do
-		local rows, next_index
 		for _, parse in ipairs(block_handlers) do
-			rows, next_index = parse(lines, index, opts)
+			local rows, next_index = parse(lines, index, opts)
 			if rows then
+				for _, row in ipairs(rows) do
+					append_row(result, row, opts)
+				end
+
+				---@cast next_index integer
+				index = next_index
 				break
 			end
 		end
-
-		for _, row in ipairs(rows) do
-			append_row(result, row, opts)
-		end
-
-		index = next_index
 	end
 
 	return result

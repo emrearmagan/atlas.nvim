@@ -163,6 +163,7 @@ function M.inline.comment(text)
 	end
 end
 
+---@type (fun(text: string, previous_character: string): table?, integer?)[]
 local inline_handlers = {
 	M.inline.escape,
 	M.inline.image,

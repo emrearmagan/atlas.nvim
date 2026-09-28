@@ -441,15 +441,21 @@ function M.open(opts)
 	local details = opts.details or {}
 	local initial_title = details.title or ""
 	local initial_body = details.description or ""
+	local fields = {
+		project_path = project_path,
+		labels = vim.deepcopy(details.labels or {}),
+		assignees = vim.deepcopy(details.assignees or {}),
+		milestone = vim.deepcopy(details.milestone),
+	}
 
 	---@type GitLabIssueEditorState
 	local issue_state = {
 		issue = opts.issue,
-		fields = {
-			project_path = project_path,
-			labels = vim.deepcopy(details.labels or {}),
-			assignees = vim.deepcopy(details.assignees or {}),
-			milestone = vim.deepcopy(details.milestone),
+		fields = fields,
+		initial = {
+			title = vim.trim(initial_title),
+			body = initial_body,
+			fields = vim.deepcopy(fields),
 		},
 		layout = {},
 		content_width = 80,
@@ -457,12 +463,6 @@ function M.open(opts)
 		pickers = default_pickers(project_path),
 		requests = request_scope.new(),
 		on_done = opts.on_done,
-	}
-
-	issue_state.initial = {
-		title = vim.trim(initial_title),
-		body = initial_body,
-		fields = vim.deepcopy(issue_state.fields),
 	}
 
 	form.open(issue_state, {

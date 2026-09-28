@@ -127,7 +127,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(details: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: GitHubIssueDetails|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)

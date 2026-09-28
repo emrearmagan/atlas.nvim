@@ -1,15 +1,6 @@
 local M = {}
 local utils = require("atlas.ui.shared.utils")
 
--- Neovim can load these parsers before a plugin registers their filetype aliases.
-local parser_aliases = {
-	sh = "bash",
-	javascriptreact = "javascript",
-	typescriptreact = "tsx",
-	tex = "latex",
-	cs = "c_sharp",
-}
-
 ---@class AtlasCodePreviewOptions
 ---@field file_path string|nil
 ---@field language string|nil Filetype or fence language; takes precedence over file_path.
@@ -33,19 +24,13 @@ local function syntax_highlights(lines, opts)
 		return {}
 	end
 	local language = vim.treesitter.language.get_lang(filetype) or filetype
-	if opts.language and language == filetype then
-		filetype = vim.filetype.match({ filename = "code." .. opts.language }) or filetype
-		language = vim.treesitter.language.get_lang(filetype) or filetype
-	end
-	if language == filetype then
-		language = parser_aliases[filetype] or language
-	end
 	local source = table.concat(lines, "\n")
 	local ok, parser = pcall(vim.treesitter.get_string_parser, source, language)
-	if not ok then
+	if not ok or not parser then
 		return {}
 	end
-	local tree = parser:parse()[1]
+	local trees = parser:parse()
+	local tree = trees and trees[1]
 	local query = vim.treesitter.query.get(language, "highlights")
 	if not tree or not query then
 		return {}

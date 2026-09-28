@@ -37,7 +37,16 @@ describe("ui.components.code_preview", function()
 		vim.treesitter = {
 			language = {
 				get_lang = function(filetype)
-					return filetype
+					return ({
+						js = "javascript",
+						jsx = "javascript",
+						javascriptreact = "javascript",
+						ts = "typescript",
+						typescriptreact = "tsx",
+						sh = "bash",
+						tex = "latex",
+						cs = "c_sharp",
+					})[filetype]
 				end,
 			},
 			get_string_parser = function(source, language)
@@ -145,7 +154,7 @@ describe("ui.components.code_preview", function()
 		assert.same({ "1  local value", "2  " }, preview.render({ lines = { "local value", "" }, width = 8 }).lines)
 	end)
 
-	it("resolves explicit language aliases and honors registered mappings first", function()
+	it("uses registered language mappings and preserves explicit parser names", function()
 		for alias, language in pairs({
 			js = "javascript",
 			jsx = "javascript",

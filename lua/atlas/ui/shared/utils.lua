@@ -527,11 +527,11 @@ function M.wrap_line(text, max_dw)
 
 		local nchars = strchars(remaining, true)
 		local cut = 1
-		for i = nchars - 1, 1, -1 do
-			if strwidth(strcharpart(remaining, 0, i, true)) <= max_dw then
-				cut = i
+		for i = 1, nchars - 1 do
+			if strwidth(strcharpart(remaining, 0, i, true)) > max_dw then
 				break
 			end
+			cut = i
 		end
 
 		local last_space = nil
