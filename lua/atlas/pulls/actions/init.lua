@@ -4,6 +4,7 @@ local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
+local pipeline_api = require("atlas.pulls.pipelines")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 local ui_utils = require("atlas.ui.shared.utils")
@@ -131,7 +132,8 @@ end
 
 ---@param context AtlasPullActionContext
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
-function M.open(context, on_done)
+---@param extra_items { label: string, icon?: string, callback: fun() }[]|nil
+function M.open(context, on_done, extra_items)
 	local actions = context.provider.capabilities.actions
 	local items = {}
 	for _, action in ipairs(actions and actions.items or {}) do
@@ -144,6 +146,7 @@ function M.open(context, on_done)
 			table.insert(items, action)
 		end
 	end
+	vim.list_extend(items, extra_items or {})
 	if #items == 0 then
 		if on_done then
 			on_done(nil, "No actions available")
@@ -163,7 +166,11 @@ function M.open(context, on_done)
 				end
 				return
 			end
-			M.run(action.id, context, on_done)
+			if action.callback then
+				action.callback()
+			else
+				M.run(action.id, context, on_done)
+			end
 		end,
 	})
 end
@@ -403,11 +410,13 @@ M.open_pipelines = {
 	label = "Open Pipelines",
 	icon = icons.action("pipeline"),
 	is_available = function(context)
-		return has_pr(context) and context.provider.capabilities.pipelines ~= nil
+		if not has_pr(context) then
+			return false
+		end
+		return pipeline_api.get(context.provider) ~= nil
 	end,
 	run = function(context, done)
-		require("atlas.pulls.ui.pipelines").open(assert(context.pr), context.provider)
-		notify(context, "success", "Opened Pipelines", 1200)
+		pipeline_api.open(assert(context.pr), context.provider)
 		done({ changed_pr = false, message = "Opened Pipelines" }, nil)
 	end,
 }

@@ -257,8 +257,8 @@ function M.open(request)
 					end
 					marker = marker .. " "
 				end
-				local text, hl = request.format_item(item)
-				table.insert(rows, marker .. tostring(text or ""))
+				local text, chunks = require("atlas.ui.picker").format_item(request, item)
+				table.insert(rows, marker .. text)
 				local row = #rows
 				if marker_hl then
 					table.insert(highlights, {
@@ -268,13 +268,17 @@ function M.open(request)
 						hl_group = marker_hl,
 					})
 				end
-				if hl then
-					table.insert(highlights, {
-						line = row,
-						start_col = #marker,
-						end_col = #rows[row],
-						hl_group = hl,
-					})
+				local col = #marker
+				for _, chunk in ipairs(chunks) do
+					if chunk[2] then
+						table.insert(highlights, {
+							line = row,
+							start_col = col,
+							end_col = col + #chunk[1],
+							hl_group = chunk[2],
+						})
+					end
+					col = col + #chunk[1]
 				end
 				if index == state.index then
 					table.insert(highlights, {

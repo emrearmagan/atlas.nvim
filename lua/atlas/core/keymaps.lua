@@ -27,6 +27,7 @@ local config = require("atlas.config")
 ---@field previous_page? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
 ---@field open_in_browser? AtlasKeymapValue
+---@field open_references? AtlasKeymapValue
 ---@field copy_id? AtlasKeymapValue
 ---@field copy_url? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
@@ -51,6 +52,7 @@ local config = require("atlas.config")
 ---@field close? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
+---@field toggle_explorer? AtlasKeymapValue
 ---@field find_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
@@ -80,7 +82,8 @@ local config = require("atlas.config")
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsReviewKeymaps
----@field focus_item? AtlasKeymapValue
+---@field open_item? AtlasKeymapValue
+---@field show_details? AtlasKeymapValue
 ---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
@@ -94,6 +97,13 @@ local config = require("atlas.config")
 ---@field open? AtlasKeymapValue
 ---@field merged? AtlasKeymapValue
 ---@field declined? AtlasKeymapValue
+
+---@class AtlasPullsPipelinesKeymaps
+---@field next_job? AtlasKeymapValue
+---@field previous_job? AtlasKeymapValue
+---@field show_history? AtlasKeymapValue
+---@field toggle_raw_logs? AtlasKeymapValue
+---@field toggle_auto_refresh? AtlasKeymapValue
 
 ---@class AtlasPullsCustomKeymap
 ---@field key string|string[]
@@ -112,6 +122,7 @@ local config = require("atlas.config")
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
 ---@field edit_search? AtlasKeymapValue
+---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
@@ -168,6 +179,7 @@ local config = require("atlas.config")
 ---| "ui.previous_page"
 ---| "ui.open_actions"
 ---| "ui.open_in_browser"
+---| "ui.open_references"
 ---| "ui.copy_id"
 ---| "ui.copy_url"
 ---| "ui.show_details"
@@ -185,13 +197,20 @@ local config = require("atlas.config")
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
 ---| "pulls.edit_search"
+---| "pulls.pipelines.next_job"
+---| "pulls.pipelines.previous_job"
+---| "pulls.pipelines.show_history"
+---| "pulls.pipelines.toggle_raw_logs"
+---| "pulls.pipelines.toggle_auto_refresh"
+---| "pulls.review.open_item"
+---| "pulls.review.show_details"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
 ---| "pulls.review.add_task"
 ---| "pulls.review.comment_templates"
----| "pulls.review.focus_item"
 ---| "pulls.review.find_file"
+---| "pulls.review.explorer.toggle_explorer"
 ---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
@@ -362,20 +381,19 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
+		{ "ui.select", "pulls.review.open_item" },
+		{ "ui.show_details", "pulls.review.show_details" },
 		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
 		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
-		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
-		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file" },
+		{ "ui.next_panel_tab", "pulls.review.explorer.next_file", "pulls.pipelines.next_job" },
+		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file", "pulls.pipelines.previous_job" },
 		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
 		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
-		{ "pulls.open_diff", "pulls.review.focus_item" },
-		{
-			"ui.comments.react",
-			"pulls.review.request_changes",
-			"issues.change_reporter",
-		},
+		{ "pulls.pipelines.show_history", "pulls.review.diff.toggle_comments" },
+		{ "pulls.pipelines.toggle_auto_refresh", "pulls.review.diff.toggle_review_panel" },
+		{ "ui.comments.react", "issues.change_reporter" },
 	}
 
 	local function conflict_allowed(actions)

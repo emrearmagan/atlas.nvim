@@ -8,6 +8,7 @@ local author_completion = require("atlas.providers.gitlab.completion.author")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
+local links_api = require("atlas.providers.gitlab.links")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local notifications_api = require("atlas.providers.gitlab.notifications")
@@ -114,6 +115,7 @@ return {
 			fetch_issues = issues_api.list_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
+			fetch_links = links_api.fetch_issue,
 			update_description = issues_api.update_description,
 		},
 		comments = {

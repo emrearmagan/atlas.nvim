@@ -492,8 +492,6 @@ function M.open(on_submit, opts, editor_opts)
 		close_ui()
 	end
 
-	require("atlas.issues.ui.highlights").setup()
-
 	state.on_submit = on_submit
 	state.fields = opts
 	state.preview_fn = editor_opts and editor_opts.preview_fn or nil

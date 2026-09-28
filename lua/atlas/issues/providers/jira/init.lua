@@ -6,6 +6,7 @@
 ---@field category table|nil
 
 ---@class JiraIssue : Issue
+---@field id string
 ---@field project JiraIssueProject|nil
 ---@field priority string|nil
 
@@ -28,6 +29,7 @@ local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local links_api = require("atlas.issues.providers.jira.api.links")
 local service = require("atlas.issues.providers.jira.api.service")
 local users_api = require("atlas.issues.providers.jira.api.users")
 
@@ -196,6 +198,7 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
+			fetch_links = links_api.fetch,
 			refresh = service.clear_memory_cache,
 		},
 		comments = {

@@ -47,6 +47,10 @@ function M.resolve(value, parsed)
 		owner, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/issues/(%d+)(.*)$")
 		domain, entity = "issues", "issue"
 	end
+	if owner == nil then
+		owner, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/actions/runs/(%d+)(.*)$")
+		domain, entity = "pulls", "pipeline"
+	end
 	if owner then
 		if not url.valid_tail(tail) then
 			return nil, "Unsupported GitHub URL"
@@ -63,7 +67,7 @@ function M.resolve(value, parsed)
 			owner = owner,
 			repo = repo,
 			repo_full_name = full_name,
-			id = entity == "pr" and id or nil,
+			id = entity ~= "issue" and id or nil,
 			number = id,
 		}
 	end
@@ -84,6 +88,6 @@ function M.resolve(value, parsed)
 		}
 	end
 
-	return nil, "Unsupported GitHub URL. Expected a repository, issue, or pull request URL"
+	return nil, "Unsupported GitHub URL. Expected a repository, issue, pull request, or pipeline URL"
 end
 return M

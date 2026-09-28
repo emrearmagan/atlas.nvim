@@ -72,28 +72,30 @@ local function fetch_candidate(target, on_done)
 	end)
 end
 
----@param number integer
+---@param value string
 ---@param repository AtlasTarget
 ---@param on_done fun(target: AtlasTarget|nil, provider: IssuesProvider|PullsProvider|nil, entity: Issue|PullRequest|nil, err: string|nil)
-local function fetch_repository_number(number, repository, on_done)
+local function fetch_reference(value, repository, on_done)
 	local candidates = {}
+	local resolve_err
 	for _, domain in ipairs({ "pulls", "issues" }) do
 		if providers.domain(repository.provider, domain) and config.provider_options(repository.provider) then
-			local entity = domain == "pulls" and "pr" or "issue"
-			local target = vim.tbl_extend("force", {}, repository, {
+			local target, err = providers.resolve(value, {
+				repository = repository,
 				domain = domain,
-				entity = entity,
-				id = number,
-				number = number,
 			})
-			table.insert(candidates, target)
+			if target then
+				table.insert(candidates, target)
+			else
+				resolve_err = resolve_err or err
+			end
 		end
 	end
 
 	local function try(index, last_err)
 		local target = candidates[index]
 		if target == nil then
-			on_done(nil, nil, nil, last_err or "Reference not found")
+			on_done(nil, nil, nil, last_err or (#candidates == 0 and resolve_err) or "Reference not found")
 			return
 		end
 		fetch_candidate(target, function(entity, provider, err)
@@ -124,16 +126,13 @@ function M.open(value)
 		return
 	end
 
-	local number = value:match("^#?(%d+)$")
-	if number then
-		local id = assert(tonumber(number))
-		---@cast id integer
+	if value:match("^[#!]?%d+$") then
 		local repository = git.local_repository()
 		if repository == nil then
 			notify.error("A numeric reference requires a supported local Git repository", { vim_notify = true })
 			return
 		end
-		fetch_repository_number(id, repository, function(target, provider, entity, resolve_err)
+		fetch_reference(value, repository, function(target, provider, entity, resolve_err)
 			if target then
 				open_target(target, provider, entity)
 			elseif resolve_err then

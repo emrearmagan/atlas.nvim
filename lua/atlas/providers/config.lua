@@ -1,0 +1,3 @@
+---@class AtlasProviderConfig
+---@field ci AtlasPullsCIConfig|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

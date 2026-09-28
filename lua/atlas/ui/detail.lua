@@ -92,7 +92,6 @@ end
 ---@param render fun()
 ---@return integer win, integer buf
 function M.open(kind, cleanup, render)
-	require("atlas.ui.shared.highlights").setup()
 	if M.is_open() and vim.api.nvim_win_get_tabpage(state.win) ~= vim.api.nvim_get_current_tabpage() then
 		M.close()
 	end

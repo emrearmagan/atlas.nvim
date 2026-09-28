@@ -4,8 +4,6 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local header = require("atlas.pulls.ui.components.header")
 
-local MAX_HASH_LEN = 12
-
 ---@param hex string
 ---@return string
 local function label_hl(hex)
@@ -37,21 +35,13 @@ function M.header_fields(_pr, details, loading)
 	return { header.assignee_field(logins) }
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsDetailChip[]
-function M.chips(pr, details, _loading)
+function M.chips(_pr, details, _loading)
 	---@cast details GitHubPullRequestDetails|nil
 	local chips = {}
-
-	local hash = pr.source.commit_hash
-	if hash ~= "" then
-		if #hash > MAX_HASH_LEN then
-			hash = hash:sub(1, MAX_HASH_LEN)
-		end
-		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
-	end
 
 	for _, lbl in ipairs(details and details.labels or {}) do
 		local name = tostring(lbl.name or "")

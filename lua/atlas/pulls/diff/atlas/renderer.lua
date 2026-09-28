@@ -83,6 +83,14 @@ local function apply_folds(win, ranges, line_count, compact)
 	end)
 end
 
+---@param buf integer
+function M.clear(buf)
+	if vim.api.nvim_buf_is_valid(buf) then
+		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+		vim.api.nvim_buf_clear_namespace(buf, inline_namespace, 0, -1)
+	end
+end
+
 ---@param document AtlasDiffDocument
 ---@param right_buf integer
 ---@param comments? table<integer, [string, string][][]>

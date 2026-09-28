@@ -67,11 +67,12 @@ function M.open(request)
 		local key = request.key(item)
 		item_by_id[id] = item
 		local marker = request.multi and (selected[key] and "✓ " or "  ") or ""
-		local text, hl_group = request.format_item(item)
-		if hl_group then
-			text = fzf_utils.ansi_from_hl(hl_group, text)
+		local _, chunks = require("atlas.ui.picker").format_item(request, item)
+		local parts = {}
+		for _, chunk in ipairs(chunks) do
+			parts[#parts + 1] = chunk[2] and fzf_utils.ansi_from_hl(chunk[2], chunk[1]) or chunk[1]
 		end
-		return id .. "\t" .. marker .. tostring(text):gsub("[\r\n\t]", " ")
+		return id .. "\t" .. marker .. table.concat(parts):gsub("[\r\n\t]", " ")
 	end
 
 	local function item_for(value)

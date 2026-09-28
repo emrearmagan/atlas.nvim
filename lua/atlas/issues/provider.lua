@@ -44,6 +44,7 @@
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_links (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field refresh fun()|nil
 

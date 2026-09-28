@@ -1,23 +1,50 @@
-local M = {}
-
-local pipeline_utils = require("atlas.pulls.pipelines")
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
-local github_pipelines = require("atlas.pulls.providers.github.api.pipelines")
-local request_scope = require("atlas.core.requests")
+
+local M = {}
+
+local MERGE_CHECKS_QUERY = [[
+query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      mergeable
+      reviewDecision
+      reviewRequests(first: 100) {
+        nodes { requestedReviewer { ... on User { login } ... on Bot { login } } }
+      }
+      reviews(first: 100, after: $endCursor) {
+        nodes { author { login } state submittedAt }
+        pageInfo { hasNextPage endCursor }
+      }
+      commits(last: 1) {
+        nodes { commit { statusCheckRollup { state } } }
+      }
+    }
+  }
+}
+]]
+
+---@type table<string, "successful"|"failed"|"inprogress">
+local PIPELINE_STATES = {
+	ERROR = "failed",
+	EXPECTED = "inprogress",
+	FAILURE = "failed",
+	PENDING = "inprogress",
+	SUCCESS = "successful",
+}
 
 ---@class GitHubMergeState
 ---@field mergeable string
----@field merge_state string
 ---@field review_decision string
 ---@field review_requests string[]
 ---@field latest_reviews { login: string, state: string }[]
+---@field pipeline_state "successful"|"failed"|"inprogress"|nil
 
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
-local function parse_reviews(result)
+local function parse_reviews(review_nodes, request_nodes)
 	local latest = {}
 	local order = {}
-	for _, review in ipairs(result.reviews or {}) do
+	for _, review in ipairs(review_nodes) do
 		local author = json.nilify(review.author)
 		local login = author and tostring(author.login or "") or ""
 		local state = tostring(review.state or ""):upper()
@@ -39,8 +66,9 @@ local function parse_reviews(result)
 	end
 
 	local pending = {}
-	for _, req in ipairs(result.reviewRequests or {}) do
-		local login = tostring(req.login or "")
+	for _, req in ipairs(request_nodes) do
+		local reviewer = json.safe_table(req.requestedReviewer)
+		local login = tostring(reviewer.login or "")
 		if login ~= "" and latest[login] == nil then
 			table.insert(pending, login)
 		end
@@ -54,7 +82,8 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_merge_state(pr, on_done)
 	local repo_slug = pr.repo_full_name
-	if repo_slug == "" then
+	local owner, repo = repo_slug:match("^([^/]+)/([^/]+)$")
+	if not owner then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
@@ -62,26 +91,50 @@ local function fetch_merge_state(pr, on_done)
 	end
 
 	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"mergeable,mergeStateStatus,reviewDecision,reviewRequests,reviews",
+		"api",
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-f",
+		"query=" .. MERGE_CHECKS_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(pr.id),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch merge checks")
 			return
 		end
 
-		local latest_reviews, review_requests = parse_reviews(result)
+		local pull_request
+		local review_nodes = {}
+		for _, page in ipairs(result) do
+			local repository = json.safe_table(json.safe_table(page.data).repository)
+			local current = json.nilify(repository.pullRequest)
+			if not current then
+				on_done(nil, "Pull request not found")
+				return
+			end
+			pull_request = pull_request or current
+			vim.list_extend(review_nodes, current.reviews.nodes)
+		end
+		if not pull_request then
+			on_done(nil, "Pull request not found")
+			return
+		end
+
+		local latest_reviews, review_requests = parse_reviews(review_nodes, pull_request.reviewRequests.nodes)
+		local last_commit = pull_request.commits.nodes[1]
+		local rollup = last_commit and json.nilify(last_commit.commit.statusCheckRollup)
 		local out = {
-			mergeable = tostring(result.mergeable or ""),
-			merge_state = tostring(result.mergeStateStatus or ""),
-			review_decision = tostring(result.reviewDecision or ""),
+			mergeable = pull_request.mergeable,
+			review_decision = json.safe_str(pull_request.reviewDecision) or "",
 			review_requests = review_requests,
 			latest_reviews = latest_reviews,
+			pipeline_state = rollup and PIPELINE_STATES[rollup.state] or nil,
 		}
 		on_done(out, nil)
 	end, {
@@ -179,25 +232,10 @@ function M.fetch(pr, opts, on_done)
 		end
 	end
 
-	local requests = request_scope.new()
-	requests.all({
-		merge_state = function(done)
-			return fetch_merge_state(pr, done)
-		end,
-		pipelines = function(done)
-			return github_pipelines.fetch(pr, opts, done)
-		end,
-	}, function(results, errors)
-		local mc_result = results.merge_state
-		if errors.merge_state or errors.pipelines then
-			on_done(nil, errors.merge_state or errors.pipelines)
+	return fetch_merge_state(pr, function(mc_result, err)
+		if not mc_result then
+			on_done(nil, err or "Failed to load merge checks")
 			return
-		end
-		local jobs = {}
-		for _, pipeline in ipairs(results.pipelines) do
-			for _, stage in ipairs(pipeline.stages) do
-				vim.list_extend(jobs, stage.jobs)
-			end
 		end
 		local checks = {}
 		if pr.state == "draft" then
@@ -209,17 +247,15 @@ function M.fetch(pr, opts, on_done)
 			})
 		end
 		table.insert(checks, reviews_check(mc_result))
-		local b = pipeline_utils.to_merge_check(jobs, "Pipelines")
-		if b then
-			table.insert(checks, b)
-		elseif mc_result.merge_state == "UNSTABLE" then
+
+		if mc_result.pipeline_state then
 			table.insert(checks, {
 				key = "pipelines",
-				state = "warning",
-				label = "Pipelines have not passed",
-				details = { "A pipeline may be pending, failing, or require action." },
+				label = "Pipelines",
+				state = mc_result.pipeline_state,
 			})
 		end
+
 		local c = conflicts_check(mc_result.mergeable)
 		if c then
 			table.insert(checks, c)
@@ -228,7 +264,6 @@ function M.fetch(pr, opts, on_done)
 		cli.set_mem(cache_key, checks, cli.cache_ttl())
 		on_done(checks, nil)
 	end)
-	return requests
 end
 
 return M

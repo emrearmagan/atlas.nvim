@@ -7,13 +7,13 @@ local notify = require("atlas.core.notify")
 ---@param item any
 ---@return snacks.picker.finder.Item
 local function entry(request, item)
-	local text, hl_group = request.format_item(item)
+	local text, chunks = require("atlas.ui.picker").format_item(request, item)
 	return {
 		text = text,
 		key = request.key(item),
 		_select_key = request.key(item),
 		item = item,
-		hl_group = hl_group,
+		chunks = chunks,
 	}
 end
 
@@ -135,7 +135,7 @@ function M.open(request)
 		win = { input = { b = { completion = false } } },
 		finder = picker_finder,
 		format = function(item)
-			return { { item.text, item.hl_group } }
+			return item.chunks
 		end,
 		actions = {
 			confirm = function(picker, item)

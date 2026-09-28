@@ -168,12 +168,21 @@ function M.register(session, opts)
 			end
 
 			if has_review_items and content_buffer(session, buf) then
-				add(items, "ui.show_details", "Open comment or note", function()
+				add(items, "pulls.review.open_item", "Open comment or note", function()
 					with_item(session, buf, function()
 						comments.open_at_cursor(session, buf)
 					end, function()
 						notes.open_at_cursor(session, buf)
 					end)
+				end)
+				add(items, "pulls.review.show_details", "Show comment, note or LSP hover", function()
+					if comments.has_at_cursor(session, buf) then
+						comments.open_at_cursor(session, buf)
+					elseif notes.has_at_cursor(session, buf) then
+						notes.open_at_cursor(session, buf)
+					else
+						vim.lsp.buf.hover()
+					end
 				end)
 				if session.review then
 					add_range(

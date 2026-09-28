@@ -7,6 +7,7 @@ local chips = require("atlas.pulls.ui.components.chips")
 local detail_tabs = require("atlas.pulls.ui.components.tabs")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
+local links = require("atlas.ui.links")
 
 local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 
@@ -100,17 +101,19 @@ function M.render(tab_items, get_tab_module)
 				and provider_detail.chips
 				and provider_detail.chips(pr, details, state.details_loading)
 			or {}
+		vim.list_extend(extra_chips, links.chips(state))
 
 		-- Header
 		local h_lines, h_spans = header.render(pr, width, extra_fields)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
+		local checks, checks_loading = state.get_merge_checks()
 		local chip_lines, chip_spans = chips.render(pr, {
 			width = width,
 			extra_chips = extra_chips,
-			checks = state.merge_checks,
-			loading = state.details_loading,
+			checks = checks,
+			loading = checks_loading,
 		})
 		if #chip_lines > 0 then
 			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })

@@ -1,3 +1,5 @@
+local providers = require("atlas.providers")
+
 describe("commands.open", function()
 	local command
 	local repository
@@ -93,10 +95,13 @@ describe("commands.open", function()
 			end,
 		}
 		package.loaded["atlas.providers"] = {
-			resolve = function(value)
-				table.insert(calls.resolve, value)
+			resolve = function(value, opts)
+				table.insert(calls.resolve, { value = value, opts = opts })
+				if opts then
+					return providers.resolve(value, opts)
+				end
 				local target = resolved[value]
-				return target, target and nil or "Unsupported Atlas target"
+				return target, not target and "Unsupported Atlas target" or nil
 			end,
 			domain = function(_, domain)
 				return domain == "pulls" or domain == "issues"
@@ -145,7 +150,7 @@ describe("commands.open", function()
 
 		command.open(value)
 
-		assert.same({ value }, calls.resolve)
+		assert.same({ { value = value } }, calls.resolve)
 		assert.are.equal(0, #calls.fetch)
 		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
 	end)
@@ -176,12 +181,17 @@ describe("commands.open", function()
 			repo_full_name = "owner/repo",
 		}
 		pull_result = { id = 42, title = "PR" }
+		pull_error = nil
 
 		command.open("#42")
 
-		assert.are.equal(0, #calls.resolve)
+		assert.same({
+			{ value = "#42", opts = { repository = repository, domain = "pulls" } },
+			{ value = "#42", opts = { repository = repository, domain = "issues" } },
+		}, calls.resolve)
 		assert.are.equal(1, #calls.fetch)
 		assert.same({ "pulls" }, { calls.fetch[1].domain })
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
 		assert.are.equal(pull_result, calls.pull_detail[1].entity)
 		assert.are.equal(0, #calls.issue_detail)
 	end)
@@ -195,10 +205,17 @@ describe("commands.open", function()
 			repo_full_name = "owner/repo",
 		}
 		issue_result = { key = "ISSUE-42", title = "Issue" }
+		issue_error = nil
 
 		command.open("42")
 
+		assert.same({
+			{ value = "42", opts = { repository = repository, domain = "pulls" } },
+			{ value = "42", opts = { repository = repository, domain = "issues" } },
+		}, calls.resolve)
 		assert.same({ "pulls", "issues" }, { calls.fetch[1].domain, calls.fetch[2].domain })
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
+		assert.same({ key = "ISSUE-42" }, calls.fetch[2].ref)
 		assert.are.equal(issue_result, calls.issue_detail[1].entity)
 	end)
 
@@ -212,7 +229,7 @@ describe("commands.open", function()
 	it("does not give owner/repo#number special repository handling", function()
 		command.open("owner/repo#42")
 
-		assert.same({ "owner/repo#42" }, calls.resolve)
+		assert.same({ { value = "owner/repo#42" } }, calls.resolve)
 		assert.are.equal(0, calls.local_repository)
 		assert.are.equal("Unsupported Atlas target", calls.errors[1])
 	end)

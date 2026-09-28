@@ -169,6 +169,7 @@ function M.to_issue(raw, sp_field)
 	local status, status_id = extract_status(safe_get(fields, "status"))
 
 	return {
+		id = raw.id,
 		key = tostring(raw.key or ""),
 		title = tostring(fields.summary or ""),
 		project = M.to_project(safe_get(fields, "project")),

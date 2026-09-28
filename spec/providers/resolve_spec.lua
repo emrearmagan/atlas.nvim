@@ -61,6 +61,7 @@ describe("providers.resolve", function()
 		local cases = {
 			{ "https://github.company.test/team/repo/pull/42", "pr", 42 },
 			{ "https://github.company.test/team/repo/issues/8", "issue", 8 },
+			{ "https://github.company.test/team/repo/actions/runs/99", "pipeline", 99 },
 			{ "https://github.company.test/team/repo", "repo" },
 			{ "https://github.company.test/team/repo.git", "repo" },
 			{ "git@github.company.test:team/repo.git", "repo" },
@@ -82,6 +83,15 @@ describe("providers.resolve", function()
 		local target, err = providers.resolve("https://github.com/team/repo/pull/42")
 		assert.is_nil(target)
 		assert.equal("Unsupported Atlas URL", err)
+	end)
+
+	it("opens project work items as issues and leaves group work items external", function()
+		local target = assert(providers.resolve("https://gitlab.example.com/group/subgroup/repo/-/work_items/8"))
+		assert.equal("issues", target.domain)
+		assert.equal("issue", target.entity)
+		assert.equal("group/subgroup/repo", target.repo_full_name)
+		assert.equal(8, target.number)
+		assert.is_nil(providers.resolve("https://gitlab.example.com/groups/group/-/work_items/8"))
 	end)
 
 	it("resolves Git remotes as repository targets", function()

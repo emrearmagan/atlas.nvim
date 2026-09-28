@@ -59,6 +59,15 @@ _G.vim = {
 		return value:match("^%s*(.-)%s*$")
 	end,
 
+	fs = {
+		basename = function(path)
+			return path:match("[^/]*$")
+		end,
+		dirname = function(path)
+			return path:match("^(.+)/[^/]*$") or (path:sub(1, 1) == "/" and "/" or ".")
+		end,
+	},
+
 	api = (function()
 		-- Fakes just enough of nvim_set_hl/nvim_get_hl to test highlight setup
 		-- code: `default = true` must behave like `:highlight default`, i.e. it

@@ -1,12 +1,9 @@
-local M = {}
-
-local request_scope = require("atlas.core.requests")
-local pipeline_utils = require("atlas.pulls.pipelines")
-local pipelines = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 
+local M = {}
+
 -- NOTE: Went hunting for full merge checks. Found two tickets and a browser API
--- that wants session cookies. Conflicts and builds it is.
+-- that wants session cookies. Conflicts it is.
 -- https://jira.atlassian.com/browse/BCLOUD-22014
 -- https://jira.atlassian.com/browse/BCLOUD-23964
 --
@@ -17,7 +14,7 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
-	local cache_key = string.format("bitbucket:merge-checks:%s:%s", pr.repo_full_name, pr.id)
+	local cache_key = string.format("bitbucket:merge-requirements:%s:%s", pr.repo_full_name, pr.id)
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -26,26 +23,14 @@ function M.fetch(pr, opts, on_done)
 		end
 	end
 
-	local requests = request_scope.new()
-	requests.all({
-		conflicts = function(done)
-			local endpoint = string.format("/repositories/%s/pullrequests/%s/conflicts", pr.repo_full_name, pr.id)
-			return service.fetch_all_values(endpoint, done, {
-				action = "Fetch PR conflicts",
-				repo = pr.repo_full_name,
-				id = pr.id,
-			})
-		end,
-		pipelines = function(done)
-			return pipelines.fetch(pr, opts, done)
-		end,
-	}, function(results, errors)
-		if errors.conflicts or errors.pipelines then
-			on_done(nil, errors.conflicts or errors.pipelines)
+	local endpoint = string.format("/repositories/%s/pullrequests/%s/conflicts", pr.repo_full_name, pr.id)
+	return service.fetch_all_values(endpoint, function(result, err)
+		if not result then
+			on_done(nil, err or "Failed to load conflicts")
 			return
 		end
 
-		local has_conflicts = #results.conflicts.values > 0
+		local has_conflicts = #result.values > 0
 		---@type PullsMergeCheck[]
 		local checks = {
 			{
@@ -55,14 +40,13 @@ function M.fetch(pr, opts, on_done)
 					or "No conflicts with destination branch",
 			},
 		}
-		local pipeline_check = pipeline_utils.to_merge_check(results.pipelines, "Pipelines")
-		if pipeline_check then
-			table.insert(checks, pipeline_check)
-		end
 		service.set_cache(cache_key, checks)
 		on_done(checks, nil)
-	end)
-	return requests
+	end, {
+		action = "Fetch PR conflicts",
+		repo = pr.repo_full_name,
+		id = pr.id,
+	})
 end
 
 return M

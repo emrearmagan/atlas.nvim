@@ -134,35 +134,6 @@
 ---@field decision "approved"|"changes_requested"|"reviewed"|"pending"
 
 --------------------------------------------------------------------------------
--- Pipeline
---------------------------------------------------------------------------------
-
----@alias PullsPipelineState "UNKNOWN"|"STOPPED"|"SUCCESSFUL"|"INPROGRESS"|"FAILED"
-
----@class PullsPipeline
----@field id string
----@field name string
----@field state PullsPipelineState
----@field provider_state string|nil
----@field url string|nil
----@field job_count integer|nil
----@field stages PullsPipelineStage[]
-
----@class PullsPipelineStage
----@field name string|nil Nil when the provider has no native stage hierarchy.
----@field state PullsPipelineState
----@field jobs PullsPipelineJob[]
-
----@class PullsPipelineJob
----@field id string
----@field name string
----@field state PullsPipelineState
----@field provider_state string|nil
----@field url string|nil
----@field started_at string|nil
----@field duration number|nil Seconds
-
---------------------------------------------------------------------------------
 -- Merge check
 --------------------------------------------------------------------------------
 
@@ -290,6 +261,7 @@
 
 ---@class PullsCommit
 ---@field hash string
+---@field repo_full_name string|nil
 ---@field short_hash string|nil
 ---@field message string
 ---@field author_name string

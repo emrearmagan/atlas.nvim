@@ -57,7 +57,7 @@ end
 ---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
-	local cache_key = string.format("jira:search:v4:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("jira:search:v5:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if not opts.force_refresh then
 		local cached = service.get_cache(cache_key)

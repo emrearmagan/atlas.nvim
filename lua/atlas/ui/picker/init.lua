@@ -8,7 +8,8 @@ local config = require("atlas.config")
 ---@field lines string[]
 ---@field title string|nil
 
----@alias AtlasPickerFormatItem fun(item: any): string, string|nil
+---@alias AtlasPickerChunk { [1]: string, [2]: string|nil }
+---@alias AtlasPickerFormatItem fun(item: any): string, string|AtlasPickerChunk[]|nil
 ---@alias AtlasPickerPreviewItem fun(item: any, done: fun(preview: AtlasPickerPreview)): { cancel: fun() }|nil
 ---@alias AtlasPickerFetch fun(query: string, done: fun(items: any[]|nil, err: string|nil)): { cancel: fun() }|nil
 
@@ -39,6 +40,18 @@ local sizes = {
 	list = { width = 0.5, height = 0.5 },
 	preview = { width = 0.7, height = 0.7 },
 }
+
+---@param request AtlasPickerRequest
+---@param item any
+---@return string, AtlasPickerChunk[]
+function M.format_item(request, item)
+	local text, formatting = request.format_item(item)
+	text = tostring(text or "")
+	if type(formatting) == "table" then
+		return text, formatting
+	end
+	return text, { { text, formatting } }
+end
 
 ---@param name string
 local function load(name)

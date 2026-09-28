@@ -1,4 +1,3 @@
----@class AtlasBitbucketConfig
+---@class AtlasBitbucketConfig : AtlasProviderConfig
 ---@field user string
 ---@field token string
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

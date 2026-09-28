@@ -436,8 +436,6 @@ function M.open(opts)
 		return
 	end
 
-	require("atlas.issues.ui.highlights").setup()
-
 	---@type GitLabCreateIssueState
 	local issue_state = {
 		fields = {

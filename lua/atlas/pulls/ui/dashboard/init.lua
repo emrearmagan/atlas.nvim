@@ -55,14 +55,15 @@ function M.select(item)
 	if type(item) ~= "table" or (item.kind ~= "pr" and item.kind ~= "pr_meta") or type(item.pr) ~= "table" then
 		return
 	end
-	local detail = require("atlas.pulls.ui.detail")
-	if detail.is_open() then
-		open_detail(item.pr)
+	local detail = require("atlas.ui.detail")
+	if not detail.is_open(vim.api.nvim_get_current_tabpage()) then
 		return
 	end
 	local repo_detail = require("atlas.pulls.ui.repo_detail")
 	if repo_detail.is_open() then
 		repo_detail.select(item.repo)
+	else
+		open_detail(item.pr)
 	end
 end
 
@@ -121,8 +122,6 @@ function M.init(provider, opts)
 
 	local notifications = require("atlas.ui.notifications")
 	notifications.set_provider(provider)
-
-	require("atlas.pulls.ui.highlights").setup()
 
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "pulls")

@@ -47,8 +47,11 @@ describe("Bitbucket Git remote mapping", function()
 		end
 	end)
 
-	it("does not attach source URLs to a same-repository ref", function()
-		local pr = pull("acme/repo", clone_links())
+	it("recognizes same-repository refs when requested by UUID", function()
+		local pr = mapper.to_pull_request({
+			source = { repository = repository("acme/repo", {}) },
+			destination = { repository = repository("acme/repo", {}) },
+		}, "{workspace-id}", "{repo-id}")
 
 		assert.is_nil(pr.source.https_url)
 		assert.is_nil(pr.source.ssh_url)

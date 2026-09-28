@@ -1,13 +1,11 @@
-local M = {}
-
 local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
 
+local M = {}
+
 local BACKGROUND_HL = "AtlasFooterBackground"
-local Statusline = {}
-Statusline.__index = Statusline
 
 ---@type table<integer, AtlasStatusline>
 local instances = {}
@@ -40,6 +38,8 @@ local next_id = 0
 ---@field loading_spinner SpinnerInstance|nil
 ---@field options AtlasStatuslineOptions
 ---@field disposed boolean
+local Statusline = {}
+Statusline.__index = Statusline
 
 local function redraw()
 	if M.enabled() then

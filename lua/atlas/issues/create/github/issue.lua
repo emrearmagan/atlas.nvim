@@ -394,8 +394,6 @@ function M.open(opts)
 		return
 	end
 
-	require("atlas.issues.ui.highlights").setup()
-
 	---@type CreateIssueState
 	local issue_state = {
 		fields = {

@@ -3,14 +3,28 @@ local M = {}
 local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
+local issues_highlights = require("atlas.issues.ui.highlights")
+local pulls_highlights = require("atlas.pulls.ui.highlights")
 local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
+
+local function setup_highlights()
+	pulls_highlights.setup()
+	issues_highlights.setup()
+end
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
 	config.setup(opts)
+	setup_highlights()
+
+	vim.api.nvim_create_autocmd("ColorScheme", {
+		group = vim.api.nvim_create_augroup("AtlasHighlights", { clear = true }),
+		callback = setup_highlights,
+	})
+
 	require("atlas.commands").setup()
-	require("atlas.core.logger").clear()
+	logger.clear()
 end
 
 ---@param domain "pulls"|"issues"
@@ -46,7 +60,6 @@ local function open_with_provider(domain, id, opts)
 	end
 
 	require("atlas.ui.dashboard").open(domain, provider.id)
-	require("atlas.ui.shared.highlights").setup()
 	if domain == "pulls" then
 		---@cast provider PullsProvider
 		require("atlas.pulls").init(provider, opts)

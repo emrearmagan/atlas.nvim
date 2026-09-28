@@ -18,6 +18,11 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert.equal(registered.name, provider.name)
 		assert_functions(provider, provider_functions, label)
 		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
+		if domain == "pulls" then
+			local pipelines = assert(provider.capabilities and provider.capabilities.pipelines)
+			assert_functions(pipelines, { "fetch" }, label .. ".pipelines")
+			assert.equal("table", type(pipelines.actions), label .. ".pipelines.actions")
+		end
 	end
 	table.sort(ids)
 	assert.same(expected_ids, ids)

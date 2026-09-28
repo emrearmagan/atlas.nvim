@@ -56,8 +56,11 @@ end
 
 ---@param item { kind: string, _issue: Issue|nil }|nil
 function M.select(item)
-	local detail = require("atlas.issues.ui.detail")
-	if detail.is_open() and type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
+	local detail = require("atlas.ui.detail")
+	if not detail.is_open(vim.api.nvim_get_current_tabpage()) then
+		return
+	end
+	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
 		open_detail(item._issue)
 	end
 end
@@ -108,8 +111,6 @@ function M.init(provider, opts)
 	state.current_page = 1
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
-
-	require("atlas.issues.ui.highlights").setup()
 
 	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
 	local bookmarks = require("atlas.ui.shared.bookmarks")

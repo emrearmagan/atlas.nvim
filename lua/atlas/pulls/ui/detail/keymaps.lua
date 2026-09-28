@@ -6,6 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
 local actions = require("atlas.pulls.actions")
 local notify = require("atlas.core.notify")
+local links = require("atlas.ui.links")
 
 local custom_registrations = {}
 
@@ -181,7 +182,7 @@ function M.register(buf)
 						local on_update = state.on_update
 						actions.open(context, function(result)
 							complete_action(pr, on_update, result)
-						end)
+						end, { links.action(state) })
 					end
 				end,
 			})
@@ -295,6 +296,7 @@ function M.register(buf)
 
 	M.remove(buf)
 	local general = items
+	vim.list_extend(general, links.keymaps(state))
 
 	utils.insert_if(
 		general,
@@ -380,6 +382,7 @@ function M.remove(buf)
 	help.remove("General", custom_registrations[buf] or {}, { buffer = buf })
 	custom_registrations[buf] = nil
 	local general = {}
+	vim.list_extend(general, links.keymaps(state))
 	utils.insert_if(general, remove_item("ui.next_item"))
 	utils.insert_if(general, remove_item("ui.previous_item"))
 	utils.insert_if(general, remove_item("ui.refresh"))
