@@ -91,9 +91,9 @@ query($owner: String!, $repo: String!, $sha: String!) {
 
 local COMMIT_STATUS_STATES = {
 	ERROR = "failed",
-	EXPECTED = "inprogress",
+	EXPECTED = "pending",
 	FAILURE = "failed",
-	PENDING = "inprogress",
+	PENDING = "pending",
 	SUCCESS = "successful",
 }
 
@@ -109,12 +109,12 @@ local CHECK_CONCLUSION_STATES = {
 	TIMED_OUT = "FAILED",
 }
 
-local INPROGRESS_STATUSES = {
-	IN_PROGRESS = true,
-	PENDING = true,
-	QUEUED = true,
-	REQUESTED = true,
-	WAITING = true,
+local CHECK_STATUS_STATES = {
+	IN_PROGRESS = "INPROGRESS",
+	PENDING = "PENDING",
+	QUEUED = "QUEUED",
+	REQUESTED = "PENDING",
+	WAITING = "PENDING",
 }
 
 ---@param status string|nil
@@ -125,7 +125,7 @@ local function check_state(status, conclusion)
 	if state then
 		return state
 	end
-	return INPROGRESS_STATUSES[tostring(status or ""):upper()] and "INPROGRESS" or "UNKNOWN"
+	return CHECK_STATUS_STATES[tostring(status or ""):upper()] or "UNKNOWN"
 end
 
 ---@param value any

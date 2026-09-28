@@ -15,8 +15,14 @@ local url_encode = require("atlas.core.utils").url_encode
 ---@return PullsPipelineState
 local function map_state(result)
 	local life = tostring(result.lifeCycleState or ""):upper()
-	if life == "INPROGRESS" or life == "QUEUED" or life == "PENDING" then
+	if life == "INPROGRESS" then
 		return "INPROGRESS"
+	end
+	if life == "QUEUED" then
+		return "QUEUED"
+	end
+	if life == "PENDING" then
+		return "PENDING"
 	end
 	if result.continuable == true or result.notRunYet == true then
 		return "MANUAL"

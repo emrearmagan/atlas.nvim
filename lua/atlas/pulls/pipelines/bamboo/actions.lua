@@ -2,6 +2,12 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 
+local active_states = {
+	PENDING = true,
+	QUEUED = true,
+	INPROGRESS = true,
+}
+
 ---@param web_base string
 ---@param request fun(method: string, url: string, label: string, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil
 ---@return PullsPipelineAction[]
@@ -21,7 +27,7 @@ function M.new(web_base, request)
 			label = "Run pipeline",
 			icon = icons.action("run"),
 			is_available = function(ctx)
-				return ctx.pipeline.state ~= "INPROGRESS" and ctx.pipeline.state ~= "MANUAL"
+				return active_states[ctx.pipeline.state] ~= true and ctx.pipeline.state ~= "MANUAL"
 			end,
 			run = function(ctx, done)
 				local key = ctx.pipeline.id:match("^(.*)%-%d+$")
@@ -45,7 +51,7 @@ function M.new(web_base, request)
 			icon = icons.action("stop"),
 			confirm = "Stop this job?",
 			is_available = function(ctx)
-				return ctx.job ~= nil and ctx.job.state == "INPROGRESS"
+				return ctx.job ~= nil and active_states[ctx.job.state] == true
 			end,
 			run = function(ctx, done)
 				return send("DELETE", ctx.job.id, "stop job", done)
