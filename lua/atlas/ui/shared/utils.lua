@@ -512,7 +512,7 @@ end
 ---@return string[] lines
 ---@return integer[] offsets Zero-based byte offsets in the source.
 function M.wrap_line(text, max_dw)
-	if max_dw < 2 or strwidth(text) <= max_dw then
+	if max_dw < 1 or strwidth(text) <= max_dw then
 		return { text }, { 0 }
 	end
 
@@ -526,7 +526,7 @@ function M.wrap_line(text, max_dw)
 		end
 
 		local nchars = strchars(remaining, true)
-		local cut = nchars
+		local cut = 1
 		for i = nchars - 1, 1, -1 do
 			if strwidth(strcharpart(remaining, 0, i, true)) <= max_dw then
 				cut = i

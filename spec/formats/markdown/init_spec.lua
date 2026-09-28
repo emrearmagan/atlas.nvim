@@ -437,12 +437,25 @@ describe("Markdown parsing", function()
 		has_span(result, span(0, 3, 6, "AtlasMarkdownCodeLabel"))
 
 		local clipped = markdown.parse("```typescript title=example\nreturn 'complete source'\n```", { width = 8 })
-		assert.are.same({ "  type  ", "  return 'complete source'  ", "        " }, clipped.lines)
+		assert.are.same({
+			"  type  ",
+			"  retu  ",
+			"  rn    ",
+			"  'com  ",
+			"  plet  ",
+			"  e     ",
+			"  sour  ",
+			"  ce'   ",
+			"        ",
+		}, clipped.lines)
 		has_span(clipped, span(0, 2, 6, "AtlasMarkdownCodeLabel"))
 
 		for _, width in ipairs({ 1, 4 }) do
 			local narrow = markdown.parse("```lua\nx\n```", { width = width })
-			assert.are.same({ string.rep(" ", width), "  x  ", string.rep(" ", width) }, narrow.lines)
+			assert.are.same(
+				{ string.rep(" ", width), width == 1 and "x" or " x  ", string.rep(" ", width) },
+				narrow.lines
+			)
 		end
 	end)
 
@@ -508,14 +521,17 @@ describe("Markdown parsing", function()
 		}, markdown.parse("```\n```"))
 	end)
 
-	it("expands code tabs while keeping long content literal for the UI to wrap", function()
-		local result = markdown.parse("```\n\ta **b** c\n```", { width = 4 })
-		assert.are.same({ "    ", "      a **b** c  ", "    " }, result.lines)
+	it("wraps literal code with padding and a continuous background on each row", function()
+		local result = markdown.render("```\n\ta **b** c\n```", { width = 16, padding = 1 })
 		assert.are.same({
-			span(0, 0, 4, "AtlasMarkdownCode"),
-			span(1, 0, 17, "AtlasMarkdownCode"),
-			span(2, 0, 4, "AtlasMarkdownCode"),
-		}, result.highlights)
+			"               ",
+			"       a       ",
+			"   **b** c     ",
+			"               ",
+		}, result.lines)
+		for line = 0, 3 do
+			has_span(result, span(line, 1, 15, "AtlasMarkdownCode"))
+		end
 	end)
 
 	it("renders horizontal rule markers at the requested width", function()

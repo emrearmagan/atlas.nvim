@@ -259,6 +259,7 @@ function M.block.code(lines, index, opts)
 		language = code_language ~= "" and code_language or opts.language,
 		file_path = opts.file_path,
 		show_line_numbers = false,
+		width = opts.width,
 		padding = 2,
 		background_hl_group = opts.hl and opts.hl.code or highlight_groups.code,
 	})

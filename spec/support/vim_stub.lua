@@ -27,6 +27,11 @@ local function json_encode(value)
 	return "null"
 end
 
+local function strchars(text)
+	local _, count = text:gsub("[^\128-\191]", "")
+	return count
+end
+
 _G.vim = {
 	-- Sentinel used by the Neovim C layer for JSON null / GraphQL null values.
 	NIL = {},
@@ -141,9 +146,14 @@ _G.vim = {
 
 	fn = {
 		-- Layout fixtures use one-cell characters, including accented text and icons.
-		strdisplaywidth = function(text)
-			local _, width = text:gsub("[^\128-\191]", "")
-			return width
+		strdisplaywidth = strchars,
+		strchars = strchars,
+		strcharpart = function(text, start, length)
+			local chars = {}
+			for char in text:gmatch("[^\128-\191][\128-\191]*") do
+				chars[#chars + 1] = char
+			end
+			return table.concat(chars, "", start + 1, math.min(#chars, start + length))
 		end,
 		fnamemodify = function(path, _)
 			return path

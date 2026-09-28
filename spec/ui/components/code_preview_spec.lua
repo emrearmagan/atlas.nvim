@@ -121,6 +121,30 @@ describe("ui.components.code_preview", function()
 		end
 	end)
 
+	it("wraps unnumbered code while preserving syntax and backgrounds", function()
+		captures = {
+			{ "keyword", { 0, 0, 0, 0, 5, 5 } },
+			{ "variable", { 0, 6, 6, 0, 11, 11 } },
+		}
+		local result = preview.render({
+			lines = { "local value", "" },
+			language = "lua",
+			show_line_numbers = false,
+			padding = 1,
+			width = 8,
+		})
+		assert.same({ " local ", " value ", "  " }, result.lines)
+		assert.equals("local value\n", parsed_source)
+		assert.same({
+			{ line = 0, line_hl_group = "AtlasCodeBackground" },
+			{ line = 1, line_hl_group = "AtlasCodeBackground" },
+			{ line = 2, line_hl_group = "AtlasCodeBackground" },
+			{ line = 0, start_col = 1, end_col = 6, hl_group = "@keyword.lua" },
+			{ line = 1, start_col = 1, end_col = 6, hl_group = "@variable.lua" },
+		}, result.highlights)
+		assert.same({ "1  local value", "2  " }, preview.render({ lines = { "local value", "" }, width = 8 }).lines)
+	end)
+
 	it("resolves explicit language aliases and honors registered mappings first", function()
 		for alias, language in pairs({
 			js = "javascript",
