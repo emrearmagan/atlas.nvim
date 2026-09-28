@@ -4,7 +4,7 @@ local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.detail.tabs.conversation.actions")
 
@@ -179,7 +179,7 @@ function M.setup(buf, refresh)
 		callback = function()
 			local comments = state.comments(false)
 			local task_comments = state.comments(true)
-			if state.toggle_all_threads(review_threads.group_comments(comments, task_comments)) then
+			if state.toggle_all_threads(comment_threads.group_comments(comments, task_comments)) then
 				refresh()
 			end
 		end,

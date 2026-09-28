@@ -5,7 +5,7 @@ local md_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
@@ -222,7 +222,7 @@ end
 
 -- Actions
 
----@param action AtlasReviewThreadAction
+---@param action AtlasCommentThreadAction
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
@@ -309,7 +309,7 @@ function M.add_task(pr, refresh)
 	end
 	local preview
 	if parent then
-		preview = review_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
+		preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
 	end
 
 	open_md_editor({

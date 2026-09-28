@@ -5,7 +5,7 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local diff = require("atlas.ui.components.diff_hunks")
 local keymaps = require("atlas.core.keymaps")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local detail = require("atlas.pulls.ui.detail.state")
 
@@ -27,7 +27,7 @@ end
 ---@param task PullsComment
 ---@param width integer
 local function emit_task(lines, spans, line_map, task, width)
-	local task_lines, task_spans, task_map = review_threads.render_task_compact(
+	local task_lines, task_spans, task_map = comment_threads.render_task_compact(
 		{ comment = task, children = {} },
 		width,
 		{
@@ -45,14 +45,13 @@ end
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
----@param nodes AtlasReviewThreadNode[]
+---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
-local function emit_thread_box(lines, spans, line_map, nodes, width)
-	local inner = math.max(1, width - 4)
+local function emit_comments(lines, spans, line_map, nodes, width)
 	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
-	local thread_lines, thread_spans, thread_map = review_threads.render(nodes, inner, {
+	local thread_lines, thread_spans, thread_map = comment_threads.render(nodes, math.max(1, width - 4), {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
 		end,
@@ -60,21 +59,22 @@ local function emit_thread_box(lines, spans, line_map, nodes, width)
 		toggle_resolved_key = toggle_keys and table.concat(toggle_keys, " / ") or nil,
 		reaction_options = comments and comments.reaction_options,
 	})
-	local mark_line = #lines
 	local result = box.render({ { lines = thread_lines, spans = thread_spans, line_map = thread_map } }, {
 		width = width,
 		padding_x = 0,
-		line_map = line_map,
-		line_offset = mark_line,
 	})
-	utils.append_block(lines, spans, { lines = result.lines, highlights = result.highlights })
+	local offset = #lines
+	utils.append_block(lines, spans, result)
+	for line, entry in pairs(result.line_map) do
+		line_map[offset + line] = entry
+	end
 end
 
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
 ---@param width integer
----@param thread AtlasReviewThreadNode
+---@param thread AtlasCommentThreadNode
 local function emit_thread(lines, spans, line_map, width, thread)
 	local comment = thread.comment
 	local position = comment.file or comment.inline
@@ -92,7 +92,7 @@ local function emit_thread(lines, spans, line_map, width, thread)
 			line_map[offset + line] = entry
 		end
 	end
-	emit_thread_box(lines, spans, line_map, { thread }, width)
+	emit_comments(lines, spans, line_map, { thread }, width)
 end
 
 ---@param width integer
@@ -146,7 +146,7 @@ function M.render(width, comments, tasks)
 		return lines, spans, line_map
 	end
 
-	local roots = review_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
+	local roots = comment_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
 	for _, thread in ipairs(roots) do
 		emit_thread(lines, spans, line_map, max_width, thread)
 		table.insert(lines, "")

@@ -3,7 +3,7 @@ local M = {}
 local box = require("atlas.ui.components.box")
 local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
-local threads = require("atlas.pulls.ui.components.review_threads")
+local threads = require("atlas.pulls.ui.components.comment_threads")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_comments")
@@ -11,7 +11,7 @@ local popup_namespace = vim.api.nvim_create_namespace("atlas_diff_thread_popup")
 local popup = { buf = nil, win = nil, owner = nil, line_map = {} }
 
 ---@class AtlasCommentRendererContext
----@field threads AtlasReviewThreadNode[]
+---@field threads AtlasCommentThreadNode[]
 ---@field expanded_threads table<string, boolean>
 ---@field old_path string
 ---@field new_path string
@@ -66,7 +66,7 @@ end
 
 ---@param context AtlasCommentRendererContext
 ---@param buf integer
----@param list AtlasReviewThreadNode[]
+---@param list AtlasCommentThreadNode[]
 ---@return [string, string][][]
 function M.thread_lines(context, buf, list)
 	local width = buffer_width(buf)
@@ -84,7 +84,7 @@ end
 
 ---@param context AtlasCommentRendererContext
 ---@param buf integer
----@param by_line table<integer, AtlasReviewThreadNode[]>
+---@param by_line table<integer, AtlasCommentThreadNode[]>
 ---@param above_lines table<integer, boolean>
 ---@return table<integer, integer>
 function M.render_comments(context, buf, by_line, above_lines)
@@ -130,7 +130,7 @@ end
 
 ---@param context AtlasCommentRendererContext
 ---@param buf integer
----@param list AtlasReviewThreadNode[]
+---@param list AtlasCommentThreadNode[]
 ---@return integer
 function M.render_file_comments(context, buf, list)
 	if #list == 0 or not vim.api.nvim_buf_is_valid(buf) then
@@ -206,12 +206,12 @@ local function key_label(keys)
 end
 
 ---@class AtlasDiffThreadPopupOptions
----@field nodes AtlasReviewThreadNode[]
+---@field nodes AtlasCommentThreadNode[]
 ---@field owner string
 ---@field title string|nil
 ---@field toggle_resolved_keys string[]|nil
 ---@field reaction_options PullsReactionOption[]|nil
----@field on_action fun(action: AtlasReviewThreadAction, comment: PullsComment, close: fun())
+---@field on_action fun(action: AtlasCommentThreadAction, comment: PullsComment, close: fun())
 
 ---@param opts AtlasDiffThreadPopupOptions
 function M.open_popup(opts)

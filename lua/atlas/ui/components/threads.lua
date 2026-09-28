@@ -131,8 +131,8 @@ local function compute_prefixes(depth, branch_prefix, is_last, padding_x, show_c
 			connector = is_last and "└─ " or "├─ "
 			continuation = is_last and "   " or "│  "
 		else
-			connector = "   "
-			continuation = "   "
+			connector = "↳ "
+			continuation = "  "
 		end
 	end
 
@@ -249,16 +249,19 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		end
 	end
 
-	local full_line = pfx.meta_prefix .. table.concat(parts, "")
+	local full_line = utils.truncate(pfx.meta_prefix .. table.concat(parts, ""), width - opts.padding_x)
 	lines[#lines + 1] = full_line
 	line_map[#lines] = make_line_map(item, "header", depth)
 
 	if #pfx.meta_prefix > 0 then
-		span(spans, #lines - 1, 0, #pfx.meta_prefix, "AtlasTextMuted")
+		span(spans, #lines - 1, 0, math.min(#pfx.meta_prefix, #full_line), "AtlasTextMuted")
 	end
 
 	for _, m in ipairs(col_markers) do
-		span(spans, #lines - 1, m[1], m[2], m[3])
+		local end_col = math.min(m[2], #full_line)
+		if m[1] < end_col then
+			span(spans, #lines - 1, m[1], end_col, m[3])
+		end
 	end
 end
 
@@ -515,6 +518,54 @@ function M.render(items, width, opts)
 				lines[#lines + 1] = sep
 				span(spans, #lines - 1, 0, #sep, "AtlasTextMuted")
 			end
+		end
+	end
+
+	return lines, spans, line_map
+end
+
+---@param items AtlasThreadItem[]
+---@param width integer
+---@param opts? AtlasThreadRenderOpts
+---@return string[], AtlasThreadSpan[], table<integer, AtlasThreadLineMap>
+function M.render_comments(items, width, opts)
+	local padding = string.rep(" ", opts and opts.padding_x or 1)
+	local inner_width = math.max(1, width - #padding * 2 - 4)
+	opts = vim.tbl_extend("force", opts or {}, { padding_x = 0, show_connectors = false })
+
+	local lines, spans, line_map = {}, {}, {}
+	local content_offset = #padding + #"│ "
+
+	for index, item in ipairs(items) do
+		if index > 1 then
+			lines[#lines + 1] = ""
+		end
+
+		local source, source_spans, source_map = M.render({ item }, inner_width, opts)
+		local offset = #lines
+
+		for row, text in ipairs(source) do
+			local title = row == 1
+			local leading = padding .. (title and "╭ " or "│ ")
+			local space = math.max(0, inner_width - vim.fn.strdisplaywidth(text))
+			local trailing = " " .. string.rep(title and "─" or " ", space) .. (title and "╮" or "│")
+			lines[#lines + 1] = leading .. text .. trailing
+			line_map[#lines] = source_map[row]
+
+			span(spans, #lines - 1, #padding, #padding + #"│", "AtlasBorder")
+			span(spans, #lines - 1, #leading + #text, #lines[#lines], "AtlasBorder")
+		end
+
+		lines[#lines + 1] = padding .. "╰" .. string.rep("─", inner_width + 2) .. "╯"
+		span(spans, #lines - 1, #padding, #lines[#lines], "AtlasBorder")
+
+		for _, highlight in ipairs(source_spans) do
+			spans[#spans + 1] = {
+				line = offset + highlight.line,
+				start_col = content_offset + highlight.start_col,
+				end_col = content_offset + highlight.end_col,
+				hl_group = highlight.hl_group,
+			}
 		end
 	end
 

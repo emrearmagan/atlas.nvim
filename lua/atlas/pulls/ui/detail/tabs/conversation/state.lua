@@ -170,7 +170,7 @@ function M.toggle(root_id)
 	M.collapsed[key] = not M.collapsed[key]
 end
 
----@param threads AtlasReviewThreadNode[]
+---@param threads AtlasCommentThreadNode[]
 ---@return boolean
 function M.toggle_all_threads(threads)
 	local roots = {}

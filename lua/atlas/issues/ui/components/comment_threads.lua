@@ -183,7 +183,7 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes) do
 		table.insert(items, build_item(node, opts, nil))
 	end
-	return threads.render(items, width, render_options(opts.padding_x or 1, opts))
+	return threads.render_comments(items, width, render_options(opts.padding_x or 1, opts))
 end
 
 ---@param comment IssueComment

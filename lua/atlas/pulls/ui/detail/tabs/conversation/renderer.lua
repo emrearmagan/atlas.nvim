@@ -3,30 +3,14 @@ local M = {}
 local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local box = require("atlas.ui.components.box")
 local icons = require("atlas.ui.shared.icons")
 local threads = require("atlas.ui.components.threads")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local activity_component = require("atlas.pulls.ui.detail.components.activity")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
 
 local PADDING_X = 1
-local PADDING = string.rep(" ", PADDING_X)
-local CONNECTOR = "│"
-
----@param lines string[]
----@param spans table[]
-local function append_connector(lines, spans)
-	local connector_line = PADDING .. CONNECTOR
-	table.insert(lines, connector_line)
-	table.insert(spans, {
-		line = #lines - 1,
-		start_col = PADDING_X,
-		end_col = PADDING_X + #CONNECTOR,
-		hl_group = "AtlasTextMuted",
-	})
-end
 
 ---@param dst_lines string[]
 ---@param dst_spans table[]
@@ -50,29 +34,25 @@ local function splice(dst_lines, dst_spans, dst_map, src_lines, src_spans, src_m
 	end
 end
 
----@param thread AtlasReviewThreadNode
+---@param thread AtlasCommentThreadNode
 ---@param collapsed boolean
 ---@param width integer
 local function render_thread(thread, collapsed, width)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
-	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
 	local fold_key = fold_keys and fold_keys[1]
-	local lines, spans, line_map = review_threads.render({ thread }, inner, {
+	local opts = {
+		boxed = true,
 		expanded = function()
 			return not collapsed
 		end,
-		padding_x = 0,
+		padding_x = PADDING_X,
 		reaction_options = comments and comments.reaction_options,
 		content_max_lines = fold_key and state.comment_max_lines or nil,
 		content_truncated_key = fold_key,
-	})
-	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
-		width = width,
-		padding_x = PADDING_X,
-	})
-	return result.lines, result.highlights, result.line_map
+	}
+	return comment_threads.render({ thread }, width, opts)
 end
 
 ---@param line_map table<integer, table>
@@ -100,7 +80,7 @@ end
 ---@class PullsConversationTimelineEntry
 ---@field type "comment"|"review"|"activity_run"
 ---@field timestamp string
----@field thread AtlasReviewThreadNode|nil
+---@field thread AtlasCommentThreadNode|nil
 ---@field item PullsConversationItem|nil
 ---@field items PullsConversationItem[]|nil
 
@@ -123,7 +103,7 @@ local function build_timeline(items)
 			})
 		end
 	end
-	for _, thread in ipairs(review_threads.group_comments(comments)) do
+	for _, thread in ipairs(comment_threads.group_comments(comments)) do
 		table.insert(mixed, {
 			kind = "comment",
 			timestamp = thread.comment.created_on or "",
@@ -250,7 +230,7 @@ local function render_entry(entry, width, has_next, by_entity)
 		local thread = entry.thread
 		local root = thread.comment
 		if root.is_task then
-			local lines, spans, line_map = review_threads.render_task_compact(thread, width, {
+			local lines, spans, line_map = comment_threads.render_task_compact(thread, width, {
 				padding_x = PADDING_X,
 				content_prefix = has_next and "│ " or "  ",
 			})
@@ -286,6 +266,12 @@ local function render_entry(entry, width, has_next, by_entity)
 	return {}, {}, {}
 end
 
+---@param entry PullsConversationTimelineEntry|nil
+---@return boolean
+local function is_activity(entry)
+	return entry ~= nil and (entry.type ~= "comment" or entry.thread.comment.is_task == true)
+end
+
 ---@param _pr PullRequest
 ---@param _details PullRequestDetails|nil
 ---@param width integer
@@ -316,9 +302,14 @@ function M.render(_pr, _details, width)
 
 	for index, entry in ipairs(entries) do
 		if #lines > 0 then
-			append_connector(lines, spans)
+			if is_activity(entry) and is_activity(entries[index - 1]) then
+				utils.push(lines, spans, "│", "AtlasTextMuted", PADDING_X)
+			else
+				lines[#lines + 1] = ""
+			end
 		end
-		local e_lines, e_spans, e_map = render_entry(entry, width, index < #entries, by_entity)
+		local has_next = is_activity(entry) and is_activity(entries[index + 1])
+		local e_lines, e_spans, e_map = render_entry(entry, width, has_next, by_entity)
 		splice(lines, spans, line_map, e_lines, e_spans, e_map)
 	end
 

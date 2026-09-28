@@ -5,7 +5,7 @@ local code_preview = require("atlas.ui.components.code_preview")
 local keymaps = require("atlas.core.keymaps")
 local position = require("atlas.pulls.diff.position")
 local review = require("atlas.pulls.diff.review")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local ui = require("atlas.pulls.diff.ui.comments")
 
 local ACTIONS = {
@@ -38,7 +38,7 @@ local function render_context(session)
 	end
 	local capability = current_review.provider.capabilities.comments
 	return {
-		threads = review_threads.group_comments(current_review.data.comments, current_review.data.tasks),
+		threads = comment_threads.group_comments(current_review.data.comments, current_review.data.tasks),
 		expanded_threads = session.expanded_threads,
 		old_path = current.document.old.path,
 		new_path = current.document.new.path,
@@ -50,7 +50,7 @@ end
 ---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side AtlasDiffSide
----@return table<integer, AtlasReviewThreadNode[]>, AtlasReviewThreadNode[]
+---@return table<integer, AtlasCommentThreadNode[]>, AtlasCommentThreadNode[]
 local function threads_by_line(session, context, path, side)
 	local document = session.current.document
 	local lines = side == "LEFT" and document.old.lines or document.new.lines
@@ -88,7 +88,7 @@ end
 ---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side AtlasDiffSide
----@return table<integer, AtlasReviewThreadNode[]>, table<integer, boolean>, AtlasReviewThreadNode[]
+---@return table<integer, AtlasCommentThreadNode[]>, table<integer, boolean>, AtlasCommentThreadNode[]
 local function visible_threads(session, context, path, side)
 	local result, file_threads = threads_by_line(session, context, path, side)
 	local above = {}
@@ -177,7 +177,7 @@ end
 ---@param target AtlasDiffHint[]
 ---@param buf integer
 ---@param line integer
----@param list AtlasReviewThreadNode[]
+---@param list AtlasCommentThreadNode[]
 local function add_line_hints(target, buf, line, list)
 	for _, node in ipairs(list) do
 		target[#target + 1] = {
@@ -191,7 +191,7 @@ end
 
 ---@param target AtlasDiffHint[]
 ---@param buf integer
----@param by_line table<integer, AtlasReviewThreadNode[]>
+---@param by_line table<integer, AtlasCommentThreadNode[]>
 local function add_hints(target, buf, by_line)
 	for line, list in pairs(by_line) do
 		add_line_hints(target, buf, line, list)
@@ -339,7 +339,7 @@ local function inline_preview(session, buf, selected_start, selected_end)
 end
 
 ---@param session AtlasDiffSession
----@param action AtlasReviewThreadAction
+---@param action AtlasCommentThreadAction
 ---@param comment PullsComment
 ---@param on_done fun()|nil
 ---@return boolean
@@ -361,7 +361,7 @@ end
 
 ---@param session AtlasDiffSession
 ---@param buf integer
----@return AtlasReviewThreadNode[]
+---@return AtlasCommentThreadNode[]
 local function at_cursor(session, buf)
 	local path, side = buffer_context(session, buf)
 	local context = render_context(session)
@@ -384,7 +384,7 @@ function M.has_at_cursor(session, buf)
 	return #at_cursor(session, buf) > 0
 end
 
----@param nodes AtlasReviewThreadNode[]
+---@param nodes AtlasCommentThreadNode[]
 ---@return string
 local function popup_title(nodes)
 	local path, side, line, file_comment
@@ -442,7 +442,7 @@ end
 ---@return boolean
 function M.toggle_at_cursor(session, buf)
 	local nodes = at_cursor(session, buf)
-	if not review_threads.toggle_all_threads(nodes, session.expanded_threads) then
+	if not comment_threads.toggle_all_threads(nodes, session.expanded_threads) then
 		return false
 	end
 	session:render()
@@ -453,7 +453,7 @@ end
 ---@return boolean
 function M.toggle_all(session)
 	local context = render_context(session)
-	if not context or not review_threads.toggle_all_threads(context.threads, session.expanded_threads) then
+	if not context or not comment_threads.toggle_all_threads(context.threads, session.expanded_threads) then
 		return false
 	end
 	session:render()

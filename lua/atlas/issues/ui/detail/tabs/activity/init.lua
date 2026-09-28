@@ -1,10 +1,8 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
-local icons = require("atlas.ui.shared.icons")
-local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
-local threads = require("atlas.ui.components.threads")
+local activity = require("atlas.issues.ui.detail.components.activity")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.issues.ui.detail.state")
 local request_scope = require("atlas.core.requests")
@@ -22,39 +20,6 @@ local state = {
 	loading = false,
 	requests = request_scope.new(),
 }
-
----@param entries IssueActivityEntry[]|nil
----@return AtlasThreadItem[]
-local function to_thread_items(entries)
-	local out = {}
-	for _, entry in ipairs(entries or {}) do
-		local author = entry.actor and entry.actor.name or "Unknown"
-		local timestamp = utils.relative_time_text(entry.date)
-		local user_icon, user_icon_hl = icons.general("user")
-		table.insert(out, {
-			icon = user_icon,
-			icon_hl = user_icon_hl,
-			author = author,
-			right_text = timestamp,
-			additional = entry.label,
-			content = entry.body,
-			line_map = { kind = "history", activity_entry = entry },
-		})
-	end
-	return out
-end
-
----@param item AtlasThreadItem
----@param row string
----@param row_index integer
----@return table[]|nil
-local function content_hl(item, row, row_index)
-	local entry = item.line_map and item.line_map.activity_entry
-	if not entry or not entry.body_hl then
-		return nil
-	end
-	return entry.body_hl(row, row_index)
-end
 
 function M.reset()
 	state.requests.cancel()
@@ -124,35 +89,17 @@ function M.render(_issue, _details, width)
 		return lines, spans, {}
 	end
 
-	local thread_items = to_thread_items(state.entries)
-	local thread_lines, thread_spans, thread_line_map = threads.render(thread_items, width, {
+	return activity.render(state.entries, width, {
 		padding_x = PADDING_X,
-		mode = "tree",
-		author_hl = function(_, author)
-			return highlights.dynamic_for(author)
-		end,
-		icon_hl_fn = function(item)
-			return highlights.dynamic_for(tostring(item.author or ""))
-		end,
-		additional_hl = function()
-			return "AtlasTextMuted"
-		end,
-		content_hl = content_hl,
+		content_max_lines = 0,
 	})
-
-	utils.append_block(lines, spans, { lines = thread_lines, highlights = thread_spans })
-	local line_map = {}
-	for lnum, entry in pairs(thread_line_map or {}) do
-		line_map[#lines - #thread_lines + lnum] = entry
-	end
-	return lines, spans, line_map
 end
 
 ---@param _lnum integer
 ---@param entry table
 ---@return boolean
 function M.is_selectable_line(_lnum, entry)
-	return entry.kind == "history"
+	return entry.activity_entry ~= nil
 end
 
 ---@return boolean

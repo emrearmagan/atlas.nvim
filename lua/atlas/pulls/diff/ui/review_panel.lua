@@ -10,7 +10,7 @@ local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local notes = require("atlas.pulls.diff.notes")
 local review = require("atlas.pulls.diff.review")
 local review_actions = require("atlas.pulls.actions.review")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local utils = require("atlas.ui.shared.utils")
 local namespace = vim.api.nvim_create_namespace("atlas_diff_review_panel")
 
@@ -563,10 +563,10 @@ local function tree_key(entry)
 		return nil
 	end
 	local root = entry.thread_root or entry.comment
-	return entry.tree_key or (root and review_threads.comment_key(root)) or nil
+	return entry.tree_key or (root and comment_threads.comment_key(root)) or nil
 end
 
----@param thread AtlasReviewThreadNode
+---@param thread AtlasCommentThreadNode
 ---@return boolean
 local function has_pending(thread)
 	if thread.comment.state == "PENDING" then
@@ -584,12 +584,12 @@ end
 ---@return table[], table[], table[], table[], table[]
 local function panel_items(data)
 	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
-	for _, thread in ipairs(review_threads.group_comments(data.comments, data.tasks)) do
+	for _, thread in ipairs(comment_threads.group_comments(data.comments, data.tasks)) do
 		local position = thread.comment.file or thread.comment.inline
 		table.insert(has_pending(thread) and pending or published_comments, {
 			kind = "comment",
 			thread = thread,
-			key = review_threads.comment_key(thread.comment),
+			key = comment_threads.comment_key(thread.comment),
 			path = position and position.path or "",
 			line = thread.comment.inline and (thread.comment.inline.to or thread.comment.inline.from) or 0,
 			timestamp = tostring(thread.comment.created_on or ""),
@@ -605,7 +605,7 @@ local function panel_items(data)
 			table.insert(standalone_tasks, {
 				kind = "task",
 				thread = { comment = task, children = {} },
-				key = review_threads.comment_key(task),
+				key = comment_threads.comment_key(task),
 				path = position and position.path or "",
 				line = task.inline and (task.inline.to or task.inline.from) or 0,
 				timestamp = tostring(task.created_on or ""),
@@ -765,7 +765,7 @@ function M.render(panel, session)
 							review_edit_key
 						)
 					elseif item.kind ~= "note" then
-						block_lines, block_spans, block_map = review_threads.render_compact(
+						block_lines, block_spans, block_map = comment_threads.render_compact(
 							item.thread,
 							width,
 							item_expanded,

@@ -8,7 +8,7 @@ local notes = require("atlas.pulls.notes")
 local core_notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local ui_utils = require("atlas.ui.utils")
-local review_threads = require("atlas.pulls.ui.components.review_threads")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
 ---@field pr PullRequest
@@ -153,7 +153,7 @@ function M.add_comment(context, opts, on_done)
 	end
 	local preview = opts.preview
 	if preview == nil and parent then
-		preview = review_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
+		preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
 	end
 	local template_action = comment_template_action()
 

@@ -14,19 +14,11 @@ local BORDER_V_BYTES = #BORDER_VERTICAL
 ---@field spans table[]
 ---@field line_map table<integer, table>|nil
 
----@class BoxRenderOpts
----@field width integer
----@field padding_x integer|nil
----@field border_hl string|nil
----@field line_map table<integer, table>|nil
----@field line_offset integer|nil
-
 ---@param groups BoxContentGroup[]
----@param opts BoxRenderOpts
+---@param opts { width: integer, padding_x?: integer, line_map?: table<integer, table>, line_offset?: integer }
 ---@return { lines: string[], highlights: table[], line_map: table<integer, table> }
 function M.render(groups, opts)
 	local padding_x = opts.padding_x or 1
-	local border_hl = opts.border_hl or "AtlasBorder"
 	local outer_pad = string.rep(" ", padding_x)
 	local line_prefix = outer_pad .. BORDER_VERTICAL
 	local line_prefix_width = vim.fn.strdisplaywidth(line_prefix)
@@ -42,7 +34,7 @@ function M.render(groups, opts)
 			line = lnum,
 			start_col = padding_x,
 			end_col = #line,
-			hl_group = border_hl,
+			hl_group = "AtlasBorder",
 		})
 	end
 
@@ -80,14 +72,14 @@ function M.render(groups, opts)
 				line = lnum,
 				start_col = padding_x,
 				end_col = padding_x + BORDER_V_BYTES,
-				hl_group = border_hl,
+				hl_group = "AtlasBorder",
 			})
 			-- Right border
 			table.insert(highlights, {
 				line = lnum,
 				start_col = #line - BORDER_V_BYTES,
 				end_col = #line,
-				hl_group = border_hl,
+				hl_group = "AtlasBorder",
 			})
 		end
 

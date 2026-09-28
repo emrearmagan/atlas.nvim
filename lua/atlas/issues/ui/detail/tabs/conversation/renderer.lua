@@ -3,28 +3,12 @@ local M = {}
 local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local box = require("atlas.ui.components.box")
 local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local activity_component = require("atlas.issues.ui.detail.components.activity")
 local detail = require("atlas.issues.ui.detail.state")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 
 local PADDING_X = 1
-local PADDING = string.rep(" ", PADDING_X)
-local CONNECTOR = "│"
-
----@param lines string[]
----@param spans table[]
-local function append_connector(lines, spans)
-	local connector_line = PADDING .. CONNECTOR
-	table.insert(lines, connector_line)
-	table.insert(spans, {
-		line = #lines - 1,
-		start_col = PADDING_X,
-		end_col = PADDING_X + #CONNECTOR,
-		hl_group = "AtlasTextMuted",
-	})
-end
 
 ---@param dst_lines string[]
 ---@param dst_spans table[]
@@ -52,25 +36,19 @@ end
 local function render_thread(thread, collapsed, width)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
-	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
 	local fold_key = fold_keys and fold_keys[1]
-	local lines, spans, line_map = comment_threads.render({ thread }, inner, {
+	return comment_threads.render({ thread }, width, {
 		expanded = function()
 			return not collapsed
 		end,
-		padding_x = 0,
+		padding_x = PADDING_X,
 		reaction_options = comments and comments.reaction_options,
 		content_max_lines = fold_key and function(comment)
 			return state.comment_max_lines(comment)
 		end or nil,
 		content_truncated_key = fold_key,
 	})
-	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
-		width = width,
-		padding_x = PADDING_X,
-	})
-	return result.lines, result.highlights, result.line_map
 end
 
 ---@param line_map table<integer, table>
@@ -225,10 +203,17 @@ function M.render(_issue, _details, width)
 	end
 
 	for index, entry in ipairs(entries) do
+		local previous = entries[index - 1]
+		local following = entries[index + 1]
 		if #lines > 0 then
-			append_connector(lines, spans)
+			if entry.type == "activity_run" and previous.type == "activity_run" then
+				utils.push(lines, spans, "│", "AtlasTextMuted", PADDING_X)
+			else
+				lines[#lines + 1] = ""
+			end
 		end
-		local entry_lines, entry_spans, entry_map = render_entry(entry, width, index < #entries, by_entity)
+		local has_next = entry.type == "activity_run" and following ~= nil and following.type == "activity_run"
+		local entry_lines, entry_spans, entry_map = render_entry(entry, width, has_next, by_entity)
 		splice(lines, spans, line_map, entry_lines, entry_spans, entry_map)
 	end
 

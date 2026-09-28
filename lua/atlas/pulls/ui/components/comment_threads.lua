@@ -7,7 +7,7 @@ local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
----@alias AtlasReviewThreadAction "add_comment"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
+---@alias AtlasCommentThreadAction "add_comment"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
 ---@param author { name: string, nickname: string|nil }|nil
 ---@return string
@@ -155,7 +155,7 @@ function M.status_marker(comment)
 end
 
 ---@param comment PullsComment
----@param opts AtlasReviewThreadRenderOptions
+---@param opts AtlasCommentThreadRenderOptions
 ---@param is_root? boolean
 ---@return AtlasThreadItem
 local function comment_item(comment, opts, is_root)
@@ -223,11 +223,9 @@ local function comment_item(comment, opts, is_root)
 
 	local author = author_name(comment.author)
 	local footer_items = {}
-	if opts.show_reactions ~= false then
-		local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
-		if reactions ~= "" then
-			table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
-		end
+	local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
+	if reactions ~= "" then
+		table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
 	end
 
 	if is_root and opts.action_keys then
@@ -261,10 +259,6 @@ local function comment_item(comment, opts, is_root)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
-	local additional_hl = nil
-	if opts.additional then
-		additional, additional_hl = opts.additional(comment, additional)
-	end
 	local location = is_root and opts.location and opts.location(comment) or ""
 	if location ~= "" then
 		additional = additional ~= "" and (additional .. "  " .. location) or location
@@ -286,7 +280,6 @@ local function comment_item(comment, opts, is_root)
 		meta = {
 			comment = comment,
 			author_hl_name = author,
-			additional_hl = additional_hl,
 			is_deleted = is_deleted,
 			right_text_hl = marker_hl,
 		},
@@ -294,7 +287,7 @@ local function comment_item(comment, opts, is_root)
 end
 
 ---@param padding_x integer
----@param opts AtlasReviewThreadRenderOptions
+---@param opts AtlasCommentThreadRenderOptions
 ---@return AtlasThreadRenderOpts
 local function threads_opts(padding_x, opts)
 	local content_max_lines = opts.content_max_lines
@@ -309,7 +302,6 @@ local function threads_opts(padding_x, opts)
 	return {
 		padding_x = padding_x,
 		show_connectors = false,
-		separator = "─",
 		content_max_lines = content_max_lines,
 		content_truncated_key = opts.content_truncated_key,
 		content_prefix = opts.content_prefix,
@@ -362,8 +354,8 @@ local function parent_key(comment)
 	return comment.parent_id ~= nil and ("comment:" .. tostring(comment.parent_id)) or nil
 end
 
----@param left AtlasReviewThreadNode
----@param right AtlasReviewThreadNode
+---@param left AtlasCommentThreadNode
+---@param right AtlasCommentThreadNode
 ---@return boolean
 local function node_sort(left, right)
 	local a = left.comment
@@ -376,13 +368,13 @@ local function node_sort(left, right)
 	return tostring(a.id or "") < tostring(b.id or "")
 end
 
----@class AtlasReviewThreadNode
+---@class AtlasCommentThreadNode
 ---@field comment PullsComment
----@field children AtlasReviewThreadNode[]
+---@field children AtlasCommentThreadNode[]
 
 ---@param comments PullsComment[]
 ---@param tasks? PullsComment[]
----@return AtlasReviewThreadNode[]
+---@return AtlasCommentThreadNode[]
 function M.group_comments(comments, tasks)
 	if tasks ~= nil then
 		local comment_ids = {}
@@ -426,7 +418,7 @@ function M.group_comments(comments, tasks)
 	return roots
 end
 
----@param node AtlasReviewThreadNode
+---@param node AtlasCommentThreadNode
 ---@return integer
 local function descendant_count(node)
 	local count = #node.children
@@ -446,7 +438,7 @@ function M.is_thread_expanded(comment, expanded)
 	return expanded[M.comment_key(comment)] == true
 end
 
----@param node AtlasReviewThreadNode
+---@param node AtlasCommentThreadNode
 ---@return boolean
 local function is_collapsible(node)
 	return not node.comment.is_task
@@ -458,7 +450,7 @@ local function is_collapsible(node)
 		)
 end
 
----@param nodes AtlasReviewThreadNode[]
+---@param nodes AtlasCommentThreadNode[]
 ---@param expanded table<string, boolean>
 ---@return boolean toggled, boolean expanded_all
 function M.toggle_all_threads(nodes, expanded)
@@ -479,8 +471,8 @@ function M.toggle_all_threads(nodes, expanded)
 	return #collapsible > 0, should_expand
 end
 
----@param node AtlasReviewThreadNode
----@param opts AtlasReviewThreadRenderOptions
+---@param node AtlasCommentThreadNode
+---@param opts AtlasCommentThreadRenderOptions
 ---@param is_root boolean
 ---@param root PullsComment|nil
 ---@return AtlasThreadItem
@@ -508,29 +500,28 @@ local function build_item(node, opts, is_root, root)
 	return item
 end
 
----@class AtlasReviewThreadActionKeys
+---@class AtlasCommentThreadActionKeys
 ---@field reply? string
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
 
----@class AtlasReviewThreadRenderOptions
+---@class AtlasCommentThreadRenderOptions
 ---@field expanded? fun(root: PullsComment): boolean
----@field action_keys? AtlasReviewThreadActionKeys
+---@field action_keys? AtlasCommentThreadActionKeys
 ---@field padding_x? integer
+---@field boxed? boolean
 ---@field toggle_resolved_key? string
 ---@field reaction_options? PullsReactionOption[]
----@field show_reactions? boolean
 ---@field location? fun(comment: PullsComment): string
 ---@field content_prefix? string
 ---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
 ---@field content_truncated_key? string
 ---@field show_task_label? boolean
----@field additional? fun(comment: PullsComment, timestamp: string): string, string|table[]|nil
 
----@param nodes AtlasReviewThreadNode[]
+---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
----@param opts AtlasReviewThreadRenderOptions|nil
+---@param opts AtlasCommentThreadRenderOptions|nil
 ---@return string[], table[], table<integer, table>
 function M.render(nodes, width, opts)
 	opts = opts or {}
@@ -541,12 +532,13 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes or {}) do
 		table.insert(rendered, build_item(node, opts, true, nil))
 	end
-	return threads.render(rendered, width, threads_opts(opts.padding_x or 1, opts))
+	local render = opts.boxed and threads.render_comments or threads.render
+	return render(rendered, width, threads_opts(opts.padding_x or 1, opts))
 end
 
----@param node AtlasReviewThreadNode
+---@param node AtlasCommentThreadNode
 ---@param width integer
----@param opts AtlasReviewThreadRenderOptions|nil
+---@param opts AtlasCommentThreadRenderOptions|nil
 ---@return string[], table[], table<integer, table>
 function M.render_task_compact(node, width, opts)
 	opts = opts or {}
@@ -564,11 +556,11 @@ function M.render_task_compact(node, width, opts)
 	return threads.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
 end
 
----@param node AtlasReviewThreadNode
+---@param node AtlasCommentThreadNode
 ---@param width integer
 ---@param expanded boolean
 ---@param location string
----@param opts AtlasReviewThreadRenderOptions|nil
+---@param opts AtlasCommentThreadRenderOptions|nil
 ---@return string[], AtlasUIHighlight[], table<integer, table>
 function M.render_compact(node, width, expanded, location, opts)
 	opts = opts or {}
@@ -596,17 +588,7 @@ function M.render_compact(node, width, expanded, location, opts)
 			end
 			local start_col = #metadata
 			metadata = metadata .. field.text
-			if type(field.hl) == "table" then
-				for _, highlight in ipairs(field.hl) do
-					table.insert(metadata_hl, {
-						start_col = start_col + highlight.start_col,
-						end_col = start_col + highlight.end_col,
-						hl_group = highlight.hl_group,
-					})
-				end
-			else
-				table.insert(metadata_hl, { start_col = start_col, end_col = #metadata, hl_group = field.hl })
-			end
+			table.insert(metadata_hl, { start_col = start_col, end_col = #metadata, hl_group = field.hl })
 		end
 	end
 
