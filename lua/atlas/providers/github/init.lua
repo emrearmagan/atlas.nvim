@@ -1,3 +1,4 @@
+local client = require("atlas.providers.github.client")
 local resolver = require("atlas.providers.github.resolve")
 local repositories = require("atlas.providers.github.repositories")
 local notifications = require("atlas.providers.github.notifications")
@@ -7,6 +8,7 @@ local users = require("atlas.providers.github.users")
 return {
 	id = "github",
 	name = "GitHub",
+	hostname = client.hostname,
 	resolver = resolver,
 	domains = {
 		pulls = {

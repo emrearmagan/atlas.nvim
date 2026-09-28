@@ -16,7 +16,7 @@ local groups = {
 
 	AtlasDiffAddLine = { link = "DiffAdd" },
 	AtlasDiffChangeLine = { link = "DiffChange" },
-	AtlasDiffDeleteFiller = { link = "Comment" },
+	AtlasDiffDeleteFiller = { fg = vim.api.nvim_get_hl(0, { name = "Comment", link = false }).fg, italic = false },
 	AtlasDiffRemoveLine = { link = "DiffDelete" },
 }
 

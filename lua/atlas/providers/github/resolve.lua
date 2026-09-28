@@ -1,6 +1,7 @@
 local M = {}
 
 local url = require("atlas.providers.url")
+local client = require("atlas.providers.github.client")
 
 ---@param parsed AtlasParsedUrl
 ---@param owner string
@@ -8,7 +9,7 @@ local url = require("atlas.providers.url")
 ---@return string, string, string
 local function repository(parsed, owner, repo)
 	local full_name = owner .. "/" .. repo
-	local web_url = url.base_url("github", parsed.host, "github.com") .. "/" .. full_name
+	local web_url = "https://" .. parsed.host .. "/" .. full_name
 	return full_name, web_url, web_url .. ".git"
 end
 
@@ -16,7 +17,7 @@ end
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
 function M.resolve(value, parsed)
-	if parsed == nil or parsed.host ~= "github.com" then
+	if parsed == nil or parsed.host ~= client.hostname() then
 		return nil, nil
 	end
 

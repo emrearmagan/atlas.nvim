@@ -1,3 +1,4 @@
+local url = require("atlas.providers.url")
 local resolver = require("atlas.providers.gitlab.resolve")
 local repositories = require("atlas.providers.gitlab.repositories")
 local notifications = require("atlas.providers.gitlab.notifications")
@@ -7,6 +8,10 @@ local users = require("atlas.providers.gitlab.users")
 return {
 	id = "gitlab",
 	name = "GitLab",
+	hostname = function()
+		local base = url.configured_base("gitlab")
+		return base and base.host or nil
+	end,
 	resolver = resolver,
 	domains = {
 		pulls = {

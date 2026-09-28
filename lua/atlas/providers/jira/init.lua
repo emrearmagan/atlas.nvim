@@ -1,3 +1,4 @@
+local url = require("atlas.providers.url")
 local resolver = require("atlas.providers.jira.resolve")
 local users = require("atlas.providers.jira.users")
 
@@ -5,6 +6,10 @@ local users = require("atlas.providers.jira.users")
 return {
 	id = "jira",
 	name = "Jira",
+	hostname = function()
+		local base = url.configured_base("jira")
+		return base and base.host or nil
+	end,
 	resolver = resolver,
 	domains = {
 		issues = {

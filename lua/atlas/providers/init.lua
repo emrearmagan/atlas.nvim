@@ -38,6 +38,7 @@ local M = {}
 ---@class AtlasProvider
 ---@field id AtlasProviderId
 ---@field name string
+---@field hostname fun(): string|nil
 ---@field resolver { resolve: fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil }
 ---@field domains table<"pulls"|"issues", AtlasProviderDomain>
 ---@field capabilities AtlasProviderCapabilities|nil

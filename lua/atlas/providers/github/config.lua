@@ -1,1 +1,2 @@
 ---@class AtlasGitHubConfig : AtlasProviderConfig
+---@field hostname string|nil GitHub hostname; defaults to GH_HOST, then github.com.

@@ -6,6 +6,9 @@ local users = require("atlas.providers.bitbucket.users")
 return {
 	id = "bitbucket",
 	name = "Bitbucket",
+	hostname = function()
+		return "bitbucket.org"
+	end,
 	resolver = resolver,
 	domains = {
 		pulls = {

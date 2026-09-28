@@ -130,7 +130,7 @@ local function pull_reviewer(raw, decision, role)
 	if username == "" then
 		return nil
 	end
-	local name = user.name ~= "" and user.name or (json.safe_str(raw.name) or username)
+	local name = user.name ~= "" and user.name or (json.safe_str(raw.teamName) or username)
 
 	return {
 		id = user.id ~= "" and user.id or username,
