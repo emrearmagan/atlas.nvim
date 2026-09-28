@@ -14,7 +14,7 @@ local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
-local MAX_DESCRIPTION_LINES = 10
+local MAX_DESCRIPTION_LINES = 15
 
 ---@param pr PullRequest
 ---@return boolean
@@ -392,6 +392,17 @@ end
 
 -- Description
 
+local function description_block(text, width)
+	if state.view_mode == "raw" then
+		local content = {
+			lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true }),
+		}
+		return utils.wrap_content(content, math.max(1, width - PADDING_X * 2), string.rep(" ", PADDING_X))
+	end
+
+	return markdown.render(text, { width = width, padding = PADDING_X })
+end
+
 ---@param details PullRequestDetails
 ---@param width integer
 ---@param lines string[]
@@ -404,35 +415,15 @@ local function render_description(details, width, lines, spans)
 		return
 	end
 
-	local block
-	if state.view_mode == "raw" then
-		block = {
-			lines = vim.split(utils.normalize_newlines(desc_text), "\n", { plain = true }),
-			highlights = {},
-		}
-	else
-		block = markdown.parse(desc_text, {
-			width = math.max(1, width - PADDING_X * 2),
-		})
-	end
-	local last_styled_line = -1
-	for _, span in ipairs(block.highlights) do
-		last_styled_line = math.max(last_styled_line, span.line)
-	end
-	while #block.lines - 1 > last_styled_line and vim.trim(block.lines[#block.lines]) == "" do
-		table.remove(block.lines)
-	end
-
+	local block = description_block(desc_text, width)
 	local truncated = not state.description_expanded and #block.lines > MAX_DESCRIPTION_LINES
 	if truncated then
 		block.lines = vim.list_slice(block.lines, 1, MAX_DESCRIPTION_LINES)
+		block.highlights = vim.tbl_filter(function(span)
+			return span.line < MAX_DESCRIPTION_LINES
+		end, block.highlights)
 	end
-	for index = #block.highlights, 1, -1 do
-		if block.highlights[index].line >= #block.lines then
-			table.remove(block.highlights, index)
-		end
-	end
-	utils.append_block(lines, spans, block, PADDING_X)
+	utils.append_block(lines, spans, block)
 
 	if truncated then
 		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}

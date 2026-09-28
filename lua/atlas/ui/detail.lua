@@ -23,7 +23,7 @@ local function configure(win)
 		foldenable = false,
 		wrap = true,
 		linebreak = true,
-		breakindent = true,
+		breakindent = false,
 		cursorline = true,
 		scrollbind = false,
 		cursorbind = false,

@@ -9,7 +9,6 @@ local notify = require("atlas.core.notify")
 local detail = require("atlas.issues.ui.detail.state")
 local conversation = require("atlas.issues.ui.detail.tabs.conversation.state")
 
-local PADDING_X = 1
 local view_mode = "markdown"
 
 ---@param _issue Issue
@@ -23,22 +22,22 @@ function M.render(_issue, details, width)
 
 	local lines = {}
 	local spans = {}
+	local content_width = math.max(1, width - 2)
 
 	local description = details.description or ""
 	if description == "" then
-		utils.push(lines, spans, "No description", "AtlasTextMuted", PADDING_X)
+		utils.push(lines, spans, "No description", "AtlasTextMuted")
 	elseif view_mode == "raw" then
 		for _, line in ipairs(vim.split(utils.normalize_newlines(description), "\n", { plain = true })) do
-			utils.push(lines, spans, line, nil, PADDING_X)
+			utils.push(lines, spans, line)
 		end
 	else
-		local block = markdown.parse(description, {
-			width = math.max(1, width - 2 * PADDING_X),
-		})
-		utils.append_block(lines, spans, block, PADDING_X)
+		local content = markdown.render(description, { width = width, padding = 1 })
+		return content.lines, content.highlights, {}
 	end
 
-	return lines, spans, {}
+	local content = utils.wrap_content({ lines = lines, highlights = spans }, content_width, " ")
+	return content.lines, content.highlights, {}
 end
 
 ---@param buf integer

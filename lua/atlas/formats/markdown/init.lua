@@ -130,4 +130,15 @@ function M.parse(source, opts)
 	return result
 end
 
+---Render Markdown with wrapping and horizontal padding within the given width.
+---@param source string
+---@param opts { width: integer, padding?: integer, hl?: table<string, string>, language?: string, file_path?: string, language_aliases?: table<string, string> }
+---@return { lines: string[], highlights: AtlasMarkdownHighlight[] }
+function M.render(source, opts)
+	local padding = math.max(0, opts.padding or 0)
+	local width = math.max(1, opts.width - padding * 2)
+	local content = M.parse(source, vim.tbl_extend("force", opts, { width = width }))
+	return utils.wrap_content(content, width, string.rep(" ", padding))
+end
+
 return M

@@ -154,6 +154,54 @@ function M.append_block(lines, spans, block, padding)
 	end
 end
 
+---Wrap display content, preserving highlights and prefixing each resulting row.
+---@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string }[] }
+---@param width integer Content width, excluding the prefix.
+---@param prefix string
+---@return { lines: string[], highlights: AtlasUIHighlight[] }
+function M.wrap_content(content, width, prefix)
+	local lines, spans = {}, {}
+	local highlights_by_line = {}
+
+	for _, highlight in ipairs(content.highlights or {}) do
+		local line = highlight.line + 1
+		highlights_by_line[line] = highlights_by_line[line] or {}
+		table.insert(highlights_by_line[line], highlight)
+	end
+
+	for index, source in ipairs(content.lines) do
+		local rows, offsets = M.wrap_line(source, width)
+		for row_index, row in ipairs(rows) do
+			local offset = offsets[row_index]
+			table.insert(lines, prefix .. row)
+
+			if prefix ~= "" then
+				table.insert(spans, {
+					line = #lines - 1,
+					start_col = 0,
+					end_col = #prefix,
+					hl_group = "AtlasTextMuted",
+				})
+			end
+
+			for _, highlight in ipairs(highlights_by_line[index] or {}) do
+				local start_col = math.max(0, highlight.start_col - offset)
+				local end_col = math.min(highlight.end_col - offset, #row)
+				if end_col > start_col then
+					table.insert(spans, {
+						line = #lines - 1,
+						start_col = #prefix + start_col,
+						end_col = #prefix + end_col,
+						hl_group = highlight.hl_group,
+					})
+				end
+			end
+		end
+	end
+
+	return { lines = lines, highlights = spans }
+end
+
 function M.get_version()
 	if _cached_version then
 		return _cached_version
