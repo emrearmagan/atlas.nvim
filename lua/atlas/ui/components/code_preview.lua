@@ -1,26 +1,90 @@
 local M = {}
+local utils = require("atlas.ui.shared.utils")
 
 ---@class AtlasCodePreviewOptions
----@field file_path string
+---@field file_path string|nil
+---@field language string|nil Filetype or fence language; takes precedence over file_path.
 ---@field lines string[]
----@field start_line integer
+---@field start_line integer|nil Defaults to 1.
 ---@field anchor_line integer|nil
 ---@field anchor_start integer|nil
 ---@field line_numbers integer[]|nil
 ---@field show_line_numbers boolean|nil
----@field background_hl_group string|nil
+---@field padding integer|nil Spaces on each side of the code; defaults to 0.
+---@field width integer|nil Maximum width including padding for unnumbered blocks; numbered previews preserve source lines.
+---@field background_hl_group string|nil Defaults to AtlasCodeBackground.
 
+-- Highlight original code before wrapping or adding line numbers and padding.
+local function syntax_highlights(lines, opts)
+	local filetype = opts.language
+	if filetype == nil and opts.file_path then
+		filetype = vim.filetype.match({ filename = opts.file_path })
+	end
+	if not filetype or filetype == "" or #lines == 0 then
+		return {}
+	end
+	local language = vim.treesitter.language.get_lang(filetype) or filetype
+	local source = table.concat(lines, "\n")
+	local ok, parser = pcall(vim.treesitter.get_string_parser, source, language)
+	if not ok or not parser then
+		return {}
+	end
+	local trees = parser:parse()
+	local tree = trees and trees[1]
+	local query = vim.treesitter.query.get(language, "highlights")
+	if not tree or not query then
+		return {}
+	end
+
+	local highlights = {}
+	for id, node, metadata in query:iter_captures(tree:root(), source) do
+		local capture = query.captures[id]
+		if capture and capture:sub(1, 1) ~= "_" and capture ~= "spell" and capture ~= "nospell" then
+			local range = vim.treesitter.get_range(node, source, metadata and metadata[id])
+			local start_row, start_col, end_row, end_col = range[1], range[2], range[4], range[5]
+			for row = start_row, math.min(end_row, #lines - 1) do
+				local from = row == start_row and start_col or 0
+				local to = row == end_row and end_col or #lines[row + 1]
+				if to > from then
+					table.insert(highlights, {
+						line = row,
+						start_col = from,
+						end_col = to,
+						hl_group = "@" .. capture .. "." .. language,
+					})
+				end
+			end
+		end
+	end
+	return highlights
+end
+
+-- { lines = { "return 1" }, language = "lua", show_line_numbers = false, padding = 2 }
+-- -> { lines = { "  return 1  " }, highlights = { ... } }.
 ---@param opts AtlasCodePreviewOptions
----@return AtlasMarkdownEditorPreview
+---@return { lines: string[], highlights: AtlasUIHighlight[] }
 function M.render(opts)
-	local last_line = opts.start_line + #opts.lines - 1
+	local width = opts.show_line_numbers == false and opts.width or nil
+	local pad = opts.padding or 0
+	if width then
+		pad = math.min(pad, math.max(0, math.floor((width - 1) / 2)))
+	end
+	local content = { lines = opts.lines, highlights = syntax_highlights(opts.lines, opts) }
+	if width then
+		content = utils.wrap_content(content, math.max(1, width - pad * 2), "")
+	end
+
+	local start_line = opts.start_line or 1
+	local last_line = start_line + #opts.lines - 1
 	for _, line in ipairs(opts.line_numbers or {}) do
 		last_line = math.max(last_line, line)
 	end
 	local number_width = #tostring(last_line)
-	local lines, offsets, highlights = {}, {}, {}
-	for index, source in ipairs(opts.lines) do
-		local line_number = opts.start_line + index - 1
+	local gutter_width = opts.show_line_numbers == false and 0 or number_width + 2
+	local padding = string.rep(" ", pad)
+	local lines, highlights = {}, {}
+	for index, source in ipairs(content.lines) do
+		local line_number = start_line + index - 1
 		local selected = opts.anchor_start
 				and opts.anchor_line
 				and line_number >= opts.anchor_start
@@ -29,58 +93,27 @@ function M.render(opts)
 		local display_line = opts.line_numbers and opts.line_numbers[index] or line_number
 		local prefix = opts.show_line_numbers == false and ""
 			or string.format("%" .. number_width .. "d  ", display_line)
-		offsets[index] = #prefix
-		table.insert(lines, prefix .. source)
+		table.insert(lines, prefix .. padding .. source .. padding)
 		table.insert(highlights, {
 			line = index - 1,
-			line_hl_group = opts.background_hl_group or "CursorLine",
+			line_hl_group = opts.background_hl_group or "AtlasCodeBackground",
 		})
-		table.insert(highlights, {
-			line = index - 1,
-			start_col = 0,
-			end_col = #prefix,
-			hl_group = selected and "CursorLineNr" or "AtlasTextMuted",
-		})
+		if gutter_width > 0 then
+			table.insert(highlights, {
+				line = index - 1,
+				start_col = 0,
+				end_col = gutter_width,
+				hl_group = selected and "CursorLineNr" or "AtlasTextMuted",
+			})
+		end
 	end
-
-	local ok, syntax = pcall(function()
-		local filetype = vim.filetype.match({ filename = opts.file_path })
-		local language = filetype and (vim.treesitter.language.get_lang(filetype) or filetype) or nil
-		if not language then
-			return {}
-		end
-
-		local source = table.concat(opts.lines, "\n")
-		local parser = vim.treesitter.get_string_parser(source, language)
-		local tree = parser:parse()[1]
-		local query = vim.treesitter.query.get(language, "highlights")
-		if not tree or not query then
-			return {}
-		end
-
-		local syntax_highlights = {}
-		for id, node in query:iter_captures(tree:root(), source) do
-			local capture = query.captures[id]
-			if capture and capture:sub(1, 1) ~= "_" and capture ~= "spell" and capture ~= "nospell" then
-				local start_row, start_col, end_row, end_col = node:range()
-				for row = start_row, math.min(end_row, #opts.lines - 1) do
-					local from = row == start_row and start_col or 0
-					local to = row == end_row and end_col or #(opts.lines[row + 1] or "")
-					if to > from then
-						table.insert(syntax_highlights, {
-							line = row,
-							start_col = offsets[row + 1] + from,
-							end_col = offsets[row + 1] + to,
-							hl_group = "@" .. capture .. "." .. language,
-						})
-					end
-				end
-			end
-		end
-		return syntax_highlights
-	end)
-	if ok then
-		vim.list_extend(highlights, syntax)
+	for _, span in ipairs(content.highlights) do
+		table.insert(highlights, {
+			line = span.line,
+			start_col = gutter_width + pad + span.start_col,
+			end_col = gutter_width + pad + span.end_col,
+			hl_group = span.hl_group,
+		})
 	end
 	return { lines = lines, highlights = highlights }
 end

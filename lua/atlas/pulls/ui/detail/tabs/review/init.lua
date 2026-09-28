@@ -53,7 +53,7 @@ function M.reset()
 	notify.clear()
 end
 
----@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasMarkdownEditorPreview|nil, on_save: fun(text: string|nil) }
+---@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasEditorPreview|nil, on_save: fun(text: string|nil) }
 local function open_md_editor(opts)
 	md_editor.open({
 		key = opts.key,

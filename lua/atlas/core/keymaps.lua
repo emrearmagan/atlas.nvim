@@ -16,6 +16,7 @@ local config = require("atlas.config")
 ---@field toggle_panel? AtlasKeymapValue
 ---@field toggle_fold? AtlasKeymapValue
 ---@field toggle_all_folds? AtlasKeymapValue
+---@field toggle_description_mode? AtlasKeymapValue
 ---@field previous_panel_tab? AtlasKeymapValue
 ---@field next_panel_tab? AtlasKeymapValue
 ---@field notifications? AtlasUINotificationKeymaps
@@ -141,7 +142,6 @@ local config = require("atlas.config")
 ---@field edit_issue? AtlasKeymapValue
 ---@field edit_search? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
----@field toggle_description_mode? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
@@ -166,6 +166,7 @@ local config = require("atlas.config")
 ---| "ui.toggle_panel"
 ---| "ui.toggle_fold"
 ---| "ui.toggle_all_folds"
+---| "ui.toggle_description_mode"
 ---| "ui.previous_panel_tab"
 ---| "ui.next_panel_tab"
 ---| "ui.notifications.open"
@@ -245,7 +246,6 @@ local config = require("atlas.config")
 ---| "issues.edit_issue"
 ---| "issues.edit_search"
 ---| "issues.create_issue"
----| "issues.toggle_description_mode"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil

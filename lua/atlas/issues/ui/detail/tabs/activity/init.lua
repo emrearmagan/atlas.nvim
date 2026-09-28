@@ -4,7 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
-local threads = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.issues.ui.detail.state")
 local request_scope = require("atlas.core.requests")
@@ -24,7 +24,7 @@ local state = {
 }
 
 ---@param entries IssueActivityEntry[]|nil
----@return AtlasThreadV2Item[]
+---@return AtlasThreadItem[]
 local function to_thread_items(entries)
 	local out = {}
 	for _, entry in ipairs(entries or {}) do
@@ -44,7 +44,7 @@ local function to_thread_items(entries)
 	return out
 end
 
----@param item AtlasThreadV2Item
+---@param item AtlasThreadItem
 ---@param row string
 ---@param row_index integer
 ---@return table[]|nil

@@ -48,7 +48,8 @@ describe("github review comments", function()
 	end)
 
 	describe("edit_comment", function()
-		it("updates a pending comment over GraphQL instead of REST", function()
+		it("updates pending and published review comments over GraphQL", function()
+			local review_state
 			github_client.install({
 				gh = function(args, callback)
 					table.insert(gh_calls, args)
@@ -59,10 +60,7 @@ describe("github review comments", function()
 									id = "PRRC_node",
 									databaseId = 4242,
 									body = "updated body",
-									url = "https://github.test/c/4242",
-									createdAt = "2026-08-07T10:00:00Z",
-									author = { login = "octocat", databaseId = 1 },
-									pullRequestReview = { id = "PRR_node", state = "PENDING" },
+									pullRequestReview = { id = "PRR_node", state = review_state },
 								},
 							},
 						},
@@ -75,68 +73,31 @@ describe("github review comments", function()
 			})
 			local api = fresh_module()
 
-			local updated, err
-			api.edit_comment(pull_request(), pending_comment(), function(result, e)
-				updated, err = result, e
-			end)
+			for index, state in ipairs({ "PENDING", "COMMENTED" }) do
+				review_state = state
+				local comment = pending_comment()
+				comment.state = state == "PENDING" and state or nil
+				local updated, err
+				api.edit_comment(pull_request(), comment, function(result, e)
+					updated, err = result, e
+				end)
 
-			assert.is_nil(err)
+				assert.is_nil(err)
+				assert.equal("graphql", gh_calls[index][2])
+				local flags = gh_flags(gh_calls[index])
+				assert.equal("PRRC_node", flags.commentId)
+				assert.equal("updated body", flags.body)
+				assert.is_truthy(flags.query:find("updatePullRequestReviewComment", 1, true))
+				assert.equal(4242, updated.id)
+				assert.equal("updated body", updated.content_raw)
+				assert.equal(comment.state, updated.state)
+				assert.equal("lua/init.lua", updated.inline.path)
+				assert.equal(12, updated.inline.to)
+				assert.equal("PRRT_node", updated.thread_id)
+				assert.equal("PRRC_node", updated._raw.comment_id)
+			end
 			assert.equal(0, #api_calls)
-			assert.equal(1, #gh_calls)
-			assert.equal("graphql", gh_calls[1][2])
-
-			local flags = gh_flags(gh_calls[1])
-			assert.equal("PRRC_node", flags.commentId)
-			assert.equal("updated body", flags.body)
-			assert.is_truthy(flags.query:find("updatePullRequestReviewComment", 1, true))
-
-			assert.equal(4242, updated.id)
-			assert.equal("updated body", updated.content_raw)
-			assert.equal("PENDING", updated.state)
-			assert.equal("lua/init.lua", updated.inline.path)
-			assert.equal(12, updated.inline.to)
-			assert.equal("PRRT_node", updated.thread_id)
-			assert.equal("PRRC_node", updated._raw.comment_id)
-		end)
-
-		it("updates published review comments over GraphQL", function()
-			github_client.install({
-				gh = function(args, callback)
-					table.insert(gh_calls, args)
-					callback({
-						data = {
-							updatePullRequestReviewComment = {
-								pullRequestReviewComment = {
-									id = "PRRC_node",
-									databaseId = 4242,
-									body = "updated body",
-									pullRequestReview = { id = "PRR_node", state = "COMMENTED" },
-								},
-							},
-						},
-					}, nil)
-				end,
-				api = function()
-					table.insert(api_calls, true)
-				end,
-			})
-			local api = fresh_module()
-
-			local published = pending_comment()
-			published.state = nil
-
-			local updated, err
-			api.edit_comment(pull_request(), published, function(result, e)
-				updated, err = result, e
-			end)
-
-			assert.is_nil(err)
-			assert.equal(0, #api_calls)
-			assert.equal(1, #gh_calls)
-			assert.equal("PRRC_node", gh_flags(gh_calls[1]).commentId)
-			assert.equal("updated body", updated.content_raw)
-			assert.equal("PRRT_node", updated.thread_id)
-			assert.is_nil(updated.state)
+			assert.equal(2, #gh_calls)
 		end)
 
 		it("fails when the pending comment has no node id", function()
@@ -177,7 +138,7 @@ describe("github review comments", function()
 	end)
 
 	describe("delete_comment", function()
-		it("deletes a pending comment over GraphQL instead of REST", function()
+		it("deletes pending and published review comments over GraphQL", function()
 			github_client.install({
 				gh = function(args, callback)
 					table.insert(gh_calls, args)
@@ -190,45 +151,22 @@ describe("github review comments", function()
 			})
 			local api = fresh_module()
 
-			local ok, err
-			api.delete_comment(pull_request(), pending_comment(), function(success, e)
-				ok, err = success, e
-			end)
+			for index, state in ipairs({ "PENDING", "COMMENTED" }) do
+				local comment = pending_comment()
+				comment.state = state == "PENDING" and state or nil
+				local ok, err
+				api.delete_comment(pull_request(), comment, function(success, e)
+					ok, err = success, e
+				end)
 
-			assert.is_true(ok)
-			assert.is_nil(err)
+				assert.is_true(ok)
+				assert.is_nil(err)
+				local flags = gh_flags(gh_calls[index])
+				assert.equal("PRRC_node", flags.commentId)
+				assert.is_truthy(flags.query:find("deletePullRequestReviewComment", 1, true))
+			end
 			assert.equal(0, #api_calls)
-			assert.equal(1, #gh_calls)
-
-			local flags = gh_flags(gh_calls[1])
-			assert.equal("PRRC_node", flags.commentId)
-			assert.is_truthy(flags.query:find("deletePullRequestReviewComment", 1, true))
-		end)
-
-		it("deletes published review comments over GraphQL", function()
-			github_client.install({
-				gh = function(args, callback)
-					table.insert(gh_calls, args)
-					callback({ data = { deletePullRequestReviewComment = {} } }, nil)
-				end,
-				api = function()
-					table.insert(api_calls, true)
-				end,
-			})
-			local api = fresh_module()
-
-			local published = pending_comment()
-			published.state = nil
-
-			local ok = false
-			api.delete_comment(pull_request(), published, function(success)
-				ok = success
-			end)
-
-			assert.is_true(ok)
-			assert.equal(0, #api_calls)
-			assert.equal(1, #gh_calls)
-			assert.equal("PRRC_node", gh_flags(gh_calls[1]).commentId)
+			assert.equal(2, #gh_calls)
 		end)
 
 		it("fails when the pending comment has no node id", function()

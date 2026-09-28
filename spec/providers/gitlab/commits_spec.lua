@@ -50,7 +50,7 @@ describe("gitlab pulls.fetch_commits", function()
 		assert.equal(0, calls)
 	end)
 
-	it("keeps the full multi-line commit message instead of just the title", function()
+	it("keeps full commit messages and falls back to the title when absent", function()
 		stub_service(function(_, _, _, callback)
 			callback({
 				{
@@ -61,6 +61,7 @@ describe("gitlab pulls.fetch_commits", function()
 					author_name = "Alice",
 					authored_date = "2024-01-02T03:04:05Z",
 				},
+				{ id = "def456", title = "Title only" },
 			}, nil)
 		end)
 		local api = fresh_module()
@@ -70,26 +71,11 @@ describe("gitlab pulls.fetch_commits", function()
 			commits = c
 		end)
 
-		assert.equal(1, #commits)
+		assert.equal(2, #commits)
 		assert.equal("Fix bug\n\nThis explains why the fix is needed.\nSecond body line.", commits[1].message)
 		assert.equal("abc123def456", commits[1].hash)
 		assert.equal("abc123d", commits[1].short_hash)
-	end)
-
-	it("falls back to the title when the message field is missing", function()
-		stub_service(function(_, _, _, callback)
-			callback({
-				{ id = "abc123", title = "Fix bug" },
-			}, nil)
-		end)
-		local api = fresh_module()
-
-		local commits
-		api.fetch_commits({ id = 12, repo_full_name = "group/project" }, nil, function(c)
-			commits = c
-		end)
-
-		assert.equal("Fix bug", commits[1].message)
+		assert.equal("Title only", commits[2].message)
 	end)
 
 	it("propagates errors from the request", function()

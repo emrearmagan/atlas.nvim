@@ -1,6 +1,6 @@
 local M = {}
 
-local threadsv2 = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 local emojis = require("atlas.ui.shared.emojis")
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
@@ -26,10 +26,10 @@ end
 
 ---@param comment IssueComment
 ---@param reaction_options IssueReactionOption[]|nil
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function comment_item(comment, reaction_options)
 	local deleted = comment.deleted == true
-	local content = deleted and "(deleted comment)" or utils.strip_markup(comment.body or "")
+	local content = deleted and "(deleted comment)" or (comment.body or "")
 	if content == "" then
 		content = "(empty comment)"
 	end
@@ -47,6 +47,7 @@ local function comment_item(comment, reaction_options)
 		author = author,
 		additional = utils.relative_time(comment.created),
 		content = content,
+		markdown = not deleted,
 		footer_items = footer_items,
 		children = {},
 		line_map = { comment = comment, entity_kind = "comment" },
@@ -56,7 +57,7 @@ end
 
 ---@param padding_x integer
 ---@param opts IssuesCommentThreadRenderOptions
----@return AtlasThreadV2RenderOpts
+---@return AtlasThreadRenderOpts
 local function render_options(padding_x, opts)
 	local max_lines = opts.content_max_lines
 	if type(max_lines) == "function" then
@@ -144,7 +145,7 @@ end
 ---@param node IssuesCommentThreadNode
 ---@param opts IssuesCommentThreadRenderOptions
 ---@param root IssueComment|nil
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function build_item(node, opts, root)
 	root = root or node.comment
 	local item = comment_item(node.comment, opts.reaction_options)
@@ -182,12 +183,12 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes) do
 		table.insert(items, build_item(node, opts, nil))
 	end
-	return threadsv2.render(items, width, render_options(opts.padding_x or 1, opts))
+	return threads.render(items, width, render_options(opts.padding_x or 1, opts))
 end
 
 ---@param comment IssueComment
 ---@param width integer
----@return AtlasMarkdownEditorPreview
+---@return AtlasEditorPreview
 function M.render_comment(comment, width)
 	local lines, highlights = M.render({ { comment = comment, children = {} } }, width, {
 		expanded = function()

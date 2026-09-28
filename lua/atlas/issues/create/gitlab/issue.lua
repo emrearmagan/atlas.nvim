@@ -11,36 +11,38 @@ local labels_api = require("atlas.issues.providers.gitlab.api.labels")
 local milestones_api = require("atlas.issues.providers.gitlab.api.milestones")
 local users_api = require("atlas.providers.gitlab.users")
 
----@class GitLabCreateIssueLabel
+---@class GitLabIssueEditorLabel
 ---@field name string
 ---@field color string|nil
 
----@class GitLabCreateIssueMilestone
+---@class GitLabIssueEditorMilestone
 ---@field id integer
 ---@field title string
 
----@class GitLabCreateIssuePickers
----@field list_labels fun(on_done: fun(items: GitLabCreateIssueLabel[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@class GitLabIssueEditorPickers
+---@field list_labels fun(on_done: fun(items: GitLabIssueEditorLabel[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field list_assignees fun(on_done: fun(items: AtlasUser[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field list_milestones fun(on_done: fun(items: GitLabCreateIssueMilestone[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field list_milestones fun(on_done: fun(items: GitLabIssueEditorMilestone[]|nil, err: string|nil)): { cancel: fun() }|nil
 
----@class GitLabCreateIssueFields
+---@class GitLabIssueEditorFields
 ---@field project_path string
----@field labels GitLabCreateIssueLabel[]
+---@field labels GitLabIssueEditorLabel[]
 ---@field assignees AtlasUser[]
----@field milestone GitLabCreateIssueMilestone|nil
+---@field milestone GitLabIssueEditorMilestone|nil
 
----@class GitLabCreateIssueState
----@field fields GitLabCreateIssueFields
+---@class GitLabIssueEditorState
+---@field fields GitLabIssueEditorFields
+---@field issue GitLabIssue|nil
+---@field initial { title: string, body: string, fields: GitLabIssueEditorFields }
 ---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
----@field pickers GitLabCreateIssuePickers
+---@field pickers GitLabIssueEditorPickers
 ---@field requests AtlasRequestScope
 ---@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
 
 ---@param project_path string
----@return GitLabCreateIssuePickers
+---@return GitLabIssueEditorPickers
 local function default_pickers(project_path)
 	return {
 		list_labels = function(cb)
@@ -122,7 +124,7 @@ local function label_hl(hex)
 	return name
 end
 
----@param milestone GitLabCreateIssueMilestone|nil
+---@param milestone GitLabIssueEditorMilestone|nil
 ---@return string
 local function format_milestone(milestone)
 	if milestone == nil then
@@ -131,7 +133,7 @@ local function format_milestone(milestone)
 	return tostring(milestone.title or "")
 end
 
----@param labels GitLabCreateIssueLabel[]
+---@param labels GitLabIssueEditorLabel[]
 ---@return AtlasFormMetaCell
 local function labels_cell(labels)
 	if #labels == 0 then
@@ -167,7 +169,7 @@ local function labels_cell(labels)
 	return { text = text, spans = spans }
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 ---@return AtlasFormMetaRow[]
 local function meta_rows(issue_state)
 	local repo = tostring(issue_state.fields.project_path or "")
@@ -191,22 +193,22 @@ local function meta_rows(issue_state)
 	}
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function get_title(issue_state)
 	return vim.trim(form.get_title(issue_state.layout))
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function get_body(issue_state)
 	return form.get_body(issue_state.layout)
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function render_meta(issue_state)
 	form.render_meta(issue_state, meta_rows(issue_state))
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function close(issue_state)
 	issue_state.requests.cancel()
 	form.close(issue_state.layout)
@@ -214,23 +216,28 @@ local function close(issue_state)
 	issue_state.is_submitting = false
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function confirm_close(issue_state)
 	local title = get_title(issue_state)
 	local body = get_body(issue_state)
-	if title == "" and body == "" then
+	if
+		title == issue_state.initial.title
+		and body == issue_state.initial.body
+		and vim.deep_equal(issue_state.fields, issue_state.initial.fields)
+	then
 		close(issue_state)
 		return
 	end
 
-	vim.ui.input({ prompt = "Discard issue draft? [y/N]: " }, function(input)
+	local prompt = issue_state.issue and "Discard issue changes? [y/N]: " or "Discard issue draft? [y/N]: "
+	vim.ui.input({ prompt = prompt }, function(input)
 		if input ~= nil and vim.trim(tostring(input)):lower() == "y" then
 			close(issue_state)
 		end
 	end)
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
 		form.notify("warn", "Assignee picker not available", { timeout = 1500 })
@@ -266,7 +273,7 @@ local function pick_assignees(issue_state)
 	end)
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
 		form.notify("warn", "Label picker not available", { timeout = 1500 })
@@ -302,7 +309,7 @@ local function pick_labels(issue_state)
 	end)
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
 		form.notify("warn", "Milestone picker not available", { timeout = 1500 })
@@ -345,7 +352,7 @@ local function pick_milestone(issue_state)
 	end)
 end
 
----@param issue_state GitLabCreateIssueState
+---@param issue_state GitLabIssueEditorState
 local function submit(issue_state)
 	if issue_state.is_submitting then
 		return
@@ -370,54 +377,55 @@ local function submit(issue_state)
 		end
 	end
 
+	local fields = {
+		project_path = issue_state.fields.project_path,
+		title = title,
+		description = get_body(issue_state),
+		labels = label_names,
+		assignee_ids = assignee_ids,
+		milestone_id = issue_state.fields.milestone and issue_state.fields.milestone.id or nil,
+	}
+	local editing = issue_state.issue ~= nil
 	issue_state.is_submitting = true
-	form.notify("loading", "Creating issue...")
+	form.notify("loading", editing and "Updating issue..." or "Creating issue...")
 
 	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 	issue_state.requests.run(function(done)
-		return issues_api.create_issue({
-			project_path = issue_state.fields.project_path,
-			title = title,
-			description = get_body(issue_state),
-			labels = label_names,
-			assignee_ids = assignee_ids,
-			milestone_id = issue_state.fields.milestone and issue_state.fields.milestone.id or nil,
-		}, done)
+		if issue_state.issue then
+			return issues_api.update_issue(issue_state.issue.key, fields, done)
+		end
+		return issues_api.create_issue(fields, done)
 	end, function(result, err)
 		issue_state.is_submitting = false
 
 		if err then
-			form.notify("error", "Create issue failed: " .. tostring(err))
-			if issue_state.on_done then
+			form.notify("error", (editing and "Update issue failed: " or "Create issue failed: ") .. tostring(err))
+			if not editing and issue_state.on_done then
 				issue_state.on_done(nil, err)
 			end
 			return
 		end
 
 		local url = result and result.url or nil
-		local message = "Issue created"
-		if url and url ~= "" then
+		local message = editing and "Issue updated" or "Issue created"
+		if not editing and url and url ~= "" then
 			message = message .. ": " .. url
 			pcall(vim.fn.setreg, "+", url)
 		end
 
+		close(issue_state)
 		if issue_state.on_done then
-			issue_state.on_done({
-				url = url,
-				key = result and result.key or nil,
-				iid = result and result.iid or nil,
-			}, nil)
+			issue_state.on_done(result, nil)
 		end
 
-		close(issue_state)
 		notify.info(message, { timeout = 1200, vim_notify = true })
-		if url and url ~= "" then
+		if not editing and url and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
 	end)
 end
 
----@param opts { project_path: string, on_done: fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil }
+---@param opts { project_path: string, issue?: GitLabIssue, details?: IssueDetails, on_done: fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil }
 function M.open(opts)
 	if type(opts) ~= "table" then
 		notify.warn("create_issue.open: missing options", { timeout = 1500, vim_notify = true })
@@ -430,13 +438,24 @@ function M.open(opts)
 		return
 	end
 
-	---@type GitLabCreateIssueState
+	local details = opts.details or {}
+	local initial_title = details.title or ""
+	local initial_body = details.description or ""
+	local fields = {
+		project_path = project_path,
+		labels = vim.deepcopy(details.labels or {}),
+		assignees = vim.deepcopy(details.assignees or {}),
+		milestone = vim.deepcopy(details.milestone),
+	}
+
+	---@type GitLabIssueEditorState
 	local issue_state = {
-		fields = {
-			project_path = project_path,
-			labels = {},
-			assignees = {},
-			milestone = nil,
+		issue = opts.issue,
+		fields = fields,
+		initial = {
+			title = vim.trim(initial_title),
+			body = initial_body,
+			fields = vim.deepcopy(fields),
 		},
 		layout = {},
 		content_width = 80,
@@ -449,8 +468,8 @@ function M.open(opts)
 	form.open(issue_state, {
 		title_label = "Title",
 		body_label = "Description",
-		initial_title = "",
-		initial_body = "",
+		initial_title = initial_title,
+		initial_body = initial_body,
 		close = function()
 			confirm_close(issue_state)
 		end,

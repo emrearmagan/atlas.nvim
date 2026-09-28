@@ -1,5 +1,5 @@
 local M = {}
-local adf = require("atlas.issues.providers.jira.converted.adf")
+local adf = require("atlas.formats.adf.to_markdown")
 local json = require("atlas.core.json")
 local users = require("atlas.providers.jira.users")
 

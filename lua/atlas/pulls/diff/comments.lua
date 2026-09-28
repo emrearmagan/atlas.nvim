@@ -316,7 +316,7 @@ end
 ---@param buf integer
 ---@param selected_start integer
 ---@param selected_end integer
----@return AtlasMarkdownEditorPreview|nil
+---@return AtlasEditorPreview|nil
 local function inline_preview(session, buf, selected_start, selected_end)
 	local current = session.current
 	local _, side = buffer_context(session, buf)

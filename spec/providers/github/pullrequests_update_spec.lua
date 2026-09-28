@@ -39,7 +39,7 @@ describe("github pull request updates", function()
 		assert.equal(0, #calls)
 	end)
 
-	it("runs gh pr edit with the new title and body", function()
+	it("runs gh pr edit with title, multiline body and empty body updates", function()
 		stub_client(function(args, callback)
 			table.insert(calls, args)
 			callback(nil, nil)
@@ -47,34 +47,20 @@ describe("github pull request updates", function()
 		local api = fresh_module()
 
 		local pr = { id = 42, repo_full_name = "octo/repo" }
-		api.update_title(pr, "New title", function(success, err)
-			assert.is_true(success)
+		for index, case in ipairs({
+			{ "update_title", "--title", "New title" },
+			{ "update_description", "--body", "Line one\nLine two" },
+			{ "update_description", "--body", "" },
+		}) do
+			local ok, err
+			api[case[1]](pr, case[3], function(success, e)
+				ok, err = success, e
+			end)
+			assert.is_true(ok)
 			assert.is_nil(err)
-		end)
-		api.update_description(pr, "Line one\nLine two", function(success, err)
-			assert.is_true(success)
-			assert.is_nil(err)
-		end)
-
-		assert.equal(2, #calls)
-		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--title", "New title" }, calls[1])
-		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--body", "Line one\nLine two" }, calls[2])
-	end)
-
-	it("clears an empty description", function()
-		stub_client(function(args, callback)
-			table.insert(calls, args)
-			callback(nil, nil)
-		end)
-		local api = fresh_module()
-
-		local ok
-		api.update_description({ id = 42, repo_full_name = "octo/repo" }, "", function(success)
-			ok = success
-		end)
-
-		assert.is_true(ok)
-		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--body", "" }, calls[1])
+			assert.same({ "pr", "edit", "42", "--repo", "octo/repo", case[2], case[3] }, calls[index])
+		end
+		assert.equal(3, #calls)
 	end)
 
 	it("propagates errors from the gh CLI", function()

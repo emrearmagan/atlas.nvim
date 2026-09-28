@@ -32,7 +32,7 @@ describe("github pulls.fetch_commits", function()
 		assert.equal(0, calls)
 	end)
 
-	it("keeps the full commit body alongside the headline", function()
+	it("maps commit messages and keeps headline-only and body-only commits readable", function()
 		stub_client(function(_, callback)
 			callback({
 				commits = {
@@ -43,6 +43,8 @@ describe("github pulls.fetch_commits", function()
 						authors = { { name = "Alice", login = "alice" } },
 						authoredDate = "2024-01-02T03:04:05Z",
 					},
+					{ oid = "def456", messageHeadline = "Headline only", messageBody = "" },
+					{ oid = "ghi789", messageHeadline = "", messageBody = "Body only" },
 				},
 			}, nil)
 		end)
@@ -53,47 +55,13 @@ describe("github pulls.fetch_commits", function()
 			commits = c
 		end)
 
-		assert.equal(1, #commits)
+		assert.equal(3, #commits)
 		assert.equal("Fix bug\n\nThis explains why the fix is needed.\nSecond body line.", commits[1].message)
 		assert.equal("abc123def456", commits[1].hash)
 		assert.equal("abc123d", commits[1].short_hash)
 		assert.equal("alice", commits[1].author_nickname)
-	end)
-
-	it("falls back to just the headline when there is no body", function()
-		stub_client(function(_, callback)
-			callback({
-				commits = {
-					{ oid = "abc123", messageHeadline = "Fix bug", messageBody = "" },
-				},
-			}, nil)
-		end)
-		local api = fresh_module()
-
-		local commits
-		api.fetch_commits({ id = 42, repo_full_name = "octo/repo" }, nil, function(c)
-			commits = c
-		end)
-
-		assert.equal("Fix bug", commits[1].message)
-	end)
-
-	it("falls back to just the body when there is no headline", function()
-		stub_client(function(_, callback)
-			callback({
-				commits = {
-					{ oid = "abc123", messageHeadline = "", messageBody = "Body only" },
-				},
-			}, nil)
-		end)
-		local api = fresh_module()
-
-		local commits
-		api.fetch_commits({ id = 42, repo_full_name = "octo/repo" }, nil, function(c)
-			commits = c
-		end)
-
-		assert.equal("Body only", commits[1].message)
+		assert.equal("Headline only", commits[2].message)
+		assert.equal("Body only", commits[3].message)
 	end)
 
 	it("propagates errors from the gh CLI", function()

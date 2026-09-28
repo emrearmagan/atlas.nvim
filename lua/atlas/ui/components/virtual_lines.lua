@@ -40,13 +40,14 @@ function M.render(lines, highlights, opts)
 			local start_col, end_col = columns[index], columns[index + 1]
 			if end_col > start_col then
 				local groups = {}
+				if background then
+					table.insert(groups, background)
+				end
+
 				for _, span in ipairs(spans) do
 					if span.start_col <= start_col and span.end_col >= end_col then
 						table.insert(groups, span.hl_group)
 					end
-				end
-				if background then
-					table.insert(groups, background)
 				end
 				local group = "Normal"
 				if #groups == 1 then

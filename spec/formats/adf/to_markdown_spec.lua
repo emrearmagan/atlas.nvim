@@ -1,4 +1,4 @@
-local adf = require("atlas.issues.providers.jira.converted.adf")
+local adf = require("atlas.formats.adf.to_markdown")
 
 local function doc(content)
 	return { type = "doc", version = 1, content = content }
@@ -181,6 +181,12 @@ describe("Jira ADF to Markdown", function()
 		converts({
 			{ type = "mediaSingle", content = { { type = "media", attrs = { url = "https://img.png" } } } },
 		}, "![](https://img.png)")
+		converts({
+			{ type = "mediaGroup", content = { { type = "media", attrs = { id = "file-id", type = "file" } } } },
+		}, "[Attachment]")
+		converts({
+			paragraph({ { type = "mediaInline", attrs = { id = "file-id", type = "file", alt = "logs.txt" } } }),
+		}, "[logs.txt]")
 	end)
 
 	it("converts tables", function()

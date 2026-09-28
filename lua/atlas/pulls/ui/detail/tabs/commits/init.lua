@@ -3,7 +3,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local threads = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local detail = require("atlas.pulls.ui.detail.state")
@@ -52,7 +52,7 @@ end
 
 ---@param commit PullsCommit
 ---@param width integer
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function to_thread_item(commit, width)
 	local message = tostring(commit.message or ""):gsub("\r\n", "\n")
 	message = message:match("([^\n]+)") or message

@@ -10,7 +10,6 @@ describe("commands.open", function()
 	local issue_error
 	local calls
 	local original_loaded
-	local original_trim
 
 	local mocked_modules = {
 		"atlas.commands.open",
@@ -28,12 +27,14 @@ describe("commands.open", function()
 		for _, name in ipairs(mocked_modules) do
 			original_loaded[name] = package.loaded[name]
 		end
-		original_trim = vim.trim
-		vim.trim = function(value)
-			return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-		end
-
-		repository = nil
+		repository = {
+			provider = "github",
+			domain = "pulls",
+			entity = "repo",
+			host = "github.com",
+			repo_full_name = "owner/repo",
+			url = "https://github.com/owner/repo",
+		}
 		resolved = {}
 		pull_result = nil
 		pull_error = "Pull request not found"
@@ -130,7 +131,6 @@ describe("commands.open", function()
 	end)
 
 	after_each(function()
-		vim.trim = original_trim
 		for _, name in ipairs(mocked_modules) do
 			package.loaded[name] = original_loaded[name]
 		end
@@ -156,15 +156,6 @@ describe("commands.open", function()
 	end)
 
 	it("opens dot as the current repository dashboard", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-			url = "https://github.com/owner/repo",
-		}
-
 		command.open(".")
 
 		assert.are.equal("pulls", calls.dashboard[1].domain)
@@ -173,13 +164,6 @@ describe("commands.open", function()
 	end)
 
 	it("resolves a number against the current repository with PR priority", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-		}
 		pull_result = { id = 42, title = "PR" }
 		pull_error = nil
 
@@ -197,13 +181,6 @@ describe("commands.open", function()
 	end)
 
 	it("falls back from a missing PR to the issue in the same repository", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-		}
 		issue_result = { key = "ISSUE-42", title = "Issue" }
 		issue_error = nil
 
@@ -220,6 +197,7 @@ describe("commands.open", function()
 	end)
 
 	it("requires local repository context for a number", function()
+		repository = nil
 		command.open("42")
 
 		assert.are.equal(0, #calls.resolve)

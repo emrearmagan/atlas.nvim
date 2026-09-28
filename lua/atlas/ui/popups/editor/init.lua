@@ -7,17 +7,17 @@ local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local completion_provider_by_buf = {}
-local preview_namespace = vim.api.nvim_create_namespace("atlas.markdown_editor.preview")
+local preview_namespace = vim.api.nvim_create_namespace("atlas.editor.preview")
 local MAX_PREVIEW_LINES = 6
 
 ---@param buf integer
----@param preview AtlasMarkdownEditorPreview
+---@param preview AtlasEditorPreview
 ---@param width integer
 local function render_preview(buf, preview, width)
 	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
 	local lines = virtual_lines.render(preview.lines, preview.highlights, {
 		width = width,
-		background_hl_group = "CursorLine",
+		background_hl_group = "AtlasCodeBackground",
 	})
 	table.insert(lines, { { string.rep("─", width), "AtlasBorder" } })
 	vim.api.nvim_buf_set_extmark(buf, preview_namespace, 0, 0, {
@@ -64,24 +64,24 @@ _G.__atlas_markdown_complete = function(findstart, base)
 	return items
 end
 
----@class AtlasMarkdownEditorAction
+---@class AtlasEditorAction
 ---@field key string
 ---@field description string|nil
----@field callback fun(ctx: AtlasMarkdownEditorActionContext)
+---@field callback fun(ctx: AtlasEditorActionContext)
 ---@field mode string|string[]|nil
 
----@class AtlasMarkdownEditorActionContext
+---@class AtlasEditorActionContext
 ---@field buf integer
 ---@field win integer
 ---@field close fun()
 ---@field get_text fun(): string
 ---@field set_text fun(text: string)
 
----@class AtlasMarkdownEditorPreview
+---@class AtlasEditorPreview
 ---@field lines string[]
 ---@field highlights AtlasUIHighlight[]|nil
 
----@class AtlasMarkdownEditorOptions
+---@class AtlasEditorOptions
 ---@field key string
 ---@field title string|nil
 ---@field title_pos "left"|"center"|"right"|nil
@@ -90,12 +90,12 @@ end
 ---@field height_ratio number|nil
 ---@field on_save fun(text: string)|nil
 ---@field on_cancel fun()|nil
----@field actions AtlasMarkdownEditorAction[]|nil
+---@field actions AtlasEditorAction[]|nil
 ---@field completion AtlasMarkdownCompletionProvider|nil
----@field preview AtlasMarkdownEditorPreview|nil
+---@field preview AtlasEditorPreview|nil
 
----@param preview AtlasMarkdownEditorPreview
----@return AtlasMarkdownEditorPreview
+---@param preview AtlasEditorPreview
+---@return AtlasEditorPreview
 local function limit_preview(preview)
 	if #preview.lines <= MAX_PREVIEW_LINES then
 		return preview
@@ -116,7 +116,7 @@ local function limit_preview(preview)
 	return { lines = lines, highlights = highlights }
 end
 
----@param opts AtlasMarkdownEditorOptions
+---@param opts AtlasEditorOptions
 ---@return integer|nil, integer|nil
 function M.open(opts)
 	if type(opts) ~= "table" then
@@ -136,10 +136,10 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-editor", { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 
-	local name = string.format("atlas://editor/%s.md", key)
+	local name = string.format("atlas://editor/%s", key)
 	pcall(vim.api.nvim_buf_set_name, buf, name)
 
 	local lines = vim.split(utils.normalize_newlines(opts.initial_text), "\n", { plain = true })
@@ -290,7 +290,7 @@ function M.open(opts)
 		})
 	end
 
-	local group = vim.api.nvim_create_augroup("AtlasMarkdownEditor" .. buf, { clear = true })
+	local group = vim.api.nvim_create_augroup("AtlasEditor" .. buf, { clear = true })
 	if preview then
 		vim.api.nvim_create_autocmd("CursorMoved", {
 			group = group,

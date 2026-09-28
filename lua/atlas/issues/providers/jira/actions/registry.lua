@@ -318,7 +318,7 @@ local function edit_issue(ctx, done)
 	---@cast issue JiraIssue
 
 	local issue_key = issue.key
-	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
+	local md_to_adf = require("atlas.formats.adf.from_markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
 
 	local function open_editor(initial_description)
@@ -390,7 +390,7 @@ end
 ---@param context AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(context, done)
-	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
+	local md_to_adf = require("atlas.formats.adf.from_markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
 	local function open_created_issue(key)
 		vim.schedule(function()

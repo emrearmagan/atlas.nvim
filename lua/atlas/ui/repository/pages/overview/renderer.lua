@@ -1,4 +1,5 @@
 local chips = require("atlas.ui.components.chips")
+local markdown = require("atlas.formats.markdown")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -68,16 +69,15 @@ local function render_description(repo, width)
 	end
 
 	utils.push(lines, spans, "Description", "AtlasColumnHeader")
-	for _, line in ipairs(utils.sanitize_lines(repo.description)) do
-		vim.list_extend(lines, utils.wrap_line(line, width))
-	end
+	utils.append_block(lines, spans, markdown.parse(repo.description, { width = width }))
 	table.insert(lines, "")
 	return lines, spans
 end
 
 ---@param repo AtlasRepositoryDetails
+---@param width integer
 ---@return string[], table[]
-local function render_readme(repo)
+local function render_readme(repo, width)
 	local lines, spans = {}, {}
 	if not repo.readme or repo.readme == "" then
 		return lines, spans
@@ -85,7 +85,7 @@ local function render_readme(repo)
 
 	utils.push(lines, spans, "README", "AtlasColumnHeader")
 	table.insert(lines, "")
-	vim.list_extend(lines, utils.sanitize_lines(repo.readme))
+	utils.append_block(lines, spans, markdown.parse(repo.readme, { width = width }))
 	table.insert(lines, "")
 	return lines, spans
 end

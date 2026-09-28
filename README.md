@@ -40,7 +40,6 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   "emrearmagan/atlas.nvim",
   dependencies = {
     "nvim-tree/nvim-web-devicons", -- optional but recommended
-    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
   },
@@ -835,6 +834,7 @@ keymaps = {
     toggle_panel = "p",
     toggle_fold = "za",
     toggle_all_folds = "zA",
+    toggle_description_mode = "<leader>m",
     previous_panel_tab = "<S-Tab>",
     next_panel_tab = "<Tab>",
     notifications = {
@@ -870,7 +870,6 @@ keymaps = {
     edit_issue = "ge",
     edit_search = "i",
     create_issue = "c",
-    toggle_description_mode = "m",
   },
   pulls = {
     open_diff = "gd",

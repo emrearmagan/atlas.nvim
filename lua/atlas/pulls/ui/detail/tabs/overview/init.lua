@@ -1,6 +1,7 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
+local markdown = require("atlas.formats.markdown")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
@@ -13,8 +14,7 @@ local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
-local PADDING = string.rep(" ", PADDING_X)
-local MAX_DESCRIPTION_LINES = 10
+local MAX_DESCRIPTION_LINES = 15
 
 ---@param pr PullRequest
 ---@return boolean
@@ -349,9 +349,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			column_key = "label",
 			leaf_prefix = "",
 			show_indicator = false,
-			is_expanded = function(row)
-				return state.is_pipeline_expanded(row.pipeline)
-			end,
+			default_expanded = true,
 		},
 		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
@@ -394,43 +392,38 @@ end
 
 -- Description
 
+local function description_block(text, width)
+	if state.view_mode == "raw" then
+		local content = {
+			lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true }),
+		}
+		return utils.wrap_content(content, math.max(1, width - PADDING_X * 2), string.rep(" ", PADDING_X))
+	end
+
+	return markdown.render(text, { width = width, padding = PADDING_X })
+end
+
 ---@param details PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
----@param line_map table<integer, table>
-local function render_description(details, width, lines, spans, line_map)
-	local start_line = #lines + 1
-	local function map_lines()
-		for lnum = start_line, #lines do
-			line_map[lnum] = { kind = "description" }
-		end
-	end
-
-	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
-
-	local desc_text = utils.strip_markup(details.description)
-	if desc_text == "" then
+local function render_description(details, width, lines, spans)
+	local desc_text = details.description or ""
+	if vim.trim(desc_text) == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
-		map_lines()
 		return
 	end
 
-	local desc_lines = utils.sanitize_lines(desc_text)
-	while #desc_lines > 0 and vim.trim(desc_lines[#desc_lines]) == "" do
-		table.remove(desc_lines)
+	local block = description_block(desc_text, width)
+	local truncated = not state.description_expanded and #block.lines > MAX_DESCRIPTION_LINES
+	if truncated then
+		block.lines = vim.list_slice(block.lines, 1, MAX_DESCRIPTION_LINES)
+		block.highlights = vim.tbl_filter(function(span)
+			return span.line < MAX_DESCRIPTION_LINES
+		end, block.highlights)
 	end
-
-	local truncated = false
-	if not state.description_expanded and #desc_lines > MAX_DESCRIPTION_LINES then
-		desc_lines = vim.list_slice(desc_lines, 1, MAX_DESCRIPTION_LINES)
-		truncated = true
-	end
-
-	for _, line in ipairs(desc_lines) do
-		table.insert(lines, PADDING .. line)
-	end
+	utils.append_block(lines, spans, block)
 
 	if truncated then
 		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}
@@ -459,7 +452,6 @@ local function render_description(details, width, lines, spans, line_map)
 	end
 
 	table.insert(lines, "")
-	map_lines()
 end
 
 -- Merge checks
@@ -558,7 +550,7 @@ function M.render(pr, details, width)
 	local line_map = {}
 
 	if details then
-		render_description(details, width, lines, spans, line_map)
+		render_description(details, width, lines, spans)
 	elseif not detail.details_loading then
 		utils.push(lines, spans, "Pull request details unavailable.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
@@ -606,8 +598,6 @@ function M.activate(buf, refresh)
 	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
 		return
 	end
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
 	if refresh ~= nil then
 		keymaps.setup(buf, refresh)
 	end
@@ -618,9 +608,6 @@ function M.deactivate(buf)
 		return
 	end
 	keymaps.teardown(buf)
-	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-	pcall(vim.treesitter.stop, buf)
 	reset_requests()
 end
 

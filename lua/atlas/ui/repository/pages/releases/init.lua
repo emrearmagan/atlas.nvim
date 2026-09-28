@@ -54,7 +54,7 @@ local function render(state)
 		})
 		return
 	end
-	local lines, line_map, spans = renderer.render(release)
+	local lines, line_map, spans = renderer.render(release, vim.api.nvim_win_get_width(state.win))
 	state.line_map = line_map
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
@@ -66,7 +66,6 @@ local function render(state)
 		})
 	end
 	vim.bo[state.buf].modifiable = false
-	vim.bo[state.buf].filetype = "markdown"
 end
 
 ---@param state RepositoryReleases
@@ -228,7 +227,9 @@ function M.open(opts)
 			render(state)
 		end
 	end
+	vim.bo[state.buf].filetype = "atlas.repository"
 	vim.wo[state.win].wrap = true
+	vim.wo[state.win].linebreak = true
 
 	local actions = {
 		{
@@ -302,10 +303,7 @@ function M.open(opts)
 	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
 		group = state.group,
 		callback = function(event)
-			if
-				(not state.release or type(state.release) == "string")
-				and (event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win))
-			then
+			if event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win) then
 				render(state)
 			end
 		end,

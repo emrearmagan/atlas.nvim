@@ -30,10 +30,11 @@ local ISSUE_DETAILS_GQL = [[
 query($path: ID!, $iid: String!) {
   project(fullPath: $path) {
     issue(iid: $iid) {
+      title
       description
       assignees(first: 100) { nodes { id username name } }
       labels(first: 100) { nodes { title color } }
-      milestone { title }
+      milestone { id title }
     }
   }
 }
@@ -443,7 +444,7 @@ function M.set_assignee_ids(key, ids, on_done)
 end
 
 ---@param opts { project_path: string, title: string, description: string|nil, assignee_ids: integer[]|nil, labels: string[]|nil, milestone_id: integer|nil, due_date: string|nil, confidential: boolean|nil }
----@param on_done fun(result: { key: string|nil, iid: integer|nil, url: string|nil }|nil, err: string|nil)
+---@param on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
 	local path = tostring(opts.project_path or "")
@@ -500,6 +501,40 @@ function M.create_issue(opts, on_done)
 		action = "Create issue",
 		path = path,
 		title = title,
+	})
+end
+
+---@param key string
+---@param fields { title: string, description: string, labels: string[], assignee_ids: integer[], milestone_id?: integer }
+---@param on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_issue(key, fields, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local payload = {
+		title = fields.title,
+		description = fields.description,
+		labels = table.concat(fields.labels, ","),
+		assignee_ids = #fields.assignee_ids > 0 and fields.assignee_ids or { 0 },
+		milestone_id = fields.milestone_id or 0,
+	}
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	return service.request("PUT", endpoint, payload, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		invalidate_issue(path, iid)
+		on_done({ key = key, iid = iid, url = json.safe_str(json.safe_table(result).web_url) }, nil)
+	end, {
+		action = "Update issue",
+		path = path,
+		iid = iid,
 	})
 end
 

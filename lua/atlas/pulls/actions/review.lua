@@ -32,7 +32,7 @@ local function author_completion(provider, pr, details, comments)
 end
 
 ---@param context AtlasReviewActionContext
----@param opts AtlasMarkdownEditorOptions
+---@param opts AtlasEditorOptions
 local function open_editor(context, opts)
 	opts.width_ratio = 0.5
 	opts.height_ratio = 0.18
@@ -55,7 +55,7 @@ local function notify(context, level, message, duration)
 	core_notify.show(level, message, { timeout = duration })
 end
 
----@return AtlasMarkdownEditorAction|nil
+---@return AtlasEditorAction|nil
 local function comment_template_action()
 	local templates = config.options.pulls.comment_templates.items
 	local key = (keymaps.resolve("pulls.review.comment_templates") or {})[1]
@@ -108,7 +108,7 @@ local function upsert_comment(context, comment)
 end
 
 ---@param context AtlasReviewActionContext
----@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
+---@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.add_comment(context, opts, on_done)

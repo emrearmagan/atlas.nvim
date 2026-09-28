@@ -42,11 +42,11 @@ local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
-      body
+      title body
       assignees(first: 100) { nodes { login name } }
       labels(first: 100) { nodes { name color } }
       milestone {
-        title progressPercentage
+        number title progressPercentage
         openIssues: issues(states: OPEN) { totalCount }
         closedIssues: issues(states: CLOSED) { totalCount }
       }
@@ -127,7 +127,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(details: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: GitHubIssueDetails|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
@@ -624,6 +624,49 @@ function M.create_issue(opts, on_done)
 		assignees = opts.assignees,
 		milestone = opts.milestone,
 	})
+end
+
+---@param key string
+---@param opts { title: string, body: string, labels: string[], assignees: string[], milestone?: integer }
+---@param on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_issue(key, opts, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	local args = {
+		"api",
+		"-X",
+		"PATCH",
+		string.format("repos/%s/issues/%d", slug, number),
+		"-f",
+		"title=" .. opts.title,
+		"-f",
+		"body=" .. opts.body,
+		"-F",
+		"milestone=" .. (opts.milestone or "null"),
+	}
+	for _, field in ipairs({ "labels", "assignees" }) do
+		if #opts[field] == 0 then
+			vim.list_extend(args, { "-f", field .. "[]" })
+		else
+			for _, value in ipairs(opts[field]) do
+				vim.list_extend(args, { "-f", field .. "[]=" .. value })
+			end
+		end
+	end
+
+	return cli.gh(args, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		cache.invalidate(key)
+		on_done({ number = number, url = result.html_url }, nil)
+	end, { action = "Update issue", key = key })
 end
 
 return M

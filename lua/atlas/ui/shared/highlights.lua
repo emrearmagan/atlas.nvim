@@ -32,6 +32,7 @@ end
 
 ---@type table<string, table>
 local groups = {
+	AtlasCodeBackground = { bg = vim.o.background == "dark" and "#20242d" or "#f1f2f4" },
 	AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
 	AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
 	AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
@@ -74,6 +75,8 @@ local groups = {
 }
 
 function M.setup()
+	require("atlas.formats.markdown.highlights").setup()
+
 	for name, opts in pairs(groups) do
 		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
 	end

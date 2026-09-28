@@ -39,7 +39,6 @@ With lazy.nvim:
     "emrearmagan/atlas.nvim",
     dependencies = {
       "nvim-tree/nvim-web-devicons",              -- optional, recommended
-      "MeanderingProgrammer/render-markdown.nvim", -- optional, recommended
       "esmuellert/codediff.nvim",                  -- optional, PR diffs
       "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
     },
@@ -645,6 +644,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         toggle_panel            = "p",
         toggle_fold             = "za",
         toggle_all_folds        = "zA",
+        toggle_description_mode = "<leader>m",
         previous_panel_tab      = "<S-Tab>",
         next_panel_tab          = "<Tab>",
         notifications = {
@@ -680,7 +680,6 @@ Atlas emits these `User` events after setup or cleanup completes:
         edit_issue       = "ge",
         edit_search      = "i",
         create_issue     = "c",
-        toggle_description_mode = "m",
       },
       pulls = {
         open_diff              = "gd",

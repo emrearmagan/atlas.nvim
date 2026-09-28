@@ -73,6 +73,7 @@ describe("GitLab linked items", function()
 		assert.equal(2, #result)
 		assert.equal("closes", result[1].relationship)
 		assert.equal("other/repo#2", result[1].key)
+		assert.equal("https://gitlab.example.com/gitlab/other/repo/-/issues/2", result[1].url)
 		assert.equal("issue", result[1].kind)
 		assert.equal("relates to", result[2].relationship)
 	end)
@@ -159,16 +160,6 @@ describe("GitLab linked items", function()
 		assert.equal(result[1].url, result[2].url)
 		assert.equal("blocked by", result[1].relationship)
 		assert.equal("parent", result[2].relationship)
-	end)
-
-	it("preserves canonical cross-project URLs from GraphQL", function()
-		graphql_links = { { linkType = "MENTIONED", workItem = issue(2, "elsewhere/another") } }
-		local result
-		api.fetch_pullrequest({ repo_full_name = "group/repo", id = 7 }, nil, function(links)
-			result = links
-		end)
-		assert.equal("https://gitlab.example.com/gitlab/elsewhere/another/-/issues/2", result[1].url)
-		assert.equal("elsewhere/another#2", result[1].key)
 	end)
 
 	it("maps external tracker issue keys using the configured Jira instance", function()

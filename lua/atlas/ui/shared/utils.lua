@@ -79,7 +79,8 @@ function M.buffer.center_message(buf, win, text, header)
 	local width = vim.api.nvim_win_get_width(win)
 	local message = {}
 	for _, line in ipairs(vim.split(text:gsub("\r\n", "\n"), "\n", { plain = true })) do
-		vim.list_extend(message, M.wrap_line(line:gsub("%c", " "), width))
+		local wrapped = M.wrap_line(line:gsub("%c", " "), width)
+		vim.list_extend(message, wrapped)
 	end
 	local lines = header or {}
 	local padding = math.max(0, math.floor((vim.api.nvim_win_get_height(win) - #lines - #message) / 2))
@@ -128,9 +129,14 @@ end
 ---@param lines string[]
 ---@param spans AtlasUIHighlight[]
 ---@param block { lines: string[], highlights: AtlasUIHighlight[]|nil }
-function M.append_block(lines, spans, block)
+---@param padding integer|nil
+function M.append_block(lines, spans, block, padding)
 	local base = #lines
-	vim.list_extend(lines, block.lines or {})
+	local pad = padding or 0
+	local prefix = string.rep(" ", pad)
+	for _, line in ipairs(block.lines or {}) do
+		table.insert(lines, prefix .. line)
+	end
 	for _, span in ipairs(block.highlights or {}) do
 		if span.line_hl_group ~= nil then
 			table.insert(spans, {
@@ -140,12 +146,60 @@ function M.append_block(lines, spans, block)
 		else
 			table.insert(spans, {
 				line = base + span.line,
-				start_col = span.start_col,
-				end_col = span.end_col,
+				start_col = pad + span.start_col,
+				end_col = pad + span.end_col,
 				hl_group = span.hl_group,
 			})
 		end
 	end
+end
+
+---Wrap display content, preserving highlights and prefixing each resulting row.
+---@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string }[] }
+---@param width integer Content width, excluding the prefix.
+---@param prefix string
+---@return { lines: string[], highlights: AtlasUIHighlight[] }
+function M.wrap_content(content, width, prefix)
+	local lines, spans = {}, {}
+	local highlights_by_line = {}
+
+	for _, highlight in ipairs(content.highlights or {}) do
+		local line = highlight.line + 1
+		highlights_by_line[line] = highlights_by_line[line] or {}
+		table.insert(highlights_by_line[line], highlight)
+	end
+
+	for index, source in ipairs(content.lines) do
+		local rows, offsets = M.wrap_line(source, width)
+		for row_index, row in ipairs(rows) do
+			local offset = offsets[row_index]
+			table.insert(lines, prefix .. row)
+
+			if prefix ~= "" then
+				table.insert(spans, {
+					line = #lines - 1,
+					start_col = 0,
+					end_col = #prefix,
+					hl_group = "AtlasTextMuted",
+				})
+			end
+
+			for _, highlight in ipairs(highlights_by_line[index] or {}) do
+				local start_col = math.max(0, highlight.start_col - offset)
+				local end_col = math.min(highlight.end_col - offset, #row)
+				if end_col > start_col then
+					table.insert(spans, {
+						line = #lines - 1,
+						start_col = #prefix + start_col,
+						end_col = #prefix + end_col,
+						hl_group = highlight.hl_group,
+					})
+				end
+			end
+		end
+	end
+
+	return { lines = lines, highlights = spans }
 end
 
 function M.get_version()
@@ -455,31 +509,33 @@ end
 
 ---@param text string
 ---@param max_dw integer
----@return string[]
+---@return string[] lines
+---@return integer[] offsets Zero-based byte offsets in the source.
 function M.wrap_line(text, max_dw)
-	if max_dw < 2 or strwidth(text) <= max_dw then
-		return { text }
+	if max_dw < 1 or strwidth(text) <= max_dw then
+		return { text }, { 0 }
 	end
 
-	local result = {}
+	local result, offsets = {}, {}
 	local remaining = text
 	while remaining ~= "" do
+		offsets[#result + 1] = #text - #remaining
 		if strwidth(remaining) <= max_dw then
 			result[#result + 1] = remaining
 			break
 		end
 
 		local nchars = strchars(remaining, true)
-		local cut = nchars
-		for i = nchars - 1, 1, -1 do
-			if strwidth(strcharpart(remaining, 0, i, true)) <= max_dw then
-				cut = i
+		local cut = 1
+		for i = 1, nchars - 1 do
+			if strwidth(strcharpart(remaining, 0, i, true)) > max_dw then
 				break
 			end
+			cut = i
 		end
 
 		local last_space = nil
-		local half = math.floor(cut * 0.5)
+		local half = math.max(1, math.floor(cut * 0.5))
 		for i = cut, half, -1 do
 			if strcharpart(remaining, i - 1, 1, true) == " " then
 				last_space = i
@@ -496,7 +552,7 @@ function M.wrap_line(text, max_dw)
 		end
 	end
 
-	return result
+	return result, offsets
 end
 
 ---@param text string|nil

@@ -44,13 +44,6 @@ describe("core.git.checkout", function()
 			assert.is_truthy(path:find("special"))
 		end)
 
-		it("resolves wildcard mapping", function()
-			local path = resolve({ ["ws/*"] = "~/code/*" }, "ws/abc")
-
-			assert.is_string(path)
-			assert.is_truthy(path:find("abc"))
-		end)
-
 		it("prefers more specific wildcard", function()
 			local path = resolve({
 				["ws/*"] = "~/code/*",

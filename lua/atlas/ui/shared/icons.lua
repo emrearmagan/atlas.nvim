@@ -27,6 +27,8 @@ local ICONS = {
 		delete = { icon = "󰆴", hl_group = "AtlasLogError" },
 		progress = { icon = "󰦖", hl_group = "AtlasTextMuted" },
 		success = { icon = "", hl_group = "AtlasTextPositive" },
+		checkbox_unchecked = { icon = "", hl_group = "AtlasTextMuted" },
+		checkbox_checked = { icon = "", hl_group = "AtlasTextPositive" },
 		warning = { icon = "", hl_group = "AtlasTextMuted" },
 		error = { icon = "", hl_group = "AtlasLogError" },
 		info = { icon = "", hl_group = "AtlasTextMuted" },

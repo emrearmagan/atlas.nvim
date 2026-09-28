@@ -14,18 +14,21 @@ describe("GitLab issue mapper", function()
 		assert.are.equal(42, issue.iid)
 	end)
 
-	it("maps only supplemental issue details", function()
+	it("maps issue details and editable milestone IDs", function()
 		local details = issue_mapper.to_issue_details({
 			iid = 7,
 			references = { full = "group/project#7" },
 			title = "Details",
 			description = "Hydrated description",
 			state = "opened",
+			milestone = { id = "gid://gitlab/Milestone/15", title = "Next" },
 		})
 
 		assert.is_nil(details.project_path)
 		assert.is_nil(details.iid)
 		assert.are.equal("Hydrated description", details.description)
+		assert.are.equal("Details", details.title)
+		assert.same({ id = 15, title = "Next" }, details.milestone)
 	end)
 end)
 

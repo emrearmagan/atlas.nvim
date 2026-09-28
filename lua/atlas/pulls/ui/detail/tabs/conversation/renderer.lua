@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local icons = require("atlas.ui.shared.icons")
-local threads = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local activity_component = require("atlas.pulls.ui.detail.components.activity")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
@@ -205,7 +205,7 @@ local function render_review(item, width, has_next)
 	local icon, icon_hl, label = review_status(review)
 	local timestamp = utils.relative_time(review.submitted_on)
 	local additional = timestamp ~= "" and (label .. "  " .. timestamp) or label
-	local body = utils.strip_markup(review.body)
+	local body = review.body or ""
 	local lines, spans, line_map = threads.render(
 		{
 			{
@@ -214,6 +214,7 @@ local function render_review(item, width, has_next)
 				author = review.author and (review.author.nickname or review.author.name) or "Unknown",
 				additional = additional,
 				content = body ~= "" and body or nil,
+				markdown = true,
 			},
 		},
 		width,

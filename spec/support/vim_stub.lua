@@ -1,6 +1,4 @@
--- Minimal stub for the `vim` global so specs can run outside Neovim via busted.
--- Loaded once as a busted helper (--helper=spec/support/vim_stub.lua).
--- Individual spec files no longer need their own `if vim == nil then` blocks.
+-- Neovim API stubs for Busted.
 
 if vim ~= nil then
 	return
@@ -29,11 +27,16 @@ local function json_encode(value)
 	return "null"
 end
 
+local function strchars(text)
+	local _, count = text:gsub("[^\128-\191]", "")
+	return count
+end
+
 _G.vim = {
 	-- Sentinel used by the Neovim C layer for JSON null / GraphQL null values.
 	NIL = {},
+	o = { background = "dark" },
 
-	-- vim.split(s, sep, {plain=true|false})
 	split = function(s, sep, opts)
 		local plain = opts and opts.plain
 		local result = {}
@@ -50,7 +53,7 @@ _G.vim = {
 		return result
 	end,
 
-	-- vim.schedule(fn) -> run immediately; specs are single-threaded
+	-- Run scheduled callbacks immediately in tests.
 	schedule = function(fn)
 		fn()
 	end,
@@ -68,53 +71,42 @@ _G.vim = {
 		end,
 	},
 
-	api = (function()
-		-- Fakes just enough of nvim_set_hl/nvim_get_hl to test highlight setup
-		-- code: `default = true` must behave like `:highlight default`, i.e. it
-		-- only fills a group in when nothing has defined it yet.
-		local highlights = {}
+	filetype = {
+		match = function()
+			return nil
+		end,
+	},
 
-		return {
-			nvim_create_namespace = function()
-				return 1
+	treesitter = {
+		language = {
+			get_lang = function(filetype)
+				return filetype
 			end,
+		},
+		get_string_parser = function()
+			error("No Tree-sitter parsers in the test environment")
+		end,
+	},
 
-			nvim_create_augroup = function()
-				return 1
-			end,
+	api = {
+		nvim_create_namespace = function()
+			return 1
+		end,
 
-			nvim_create_autocmd = function()
-				return 1
-			end,
+		nvim_create_augroup = function()
+			return 1
+		end,
 
-			nvim_set_hl = function(_, name, val)
-				if val.default and highlights[name] ~= nil then
-					return
-				end
-				highlights[name] = val
-			end,
+		nvim_create_autocmd = function()
+			return 1
+		end,
 
-			nvim_get_hl = function(_, filter)
-				local name = filter and filter.name
-				local existing = name and highlights[name]
-				if not existing then
-					return {}
-				end
-				local copy = {}
-				for k, v in pairs(existing) do
-					copy[k] = v
-				end
-				return copy
-			end,
+		nvim_set_hl = function() end,
+		nvim_get_hl = function()
+			return {}
+		end,
+	},
 
-			-- Test-only: clears recorded highlights between specs.
-			__reset_highlights = function()
-				highlights = {}
-			end,
-		}
-	end)(),
-
-	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
 	tbl_extend = function(behavior, ...)
 		assert(
 			behavior == "keep" or behavior == "force" or behavior == "error",
@@ -133,7 +125,6 @@ _G.vim = {
 		return out
 	end,
 
-	-- vim.list_extend(dst, src) -> append src onto dst in place
 	list_extend = function(dst, src)
 		for _, v in ipairs(src or {}) do
 			table.insert(dst, v)
@@ -141,7 +132,6 @@ _G.vim = {
 		return dst
 	end,
 
-	-- vim.tbl_keys(t) -> list of the table's keys
 	tbl_keys = function(t)
 		local keys = {}
 		for k in pairs(t) do
@@ -152,10 +142,19 @@ _G.vim = {
 
 	env = { HOME = os.getenv("HOME") or "" },
 
-	-- vim.json.encode(value) -> minimal JSON encoder for plain Lua values
 	json = { encode = json_encode },
 
 	fn = {
+		-- Layout fixtures use one-cell characters, including accented text and icons.
+		strdisplaywidth = strchars,
+		strchars = strchars,
+		strcharpart = function(text, start, length)
+			local chars = {}
+			for char in text:gmatch("[^\128-\191][\128-\191]*") do
+				chars[#chars + 1] = char
+			end
+			return table.concat(chars, "", start + 1, math.min(#chars, start + length))
+		end,
 		fnamemodify = function(path, _)
 			return path
 		end,
