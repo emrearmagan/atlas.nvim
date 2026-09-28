@@ -265,11 +265,19 @@ node_handlers.codeBlock = function(node)
 	return "```" .. lang .. "\n" .. table.concat(content) .. "\n```"
 end
 
--- { "type": "media", "attrs": { "url": "https://example.com/image.png" } }
+-- File media uses a Media Services ID; external images include a URL.
 node_handlers.media = function(node)
-	local url = node.attrs and node.attrs.url or ""
-	return "![](" .. url .. ")"
+	local attrs = node.attrs or {}
+	if attrs.url then
+		return "![" .. (attrs.alt or "") .. "](" .. attrs.url .. ")"
+	end
+	-- No media link yet. We'd need to fetch the issue's attachment metadata
+	-- and pass it to the parser to map the media ID to a URL.
+	return "[" .. (attrs.alt or "Attachment") .. "]"
 end
+
+node_handlers.mediaInline = node_handlers.media
+node_handlers.mediaGroup = node_handlers.doc
 
 -- { "type": "mediaSingle", "content": [{ "type": "media", ... }] }
 node_handlers.mediaSingle = function(node, convert_node, ctx)
