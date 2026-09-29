@@ -207,18 +207,19 @@ function M.get_version()
 		return _cached_version
 	end
 
-	local ok, version = pcall(function()
-		return vim.fn.system(
-			"git -C " .. vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h:h") .. " describe --tags --abbrev=0"
-		)
-	end)
-
-	if ok and type(version) == "string" and version ~= "" then
-		_cached_version = version:gsub("%s+", "")
-	else
-		_cached_version = "dev"
-	end
-
+	_cached_version = "dev"
+	local cwd = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h")
+	pcall(
+		require("atlas.core.git").run,
+		{ "describe", "--tags", "--abbrev=0" },
+		{ cwd = cwd, text = true },
+		function(result)
+			if result.code == 0 and vim.trim(result.stdout or "") ~= "" then
+				_cached_version = vim.trim(result.stdout)
+				vim.cmd("redrawstatus")
+			end
+		end
+	)
 	return _cached_version
 end
 

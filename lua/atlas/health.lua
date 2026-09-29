@@ -149,11 +149,20 @@ local function check_github()
 
 	local hostname = providers.github.hostname()
 	vim.health.info("GitHub host: " .. hostname)
-	if vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }):wait().code ~= 0 then
-		vim.health.error("gh not authenticated for " .. hostname, { "Run: gh auth login --hostname " .. hostname })
-		return
-	end
-	vim.health.ok("gh authenticated for " .. hostname)
+	vim.health.info("Checking GitHub authentication; the result will appear in a notification")
+	vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }, function(result)
+		vim.schedule(function()
+			if result.code == 0 then
+				vim.notify("gh authenticated for " .. hostname, vim.log.levels.INFO, { title = "Atlas health" })
+			else
+				vim.notify(
+					"gh not authenticated for " .. hostname .. "\nRun: gh auth login --hostname " .. hostname,
+					vim.log.levels.ERROR,
+					{ title = "Atlas health" }
+				)
+			end
+		end)
+	end)
 end
 
 local function check_gitlab()
