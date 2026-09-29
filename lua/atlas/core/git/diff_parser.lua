@@ -28,8 +28,6 @@ local M = {}
 ---@field additions integer|nil         -- optional total when supplied without hunks
 ---@field deletions integer|nil          -- optional total when supplied without hunks
 
--- Helpers
-
 ---@param raw string
 ---@return string[]
 local function split_lines(raw)
@@ -59,8 +57,6 @@ local function finalise_file(file)
 		file.status = "renamed"
 	end
 end
-
--- Public
 
 -- Example
 --   raw unified diff:
@@ -112,26 +108,25 @@ function M.parse(raw)
 	local old_cursor = 0
 	local new_cursor = 0
 
-	local function flush_hunk()
-		if cur_hunk and cur_file then
-			table.insert(cur_file.hunks, cur_hunk)
-			cur_hunk = nil
-		end
-	end
-
 	local function flush_file()
-		flush_hunk()
 		if cur_file then
 			finalise_file(cur_file)
 			table.insert(files, cur_file)
 			cur_file = nil
 		end
+		cur_hunk = nil
 	end
 
 	for _, line in ipairs(split_lines(raw)) do
+		-- ---/+++ are source lines while the current hunk still expects content.
+		local in_hunk = cur_hunk
+			and (
+				old_cursor < cur_hunk.old_start + cur_hunk.old_count
+				or new_cursor < cur_hunk.new_start + cur_hunk.new_count
+			)
 		if line:match("^diff %-%-git ") then
 			flush_file()
-			cur_file = { path = "", old_path = nil, status = "modified", hunks = {} }
+			cur_file = { path = "", status = "modified", hunks = {} }
 		elseif line:match("^new file mode") then
 			if cur_file then
 				cur_file.status = "added"
@@ -149,86 +144,69 @@ function M.parse(raw)
 			if cur_file then
 				cur_file.path = line:match("^rename to (.+)$")
 			end
-		elseif line:match("^%-%-%- ") then
+		elseif not in_hunk and line:match("^%-%-%- ") then
 			cur_file = cur_file or { path = "", status = "modified", hunks = {} }
 			-- Extract old path; /dev/null means the file is new
-			if cur_file then
-				local p = line:match("^%-%-%- a/(.+)$") or line:match("^%-%-%- (.+)$")
-				if p and p ~= "/dev/null" then
-					cur_file.old_path = p
-				end
+			local path = line:match("^%-%-%- a/(.+)$") or line:match("^%-%-%- (.+)$")
+			if path and path ~= "/dev/null" then
+				cur_file.old_path = path
 			end
-		elseif line:match("^%+%+%+ ") then
+		elseif not in_hunk and line:match("^%+%+%+ ") then
 			-- Extract new path; /dev/null means the file is deleted
 			if cur_file then
-				local p = line:match("^%+%+%+ b/(.+)$") or line:match("^%+%+%+ (.+)$")
-				if p and p ~= "/dev/null" then
-					cur_file.path = p
+				local path = line:match("^%+%+%+ b/(.+)$") or line:match("^%+%+%+ (.+)$")
+				if path and path ~= "/dev/null" then
+					cur_file.path = path
 				end
 				-- /dev/null on +++ side is handled in finalise_file
 			end
 		elseif line:match("^@@ ") then
-			flush_hunk()
 			cur_file = cur_file or { path = "", status = "modified", hunks = {} }
-			if cur_file then
-				local oa, ob, na, nb, ctx = line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@ ?(.*)$")
-				local old_start = tonumber(oa) or 0
-				local old_count = tonumber(ob)
-				if old_count == nil or old_count == 0 then
-					old_count = ob == "" and 1 or 0
-				end
-				local new_start = tonumber(na) or 0
-				local new_count = tonumber(nb)
-				if new_count == nil or new_count == 0 then
-					new_count = nb == "" and 1 or 0
-				end
-				cur_hunk = {
-					header = line,
-					context = ctx or "",
-					old_start = old_start,
-					old_count = old_count,
-					new_start = new_start,
-					new_count = new_count,
-					additions = 0,
-					deletions = 0,
-					lines = {},
-				}
-				old_cursor = old_start
-				new_cursor = new_start
-			end
+			local old_start, old_count, new_start, new_count, context =
+				line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@ ?(.*)$")
+			cur_hunk = {
+				header = line,
+				context = context or "",
+				old_start = tonumber(old_start) or 0,
+				old_count = tonumber(old_count) or (old_count == "" and 1 or 0),
+				new_start = tonumber(new_start) or 0,
+				new_count = tonumber(new_count) or (new_count == "" and 1 or 0),
+				additions = 0,
+				deletions = 0,
+				lines = {},
+			}
+			table.insert(cur_file.hunks, cur_hunk)
+			old_cursor, new_cursor = cur_hunk.old_start, cur_hunk.new_start
 		elseif cur_hunk then
-			local kind
+			local marker = line:sub(1, 1)
 			local entry = { text = line }
-			if line:match("^%+") then
-				kind = "add"
+			if marker == "+" then
+				entry.kind = "add"
 				entry.content = line:sub(2)
 				entry.new_line = new_cursor
 				new_cursor = new_cursor + 1
 				cur_hunk.additions = cur_hunk.additions + 1
-			elseif line:match("^%-") then
-				kind = "remove"
+			elseif marker == "-" then
+				entry.kind = "remove"
 				entry.content = line:sub(2)
 				entry.old_line = old_cursor
 				old_cursor = old_cursor + 1
 				cur_hunk.deletions = cur_hunk.deletions + 1
 			elseif line:match("^\\ ") then
-				kind = "meta" -- "\ No newline at end of file"
+				entry.kind = "meta" -- "\ No newline at end of file"
 				entry.content = line
 			else
-				kind = "context"
-				entry.content = line:sub(1, 1) == " " and line:sub(2) or line
+				entry.kind = "context"
+				entry.content = marker == " " and line:sub(2) or line
 				entry.old_line = old_cursor
 				entry.new_line = new_cursor
 				old_cursor = old_cursor + 1
 				new_cursor = new_cursor + 1
 			end
-			entry.kind = kind
 			table.insert(cur_hunk.lines, entry)
 		elseif not cur_file and #files == 0 then
-			-- Lines before any "diff --git" (shouldn't happen with Bitbucket, but
-			-- guard against truncated/non-standard responses by attaching them to
-			-- a synthetic file entry so nothing is silently lost).
-			cur_file = { path = "(unknown)", old_path = nil, status = "modified", hunks = {} }
+			-- Preserve headerless comment previews without inventing a file path.
+			cur_file = { path = "(unknown)", status = "modified", hunks = {} }
 			cur_hunk = {
 				header = "",
 				context = "",
@@ -241,6 +219,7 @@ function M.parse(raw)
 				lines = {},
 			}
 			table.insert(cur_hunk.lines, { text = line, kind = "context", content = line })
+			table.insert(cur_file.hunks, cur_hunk)
 		end
 	end
 

@@ -38,6 +38,23 @@ describe("core.git.diff_parser", function()
 		assert.equals(1, hunk.deletions)
 	end)
 
+	it("preserves header-like source lines in full diffs and standalone hunks", function()
+		local raw_hunk = "@@ -1 +1 @@\n--- a/old\n+++ b/new"
+		local file =
+			parser.parse("diff --git a/source.lua b/source.lua\n--- a/source.lua\n+++ b/source.lua\n" .. raw_hunk)[1]
+
+		assert.equals("source.lua", file.path)
+		assert.equals("modified", file.status)
+		assert.is_nil(file.old_path)
+		assert.same({
+			{ kind = "remove", text = "--- a/old", content = "-- a/old", old_line = 1 },
+			{ kind = "add", text = "+++ b/new", content = "++ b/new", new_line = 1 },
+		}, file.hunks[1].lines)
+		assert.equals(1, file.hunks[1].additions)
+		assert.equals(1, file.hunks[1].deletions)
+		assert.same(file.hunks[1], parser.parse_hunk(raw_hunk))
+	end)
+
 	it("recognizes file status and paths", function()
 		for _, case in ipairs({
 			{
