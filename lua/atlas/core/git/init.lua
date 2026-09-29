@@ -112,12 +112,12 @@ function M.run(args, opts, on_done, on_progress)
 		end
 	end
 
-	local handle = vim.system(command, system_opts, function(res)
+	local function finish(res)
 		if on_progress then
 			if pending ~= "" then
 				report_progress(pending)
 			end
-			res.stderr = table.concat(stderr)
+			res.stderr = #stderr > 0 and table.concat(stderr) or res.stderr
 		end
 		if not cancelled then
 			log_failure(res, context)
@@ -127,14 +127,22 @@ function M.run(args, opts, on_done, on_progress)
 				on_done(res)
 			end
 		end)
-	end)
+	end
+
+	local ok, handle = pcall(vim.system, command, system_opts, finish)
+	if not ok then
+		finish({ code = -1, signal = 0, stdout = "", stderr = tostring(handle) })
+		handle = nil
+	end
 	return {
 		cancel = function()
 			if cancelled then
 				return
 			end
 			cancelled = true
-			pcall(handle.kill, handle, 9)
+			if handle then
+				pcall(handle.kill, handle, 9)
+			end
 		end,
 	}
 end
