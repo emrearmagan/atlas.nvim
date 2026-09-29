@@ -10,7 +10,6 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local links = require("atlas.ui.links")
-local overview_icon = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -18,7 +17,7 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = { icon = overview_icon },
+		icon = { icon = icons.general("overview") },
 		mod = require("atlas.pulls.ui.detail.tabs.overview"),
 	},
 }
@@ -319,6 +318,40 @@ end
 
 -- Public API
 
+---@return PullsDetailTab[]
+function M.default_tabs()
+	local overview_icon = icons.general("overview")
+	local conversation_icon = icons.general("conversation")
+	local review_icon = icons.pulls("review")
+	local commit_icon = icons.pulls("commit")
+	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = { icon = overview_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.overview"),
+		},
+		{
+			key = "conversation",
+			label = "Conversation",
+			icon = { icon = conversation_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
+		},
+		{
+			key = "review",
+			label = "Review",
+			icon = { icon = review_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.review"),
+		},
+		{
+			key = "commits",
+			label = "Commits",
+			icon = { icon = commit_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.commits"),
+		},
+	}
+end
+
 ---@return boolean
 function M.is_open()
 	return detail_ui.is_showing("pulls")
@@ -417,9 +450,12 @@ function M.refresh(ref)
 		return
 	end
 
-	M.select(pr, { force_refresh = true })
+	clear_pr()
+	state.current_pr = pr
 	state.pr_loading = true
+	state.details_loading = true
 	update_spinner()
+	render()
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(pulls, err)
@@ -427,12 +463,13 @@ function M.refresh(ref)
 			return
 		end
 		state.pr_loading = false
+		state.details_loading = false
 		local refreshed_pr = pulls and pulls[1] or nil
 		if refreshed_pr then
-			state.current_pr = refreshed_pr
-		else
-			notify.error(tostring(err or "Failed to reload pull request"))
+			M.select(refreshed_pr, { force_refresh = true })
+			return
 		end
+		notify.error(tostring(err or "Failed to reload pull request"))
 		update_spinner()
 		render_if_open()
 	end)

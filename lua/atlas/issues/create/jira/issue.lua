@@ -9,6 +9,7 @@ local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
+local request_scope = require("atlas.core.requests")
 
 ---@class IssueEditorFields
 ---@field summary string
@@ -23,48 +24,19 @@ local picker = require("atlas.ui.picker")
 ---@field layout AtlasFormLayout
 ---@field preview_mode boolean
 ---@field original_markdown string
----@field initial_summary string
----@field initial_description string
+---@field initial IssueEditorFields
+---@field is_submitting boolean
+---@field closed boolean
+---@field requests AtlasRequestScope
 ---@field fields IssueEditorFields
 ---@field assignees AtlasUser[]|"loading"|nil
 ---@field issue_types IssueType[]|"loading"|nil
 ---@field current_user AtlasUser|nil
 ---@field current_user_loading boolean
 ---@field spinner SpinnerInstance|nil
----@field assignees_handle { job_id: integer, cancel: fun() }|nil
----@field issue_types_handle { job_id: integer, cancel: fun() }|nil
----@field current_user_handle { job_id: integer, cancel: fun() }|nil
 ---@field content_width integer
 ---@field on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@field preview_fn (fun(markdown: string): string)|nil
-
-local state = {
-	layout = {},
-	preview_mode = false,
-	original_markdown = "",
-	initial_summary = "",
-	initial_description = "",
-	fields = {
-		summary = "",
-		description = nil,
-		assignee = nil,
-		reporter = nil,
-		project = "",
-		issue_key = nil,
-		issue_type = nil,
-	},
-	assignees = nil,
-	issue_types = nil,
-	current_user = nil,
-	current_user_loading = false,
-	spinner = nil,
-	assignees_handle = nil,
-	issue_types_handle = nil,
-	current_user_handle = nil,
-	content_width = 0,
-	on_submit = nil,
-	preview_fn = nil,
-}
 
 local function valid_win(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
@@ -74,26 +46,30 @@ local function valid_buf(buf)
 	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
 end
 
-local function get_title()
+---@param state IssueState
+local function get_title(state)
 	return form.get_title(state.layout)
 end
 
-local function get_description()
+---@param state IssueState
+local function get_description(state)
 	return form.get_body(state.layout)
 end
 
+---@param state IssueState
 ---@return string
-local function get_active_markdown_description()
+local function get_active_markdown_description(state)
 	if state.preview_mode then
 		return tostring(state.original_markdown or "")
 	end
-	return get_description()
+	return get_description(state)
 end
 
+---@param state IssueState
 ---@param markdown string
 ---@return boolean
-local function set_description_markdown(markdown)
-	if not valid_buf(state.layout.editor_buf) then
+local function set_description_markdown(state, markdown)
+	if state.closed or not valid_buf(state.layout.editor_buf) then
 		return false
 	end
 
@@ -107,9 +83,21 @@ local function set_description_markdown(markdown)
 	return true
 end
 
-local function is_modified()
-	return vim.trim(get_title()) ~= vim.trim(state.initial_summary)
-		or get_active_markdown_description() ~= state.initial_description
+---@param left { id?: string|number }|nil
+---@param right { id?: string|number }|nil
+local function same_id(left, right)
+	return (left and left.id) == (right and right.id)
+end
+
+---@param state IssueState
+local function is_modified(state)
+	local fields, initial = state.fields, state.initial
+	local description = type(initial.description) == "string" and initial.description or ""
+	return vim.trim(get_title(state)) ~= vim.trim(initial.summary or "")
+		or get_active_markdown_description(state) ~= description
+		or not same_id(fields.assignee, initial.assignee)
+		or not same_id(fields.reporter or state.current_user, initial.reporter or state.current_user)
+		or not same_id(fields.issue_type, initial.issue_type)
 end
 
 ---@param issue_types IssueType[]
@@ -123,7 +111,8 @@ local function pick_default_issue_type(issue_types)
 	return issue_types[1]
 end
 
-local function meta_rows()
+---@param state IssueState
+local function meta_rows(state)
 	return issue_helper.meta_rows(
 		state.fields,
 		state.assignees,
@@ -134,11 +123,16 @@ local function meta_rows()
 	)
 end
 
-local function render_meta()
-	form.render_meta(state, meta_rows())
+---@param state IssueState
+local function render_meta(state)
+	if state.closed then
+		return
+	end
+	form.render_meta(state, meta_rows(state))
 end
 
-local function stop_loading_spinner_if_done()
+---@param state IssueState
+local function stop_loading_spinner_if_done(state)
 	if not state.spinner then
 		return
 	end
@@ -151,62 +145,24 @@ local function stop_loading_spinner_if_done()
 	state.spinner = nil
 end
 
-local function cancel_pending_requests()
-	if state.assignees_handle and state.assignees_handle.cancel then
-		pcall(state.assignees_handle.cancel)
+---@param state IssueState
+local function close_ui(state)
+	if state.closed then
+		return
 	end
-	state.assignees_handle = nil
-
-	if state.issue_types_handle and state.issue_types_handle.cancel then
-		pcall(state.issue_types_handle.cancel)
-	end
-	state.issue_types_handle = nil
-
-	if state.current_user_handle and state.current_user_handle.cancel then
-		pcall(state.current_user_handle.cancel)
-	end
-	state.current_user_handle = nil
-end
-
-local function close_ui()
-	cancel_pending_requests()
-
+	state.closed = true
+	state.requests.cancel()
 	if state.spinner then
 		state.spinner:stop()
 		state.spinner = nil
 	end
-
 	form.close(state.layout)
-
-	state.layout = {}
-	state.preview_mode = false
-	state.original_markdown = ""
-	state.initial_summary = ""
-	state.initial_description = ""
-	state.fields = {
-		summary = "",
-		description = nil,
-		assignee = nil,
-		reporter = nil,
-		project = "",
-		issue_key = nil,
-		issue_type = nil,
-	}
-	state.assignees = nil
-	state.issue_types = nil
-	state.current_user = nil
-	state.current_user_loading = false
-	state.assignees_handle = nil
-	state.issue_types_handle = nil
-	state.current_user_handle = nil
-	state.content_width = 0
-	state.on_submit = nil
-	state.preview_fn = nil
 end
 
-local function confirm_close()
-	if not is_modified() then
-		close_ui()
+---@param state IssueState
+local function confirm_close(state)
+	if not is_modified(state) then
+		close_ui(state)
 		return
 	end
 
@@ -218,14 +174,18 @@ local function confirm_close()
 		end
 
 		if vim.trim(tostring(input)):lower() == "y" then
-			close_ui()
+			close_ui(state)
 		end
 	end)
 end
 
-local function submit_issue()
-	local title = vim.trim(get_title())
-	local desc = state.preview_mode and state.original_markdown or get_description()
+---@param state IssueState
+local function submit_issue(state)
+	if state.closed or state.is_submitting then
+		return
+	end
+	local title = vim.trim(get_title(state))
+	local desc = state.preview_mode and state.original_markdown or get_description(state)
 
 	if title == "" then
 		form.notify("warn", "Title is required")
@@ -244,10 +204,17 @@ local function submit_issue()
 	local is_edit = type(state.fields.issue_key) == "string" and state.fields.issue_key ~= ""
 	form.notify("loading", is_edit and "Saving issue..." or "Creating issue...")
 
-	on_submit(fields, function(ok, err)
+	state.is_submitting = true
+	state.requests.run(function(done)
+		on_submit(fields, done)
+	end, function(ok, err)
 		vim.schedule(function()
+			if state.closed then
+				return
+			end
+			state.is_submitting = false
 			if ok then
-				close_ui()
+				close_ui(state)
 				return
 			end
 
@@ -259,7 +226,8 @@ local function submit_issue()
 	end)
 end
 
-local function toggle_preview()
+---@param state IssueState
+local function toggle_preview(state)
 	if not valid_buf(state.layout.editor_buf) or not valid_win(state.layout.editor_win) then
 		return
 	end
@@ -276,7 +244,7 @@ local function toggle_preview()
 		state.preview_mode = false
 		form.notify("info", "Editing markdown")
 	else
-		state.original_markdown = get_description()
+		state.original_markdown = get_description(state)
 		local preview = state.preview_fn(state.original_markdown)
 		vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.editor_buf })
 		form.set_body(state.layout, preview)
@@ -287,7 +255,8 @@ local function toggle_preview()
 	end
 end
 
-local function show_assignee_picker()
+---@param state IssueState
+local function show_assignee_picker(state)
 	---@type table[]
 	local initial_items = {}
 
@@ -318,43 +287,49 @@ local function show_assignee_picker()
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
 		fetch = function(query, done)
-			return issues_api.get_assignable_users(
-				{ project = state.fields.project, issue_key = state.fields.issue_key },
-				query,
-				function(users, err)
-					if err then
-						done(nil, err)
-						return
-					end
-					local items = {}
-					table.insert(items, {
-						id = "__unassign__",
-						label = "Unassign",
-						value = { id = nil, name = "Unassign" },
-					})
-					for _, u in ipairs(users or {}) do
-						table.insert(items, {
-							id = u.id or "",
-							label = u.name or "",
-							value = u,
-						})
-					end
-					done(items, nil)
+			return state.requests.run(function(on_done)
+				return issues_api.get_assignable_users(
+					{ project = state.fields.project, issue_key = state.fields.issue_key },
+					query,
+					on_done
+				)
+			end, function(users, err)
+				if err then
+					done(nil, err)
+					return
 				end
-			)
+				local items = {}
+				table.insert(items, {
+					id = "__unassign__",
+					label = "Unassign",
+					value = { id = nil, name = "Unassign" },
+				})
+				for _, u in ipairs(users or {}) do
+					table.insert(items, {
+						id = u.id or "",
+						label = u.name or "",
+						value = u,
+					})
+				end
+				done(items, nil)
+			end)
 		end,
 		on_select = function(item)
+			if state.closed then
+				return
+			end
 			if item.id == "__unassign__" then
 				state.fields.assignee = nil
 			else
 				state.fields.assignee = item.value
 			end
-			render_meta()
+			render_meta(state)
 		end,
 	})
 end
 
-local function show_reporter_picker()
+---@param state IssueState
+local function show_reporter_picker(state)
 	---@type table[]
 	local initial_items = {}
 
@@ -376,111 +351,60 @@ local function show_reporter_picker()
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
 		fetch = function(query, done)
-			return issues_api.get_assignable_users(
-				{ project = state.fields.project, issue_key = state.fields.issue_key },
-				query,
-				function(users, err)
-					if err then
-						done(nil, err)
-						return
-					end
-					local items = {}
-					for _, u in ipairs(users or {}) do
-						table.insert(items, {
-							id = u.id or "",
-							label = u.name or "",
-							value = u,
-						})
-					end
-					done(items, nil)
+			return state.requests.run(function(on_done)
+				return issues_api.get_assignable_users(
+					{ project = state.fields.project, issue_key = state.fields.issue_key },
+					query,
+					on_done
+				)
+			end, function(users, err)
+				if err then
+					done(nil, err)
+					return
 				end
-			)
+				local items = {}
+				for _, u in ipairs(users or {}) do
+					table.insert(items, {
+						id = u.id or "",
+						label = u.name or "",
+						value = u,
+					})
+				end
+				done(items, nil)
+			end)
 		end,
 		on_select = function(item)
-			if state.current_user_handle then
-				state.current_user_handle.cancel()
-				state.current_user_handle = nil
+			if state.closed then
+				return
 			end
 			state.current_user_loading = false
-			if state.current_user and item.value.id == state.current_user.id then
-				state.fields.reporter = nil
-			else
-				state.fields.reporter = item.value
-			end
-			stop_loading_spinner_if_done()
-			render_meta()
+			state.fields.reporter = item.value
+			stop_loading_spinner_if_done(state)
+			render_meta(state)
 		end,
 	})
 end
 
-local function show_issue_type_picker()
-	---@type table[]
-	local initial_items = {}
-
-	if state.issue_types and state.issue_types ~= "loading" then
-		for _, issue_type in ipairs(state.issue_types) do
-			table.insert(initial_items, {
-				id = tostring(issue_type.id or ""),
-				label = tostring(issue_type.name or ""),
-				value = issue_type,
-			})
-		end
+---@param state IssueState
+local function show_issue_type_picker(state)
+	if state.issue_types == "loading" then
+		form.notify("info", "Issue types are still loading")
+		return
 	end
 
-	picker.search({
+	picker.select({
 		title = "Select Issue Type",
-		initial_items = initial_items,
-		fetch_on_open = not (state.issue_types and state.issue_types ~= "loading" and #state.issue_types > 0),
-		debounce_ms = 0,
-		format_item = function(item)
-			local icon, icon_hl = icons.issues_type(item.label)
-			return string.format("%s %s", icon, item.label), icon_hl
+		items = state.issue_types or {},
+		format_item = function(issue_type)
+			local icon, icon_hl = icons.issues_type(issue_type.name)
+			return string.format("%s %s", icon, issue_type.name), icon_hl
 		end,
-		fetch = function(query, fetch_done)
-			local cancelled = false
-			local function do_filter()
-				if cancelled then
-					return
-				end
-				if state.issue_types == "loading" then
-					vim.defer_fn(do_filter, 100)
-					return
-				end
-
-				if #initial_items == 0 and state.issue_types then
-					for _, issue_type in ipairs(state.issue_types) do
-						table.insert(initial_items, {
-							id = tostring(issue_type.id or ""),
-							label = tostring(issue_type.name or ""),
-							value = issue_type,
-						})
-					end
-				end
-
-				local normalized = vim.trim(query):lower()
-				if normalized == "" then
-					fetch_done(initial_items, nil)
-					return
-				end
-				local filtered = {}
-				for _, item in ipairs(initial_items) do
-					if item.label:lower():find(normalized, 1, true) then
-						table.insert(filtered, item)
-					end
-				end
-				fetch_done(filtered, nil)
+		on_select = function(issue_type)
+			if state.closed or not issue_type then
+				return
 			end
-
-			do_filter()
-			return {
-				cancel = function()
-					cancelled = true
-				end,
-			}
-		end,
-		on_select = function(item)
-			state.fields.issue_type = item.value
-			render_meta()
+			state.fields.issue_type = issue_type
+			render_meta(state)
 		end,
 	})
 end
@@ -489,21 +413,24 @@ end
 ---@param opts IssueEditorFields
 ---@param editor_opts { preview_fn: (fun(markdown: string): string)|nil, current_user: AtlasUser|nil }|nil
 function M.open(on_submit, opts, editor_opts)
-	if valid_win(state.layout.editor_win) then
-		close_ui()
-	end
-
-	state.on_submit = on_submit
-	state.fields = opts
-	state.preview_fn = editor_opts and editor_opts.preview_fn or nil
-	state.assignees = nil
-	state.issue_types = nil
-	state.current_user = editor_opts and editor_opts.current_user or nil
+	---@type IssueState
+	local state = {
+		layout = {},
+		preview_mode = false,
+		original_markdown = "",
+		fields = vim.deepcopy(opts),
+		initial = vim.deepcopy(opts),
+		is_submitting = false,
+		closed = false,
+		requests = request_scope.new(),
+		content_width = 0,
+		on_submit = on_submit,
+		preview_fn = editor_opts and editor_opts.preview_fn or nil,
+		current_user = editor_opts and editor_opts.current_user or nil,
+		current_user_loading = false,
+	}
 	state.current_user_loading = state.fields.reporter == nil and state.current_user == nil
-
 	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
-	state.initial_summary = tostring(state.fields.summary or "")
-	state.initial_description = initial_desc
 	local preview_keys = keymaps.resolve("ui.toggle_description_mode")
 
 	form.open(state, {
@@ -511,26 +438,38 @@ function M.open(on_submit, opts, editor_opts)
 		body_label = "Description",
 		initial_title = tostring(state.fields.summary or ""),
 		initial_body = initial_desc,
-		close = confirm_close,
-		submit = submit_issue,
-		meta = meta_rows,
+		close = function()
+			confirm_close(state)
+		end,
+		submit = function()
+			submit_issue(state)
+		end,
+		meta = function()
+			return meta_rows(state)
+		end,
 		keymaps = {
 			{
 				key = "ga",
 				buffers = { "editor" },
-				action = show_assignee_picker,
+				action = function()
+					show_assignee_picker(state)
+				end,
 				desc = "assignee",
 			},
 			{
 				key = "gr",
 				buffers = { "editor" },
-				action = show_reporter_picker,
+				action = function()
+					show_reporter_picker(state)
+				end,
 				desc = "reporter",
 			},
 			{
 				key = "gt",
 				buffers = { "editor" },
-				action = show_issue_type_picker,
+				action = function()
+					show_issue_type_picker(state)
+				end,
 				desc = "issue type",
 			},
 			{
@@ -538,8 +477,12 @@ function M.open(on_submit, opts, editor_opts)
 				buffers = { "editor" },
 				action = function()
 					templates.open({
-						get_description = get_active_markdown_description,
-						set_description = set_description_markdown,
+						get_description = function()
+							return get_active_markdown_description(state)
+						end,
+						set_description = function(markdown)
+							return set_description_markdown(state, markdown)
+						end,
 					})
 				end,
 				desc = "templates",
@@ -547,7 +490,9 @@ function M.open(on_submit, opts, editor_opts)
 			preview_keys and {
 				key = preview_keys,
 				buffers = { "editor" },
-				action = toggle_preview,
+				action = function()
+					toggle_preview(state)
+				end,
 				desc = "raw preview",
 			} or nil,
 		},
@@ -558,58 +503,59 @@ function M.open(on_submit, opts, editor_opts)
 	state.spinner = spinner.create({
 		on_tick = function()
 			if state.assignees == "loading" or state.issue_types == "loading" or state.current_user_loading then
-				render_meta()
+				render_meta(state)
 			end
 		end,
 	})
 	state.spinner:start()
 
-	render_meta()
+	render_meta(state)
 
 	if state.current_user_loading then
-		state.current_user_handle = users_api.fetch_user(function(user, err)
-			state.current_user_handle = nil
+		state.requests.run(users_api.fetch_user, function(user, err)
+			if not state.current_user_loading then
+				return
+			end
 			state.current_user_loading = false
 			if err then
 				form.notify("warn", "Failed to load reporter: " .. err, { timeout = 2000 })
 			else
 				state.current_user = user
 			end
-			stop_loading_spinner_if_done()
+			stop_loading_spinner_if_done(state)
 			vim.schedule(function()
-				render_meta()
+				render_meta(state)
 			end)
 		end)
 	end
 
 	if state.fields.project ~= "" then
-		state.assignees_handle = issues_api.get_assignable_users(
-			{ project = state.fields.project, issue_key = state.fields.issue_key },
-			"",
-			function(users, err)
-				state.assignees_handle = nil
-
-				if err then
-					form.notify("warn", "Failed to load assignees: " .. err, { timeout = 2000 })
-					state.assignees = {}
-				else
-					state.assignees = users or {}
-				end
-
-				stop_loading_spinner_if_done()
-				vim.schedule(function()
-					render_meta()
-				end)
+		state.requests.run(function(done)
+			return issues_api.get_assignable_users(
+				{ project = state.fields.project, issue_key = state.fields.issue_key },
+				"",
+				done
+			)
+		end, function(users, err)
+			if err then
+				form.notify("warn", "Failed to load assignees: " .. err, { timeout = 2000 })
+				state.assignees = {}
+			else
+				state.assignees = users or {}
 			end
-		)
 
-		state.issue_types_handle = issues_api.get_create_meta(state.fields.project, function(issue_types, err)
-			state.issue_types_handle = nil
+			stop_loading_spinner_if_done(state)
+			vim.schedule(function()
+				render_meta(state)
+			end)
+		end)
 
+		state.requests.run(function(done)
+			return issues_api.get_create_meta(state.fields.project, done)
+		end, function(issue_types, err)
 			if err then
 				form.notify("warn", "Failed to load issue types: " .. err, { timeout = 2000 })
 				state.issue_types = {}
-				state.fields.issue_type = nil
 			else
 				local filtered = {}
 				for _, issue_type in ipairs(issue_types or {}) do
@@ -620,27 +566,27 @@ function M.open(on_submit, opts, editor_opts)
 				state.issue_types = filtered
 				if not state.fields.issue_type then
 					state.fields.issue_type = pick_default_issue_type(state.issue_types)
+					state.initial.issue_type = vim.deepcopy(state.fields.issue_type)
 				end
 			end
 
-			stop_loading_spinner_if_done()
+			stop_loading_spinner_if_done(state)
 			vim.schedule(function()
-				render_meta()
+				render_meta(state)
 			end)
 		end)
 	else
 		state.assignees = {}
 		state.issue_types = {}
-		stop_loading_spinner_if_done()
-		state.fields.issue_type = nil
-		render_meta()
+		stop_loading_spinner_if_done(state)
+		render_meta(state)
 	end
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		pattern = tostring(state.layout.editor_win),
 		once = true,
 		callback = function()
-			close_ui()
+			close_ui(state)
 		end,
 	})
 end

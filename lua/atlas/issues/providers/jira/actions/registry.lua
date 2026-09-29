@@ -335,8 +335,11 @@ local function edit_issue(ctx, done)
 			local desc = fields.description
 			local payload = {
 				summary = fields.summary,
-				description = type(desc) == "string" and (is_server and desc or md_to_adf.to_adf(desc)) or vim.NIL,
 			}
+			if (desc or "") ~= initial_description then
+				payload.description = type(desc) == "string" and (is_server and desc or md_to_adf.to_adf(desc))
+					or vim.NIL
+			end
 
 			if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
 				payload.issuetype = { id = fields.issue_type.id }
@@ -346,6 +349,10 @@ local function edit_issue(ctx, done)
 				payload.assignee = is_server and { name = fields.assignee.id } or { id = fields.assignee.id }
 			else
 				payload.assignee = vim.NIL
+			end
+
+			if fields.reporter and fields.reporter.id ~= (issue.reporter and issue.reporter.id) then
+				payload.reporter = is_server and { name = fields.reporter.id } or { accountId = fields.reporter.id }
 			end
 
 			notify.loading(string.format("Updating issue %s...", issue_key))
@@ -384,8 +391,9 @@ local function edit_issue(ctx, done)
 	notify.loading(string.format("Loading description for %s...", issue_key))
 	issues_api.fetch_issue({ key = issue_key }, { force_refresh = true }, function(details, err)
 		if err or details == nil then
-			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
-			open_editor("")
+			local message = string.format("Failed loading description for %s: %s", issue_key, err or "Empty response")
+			notify.error(message)
+			done(nil, message)
 			return
 		end
 

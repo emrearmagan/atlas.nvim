@@ -49,33 +49,26 @@ end
 
 ---@param issue_key string
 ---@param comment string
----@param opts { parent_id?: string|number }|nil
+---@param comment_id string|nil
+---@param parent_id string|number|nil
 ---@param callback fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.add_comment(issue_key, comment, opts, callback)
-	local body = comment
-	if vim.trim(body) == "" then
+local function write_comment(issue_key, comment, comment_id, parent_id, callback)
+	if vim.trim(comment) == "" then
 		callback(nil, "Comment cannot be empty")
 		return nil
 	end
 
 	local endpoint = string.format("/issue/%s/comment", issue_key)
-	local payload = { body = "" }
-	if not service.is_server() then
-		payload.body = markdown.to_adf(body)
-	else
-		payload.body = body
+	if comment_id then
+		endpoint = endpoint .. "/" .. comment_id
+	end
+	local payload = { body = service.is_server() and comment or markdown.to_adf(comment) }
+	if parent_id ~= nil and tostring(parent_id) ~= "" then
+		payload.parentId = tostring(parent_id)
 	end
 
-	local parent_id = opts and opts.parent_id or nil
-	if parent_id ~= nil then
-		local pid = tostring(parent_id)
-		if pid ~= "" then
-			payload.parentId = pid
-		end
-	end
-
-	return service.request("POST", endpoint, payload, function(result, err)
+	return service.request(comment_id and "PUT" or "POST", endpoint, payload, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
 			return
@@ -85,9 +78,19 @@ function M.add_comment(issue_key, comment, opts, callback)
 		local comments = map_comments({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end, {
-		action = "Add comment",
+		action = comment_id and "Edit comment" or "Add comment",
 		issue_key = issue_key,
+		comment_id = comment_id,
 	})
+end
+
+---@param issue_key string
+---@param comment string
+---@param opts { parent_id?: string|number }|nil
+---@param callback fun(comment: IssueComment|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.add_comment(issue_key, comment, opts, callback)
+	return write_comment(issue_key, comment, nil, opts and opts.parent_id or nil, callback)
 end
 
 ---@param issue_key string
@@ -101,35 +104,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		callback(nil, "Missing comment id")
 		return nil
 	end
-
-	local body = comment
-	if vim.trim(body) == "" then
-		callback(nil, "Comment cannot be empty")
-		return nil
-	end
-
-	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
-	local payload = { body = "" }
-	if not service.is_server() then
-		payload.body = markdown.to_adf(body)
-	else
-		payload.body = body
-	end
-
-	return service.request("PUT", endpoint, payload, function(result, err)
-		if err or not result then
-			callback(nil, err or "Empty response")
-			return
-		end
-
-		service.clear_memory_cache()
-		local comments = map_comments({ comments = { result } }, issue_key)
-		callback(comments[1], nil)
-	end, {
-		action = "Edit comment",
-		issue_key = issue_key,
-		comment_id = id,
-	})
+	return write_comment(issue_key, comment, id, nil, callback)
 end
 
 ---@param issue_key string

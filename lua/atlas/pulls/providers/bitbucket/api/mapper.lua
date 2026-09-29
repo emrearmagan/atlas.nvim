@@ -70,16 +70,13 @@ end
 ---@param is_draft boolean
 ---@return "open"|"merged"|"declined"|"draft"
 local function map_state(bb_state, is_draft)
-	if is_draft then
-		return "draft"
-	end
 	local s = tostring(bb_state or ""):upper()
-	if s == "OPEN" then
-		return "open"
-	elseif s == "MERGED" then
+	if s == "MERGED" then
 		return "merged"
 	elseif s == "DECLINED" or s == "SUPERSEDED" then
 		return "declined"
+	elseif is_draft then
+		return "draft"
 	end
 	return "open"
 end

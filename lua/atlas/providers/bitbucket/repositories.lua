@@ -100,9 +100,14 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		path = "README.md"
 	end
 
-	local encoded_ref = ref:gsub(" ", "%%20")
-	local encoded_path = path:gsub(" ", "%%20")
-	local endpoint = string.format("/repositories/%s/%s/src/%s/%s", owner, repo_name, encoded_ref, encoded_path)
+	local encoded_path = path:gsub("[^/]+", url_encode)
+	local endpoint = string.format(
+		"/repositories/%s/%s/src/%s/%s",
+		url_encode(owner),
+		url_encode(repo_name),
+		url_encode(ref),
+		encoded_path
+	)
 
 	return service.request_text("GET", endpoint, { Accept = "text/plain" }, nil, function(result, err)
 		if err ~= nil then
@@ -131,13 +136,11 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 	end
 	local query_prefix = ""
 	if search ~= "" then
-		local escaped_term = search:gsub('"', '\\"')
-		local q_expression = string.format('name~"%s"', escaped_term)
-		local encoded_q = q_expression:gsub('"', "%%22"):gsub(" ", "%%20")
-		query_prefix = string.format("q=%s&", encoded_q)
+		query_prefix = "q=" .. url_encode("name~" .. vim.json.encode(search)) .. "&"
 	end
 
-	local endpoint = string.format("/repositories/%s?%ssort=-updated_on&pagelen=50", workspace, query_prefix)
+	local endpoint =
+		string.format("/repositories/%s?%ssort=-updated_on&pagelen=50", url_encode(workspace), query_prefix)
 
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
@@ -251,7 +254,8 @@ function M.fetch_details(repo, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("/repositories/%s/%s", owner, repo_name)
+	local endpoint =
+		string.format("/repositories/%s/%s?fields=%%2Bmainbranch.target.hash", url_encode(owner), url_encode(repo_name))
 	local requests = request_scope.new()
 	requests.run(function(done)
 		return service.request("GET", endpoint, nil, nil, done, {
@@ -267,7 +271,8 @@ function M.fetch_details(repo, on_done)
 
 		local detail = to_repo_details(result, owner)
 		local readme_path = configured_readme_path(repo)
-		local ref = detail.default_branch or ""
+		local mainbranch = json.safe_table(result.mainbranch)
+		local ref = json.safe_str(json.safe_table(mainbranch.target).hash) or ""
 
 		requests.run(function(done)
 			return fetch_readme(owner, repo_name, ref, readme_path, done)

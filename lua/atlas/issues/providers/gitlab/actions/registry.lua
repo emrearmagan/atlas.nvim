@@ -90,20 +90,8 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
-	local target = issue.status_id == "closed" and "reopen" or "close"
-	local label = target == "close" and "Closing" or "Reopening"
-	notify.loading(string.format("%s %s...", label, key))
-	issues_api.set_state(key, target, function(ok, err)
-		if not ok then
-			notify.error(err or (label .. " failed"))
-			done(nil, err or (label .. " failed"))
-			return
-		end
-		local msg = target == "close" and "Closed" or "Reopened"
-		notify.success(string.format("%s %s", msg, key), { timeout = 1200 })
-		done({ issue_key = key }, nil)
-	end)
+	local action = issue.status_id == "closed" and reopen or close
+	action(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext

@@ -538,12 +538,7 @@ function M.open(opts)
 	state.root_request.run(function(done)
 		return git.resolve(opts.repo, done)
 	end, function(root)
-		if
-			states[state.buf] ~= state
-			or not utils.buffer.valid(state.buf)
-			or not utils.window.valid(state.win)
-			or vim.api.nvim_win_get_buf(state.win) ~= state.buf
-		then
+		if states[state.buf] ~= state or not utils.window.has_buffer(state.win, state.buf) then
 			return
 		end
 		state.root = root

@@ -301,10 +301,11 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         },
       },
       repo_config = {
-        -- Map `workspace/repo` -> local path for checkout / diffs / actions.
+        -- Map `namespace/repo` -> local path for checkout / diffs / actions.
         paths = {
           ["your-workspace/*"]    = "~/code/repos/*",
           ["your-workspace/atlas"] = "~/code/atlas",
+          ["group/subgroup/*"]    = "~/code/subgroup/*",
         },
         settings = {
           ["your-workspace/atlas"] = {

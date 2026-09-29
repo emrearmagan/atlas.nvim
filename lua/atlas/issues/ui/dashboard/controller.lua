@@ -177,29 +177,24 @@ end
 ---@param issues Issue[]
 ---@param force_refresh boolean
 ---@param scope AtlasRequestScope
----@param on_done fun(issues: Issue[])
+---@param on_done fun(issues: Issue[], err: string|nil)
 local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
 	local fetch = provider.capabilities.core.fetch_by_refs
 	if not relationships_enabled(view) then
-		on_done(issues)
+		on_done(issues, nil)
 		return
 	end
 
 	local refs = missing_parent_refs(issues)
 	if #refs == 0 then
-		on_done(issues)
+		on_done(issues, nil)
 		return
 	end
 
 	scope.run(function(done)
 		return fetch(refs, { force_refresh = force_refresh }, done)
 	end, function(parents, err)
-		if err then
-			notify.warn("Failed to fetch parent issues: " .. tostring(err))
-			on_done(issues)
-			return
-		end
-		on_done(merge_issues(issues, parents))
+		on_done(merge_issues(issues, parents), err)
 	end)
 end
 
@@ -266,12 +261,16 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 
 		state.error = nil
 		state.query = page.query or ""
-		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched)
+		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched, parent_err)
 			state.set_issues(mark_starred(enriched))
 			page.items = state.issues
 			state.page_history[page_number] = page
 			finish_loading()
-			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
+			if parent_err then
+				notify.warn("Some parent issues could not be fetched: " .. tostring(parent_err))
+			else
+				notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
+			end
 			render_if_active()
 			on_done()
 		end)

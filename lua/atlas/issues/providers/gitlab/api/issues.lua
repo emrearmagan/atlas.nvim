@@ -186,14 +186,12 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local requests = request_scope.new()
 	requests.all(starts, function(values, errors)
 		local issues = {}
+		local err
 		for path in pairs(iids_by_project) do
-			if errors[path] then
-				on_done({}, errors[path])
-				return
-			end
+			err = err or errors[path]
 			vim.list_extend(issues, values[path] or {})
 		end
-		on_done(issues, nil)
+		on_done(issues, err)
 	end)
 	return requests
 end

@@ -14,7 +14,6 @@ local author_completion = require("atlas.providers.github.completion.author")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
-local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
 local git = require("atlas.core.git")
@@ -39,40 +38,6 @@ local function fetch_pullrequest(ref, opts, on_done)
 		return nil
 	end
 	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_refresh = opts.force_refresh == true })
-end
-
----@param pr PullRequest
----@param item PullsConversationItem
----@param key string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_reaction(pr, item, key, on_done)
-	local repo_slug = pr.repo_full_name
-	if repo_slug == "" then
-		on_done(false, "Missing repo")
-		return nil
-	end
-
-	if item.kind ~= "comment" then
-		on_done(false, "This item does not support reactions")
-		return nil
-	end
-	---@type PullsComment
-	local comment = item.entity
-	local endpoint
-	if comment.inline or comment.file then
-		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
-	else
-		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
-	end
-	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
-		on_done(err == nil, err)
-	end, {
-		action = "Add PR reaction",
-		repo = repo_slug,
-		number = pr.id,
-		reaction = key,
-	})
 end
 
 ---@return AtlasGitHubViewConfig[]
@@ -171,7 +136,7 @@ return {
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
-			add_reaction = add_reaction,
+			add_reaction = comments_api.add_reaction,
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {

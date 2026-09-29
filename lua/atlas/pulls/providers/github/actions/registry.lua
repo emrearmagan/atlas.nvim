@@ -31,6 +31,24 @@ local function notify(ctx, level, message, duration)
 	core_notify.show(level, message, { timeout = duration })
 end
 
+---@param original table<string, boolean>
+---@param selected table<string, boolean>
+---@return string[] adds, string[] removes
+local function selection_diff(original, selected)
+	local adds, removes = {}, {}
+	for value in pairs(selected) do
+		if not original[value] then
+			table.insert(adds, value)
+		end
+	end
+	for value in pairs(original) do
+		if not selected[value] then
+			table.insert(removes, value)
+		end
+	end
+	return adds, removes
+end
+
 ---@type AtlasPullAction[]
 local ACTIONS = {}
 M.items = ACTIONS
@@ -162,7 +180,7 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function edit_assignees_available(ctx)
+local function repository_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
@@ -229,17 +247,7 @@ local function edit_assignees(ctx, done)
 						selected_set[item.username] = true
 					end
 
-					local adds, removes = {}, {}
-					for login in pairs(selected_set) do
-						if not original_set[login] then
-							table.insert(adds, login)
-						end
-					end
-					for login in pairs(original_set) do
-						if not selected_set[login] then
-							table.insert(removes, login)
-						end
-					end
+					local adds, removes = selection_diff(original_set, selected_set)
 
 					if #adds == 0 and #removes == 0 then
 						done({ changed_pr = false, message = "No changes" }, nil)
@@ -295,17 +303,6 @@ local function edit_assignees(ctx, done)
 		---@cast details GitHubPullRequestDetails
 		open_picker(details.assignees)
 	end)
-end
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function edit_labels_available(ctx)
-	if ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if ctx.pr.repo_full_name == "" then
-		return false, "Missing repository info"
-	end
-	return true, nil
 end
 
 ---@param ctx AtlasPullActionContext
@@ -372,17 +369,7 @@ local function edit_labels(ctx, done)
 						selected_set[item.name] = true
 					end
 
-					local adds, removes = {}, {}
-					for name in pairs(selected_set) do
-						if not original_set[name] then
-							table.insert(adds, name)
-						end
-					end
-					for name in pairs(original_set) do
-						if not selected_set[name] then
-							table.insert(removes, name)
-						end
-					end
+					local adds, removes = selection_diff(original_set, selected_set)
 
 					if #adds == 0 and #removes == 0 then
 						done({ changed_pr = false, message = "No changes" }, nil)
@@ -404,17 +391,6 @@ local function edit_labels(ctx, done)
 			})
 		end)
 	end)
-end
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function create_issue_available(ctx)
-	if ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if ctx.pr.repo_full_name == "" then
-		return false, "Missing repository info"
-	end
-	return true, nil
 end
 
 ---@param ctx AtlasPullActionContext
@@ -708,7 +684,7 @@ register({
 	id = "edit_assignees",
 	label = "Edit assignees",
 	icon = icons.action("user"),
-	is_available = edit_assignees_available,
+	is_available = repository_available,
 	run = edit_assignees,
 })
 
@@ -716,7 +692,7 @@ register({
 	id = "labels",
 	label = "Edit labels",
 	icon = icons.action("label"),
-	is_available = edit_labels_available,
+	is_available = repository_available,
 	run = edit_labels,
 })
 
@@ -799,7 +775,7 @@ register({
 	id = "create_issue",
 	label = "Create issue",
 	icon = icons.action("create"),
-	is_available = create_issue_available,
+	is_available = repository_available,
 	run = create_issue,
 })
 

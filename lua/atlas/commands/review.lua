@@ -14,6 +14,29 @@ local function no_repository()
 	notify.error("No supported Git repository found", { vim_notify = true })
 end
 
+---@param pr PullRequest
+---@param details PullRequestDetails|nil
+---@return AtlasPickerPreview
+local function format_preview(pr, details)
+	local author = pr.author.username ~= "" and "@" .. pr.author.username or pr.author.name
+	local status = pr.state .. "   updated " .. ui_utils.relative_time(pr.updated_on)
+	if pr.lines_added ~= nil and pr.lines_removed ~= nil then
+		status = status .. string.format("   +%d -%d", pr.lines_added, pr.lines_removed)
+	end
+	local description = ui_utils.strip_markup(details and details.description or "")
+	local lines = {
+		author,
+		pr.source.branch .. " → " .. pr.destination.branch,
+		status,
+		"",
+	}
+	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
+	return {
+		title = "#" .. tostring(pr.id),
+		lines = lines,
+	}
+end
+
 ---@param root string
 ---@param info AtlasTarget|nil
 local function open_repository(root, info)
@@ -69,26 +92,7 @@ local function open_repository(root, info)
 							done({ title = "#" .. tostring(pr.id), lines = { err } })
 							return
 						end
-						local author = pr.author.username ~= "" and "@" .. pr.author.username or pr.author.name
-						local status = pr.state .. "   updated " .. ui_utils.relative_time(pr.updated_on)
-						if pr.lines_added ~= nil and pr.lines_removed ~= nil then
-							status = status .. string.format("   +%d -%d", pr.lines_added, pr.lines_removed)
-						end
-						local description = ui_utils.strip_markup(details and details.description or "")
-						local lines = {
-							author,
-							pr.source.branch .. " → " .. pr.destination.branch,
-							status,
-							"",
-						}
-						vim.list_extend(
-							lines,
-							vim.split(description ~= "" and description or "No description", "\n", { plain = true })
-						)
-						done({
-							title = "#" .. tostring(pr.id),
-							lines = lines,
-						})
+						done(format_preview(pr, details))
 					end
 				)
 			end,

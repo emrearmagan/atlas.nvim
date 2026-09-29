@@ -567,9 +567,17 @@ function M.render_compact(node, width, expanded, location, opts)
 	opts.expanded = function()
 		return true
 	end
-	local item = build_item(node, opts, true, nil)
-
 	local comment = node.comment
+	local item
+	if expanded then
+		item = build_item(node, opts, true, nil)
+	else
+		item = comment_item(comment, opts, true)
+		item.line_map.thread_root = comment
+		item.line_map.thread_has_replies = #node.children > 0
+		item.content = nil
+		item.footer_items = {}
+	end
 	local replies = descendant_count(node)
 	local marker, marker_hl = M.status_marker(comment)
 	local fields = {
@@ -600,12 +608,6 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.right_text, item.meta.right_text_hl = comment_status(comment, marker, marker_hl)
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
-	if not expanded then
-		item.content = nil
-		item.children = {}
-		item.footer_items = {}
-	end
-
 	return threads.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
 end
 

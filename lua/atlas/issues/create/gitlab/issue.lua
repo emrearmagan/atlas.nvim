@@ -46,34 +46,13 @@ local users_api = require("atlas.providers.gitlab.users")
 local function default_pickers(project_path)
 	return {
 		list_labels = function(cb)
-			return labels_api.list(project_path, function(items, err)
-				if err or items == nil then
-					cb(nil, err)
-					return
-				end
-				local out = {}
-				for _, l in ipairs(items) do
-					table.insert(out, { name = l.name, color = l.color })
-				end
-				cb(out, nil)
-			end)
+			return labels_api.list(project_path, cb)
 		end,
 		list_assignees = function(cb)
 			return users_api.list_members(project_path, "", cb)
 		end,
 		list_milestones = function(cb)
-			return milestones_api.list(project_path, function(items, err)
-				if err or items == nil then
-					cb(nil, err)
-					return
-				end
-				local out = {}
-				for _, m in ipairs(items) do
-					---@cast m GitLabMilestone
-					table.insert(out, { id = m.id, title = m.title })
-				end
-				cb(out, nil)
-			end)
+			return milestones_api.list(project_path, cb)
 		end,
 	}
 end

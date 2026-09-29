@@ -116,6 +116,26 @@ local function add_values(row, values)
 	end
 end
 
+---@param pr PullRequest
+---@param repo AtlasRepository
+---@param opts table
+---@return table
+local function pull_row(pr, repo, opts)
+	local icon, icon_hl = pr_icon(pr, opts)
+	local author = presentation.user_handle(pr.author)
+	return {
+		kind = "pr",
+		_pr_icon_str = icon,
+		_pr_icon_hl = icon_hl,
+		conversation = tostring(pr.comments_count),
+		author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
+		author_hl = author,
+		created = utils.relative_time(pr.created_on),
+		updated = utils.relative_time(pr.updated_on),
+		_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
+	}
+end
+
 ---@param pulls PullRequest[]
 ---@param display table
 ---@param opts table
@@ -124,25 +144,13 @@ local function compact_rows(pulls, display, opts)
 	local rows = {}
 	for _, pr in ipairs(pulls) do
 		local repo = pr.repo
-		local icon, icon_hl = pr_icon(pr, opts)
-		local author = presentation.user_handle(pr.author)
-		local row = {
-			kind = "pr",
-			pr_icon = icon,
-			_pr_icon_str = icon,
-			_pr_icon_hl = icon_hl,
-			repo_pr = (pr.is_starred and STAR_ICON .. " " or "")
-				.. display.reference
-				.. tostring(pr.id)
-				.. " "
-				.. pr.title,
-			conversation = tostring(pr.comments_count),
-			author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
-			author_hl = author,
-			created = utils.relative_time(pr.created_on),
-			updated = utils.relative_time(pr.updated_on),
-			_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
-		}
+		local row = pull_row(pr, repo, opts)
+		row.pr_icon = row._pr_icon_str
+		row.repo_pr = (pr.is_starred and STAR_ICON .. " " or "")
+			.. display.reference
+			.. tostring(pr.id)
+			.. " "
+			.. pr.title
 		add_values(row, display.values(pr))
 		table.insert(rows, row)
 		table.insert(rows, {
@@ -186,23 +194,14 @@ local function list_rows(pulls, grouped, display, opts)
 			if not grouped and #rows > 0 then
 				table.insert(rows, { kind = "spacer" })
 			end
-			local repo = group.repo
-			local icon, icon_hl = pr_icon(pr, opts)
-			local author = presentation.user_handle(pr.author)
-			local row = {
-				kind = "pr",
-				_pr_icon_str = icon,
-				_pr_icon_hl = icon_hl,
-				name = icon .. " " .. (pr.is_starred and STAR_ICON .. " " or "") .. display.reference .. tostring(
-					pr.id
-				) .. " " .. pr.title,
-				conversation = tostring(pr.comments_count),
-				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
-				author_hl = author,
-				created = utils.relative_time(pr.created_on),
-				updated = utils.relative_time(pr.updated_on),
-				_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
-			}
+			local row = pull_row(pr, group.repo, opts)
+			row.name = row._pr_icon_str
+				.. " "
+				.. (pr.is_starred and STAR_ICON .. " " or "")
+				.. display.reference
+				.. tostring(pr.id)
+				.. " "
+				.. pr.title
 			add_values(row, display.values(pr))
 			table.insert(rows, row)
 			if grouped and pr_index < #group.pulls then

@@ -520,4 +520,38 @@ reply_comment = function(pr, parent, content, opts, on_done)
 	return M.add_comment(pr, content, nil, on_done)
 end
 
+---@param pr PullRequest
+---@param item PullsConversationItem
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(pr, item, key, on_done)
+	local repo_slug = pr.repo_full_name
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+
+	if item.kind ~= "comment" then
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	---@type PullsComment
+	local comment = item.entity
+	local endpoint
+	if comment.inline or comment.file then
+		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+	else
+		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+	end
+	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
+		on_done(err == nil, err)
+	end, {
+		action = "Add PR reaction",
+		repo = repo_slug,
+		number = pr.id,
+		reaction = key,
+	})
+end
+
 return M

@@ -1,6 +1,7 @@
 ---@class GitLabIssue : Issue
 ---@field project_path string
 ---@field iid integer
+---@field confidential boolean|nil
 
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local author_completion = require("atlas.providers.gitlab.completion.author")

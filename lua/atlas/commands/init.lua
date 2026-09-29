@@ -220,6 +220,17 @@ local function clear_caches()
 	require("atlas.core.memory_cache").clear_all()
 end
 
+---@param prompt string
+---@param on_confirm fun()
+local function confirm(prompt, on_confirm)
+	vim.ui.input({ prompt = prompt }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer == "y" or answer == "yes" then
+			on_confirm()
+		end
+	end)
+end
+
 M.register({
 	name = "clear",
 	usage = "clear [cache|notes|stars]",
@@ -230,11 +241,7 @@ M.register({
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
 		if target == "cache" then
-			vim.ui.input({ prompt = "Delete Atlas caches and cloned repositories? [y/N]: " }, function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
+			confirm("Delete Atlas caches and cloned repositories? [y/N]: ", function()
 				clear_caches()
 				notify.info("Atlas caches cleared", { vim_notify = true })
 			end)
@@ -245,11 +252,7 @@ M.register({
 			return
 		end
 		if target == "stars" then
-			vim.ui.input({ prompt = "Delete all starred items? [y/N]: " }, function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
+			confirm("Delete all starred items? [y/N]: ", function()
 				local cleared, err = require("atlas.core.starred").clear_all()
 				if not cleared then
 					notify.error(err or "Unable to delete starred items", { vim_notify = true })
@@ -264,32 +267,25 @@ M.register({
 			return
 		end
 
-		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
-			function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
-				local cleared, err = require("atlas.pulls.notes").clear_all()
-				if not cleared then
-					notify.error(err or "Unable to delete local notes", { vim_notify = true })
-					return
-				end
-				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
-				if not stars_cleared then
-					notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
-					return
-				end
-				clear_caches()
-				require("atlas.core.logger").clear()
-				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
-				if notes_ui then
-					notes_ui.refresh()
-				end
-				notify.info("Atlas data cleared", { vim_notify = true })
+		confirm("Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: ", function()
+			local cleared, err = require("atlas.pulls.notes").clear_all()
+			if not cleared then
+				notify.error(err or "Unable to delete local notes", { vim_notify = true })
+				return
 			end
-		)
+			local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+			if not stars_cleared then
+				notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
+				return
+			end
+			clear_caches()
+			require("atlas.core.logger").clear()
+			local notes_ui = package.loaded["atlas.pulls.notes.ui"]
+			if notes_ui then
+				notes_ui.refresh()
+			end
+			notify.info("Atlas data cleared", { vim_notify = true })
+		end)
 	end,
 })
 

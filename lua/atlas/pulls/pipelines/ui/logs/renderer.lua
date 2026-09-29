@@ -194,11 +194,7 @@ end
 
 ---@param pane PullsPipelinesLogs
 function M.render(pane)
-	if
-		not utils.buffer.valid(pane.buf)
-		or not utils.window.valid(pane.win)
-		or vim.api.nvim_win_get_buf(pane.win) ~= pane.buf
-	then
+	if not utils.window.has_buffer(pane.win, pane.buf) then
 		return
 	end
 

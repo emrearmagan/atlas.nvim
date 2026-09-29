@@ -18,6 +18,13 @@ function M.window.valid(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
 
+---@param win integer|nil
+---@param buf integer|nil
+---@return boolean
+function M.window.has_buffer(win, buf)
+	return M.window.valid(win) and vim.api.nvim_win_get_buf(win) == buf
+end
+
 ---@param anchor integer
 ---@param split_cmd string
 ---@param buf integer

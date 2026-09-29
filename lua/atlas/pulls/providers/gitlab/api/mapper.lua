@@ -82,15 +82,15 @@ end
 ---@param mr table
 ---@return "open"|"merged"|"declined"|"draft"
 local function normalize_state(mr)
-	if mr.draft == true or mr.work_in_progress == true then
-		return "draft"
-	end
 	local s = tostring(mr.state or ""):lower()
 	if s == "merged" then
 		return "merged"
 	end
 	if s == "closed" then
 		return "declined"
+	end
+	if mr.draft == true or mr.work_in_progress == true then
+		return "draft"
 	end
 	return "open"
 end

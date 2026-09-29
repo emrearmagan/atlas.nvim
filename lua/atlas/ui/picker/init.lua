@@ -1,6 +1,8 @@
 local M = {}
 
 local config = require("atlas.config")
+local markdown = require("atlas.formats.markdown")
+local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@alias AtlasPickerName "auto"|"default"|"snacks"|"fzf-lua"
 
@@ -51,6 +53,26 @@ function M.format_item(request, item)
 		return text, formatting
 	end
 	return text, { { text, formatting } }
+end
+
+---@param lines string[]
+---@param win integer
+---@return { lines: string[], highlights: AtlasMarkdownHighlight[] }
+function M.format_preview(lines, win)
+	local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
+	return markdown.parse(table.concat(lines, "\n"), { width = width })
+end
+
+---@param buf integer
+---@param highlights AtlasMarkdownHighlight[]
+function M.highlight_preview(buf, highlights)
+	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
+	for _, span in ipairs(highlights) do
+		vim.api.nvim_buf_set_extmark(buf, preview_namespace, span.line, span.start_col, {
+			end_col = span.end_col,
+			hl_group = span.hl_group,
+		})
+	end
 end
 
 ---@param name string

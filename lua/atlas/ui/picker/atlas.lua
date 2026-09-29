@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
-local markdown = require("atlas.formats.markdown")
+local picker = require("atlas.ui.picker")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -195,18 +195,11 @@ function M.open(request)
 	---@param buf integer
 	---@param win integer
 	local function draw_preview(buf, win)
-		local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
-		local result = markdown.parse(table.concat(state.preview_lines, "\n"), { width = width })
+		local result = picker.format_preview(state.preview_lines, win)
 		vim.bo[buf].modifiable = true
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
 		vim.bo[buf].modifiable = false
-		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
-		for _, span in ipairs(result.highlights) do
-			vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
-		end
+		picker.highlight_preview(buf, result.highlights)
 	end
 
 	local function render_preview()
@@ -277,7 +270,7 @@ function M.open(request)
 					end
 					marker = marker .. " "
 				end
-				local text, chunks = require("atlas.ui.picker").format_item(request, item)
+				local text, chunks = picker.format_item(request, item)
 				table.insert(rows, marker .. text)
 				local row = #rows
 				if marker_hl then

@@ -467,10 +467,11 @@ pulls = {
     },
   },
   repo_config = {
-    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
+      ["group/subgroup/*"] = "~/code/subgroup/*",
     },
     settings = {
       ["your-workspace/atlas"] = {

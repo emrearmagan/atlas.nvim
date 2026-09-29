@@ -179,41 +179,6 @@ local function fetch_conversation(issue, opts, on_done)
 	end, { force_refresh = opts.force_refresh == true })
 end
 
----@param issue Issue
----@param item IssueConversationItem
----@param key string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_reaction(issue, item, key, on_done)
-	---@cast issue GitHubIssue
-	local slug = issue.repo_full_name
-	if slug == "" then
-		on_done(false, "Invalid issue")
-		return nil
-	end
-
-	if item.kind ~= "comment" then
-		on_done(false, "This item does not support reactions")
-		return nil
-	end
-	local comment = item.entity
-	---@cast comment IssueComment
-	local endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
-
-	return client.api("POST", endpoint, { content = key }, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		issue_cache.invalidate(issue.key)
-		on_done(true, nil)
-	end, {
-		action = "Add issue reaction",
-		key = issue.key,
-		reaction = key,
-	})
-end
-
 ---@return AtlasGitHubIssuesViewConfig[]
 local function views()
 	local cfg = config.domain_options("github", "issues") or {}
@@ -274,7 +239,7 @@ return {
 			add_comment = comments_api.add,
 			edit_comment = comments_api.edit,
 			delete_comment = comments_api.delete,
-			add_reaction = add_reaction,
+			add_reaction = comments_api.add_reaction,
 		},
 		ui = {
 			detail = ui_detail,

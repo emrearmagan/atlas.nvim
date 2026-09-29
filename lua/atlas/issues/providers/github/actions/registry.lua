@@ -45,6 +45,24 @@ local function create_issue_slug(ctx, on_done)
 	end)
 end
 
+---@param original table<string, boolean>
+---@param selected table<string, boolean>
+---@return string[] adds, string[] removes
+local function selection_diff(original, selected)
+	local adds, removes = {}, {}
+	for value in pairs(selected) do
+		if not original[value] then
+			table.insert(adds, value)
+		end
+	end
+	for value in pairs(original) do
+		if not selected[value] then
+			table.insert(removes, value)
+		end
+	end
+	return adds, removes
+end
+
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
 M.items = ACTIONS
@@ -108,7 +126,7 @@ end
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
-local function transition_available(ctx)
+local function issue_available(ctx)
 	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
@@ -134,15 +152,6 @@ local function transition(ctx, done)
 
 		action(ctx, done)
 	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function assign_available(ctx)
-	if ctx.issue == nil then
-		return false, "No issue selected"
-	end
-	return true, nil
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -195,17 +204,7 @@ local function assign(ctx, done)
 					end
 				end
 
-				local adds, removes = {}, {}
-				for login, _ in pairs(selected_set) do
-					if not original_set[login] then
-						table.insert(adds, login)
-					end
-				end
-				for login, _ in pairs(original_set) do
-					if not selected_set[login] then
-						table.insert(removes, login)
-					end
-				end
+				local adds, removes = selection_diff(original_set, selected_set)
 
 				if #adds == 0 and #removes == 0 then
 					done(nil, nil)
@@ -226,15 +225,6 @@ local function assign(ctx, done)
 			end,
 		})
 	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function labels_available(ctx)
-	if ctx.issue == nil then
-		return false, "No issue selected"
-	end
-	return true, nil
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -293,17 +283,7 @@ local function labels(ctx, done)
 					selected_set[it.name] = true
 				end
 
-				local adds, removes = {}, {}
-				for name, _ in pairs(selected_set) do
-					if not original_set[name] then
-						table.insert(adds, name)
-					end
-				end
-				for name, _ in pairs(original_set) do
-					if not selected_set[name] then
-						table.insert(removes, name)
-					end
-				end
+				local adds, removes = selection_diff(original_set, selected_set)
 
 				if #adds == 0 and #removes == 0 then
 					done(nil, nil)
@@ -635,21 +615,21 @@ register({
 	label = "Transition Issue",
 	icon = icons.action("transition"),
 	hidden = true,
-	is_available = transition_available,
+	is_available = issue_available,
 	run = transition,
 })
 register({
 	id = "assign",
 	label = "Edit Assignees",
 	icon = icons.action("user"),
-	is_available = assign_available,
+	is_available = issue_available,
 	run = assign,
 })
 register({
 	id = "labels",
 	label = "Edit Labels",
 	icon = icons.action("label"),
-	is_available = labels_available,
+	is_available = issue_available,
 	run = labels,
 })
 register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })

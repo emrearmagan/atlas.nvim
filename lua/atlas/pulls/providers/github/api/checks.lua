@@ -40,7 +40,7 @@ local PIPELINE_STATES = {
 ---@field latest_reviews { login: string, state: string }[]
 ---@field pipeline_state "successful"|"failed"|"inprogress"|nil
 
----@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
+---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"DISMISSED" }[], string[]
 local function parse_reviews(review_nodes, request_nodes)
 	local latest = {}
 	local order = {}
@@ -48,7 +48,7 @@ local function parse_reviews(review_nodes, request_nodes)
 		local author = json.nilify(review.author)
 		local login = author and tostring(author.login or "") or ""
 		local state = tostring(review.state or ""):upper()
-		if login ~= "" and state ~= "PENDING" then
+		if login ~= "" and state ~= "PENDING" and state ~= "COMMENTED" then
 			local at = tostring(review.submittedAt or "")
 			local prev = latest[login]
 			if prev == nil then
@@ -160,7 +160,7 @@ local function reviews_check(mc)
 		end
 	end
 
-	if approved == 0 and changes_requested == 0 and #requests == 0 then
+	if rd == "" and approved == 0 and changes_requested == 0 and #requests == 0 then
 		return { key = "reviews", state = "muted", label = "Reviews", details = { "No review required" } }
 	end
 
@@ -180,6 +180,8 @@ local function reviews_check(mc)
 	end
 	if #requests > 0 then
 		table.insert(details, string.format("%d pending %s", #requests, #requests == 1 and "review" or "reviews"))
+	elseif rd == "REVIEW_REQUIRED" then
+		table.insert(details, "Review required")
 	end
 
 	local state

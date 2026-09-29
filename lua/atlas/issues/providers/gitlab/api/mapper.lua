@@ -108,6 +108,7 @@ function M.to_issue(raw)
 		title = title,
 		status = status_name,
 		status_id = status_id,
+		confidential = json.nilify(raw.confidential),
 		type = to_issue_type(raw.issue_type),
 		assignee = issue_assignees[1],
 		reporter = M.to_user(raw.author),

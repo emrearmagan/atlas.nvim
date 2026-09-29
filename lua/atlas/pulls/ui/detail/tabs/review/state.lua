@@ -73,23 +73,7 @@ end
 ---@param comments PullsComment[]
 ---@return boolean
 function M.toggle_all_folds(comments)
-	local roots = thread_roots(comments)
-	if #roots == 0 then
-		return false
-	end
-
-	local expand = false
-	for _, root in ipairs(roots) do
-		if not M.is_thread_expanded(root) then
-			expand = true
-			break
-		end
-	end
-
-	for _, root in ipairs(roots) do
-		set_expanded(root, expand)
-	end
-	return true
+	return M.toggle_threads(thread_roots(comments))
 end
 
 return M

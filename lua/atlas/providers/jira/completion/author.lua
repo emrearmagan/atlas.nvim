@@ -6,8 +6,10 @@ local M = {}
 
 ---@param context AtlasIssuesCommentCompletionContext
 ---@return JiraMentionUser[]
+---@return table<string, integer> label_counts
 local function collect_users(context)
 	local seen = {}
+	local label_counts = {}
 	---@type JiraMentionUser[]
 	local users = {}
 
@@ -25,6 +27,8 @@ local function collect_users(context)
 
 		seen[id] = true
 		table.insert(users, { id = id, label = label })
+		local label_key = label:lower()
+		label_counts[label_key] = (label_counts[label_key] or 0) + 1
 	end
 
 	add(context.issue.assignee)
@@ -37,41 +41,7 @@ local function collect_users(context)
 		return a.label:lower() < b.label:lower()
 	end)
 
-	return users
-end
-
----@param context AtlasIssuesCommentCompletionContext
----@return table<string, JiraMentionUser>
-local function build_map(context)
-	local map = {}
-	for _, user in ipairs(collect_users(context)) do
-		local id = vim.trim(user.id)
-		local label = vim.trim(user.label)
-		if id ~= "" and label ~= "" then
-			map[id] = { id = id, label = label }
-		end
-	end
-	return map
-end
-
----@param mention_map table<string, JiraMentionUser>
----@param label string
----@return boolean
-local function is_unique_label(mention_map, label)
-	local target = vim.trim(tostring(label or "")):lower()
-	if target == "" then
-		return false
-	end
-	local count = 0
-	for _, user in pairs(mention_map) do
-		if vim.trim(user.label):lower() == target then
-			count = count + 1
-			if count > 1 then
-				return false
-			end
-		end
-	end
-	return true
+	return users, label_counts
 end
 
 ---@param author AtlasUser|nil
@@ -108,13 +78,13 @@ function M.for_issues(context)
 		end,
 		complete = function(base)
 			local query = vim.trim(tostring(base or "")):gsub("^@", ""):lower()
-			local mention_map = build_map(context)
+			local users, label_counts = collect_users(context)
 			local matches = {}
-			for _, user in pairs(mention_map) do
+			for _, user in ipairs(users) do
 				local id = user.id
 				local label = user.label
-				if id ~= "" and label ~= "" and (query == "" or label:lower():find(query, 1, true) == 1) then
-					local use_simple_label = is_unique_label(mention_map, label)
+				if query == "" or label:lower():find(query, 1, true) == 1 then
+					local use_simple_label = label_counts[label:lower()] == 1
 					local shown_abbr = use_simple_label and ("@" .. label) or string.format("@%s (%s)", label, id)
 					local insert_word = resolve_mention({
 						id = id,

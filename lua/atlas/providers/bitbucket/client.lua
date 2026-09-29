@@ -27,26 +27,47 @@ function M.get_auth()
 	return user, token, nil
 end
 
----@param user string
----@param token string
----@param has_body boolean|nil
----@return table<string, string>
-local function build_headers(user, token, has_body)
+---@param headers table|nil
+---@param has_body boolean
+---@return table<string, string>|nil, string|nil
+local function build_headers(headers, has_body)
+	local user, token, auth_err = M.get_auth()
+	if auth_err then
+		local err = sanitize_error(auth_err)
+		logger.logerror("Bitbucket auth missing", { error = err })
+		return nil, err
+	end
+
 	local auth = vim.base64.encode(string.format("%s:%s", user, token))
-	return {
+	return vim.tbl_extend("force", {
 		Authorization = "Basic " .. auth,
 		["Content-Type"] = has_body and "application/json" or nil,
 		Accept = "application/json",
-	}
+	}, headers or {})
 end
 
----@param endpoint string
+---@param url string
 ---@return string
-local function request_url(endpoint)
-	if endpoint:sub(1, 1) ~= "/" then
-		endpoint = "/" .. endpoint
+local function request_url(url)
+	if url:match("^https?://") then
+		return url
 	end
-	return API_BASE .. endpoint
+	if url:sub(1, 1) ~= "/" then
+		url = "/" .. url
+	end
+	return API_BASE .. url
+end
+
+---@param method string
+---@param url string
+---@param ctx table|nil
+---@return string, table
+local function log_request(method, url, ctx)
+	local log = vim.tbl_extend("keep", { method = method, endpoint = url }, ctx or {})
+	local message = log.action or "Bitbucket request"
+	log.action = nil
+	logger.loginfo(message, log)
+	return message, log
 end
 
 ---@return number
@@ -132,31 +153,14 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request(method, url, headers, body, callback, ctx)
-	local user, token, auth_err = M.get_auth()
+	local request_headers, auth_err = build_headers(headers, body ~= nil)
 	if auth_err then
-		local err = sanitize_error(auth_err)
-		logger.logerror("Bitbucket auth missing", { error = err })
-		callback(nil, err)
+		callback(nil, auth_err)
 		return nil
 	end
 
-	local request_headers = build_headers(user, token, body ~= nil)
-	if headers then
-		for k, v in pairs(headers) do
-			request_headers[k] = v
-		end
-	end
-
-	-- If url doesn't start with http, treat it as an endpoint
-	local full_url = url
-	if not url:match("^https?://") then
-		full_url = request_url(url)
-	end
-
-	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
-	local message = log.action or "Bitbucket request"
-	log.action = nil
-	logger.loginfo(message, log)
+	local full_url = request_url(url)
+	local message, log = log_request(method, full_url, ctx)
 
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
 		if err then
@@ -237,31 +241,14 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request_text(method, url, headers, body, callback, ctx)
-	local user, token, auth_err = M.get_auth()
+	local request_headers, auth_err = build_headers(headers, body ~= nil)
 	if auth_err then
-		local err = sanitize_error(auth_err)
-		logger.logerror("Bitbucket auth missing", { error = err })
-		callback(nil, err)
+		callback(nil, auth_err)
 		return nil
 	end
 
-	local request_headers = build_headers(user, token, body ~= nil)
-	if headers then
-		for k, v in pairs(headers) do
-			request_headers[k] = v
-		end
-	end
-
-	-- If url doesn't start with http, treat it as an endpoint
-	local full_url = url
-	if not url:match("^https?://") then
-		full_url = request_url(url)
-	end
-
-	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
-	local message = log.action or "Bitbucket request"
-	log.action = nil
-	logger.loginfo(message, log)
+	local full_url = request_url(url)
+	local message, log = log_request(method, full_url, ctx)
 
 	return http.curl_text_request(method, full_url, request_headers, body, function(text, err, status)
 		if err then

@@ -4,7 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
 local header = require("atlas.pulls.ui.components.header")
 local chips = require("atlas.pulls.ui.components.chips")
-local detail_tabs = require("atlas.pulls.ui.components.tabs")
+local tabs = require("atlas.ui.components.tabs")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local links = require("atlas.ui.links")
@@ -122,8 +122,11 @@ function M.render(tab_items, get_tab_module)
 
 		-- Tab bar
 		if #tab_items > 1 then
-			local tab_lines, tab_spans =
-				detail_tabs.render(tab_items, state.current_tab, { width = width, padding_x = PADDING_X })
+			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
+				inactive_hl = "AtlasTextMuted",
+				gap = " ",
+				padding_x = PADDING_X,
+			})
 			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 			table.insert(lines, "")
 		end

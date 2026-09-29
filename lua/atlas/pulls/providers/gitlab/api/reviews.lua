@@ -355,51 +355,44 @@ function M.discard(pr, _review, on_done)
 	end
 
 	local prefix = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
-	local current
-	local cancelled = false
+	local requests = request_scope.new()
 	local function delete_next(drafts, index)
-		if cancelled then
-			return
-		end
 		local draft = drafts[index]
 		if not draft then
 			invalidate_review_caches(path, iid)
 			on_done(true, nil)
 			return
 		end
-		current = service.request("DELETE", prefix .. "/" .. tostring(draft.id), nil, function(_, err)
+		requests.run(function(done)
+			return service.request("DELETE", prefix .. "/" .. tostring(draft.id), nil, done, {
+				action = "Delete MR draft comment",
+				project_path = path,
+				iid = iid,
+				draft_note_id = tostring(draft.id),
+			})
+		end, function(_, err)
 			if err then
 				on_done(false, err)
 				return
 			end
 			delete_next(drafts, index + 1)
-		end, {
-			action = "Delete MR draft comment",
-			project_path = path,
-			iid = iid,
-			draft_note_id = tostring(draft.id),
-		})
+		end)
 	end
 
-	current = service.fetch_all_pages(prefix .. "?per_page=100", function(drafts, err)
+	requests.run(function(done)
+		return service.fetch_all_pages(prefix .. "?per_page=100", done, {
+			action = "Fetch MR draft comments",
+			project_path = path,
+			iid = iid,
+		})
+	end, function(drafts, err)
 		if err then
 			on_done(false, err)
 			return
 		end
 		delete_next(drafts or {}, 1)
-	end, {
-		action = "Fetch MR draft comments",
-		project_path = path,
-		iid = iid,
-	})
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -478,26 +471,19 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
 function M.approve(pr, _review, body, on_done)
-	local cancelled = false
-	local current
-	current = publish(pr, "reviewed", body, function(ok, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return publish(pr, "reviewed", body, done)
+	end, function(ok, err)
 		if not ok then
 			on_done(false, err)
 			return
 		end
-		current = approve_pull_request(pr, on_done)
+		requests.run(function(done)
+			return approve_pull_request(pr, done)
+		end, on_done)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
