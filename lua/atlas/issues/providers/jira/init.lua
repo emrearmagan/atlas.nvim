@@ -23,7 +23,6 @@
 ---@field raw_description table|string|nil
 ---@field custom_fields JiraIssueCustomField[]
 
-local actions = require("atlas.issues.providers.jira.actions")
 local author_completion = require("atlas.providers.jira.completion.author")
 local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
@@ -210,7 +209,6 @@ return {
 			delete_comment = delete_comment,
 			comment_completion = author_completion.for_issues,
 		},
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 		},

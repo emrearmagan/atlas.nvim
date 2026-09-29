@@ -1,3 +1,12 @@
+---@alias AtlasGitHubActionId
+---| AtlasPullActionId
+---| "reopen"
+---| "edit_assignees"
+---| "create_issue"
+---| "labels"
+---| "open_repo"
+---| "toggle_subscription"
+
 local M = {}
 
 local actions = require("atlas.pulls.actions")

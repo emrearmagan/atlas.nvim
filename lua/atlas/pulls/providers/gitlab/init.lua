@@ -18,7 +18,6 @@
 ---@class GitLabPullsActivityEntry : PullsActivityEntry
 ---@field inline_thread boolean|nil
 
-local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local author_completion = require("atlas.providers.gitlab.completion.author")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
@@ -183,7 +182,6 @@ return {
 			discard_review = reviews_api.discard,
 		},
 		pipelines = require("atlas.pulls.pipelines.gitlab"),
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

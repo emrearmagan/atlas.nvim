@@ -179,12 +179,16 @@ providers = {
           done(job, nil)
         end,
         fetch_job_log = function(context, pipeline, job, done)
+          -- Fetch the job's raw log output.
           done({ raw = "Your log output here" }, nil)
         end,
         parse = function(log)
           -- Return cleaned lines or your own nested groups.
           return log.lines
         end,
+        actions = {
+          -- Add your actions here.
+        },
       },
       highlights = {
         { pattern = "^FAIL%s", level = "error" },

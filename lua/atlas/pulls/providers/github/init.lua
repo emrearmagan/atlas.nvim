@@ -9,7 +9,6 @@
 ---@field assignees PullsAuthor[]
 ---@field labels PullsLabel[]
 
-local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local author_completion = require("atlas.providers.github.completion.author")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
@@ -188,7 +187,6 @@ return {
 			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
 		pipelines = require("atlas.pulls.pipelines.github"),
-		actions = actions,
 		ui = {
 			detail = ui_detail,
 			repository = ui_repository,

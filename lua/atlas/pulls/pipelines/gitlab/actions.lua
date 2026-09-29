@@ -30,7 +30,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.retry(ctx.context, ctx.pipeline, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -44,7 +44,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.cancel(ctx.context, ctx.pipeline, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -57,7 +57,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.retry_job(ctx.context, ctx.job, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -71,7 +71,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.cancel_job(ctx.context, ctx.job, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},

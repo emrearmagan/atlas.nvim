@@ -35,7 +35,6 @@
 ---@class IssuesProviderCapabilities : AtlasProviderCapabilities
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
----@field actions IssuesActionsCapability|nil
 ---@field ui IssuesUICapability|nil
 
 ---@class IssuesCoreCapability
@@ -57,14 +56,10 @@
 ---@field reaction_options IssueReactionOption[]|nil
 ---@field comment_completion (fun(context: AtlasIssuesCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
 
----@class IssuesActionsCapability
----@field items AtlasIssueAction[]
----@field is_available fun(action_id: string, context: AtlasIssueActionContext): boolean
----@field run fun(action_id: string, context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean
-
 ---@class IssuesActionResult
 ---@field issue_key string|nil
 ---@field removed boolean|nil
+---@field message string|nil
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil

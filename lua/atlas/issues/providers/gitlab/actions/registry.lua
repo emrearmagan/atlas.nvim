@@ -1,3 +1,10 @@
+---@alias AtlasGitLabIssueActionId
+---| AtlasIssueActionId
+---| "close"
+---| "reopen"
+---| "labels"
+---| "open_project"
+
 local M = {}
 
 local actions = require("atlas.issues.actions")

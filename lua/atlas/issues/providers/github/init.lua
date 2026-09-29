@@ -14,7 +14,6 @@
 ---@field milestone GitHubIssueMilestone|nil
 ---@field sub_issues GitHubIssue[]
 
-local actions = require("atlas.issues.providers.github.actions")
 local author_completion = require("atlas.providers.github.completion.author")
 local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
@@ -277,7 +276,6 @@ return {
 			delete_comment = comments_api.delete,
 			add_reaction = add_reaction,
 		},
-		actions = actions,
 		ui = {
 			detail = ui_detail,
 			repository = ui_repository,

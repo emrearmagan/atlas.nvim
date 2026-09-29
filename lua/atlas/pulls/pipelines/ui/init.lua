@@ -1,6 +1,7 @@
 local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local actions = require("atlas.pulls.pipelines.ui.actions")
+local action_runner = require("atlas.core.actions")
 local config = require("atlas.pulls.pipelines.ui.config")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local keymaps = require("atlas.pulls.pipelines.ui.keymaps")
@@ -133,7 +134,7 @@ local function open_actions(session, selection)
 		end
 		session.action = action
 		update_statusline(session)
-		action.run(ctx, function(err)
+		action_runner.run(action, ctx, function(_, err)
 			if session.closed then
 				return
 			end

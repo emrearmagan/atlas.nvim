@@ -3,7 +3,6 @@
 ---@field iid integer
 
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-local actions = require("atlas.issues.providers.gitlab.actions")
 local author_completion = require("atlas.providers.gitlab.completion.author")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
@@ -148,7 +147,6 @@ return {
 			delete_comment = notes_api.delete_comment,
 			add_reaction = notes_api.add_reaction,
 		},
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

@@ -1,6 +1,7 @@
 local notify = require("atlas.core.notify")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local action_runner = require("atlas.core.actions")
 
 local M = {}
 
@@ -10,7 +11,7 @@ local M = {}
 function M.open(backend, ctx, on_select)
 	local available = {}
 	for _, action in ipairs(backend and backend.actions or {}) do
-		if action.is_available(ctx) then
+		if action_runner.is_available(action, ctx) then
 			available[#available + 1] = action
 		end
 	end

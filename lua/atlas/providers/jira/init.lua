@@ -14,6 +14,7 @@ return {
 	domains = {
 		issues = {
 			module = "atlas.issues.providers.jira",
+			actions = "atlas.issues.providers.jira.actions.registry",
 			icon = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
 			bookmark_key = "J",
 			bookmark_label = "JQL",

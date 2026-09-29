@@ -1,3 +1,10 @@
+---@alias AtlasJiraIssueActionId
+---| AtlasIssueActionId
+---| "reporter"
+---| "delete_issue"
+---| "open_project"
+---| "search_jql"
+
 local M = {}
 
 local actions = require("atlas.issues.actions")

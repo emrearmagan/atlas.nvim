@@ -20,7 +20,6 @@
 ---@class BitbucketPullRequestDetails : PullRequestDetails
 ---@field close_source_branch boolean|nil
 
-local actions = require("atlas.pulls.providers.bitbucket.actions")
 local author_completion = require("atlas.providers.bitbucket.completion.author")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
@@ -152,7 +151,6 @@ return {
 			edit_task = tasks_api.edit_task,
 			delete_task = tasks_api.delete_task,
 		},
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

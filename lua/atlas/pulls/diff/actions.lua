@@ -1,5 +1,6 @@
 local M = {}
 
+local action_runner = require("atlas.core.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 
@@ -37,20 +38,27 @@ function M.run(session, callback)
 	end)
 end
 
+---@param session AtlasDiffSession
+---@param action AtlasPullAction
+local function run_action(session, action)
+	return M.run(session, function(context, on_done)
+		action = require("atlas.pulls.actions").find(action.id, context) or action
+		return action_runner.run(action, context, on_done)
+	end)
+end
+
 ---@param id string
 ---@param context AtlasPullActionContext
 ---@return boolean
 function M.is_available(id, context)
-	local actions = context.provider.capabilities.actions
-	return actions ~= nil and actions.is_available(id, context)
+	return require("atlas.pulls.actions").is_available(id, context)
 end
 
 ---@param session AtlasDiffSession
 local function open_in_browser(session)
 	local context = review_api.action_context(session)
-	local actions = context and context.provider.capabilities.actions
-	if context and actions then
-		actions.run("open_in_browser", context, function() end)
+	if context then
+		return require("atlas.pulls.actions").run("open_in_browser", context)
 	end
 end
 
@@ -90,12 +98,12 @@ function M.start_or_submit(session)
 	local reviews = review.provider.capabilities.reviews or {}
 	if review.data.review.pending then
 		if reviews.submit_review then
-			M.run(session, review_actions.submit_review.run)
+			return run_action(session, review_actions.submit_review)
 		else
 			open_in_browser(session)
 		end
 	elseif reviews.start_review then
-		M.run(session, review_actions.start_review.run)
+		return run_action(session, review_actions.start_review)
 	end
 end
 
@@ -110,7 +118,7 @@ function M.approve(session)
 		open_in_browser(session)
 		return
 	end
-	M.run(session, review_actions.approve.run)
+	return run_action(session, review_actions.approve)
 end
 
 ---@param session AtlasDiffSession
@@ -124,7 +132,7 @@ function M.request_changes(session)
 		open_in_browser(session)
 		return
 	end
-	M.run(session, review_actions.request_changes.run)
+	return run_action(session, review_actions.request_changes)
 end
 
 ---@param session AtlasDiffSession
@@ -186,7 +194,7 @@ function M.open(session)
 				M.toggle_detail_panel(session)
 				return
 			end
-			M.run(session, action.run)
+			return run_action(session, action)
 		end,
 	})
 end
