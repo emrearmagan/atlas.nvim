@@ -523,18 +523,6 @@ local function create_issue(ctx, done)
 		---@cast issue GitLabIssue
 		resolved = issue.project_path
 	end
-	if resolved == "" then
-		local git = require("atlas.core.git")
-		local root = git.repo_root(nil)
-		if root then
-			local remote = git.remote_url(root, "origin")
-			local info = remote and git.parse_remote_url(remote) or nil
-			if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
-				resolved = info.repo_full_name
-			end
-		end
-	end
-
 	local function open_editor(path)
 		local create_issue_ui = require("atlas.issues.create.gitlab.issue")
 		create_issue_ui.open({
@@ -558,17 +546,23 @@ local function create_issue(ctx, done)
 		return
 	end
 
-	vim.ui.input({ prompt = "Project (group/project): " }, function(input)
-		if input == nil then
-			done(nil, nil)
+	return require("atlas.core.git").local_repository(nil, function(info)
+		if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
+			open_editor(info.repo_full_name)
 			return
 		end
-		local path = vim.trim(tostring(input))
-		if path == "" then
-			done(nil, nil)
-			return
-		end
-		open_editor(path)
+		vim.ui.input({ prompt = "Project (group/project): " }, function(input)
+			if input == nil then
+				done(nil, nil)
+				return
+			end
+			local path = vim.trim(tostring(input))
+			if path == "" then
+				done(nil, nil)
+				return
+			end
+			open_editor(path)
+		end)
 	end)
 end
 

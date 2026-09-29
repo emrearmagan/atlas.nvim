@@ -18,13 +18,14 @@ local config = require("atlas.config")
 local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
+local git = require("atlas.core.git")
 local links_api = require("atlas.providers.github.links")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
+local request_scope = require("atlas.core.requests")
 local search_query = require("atlas.providers.github.query")
 local ui_detail = require("atlas.pulls.providers.github.ui.detail")
 local ui_repository = require("atlas.providers.github.ui.repository")
-local git = require("atlas.core.git")
 
 ---@param ref PullRequestRef
 ---@param opts PullsFetchOpts
@@ -83,25 +84,48 @@ local function views()
 	if not configured or #configured == 0 then
 		configured = { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
 	end
-	local repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "github" then
-				repo = target.repo_full_name
-			end
-			break
-		end
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
+end
+
+---@param view AtlasGitHubViewConfig
+---@param on_done fun(view: AtlasGitHubViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
 	end
-	local resolved = {}
-	for i, view in ipairs(configured) do
-		resolved[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and repo then
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		local repo = target and target.provider == "github" and target.repo_full_name or nil
+		if repo then
 			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
-			resolved[i].search = string.format("repo:%s%s", repo, additional)
+			resolved.search = string.format("repo:%s%s", repo, additional)
 		end
-	end
-	return resolved
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasGitHubViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return AtlasRequestScope
+local function fetch_pullrequests(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		local query = search_query.query(resolved)
+		requests.run(function(done)
+			return pullrequests_api.fetch_search(search_query.queries(resolved), opts, done)
+		end, function(page, err)
+			page.query = query
+			on_done(page, err)
+		end)
+	end)
+	return requests
 end
 
 ---@param target AtlasTarget
@@ -124,9 +148,7 @@ return {
 	resolve_search = search_query.query,
 	capabilities = {
 		core = {
-			fetch_pullrequests = function(view, opts, on_done)
-				return pullrequests_api.fetch_search(search_query.queries(view), opts, on_done)
-			end,
+			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			fetch_links = links_api.fetch_pr,

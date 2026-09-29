@@ -13,6 +13,7 @@
 
 ---@class IssuesPage
 ---@field items Issue[]
+---@field query string|nil
 ---@field next_cursor string|nil
 ---@field total_pages integer|nil
 
@@ -28,7 +29,6 @@
 ---@field hl_group string
 ---@field views fun(): IssuesViewConfig[]
 ---@field view_for_target fun(target: AtlasTarget): IssuesViewConfig
----@field resolve_search fun(view: IssuesViewConfig): string
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 

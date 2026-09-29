@@ -1,6 +1,5 @@
 local M = {}
 
-local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local pipelines = require("atlas.commands.pipelines")
@@ -174,8 +173,16 @@ M.register({
 M.register({
 	name = "diff",
 	description = "Open native AtlasDiff",
+	complete = function(arglead, args)
+		return require("atlas.pulls.diff").complete(arglead, args)
+	end,
 	run = function(args)
-		with_argument(args, "Git range or pull request: ", require("atlas.pulls.diff").open_argument)
+		local value = vim.trim(table.concat(args, " "))
+		if value == "" then
+			notify.error("Usage: :Atlas diff <base...head|pull-request-url>", { vim_notify = true })
+			return
+		end
+		require("atlas.pulls.diff").open_argument(value)
 	end,
 })
 
@@ -183,14 +190,7 @@ M.register({
 	name = "pipelines",
 	usage = "pipelines [target|.]",
 	description = "Open branch, pull request, or build pipelines",
-	complete = function(arglead)
-		local options = { "." }
-		local root = git.repo_root()
-		if root then
-			vim.list_extend(options, git.list_remote_branches(root, "origin"))
-		end
-		return complete_options(arglead, options)
-	end,
+	complete = pipelines.complete,
 	run = function(args)
 		with_argument(args, "Branch, pull request, or pipeline URL: ", pipelines.open)
 	end,
@@ -207,6 +207,9 @@ M.register({
 M.register({
 	name = "notes",
 	description = "Open local review notes",
+	complete = function(arglead, args)
+		return require("atlas.pulls.notes").complete(arglead, args)
+	end,
 	run = function(args)
 		require("atlas.pulls.notes.ui").open({ target = args[1] })
 	end,
@@ -403,7 +406,6 @@ end
 
 function M.setup()
 	pcall(vim.api.nvim_del_user_command, "Atlas")
-	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
 
 	vim.api.nvim_create_user_command("Atlas", function(opts)
 		M.run(opts.fargs)
@@ -411,13 +413,6 @@ function M.setup()
 		desc = "Open Atlas or run a command",
 		nargs = "*",
 		complete = complete,
-	})
-
-	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
-		require("atlas.pulls.diff").open_argument(opts.args)
-	end, {
-		desc = "Open a Git range or pull request in AtlasDiff",
-		nargs = 1,
 	})
 end
 

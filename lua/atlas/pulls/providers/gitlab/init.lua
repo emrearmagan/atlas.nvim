@@ -26,12 +26,12 @@ local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
+local git = require("atlas.core.git")
 local links_api = require("atlas.providers.gitlab.links")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local gitlab_query = require("atlas.providers.gitlab.query")
-local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 
@@ -85,25 +85,48 @@ local function views()
 			{ name = "Created", key = "2", scope = "created_by_me" },
 		}
 	end
-	local repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "gitlab" then
-				repo = target.repo_full_name
-			end
-			break
-		end
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
+end
+
+---@param view AtlasGitLabPullsViewConfig
+---@param on_done fun(view: AtlasGitLabPullsViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
 	end
-	local resolved = {}
-	for i, view in ipairs(configured) do
-		resolved[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and repo then
-			resolved[i].project = repo
-			resolved[i].scope = view.scope or "all"
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		local repo = target and target.provider == "gitlab" and target.repo_full_name or nil
+		if repo then
+			resolved.project = repo
+			resolved.scope = view.scope or "all"
 		end
-	end
-	return resolved
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasGitLabPullsViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return AtlasRequestScope
+local function fetch_pullrequests(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		local query = gitlab_query.query(resolved)
+		requests.run(function(done)
+			return pullrequests_api.fetch_states(resolved, gitlab_query.api_states(resolved), opts, done)
+		end, function(page, err)
+			page.query = query
+			on_done(page, err)
+		end)
+	end)
+	return requests
 end
 
 ---@param target AtlasTarget
@@ -123,10 +146,7 @@ return {
 	resolve_search = gitlab_query.query,
 	capabilities = {
 		core = {
-			fetch_pullrequests = function(view, opts, on_done)
-				---@cast view AtlasGitLabPullsViewConfig
-				return pullrequests_api.fetch_states(view, gitlab_query.api_states(view), opts, on_done)
-			end,
+			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_links = links_api.fetch_pullrequest,

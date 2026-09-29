@@ -322,6 +322,23 @@ function M.documents()
 	return documents, nil
 end
 
+---@param arglead string
+---@param args string[]|nil
+---@return string[]
+function M.complete(arglead, args)
+	if args and #args > 1 then
+		return {}
+	end
+	local options = {}
+	for _, document in ipairs(M.documents() or {}) do
+		local ref = document.target.ref
+		if ref:find(arglead, 1, true) == 1 then
+			options[#options + 1] = ref
+		end
+	end
+	return options
+end
+
 ---@param target AtlasNoteTarget
 ---@return AtlasNote[]|nil, string|nil
 function M.list(target)

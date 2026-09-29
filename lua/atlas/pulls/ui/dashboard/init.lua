@@ -96,10 +96,7 @@ function M.init(provider, opts)
 		state.current_user = nil
 	end
 	state.provider = provider
-	state.provider_views = vim.tbl_map(function(view)
-		return vim.tbl_extend("force", {}, view)
-	end, provider.views())
-	state.is_loading = false
+	state.views = provider.views()
 	state.error = nil
 	state.pulls = {}
 	state.current_page = 1
@@ -114,21 +111,14 @@ function M.init(provider, opts)
 
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "pulls")
-	state.views = bookmarks.views(state.provider_views, state.bookmarks, state.starred_items)
 	local initial_view = opts and opts.initial_view
-	state.view = initial_view and vim.tbl_extend("force", {}, initial_view) or state.views[1]
-
+	state.view = initial_view and vim.tbl_extend("force", {}, initial_view)
+		or bookmarks.views(state.views, state.bookmarks, state.starred_items)[1]
 	statusline.clear_items()
 
 	local buf = dashboard_host.buf()
 	if buf ~= nil then
 		keymaps.register(buf, state.views)
-	end
-
-	if state.view == nil then
-		state.error = "No pull request view configured"
-		M.render()
-		return
 	end
 
 	controller.switch_view(state.view)

@@ -20,13 +20,14 @@ local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
 local client = require("atlas.providers.github.client")
 local emojis = require("atlas.ui.shared.emojis")
+local git = require("atlas.core.git")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local links_api = require("atlas.providers.github.links")
+local request_scope = require("atlas.core.requests")
 local timeline_api = require("atlas.issues.providers.github.api.timeline")
 local ui_detail = require("atlas.issues.providers.github.ui.detail")
 local ui_repository = require("atlas.providers.github.ui.repository")
-local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@return string
@@ -39,37 +40,64 @@ local function resolve_search(view)
 	return search
 end
 
----@param view IssuesViewConfig
+---@param view AtlasGitHubIssuesViewConfig
+---@param on_done fun(view: AtlasGitHubIssuesViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
+	end
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		local repo = target and target.provider == "github" and target.repo_full_name or nil
+		if repo then
+			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
+			resolved.search = string.format("repo:%s%s", repo, additional)
+		end
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasGitHubIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(page: IssuesPage, err: string|nil)
----@return { cancel: fun() }|nil
+---@return { cancel: fun() }
 local function fetch_issues(view, opts, on_done)
-	local search = resolve_search(view)
-	return issues_api.search_issues(search, function(page, err)
-		if err then
-			on_done({ items = {} }, err)
-			return
-		end
-
-		local pinned, rest = {}, {}
-		for _, issue in ipairs(page.items) do
-			---@cast issue GitHubIssue
-			if issue.is_pinned == true then
-				table.insert(pinned, issue)
-			else
-				table.insert(rest, issue)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		local query = resolve_search(resolved)
+		requests.run(function(done)
+			return issues_api.search_issues(query, done, {
+				force_refresh = opts.force_refresh == true,
+				pagelen = opts.pagelen,
+				cursor = opts.cursor,
+			})
+		end, function(page, err)
+			if err then
+				on_done({ items = {}, query = query }, err)
+				return
 			end
-		end
-		local sorted = vim.list_extend({}, pinned)
-		vim.list_extend(sorted, rest)
-		page.items = sorted
 
-		on_done(page, nil)
-	end, {
-		force_refresh = opts.force_refresh == true,
-		pagelen = opts.pagelen,
-		cursor = opts.cursor,
-	})
+			local pinned, rest = {}, {}
+			for _, issue in ipairs(page.items) do
+				---@cast issue GitHubIssue
+				if issue.is_pinned == true then
+					table.insert(pinned, issue)
+				else
+					table.insert(rest, issue)
+				end
+			end
+			local sorted = vim.list_extend({}, pinned)
+			vim.list_extend(sorted, rest)
+			page.items = sorted
+			page.query = query
+			on_done(page, nil)
+		end)
+	end)
+	return requests
 end
 
 ---@param ref IssueRef
@@ -200,25 +228,9 @@ local function views()
 			},
 		}
 	end
-	local repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "github" then
-				repo = target.repo_full_name
-			end
-			break
-		end
-	end
-	local resolved = {}
-	for i, view in ipairs(configured) do
-		resolved[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and repo then
-			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
-			resolved[i].search = string.format("repo:%s%s", repo, additional)
-		end
-	end
-	return resolved
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
 end
 
 ---@param target AtlasTarget
@@ -247,7 +259,6 @@ end
 return {
 	views = views,
 	view_for_target = view_for_target,
-	resolve_search = resolve_search,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {

@@ -2,7 +2,6 @@ local checkout = require("atlas.core.git.checkout")
 
 local function resolve(paths, repo)
 	return checkout.resolve_repo_path(paths, repo, {
-		require_git = false,
 		require_existing = false,
 	})
 end

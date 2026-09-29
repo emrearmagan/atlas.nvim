@@ -211,9 +211,9 @@ Use `ctx.output(title)` to show output from a custom action:
         an open or draft pull request, and open its diff. With a URL, open that
         pull request directly.
 
-:Atlas diff [target]
+:Atlas diff <target>
         Open a Git range (`base...head`) or pull-request URL in native
-        AtlasDiff. Without a target, Atlas prompts for one.
+        AtlasDiff. A target is required.
 
 :Atlas pipelines [target|.]
         Open pipelines by branch name, PR URL or number (`123`, `#123`, or
@@ -247,11 +247,6 @@ Use `ctx.output(title)` to show output from a custom action:
 
 :Atlas logs
         Toggle the Atlas log buffer.
-
-                                                                   *:AtlasDiff*
-:AtlasDiff <target>
-        Open a Git range (`base...head`) or pull-request URL directly in
-        native AtlasDiff.
 
 ==============================================================================
 5. PULLS                                                          *atlas-pulls*

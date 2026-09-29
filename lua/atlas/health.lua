@@ -104,10 +104,10 @@ local function check_pulls()
 	local diff_cmd = tostring((pulls.diff or {}).open_cmd or "")
 	if diff_cmd == "" then
 		vim.health.warn("pulls.diff.open_cmd is empty")
-	elseif vim.fn.exists(":" .. diff_cmd) == 2 then
-		vim.health.ok(string.format("pulls.diff.open_cmd available: %s", diff_cmd))
+	elseif diff_cmd == "AtlasDiff" then
+		vim.health.ok("Using default diff viewer: AtlasDiff")
 	else
-		vim.health.error(string.format("pulls.diff.open_cmd not found: %s", diff_cmd))
+		vim.health.ok(string.format("Configured diff viewer: %s", diff_cmd))
 	end
 
 	local lsp = (pulls.diff or {}).lsp or {}

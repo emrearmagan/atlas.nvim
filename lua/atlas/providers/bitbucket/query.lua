@@ -50,7 +50,7 @@ end
 
 ---@param input string|nil
 ---@return BitbucketParsedSearch|nil, string|nil
-function M.parse(input)
+local function parse(input)
 	local input_value = vim.trim(input or "")
 	local tokens, current = {}, {}
 	local quoted = false
@@ -94,10 +94,6 @@ function M.parse(input)
 		end
 	end
 
-	if #targets == 0 then
-		return nil, "Add repo:workspace/name or project:workspace/key"
-	end
-
 	local value = table.concat(query_tokens, " ")
 	local states
 	local padded = " " .. value .. " "
@@ -128,6 +124,16 @@ function M.parse(input)
 	}, nil
 end
 
+---@param input string|nil
+---@return BitbucketParsedSearch|nil, string|nil
+function M.parse(input)
+	local parsed, err = parse(input)
+	if parsed and #parsed.targets == 0 then
+		return nil, "Add repo:workspace/name or project:workspace/key"
+	end
+	return parsed, err
+end
+
 ---@param parsed BitbucketParsedSearch
 ---@param states PullsStateFilter[]
 ---@return string
@@ -143,9 +149,9 @@ end
 ---@return string, PullsStateFilter[]
 function M.query(view)
 	---@cast view AtlasBitbucketViewConfig
-	local parsed = M.parse(view.search)
+	local parsed = parse(view.search)
 	local states = view._states or (parsed and parsed.states) or { "open" }
-	if parsed == nil then
+	if parsed == nil or #parsed.targets == 0 then
 		return vim.trim(view.search or ""), states
 	end
 

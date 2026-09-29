@@ -16,6 +16,20 @@ describe("Bitbucket pull request search", function()
 		assert.is_string(err)
 	end)
 
+	it("preserves status filters before the current repository is resolved", function()
+		local view = { current_repo = true, search = 'state   = "MERGED"' }
+		local _, states = query.query(view)
+		view._states = states
+
+		local parsed = assert(query.parse(query.for_repo("acme", "core", view.search)))
+		assert.same({ "merged" }, states)
+		assert.equal('state = "MERGED"', query.filter(parsed, view._states))
+
+		view._states = { "declined" }
+		_, states = query.query(view)
+		assert.same({ "declined" }, states)
+	end)
+
 	it("parses repository scopes before and after the query", function()
 		local parsed, err = query.parse('repo:acme/core title ~ "atlas" repo:other/app')
 

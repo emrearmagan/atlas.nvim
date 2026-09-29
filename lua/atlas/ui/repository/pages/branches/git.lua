@@ -6,11 +6,11 @@ local providers = require("atlas.providers")
 
 local M = {}
 
----@param root string
+---@param remote_url string|nil
 ---@param repo_url string|nil
 ---@return boolean
-local function matches_origin(root, repo_url)
-	local remote = git.local_repository(root)
+local function matches_remote(remote_url, repo_url)
+	local remote = remote_url and git.parse_remote_url(remote_url) or nil
 	local target = repo_url and providers.resolve(repo_url) or nil
 	return remote ~= nil
 		and target ~= nil
@@ -44,14 +44,18 @@ local function parse_commits(output)
 end
 
 ---@param repo AtlasRepository
----@return string|nil root
----@return string|nil err
-function M.resolve(repo)
+---@param on_done fun(root: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.resolve(repo, on_done)
 	local paths = (config.options.pulls.repo_config or {}).paths or {}
-	return checkout.resolve_repo_path(paths, repo.full_name, {
+	local path, err = checkout.resolve_repo_path(paths, repo.full_name, {
 		require_existing = true,
-		require_git = true,
 	})
+	if not path then
+		on_done(nil, err)
+		return nil
+	end
+	return git.repo_root(path, on_done)
 end
 
 ---@param root string
@@ -69,22 +73,37 @@ function M.fetch(root, branches, opts, on_done)
 		table.insert(hashes, branch.hash)
 	end
 
-	local exists = git.check_commits(root, hashes)
-	local refs = {}
-	for index, branch in ipairs(branches) do
-		if not exists[index] then
-			table.insert(refs, "refs/heads/" .. branch.name)
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.check_commits(root, hashes, done)
+	end, function(exists, err)
+		if not exists then
+			on_done(false, err)
+			return
 		end
-	end
-	if #refs == 0 then
-		on_done(true, nil)
-		return
-	end
-	if not matches_origin(root, opts.repo_url) then
-		on_done(false, "Branch commits are missing locally and origin does not match this repository")
-		return
-	end
-	return git.fetch_refs(root, "origin", refs, on_done)
+		local refs = {}
+		for index, branch in ipairs(branches) do
+			if not exists[index] then
+				table.insert(refs, "refs/heads/" .. branch.name)
+			end
+		end
+		if #refs == 0 then
+			on_done(true, nil)
+			return
+		end
+		scope.run(function(done)
+			return git.remote_url(root, "origin", done)
+		end, function(remote)
+			if not matches_remote(remote, opts.repo_url) then
+				on_done(false, "Branch commits are missing locally and origin does not match this repository")
+				return
+			end
+			scope.run(function(done)
+				return git.fetch_refs(root, "origin", refs, done)
+			end, on_done)
+		end)
+	end)
+	return scope
 end
 
 ---@param root string
@@ -93,25 +112,36 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.checkout(root, branch, opts, on_done)
-	if git.rev_exists(root, "refs/heads/" .. branch.name) then
-		return git.checkout_branch(root, branch.name, on_done)
-	end
-	if not matches_origin(root, opts.repo_url) then
-		on_done(false, "Cannot fetch branch: origin does not match this repository")
-		return
-	end
-	local remote_ref = "refs/remotes/origin/" .. branch.name
 	local scope = requests.new()
 	scope.run(function(done)
-		return git.fetch_refs(root, "origin", { "refs/heads/" .. branch.name .. ":" .. remote_ref }, done)
-	end, function(ok, err)
-		if not ok then
-			on_done(false, err)
+		return git.rev_exists(root, "refs/heads/" .. branch.name, done)
+	end, function(exists)
+		if exists then
+			scope.run(function(done)
+				return git.checkout_branch(root, branch.name, done)
+			end, on_done)
 			return
 		end
 		scope.run(function(done)
-			return git.checkout_new_branch(root, branch.name, remote_ref, done)
-		end, on_done)
+			return git.remote_url(root, "origin", done)
+		end, function(remote)
+			if not matches_remote(remote, opts.repo_url) then
+				on_done(false, "Cannot fetch branch: origin does not match this repository")
+				return
+			end
+			local remote_ref = "refs/remotes/origin/" .. branch.name
+			scope.run(function(done)
+				return git.fetch_refs(root, "origin", { "refs/heads/" .. branch.name .. ":" .. remote_ref }, done)
+			end, function(ok, err)
+				if not ok then
+					on_done(false, err)
+					return
+				end
+				scope.run(function(done)
+					return git.checkout_new_branch(root, branch.name, remote_ref, done)
+				end, on_done)
+			end)
+		end)
 	end)
 	return scope
 end

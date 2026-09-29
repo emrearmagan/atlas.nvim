@@ -97,7 +97,7 @@ local function render_header(lines, spans, width)
 	local hl = state.provider and state.provider.hl_group or "Title"
 	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
 
-	local views = vim.list_extend({}, state.views)
+	local views = vim.list_extend({}, bookmarks.views(state.views, state.bookmarks, state.starred_items))
 	local active_view = state.view
 	local active_id = view_id(active_view)
 	local found = false

@@ -101,7 +101,7 @@ function M.init(provider, opts)
 		state.current_user = nil
 	end
 	state.provider = provider
-	state.provider_views = provider.views()
+	state.views = provider.views()
 	state.query = ""
 
 	local notifications = require("atlas.ui.notifications")
@@ -115,8 +115,7 @@ function M.init(provider, opts)
 	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "issues")
-	state.views = bookmarks.views(state.provider_views, state.bookmarks, state.starred_items)
-	state.view = (opts and opts.initial_view) or state.views[1]
+	state.view = (opts and opts.initial_view) or bookmarks.views(state.views, state.bookmarks, state.starred_items)[1]
 
 	statusline.clear_items()
 
@@ -125,13 +124,6 @@ function M.init(provider, opts)
 		keymaps.register(buf, state.views)
 	end
 
-	if state.view == nil then
-		state.error = "No issues view configured"
-		M.render()
-		return
-	end
-
-	M.render()
 	controller.switch_view(state.view)
 
 	if provider.capabilities.notifications then

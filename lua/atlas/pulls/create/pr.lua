@@ -9,6 +9,9 @@ local picker = require("atlas.ui.picker")
 local description = require("atlas.pulls.create.description")
 local presentation = require("atlas.pulls.ui.presentation")
 local notify = require("atlas.core.notify")
+local requests = require("atlas.core.requests")
+
+local start_request
 
 ---@class PullsCreatePRReviewer
 ---@field label string
@@ -35,6 +38,7 @@ local notify = require("atlas.core.notify")
 ---@field repo_slug string         -- "owner/repo"
 ---@field repo_root string         -- absolute path to local repo
 ---@field provider PullsProvider|nil
+---@field repository AtlasTarget|nil
 ---@field head string              -- source branch
 ---@field base string              -- destination branch
 ---@field draft boolean
@@ -49,8 +53,10 @@ local notify = require("atlas.core.notify")
 ---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
+---@field is_refreshing boolean
 ---@field settings_changed boolean
 ---@field initial_body string
+---@field content_requests AtlasRequestScope
 
 ---@param provider_id string
 ---@return PullsProvider|nil, string|nil
@@ -152,44 +158,73 @@ local function commit_context(pr_state)
 end
 
 ---@param pr_state CreatePRState
+---@return boolean
+local function is_open(pr_state)
+	local layout = pr_state.layout
+	return not layout.closing
+		and layout.tab ~= nil
+		and vim.api.nvim_tabpage_is_valid(layout.tab)
+		and layout.editor_buf ~= nil
+		and vim.api.nvim_buf_is_valid(layout.editor_buf)
+end
+
+---@param pr_state CreatePRState
 local function refresh_commits(pr_state)
-	local replace_body = form.get_body(pr_state.layout) == pr_state.initial_body
-	local content, err = description.build(
-		pr_state.fields.repo_root,
-		pr_state.fields.repo_slug,
-		pr_state.fields.base,
-		pr_state.fields.head
-	)
-	if not content then
-		form.notify("error", err or "Unable to build pull request description")
-		return
-	end
-	pr_state.fields.commits = content.commits
-	pr_state.fields.commit_count = #content.commits
-	pr_state.fields.diffstat = content.diffstat
-	if replace_body then
-		pr_state.initial_body = content.body
-		form.set_body(pr_state.layout, content.body)
-	end
-	form.render_context(pr_state, commit_context(pr_state))
+	pr_state.content_requests.cancel()
+	pr_state.content_requests = requests.new()
+	pr_state.is_refreshing = true
+	local initial_body = pr_state.initial_body
+	pr_state.content_requests.run(function(done)
+		return description.build(
+			pr_state.fields.repo_root,
+			pr_state.fields.repo_slug,
+			pr_state.fields.base,
+			pr_state.fields.head,
+			done,
+			pr_state.fields.repository
+		)
+	end, function(content, err)
+		if not is_open(pr_state) then
+			return
+		end
+		pr_state.is_refreshing = false
+		if not content then
+			form.notify("error", err or "Unable to build pull request description")
+			return
+		end
+		pr_state.fields.commits = content.commits
+		pr_state.fields.commit_count = #content.commits
+		pr_state.fields.diffstat = content.diffstat
+		if form.get_body(pr_state.layout) == initial_body then
+			pr_state.initial_body = content.body
+			form.set_body(pr_state.layout, content.body)
+		end
+		form.render_context(pr_state, commit_context(pr_state))
+		form.render_meta(pr_state, meta_rows(pr_state))
+	end)
 end
 
 ---@param pr_state CreatePRState
 local function preview_diff(pr_state)
-	local base, head, err =
-		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
-	if not base or not head then
-		form.notify("error", err or "Unable to resolve diff revisions")
-		return
-	end
-	require("atlas.pulls.diff").open_range({
-		root = pr_state.fields.repo_root,
-		base = base,
-		head = head,
-	}, function(open_err)
-		if open_err then
-			form.notify("error", "Unable to open diff: " .. tostring(open_err))
+	pr_state.content_requests.run(function(done)
+		return git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head, done)
+	end, function(base, head, err)
+		if not is_open(pr_state) then
+			return
 		end
+		if not base or not head then
+			form.notify("error", err or "Unable to resolve diff revisions")
+			return
+		end
+		require("atlas.pulls.diff").open_range({
+			root = pr_state.fields.repo_root,
+			base = base,
+			head = head,
+		}, function(open_err)
+			if open_err and is_open(pr_state) then
+				form.notify("error", "Unable to open diff: " .. tostring(open_err))
+			end
+		end)
 	end)
 end
 
@@ -210,6 +245,7 @@ end
 
 ---@param pr_state CreatePRState
 local function close(pr_state)
+	pr_state.content_requests.cancel()
 	form.close(pr_state.layout)
 end
 
@@ -368,6 +404,10 @@ local function submit(pr_state)
 	if pr_state.is_submitting then
 		return
 	end
+	if pr_state.is_refreshing then
+		form.notify("warn", "Wait for the description to finish updating")
+		return
+	end
 
 	local title = get_title(pr_state)
 	if title == "" then
@@ -453,6 +493,7 @@ end
 
 ---@class CreatePROpenOpts
 ---@field provider PullsProvider
+---@field repository AtlasTarget|nil
 ---@field repo_slug string
 ---@field repo_root string
 ---@field head string
@@ -471,6 +512,7 @@ function M.open(opts)
 	local pr_state = {
 		fields = {
 			provider = opts.provider,
+			repository = opts.repository,
 			repo_slug = opts.repo_slug,
 			repo_root = opts.repo_root,
 			head = opts.head,
@@ -485,8 +527,10 @@ function M.open(opts)
 		layout = {},
 		content_width = 80,
 		is_submitting = false,
+		is_refreshing = false,
 		settings_changed = false,
 		initial_body = opts.initial_body,
+		content_requests = requests.new(),
 	}
 
 	local form_keymaps = {
@@ -560,76 +604,113 @@ function M.open(opts)
 		end,
 		keymaps = form_keymaps,
 	})
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		group = pr_state.layout.augroup,
+		buffer = pr_state.layout.editor_buf,
+		once = true,
+		callback = function()
+			pr_state.content_requests.cancel()
+		end,
+	})
 
 	load_reviewers(pr_state, function()
 		render_meta(pr_state)
 	end)
 end
 
+---@return AtlasRequestScope
 function M.start()
-	local root, root_err = git_branch.repo_root(nil)
-	if not root then
-		notify.error(root_err or "Not in a git repository", { vim_notify = true })
-		return
+	if start_request then
+		start_request.cancel()
 	end
-
-	local head, head_err = git_branch.current_branch(root)
-	if not head then
-		notify.error(head_err or "Could not detect current branch", { vim_notify = true })
-		return
-	end
-
-	local info = git_branch.local_repository(root)
-	if not info then
-		notify.error("Could not resolve the origin repository", { vim_notify = true })
-		return
-	end
-
-	local provider, provider_err = load_provider(info.provider)
-	if not provider then
-		notify.error(provider_err or "Provider unavailable", { vim_notify = true })
-		return
-	end
-	local base = git_branch.default_branch(root, "origin") or "main"
-	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
-
-	if head == base then
-		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head), {
-			vim_notify = true,
-		})
-		return
-	end
-
-	local remote_branches = git_branch.list_remote_branches(root, "origin")
-	local available_bases = { base }
-	local seen = { [base] = true }
-	for _, b in ipairs(remote_branches) do
-		if not seen[b] and b ~= head then
-			seen[b] = true
-			table.insert(available_bases, b)
+	local scope = requests.new()
+	start_request = scope
+	scope.run(function(done)
+		return git_branch.repo_root(nil, done)
+	end, function(root, root_err)
+		if not root then
+			notify.error(root_err or "Not in a git repository", { vim_notify = true })
+			return
 		end
-	end
-
-	local initial, description_err = description.build(root, repo_full_name, base, head)
-	if not initial then
-		notify.error(description_err or "Unable to build pull request description", { vim_notify = true })
-		return
-	end
-
-	M.open({
-		provider = provider,
-		repo_slug = repo_full_name,
-		repo_root = root,
-		head = head,
-		base = base,
-		available_bases = available_bases,
-		initial_title = initial.title,
-		initial_body = initial.body,
-		draft = false,
-		commit_count = #initial.commits,
-		commits = initial.commits,
-		diffstat = initial.diffstat,
-	})
+		scope.all({
+			head = function(done)
+				return git_branch.current_branch(root, done)
+			end,
+			repository = function(done)
+				return git_branch.local_repository(root, done)
+			end,
+		}, function(values, errors)
+			local head, info = values.head, values.repository
+			if not head then
+				notify.error(errors.head or "Could not detect current branch", { vim_notify = true })
+				return
+			end
+			if not info then
+				notify.error(errors.repository or "Could not resolve the origin repository", { vim_notify = true })
+				return
+			end
+			local provider, provider_err = load_provider(info.provider)
+			if not provider then
+				notify.error(provider_err or "Provider unavailable", { vim_notify = true })
+				return
+			end
+			local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
+			scope.all({
+				base = function(done)
+					return git_branch.default_branch(root, "origin", done)
+				end,
+				branches = function(done)
+					return git_branch.list_remote_branches(root, "origin", done)
+				end,
+			}, function(refs)
+				local base = refs.base or "main"
+				if head == base then
+					notify.warn(
+						string.format("HEAD '%s' is the default branch — switch to a feature branch first", head),
+						{
+							vim_notify = true,
+						}
+					)
+					return
+				end
+				local available_bases = { base }
+				local seen = { [base] = true }
+				for _, branch in ipairs(refs.branches or {}) do
+					if not seen[branch] and branch ~= head then
+						seen[branch] = true
+						table.insert(available_bases, branch)
+					end
+				end
+				scope.run(function(done)
+					return description.build(root, repo_full_name, base, head, done, info)
+				end, function(initial, description_err)
+					if not initial then
+						notify.error(
+							description_err or "Unable to build pull request description",
+							{ vim_notify = true }
+						)
+						return
+					end
+					M.open({
+						provider = provider,
+						repository = info,
+						repo_slug = repo_full_name,
+						repo_root = root,
+						head = head,
+						base = base,
+						available_bases = available_bases,
+						initial_title = initial.title,
+						initial_body = initial.body,
+						draft = false,
+						commit_count = #initial.commits,
+						commits = initial.commits,
+						diffstat = initial.diffstat,
+					})
+				end)
+			end)
+		end)
+	end)
+	return scope
 end
 
 return M

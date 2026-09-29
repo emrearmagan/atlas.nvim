@@ -54,7 +54,7 @@ describe("providers contracts", function()
 		assert_contract(
 			"issues",
 			{ "github", "gitlab", "jira" },
-			{ "resolve_search", "view_for_target", "issue_ref", "views" },
+			{ "view_for_target", "issue_ref", "views" },
 			{ "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)
 	end)

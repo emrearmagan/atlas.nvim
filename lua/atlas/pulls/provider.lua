@@ -11,6 +11,7 @@
 
 ---@class PullsPage
 ---@field items PullRequest[]
+---@field query string|nil
 ---@field next_cursor table<string, string>|nil
 ---@field total_pages integer|nil
 

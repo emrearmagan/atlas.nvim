@@ -76,11 +76,8 @@ function M.register(buf, views)
 		desc = "Switch to bookmarks",
 		hidden = true,
 		callback = function()
-			for _, view in ipairs(state.views) do
-				if view == bookmark_view then
-					controller.switch_view(view)
-					return
-				end
+			if next(state.bookmarks.items) ~= nil or #state.starred_items > 0 then
+				controller.switch_view(bookmark_view)
 			end
 		end,
 	})

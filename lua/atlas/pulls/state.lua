@@ -11,7 +11,6 @@
 ---@field current_page integer
 ---@field page_history PullsPage[]
 ---@field provider PullsProvider|nil
----@field provider_views AtlasPullsViewConfig[]
 ---@field starred_items AtlasStarredItem[]
 ---@field reloading_pr_keys table<string, boolean>
 ---@field reload_spinner_frame string
@@ -28,7 +27,6 @@ local M = {
 	current_page = 1,
 	page_history = {},
 	provider = nil,
-	provider_views = {},
 	starred_items = {},
 	reloading_pr_keys = {},
 	reload_spinner_frame = "⠋",
@@ -47,7 +45,11 @@ end
 ---@return PullsStateFilter[]
 function M.selected_states()
 	local view = M.search_view()
-	return (view and view._states) or {}
+	if view == nil then
+		return {}
+	end
+	local _, states = M.provider.resolve_search(view)
+	return states
 end
 
 ---@param repo_id string

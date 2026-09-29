@@ -9,38 +9,33 @@ local issues_api = require("atlas.issues.providers.github.api.issues")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 
 ---@param ctx AtlasIssueActionContext
----@return string|nil slug, string|nil err
-local function create_issue_slug(ctx)
+---@param on_done fun(slug: string|nil, err: string|nil)
+local function create_issue_slug(ctx, on_done)
 	local explicit = tostring(ctx.repo_slug or "")
 	if explicit ~= "" then
-		return explicit, nil
+		on_done(explicit, nil)
+		return
 	end
 
 	if ctx.issue then
 		local issue = assert(ctx.issue)
 		---@cast issue GitHubIssue
 		if issue.repo_full_name ~= "" then
-			return issue.repo_full_name, nil
+			on_done(issue.repo_full_name, nil)
+			return
 		end
 	end
 
 	local git = require("atlas.core.git")
-	local root, root_err = git.repo_root(nil)
-	if not root then
-		return nil, root_err or "Not in a git repository"
-	end
-	local remote, remote_err = git.remote_url(root, "origin")
-	if not remote then
-		return nil, remote_err or "No origin remote configured"
-	end
-	local info, parse_err = git.parse_remote_url(remote)
-	if not info then
-		return nil, parse_err or "Could not parse remote URL"
-	end
-	if info.provider ~= "github" then
-		return nil, "Current repository is not hosted on GitHub"
-	end
-	return info.repo_full_name, nil
+	return git.local_repository(nil, function(info, err)
+		if not info then
+			on_done(nil, err or "Could not determine repository")
+		elseif info.provider ~= "github" then
+			on_done(nil, "Current repository is not hosted on GitHub")
+		else
+			on_done(info.repo_full_name, nil)
+		end
+	end)
 end
 
 ---@type AtlasIssueAction[]
@@ -347,32 +342,33 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(ctx, done)
-	local slug, slug_err = create_issue_slug(ctx)
-	if slug == nil or slug == "" then
-		local err = slug_err or "Could not determine repository"
-		notify.error(err)
-		done(nil, err)
-		return
-	end
+	return create_issue_slug(ctx, function(slug, slug_err)
+		if slug == nil or slug == "" then
+			local err = slug_err or "Could not determine repository"
+			notify.error(err)
+			done(nil, err)
+			return
+		end
 
-	local create_issue_ui = require("atlas.issues.create.github.issue")
+		local create_issue_ui = require("atlas.issues.create.github.issue")
 
-	create_issue_ui.open({
-		repo_slug = slug,
-		on_done = function(result, err)
-			if err then
-				done(nil, tostring(err))
-				return
-			end
+		create_issue_ui.open({
+			repo_slug = slug,
+			on_done = function(result, err)
+				if err then
+					done(nil, tostring(err))
+					return
+				end
 
-			local number = result and result.number
-			if number == nil then
-				done(nil, nil)
-				return
-			end
-			done({ issue_key = string.format("%s#%d", slug, number) }, nil)
-		end,
-	})
+				local number = result and result.number
+				if number == nil then
+					done(nil, nil)
+					return
+				end
+				done({ issue_key = string.format("%s#%d", slug, number) }, nil)
+			end,
+		})
+	end)
 end
 
 ---@param ctx AtlasIssueActionContext

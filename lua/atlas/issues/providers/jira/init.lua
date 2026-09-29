@@ -60,15 +60,16 @@ end
 local function fetch_issues(view, opts, on_done)
 	local jql = resolve_search(view)
 	if jql == "" then
-		on_done({ items = {} }, "Missing Jira view JQL")
+		on_done({ items = {}, query = jql }, "Missing Jira view JQL")
 		return nil
 	end
 
 	return issues_api.search_issues(jql, function(page, err)
 		if err or page == nil then
-			on_done({ items = {} }, err or "Failed to fetch issues")
+			on_done({ items = {}, query = jql }, err or "Failed to fetch issues")
 			return
 		end
+		page.query = jql
 		on_done(page, nil)
 	end, {
 		force_refresh = opts.force_refresh == true,
@@ -189,7 +190,6 @@ end
 return {
 	views = views,
 	view_for_target = view_for_target,
-	resolve_search = resolve_search,
 	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
