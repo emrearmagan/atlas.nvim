@@ -199,6 +199,18 @@ local function compute_widths(columns, rows, available_width, gap_after, tree, f
 		return sum
 	end
 
+	if hide_columns then
+		for i, column in ipairs(columns) do
+			local overflow = total_used() - available_width
+			if overflow <= 0 then
+				break
+			end
+			if not column.width and column.can_grow ~= false and column.min_width then
+				widths[i] = math.max(column.min_width, widths[i] - overflow)
+			end
+		end
+	end
+
 	for _, key in ipairs(hide_columns or {}) do
 		local overflow = total_used() - available_width
 		if overflow <= 0 then

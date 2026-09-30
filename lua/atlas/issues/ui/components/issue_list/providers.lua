@@ -7,7 +7,7 @@ local M = {}
 local function columns()
 	return {
 		{ key = "icon", name = "", can_grow = false, align = "center" },
-		{ key = "name", name = "Issue" },
+		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "assignee",
 			name = string.format("%s Assignee", icons.general("user")),

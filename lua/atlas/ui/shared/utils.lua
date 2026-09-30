@@ -454,23 +454,21 @@ function M.truncate(str, max_dw, from_start)
 	local marker = max_dw == 1 and "." or ".."
 
 	local nchars = strchars(str, true)
-	if from_start then
-		for i = 1, nchars do
-			local tail = strcharpart(str, i, nchars - i, true)
-			if strwidth(marker .. tail) <= max_dw then
-				return marker .. tail
-			end
-		end
-		return marker
-	end
-
-	for i = nchars - 1, 0, -1 do
-		local head = strcharpart(str, 0, i, true)
-		if strwidth(head .. marker) <= max_dw then
-			return head .. marker
+	local low, high = 0, nchars - 1
+	local result = marker
+	while low <= high do
+		local count = math.floor((low + high) / 2)
+		local start = from_start and (nchars - count) or 0
+		local part = strcharpart(str, start, count, true)
+		local candidate = from_start and (marker .. part) or (part .. marker)
+		if strwidth(candidate) <= max_dw then
+			result = candidate
+			low = count + 1
+		else
+			high = count - 1
 		end
 	end
-	return marker
+	return result
 end
 
 ---@param name string|nil
