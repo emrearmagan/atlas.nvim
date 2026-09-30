@@ -94,6 +94,7 @@ function M.mark_done(id, on_done)
 			on_done(false, err)
 			return
 		end
+		client.clear_memory_cache("gitlab:todos:")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification done",

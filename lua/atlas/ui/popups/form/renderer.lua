@@ -2,6 +2,7 @@ local M = {}
 
 local table_tree = require("atlas.ui.components.table_tree")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
+local utils = require("atlas.ui.shared.utils")
 
 local NS = vim.api.nvim_create_namespace("atlas.editor.meta")
 
@@ -48,13 +49,9 @@ local function table_rows(rows)
 	end
 
 	for _, row in ipairs(rows or {}) do
-		local item = { _hls = {}, _spans = {} }
+		local item = { _cells = row }
 		for i, cell in ipairs(row) do
 			item[i] = cell_value(cell)
-			item._hls[i] = default_hl(cell, i)
-			if type(cell) == "table" then
-				item._spans[i] = cell.spans
-			end
 		end
 		table.insert(items, item)
 	end
@@ -102,12 +99,12 @@ function M.render_meta(state, rows)
 		fill = false,
 		cell_hl = function(row, col)
 			local text = row[col.key] or ""
-			local cell_spans = row._spans and row._spans[col.key]
-			if cell_spans then
-				return cell_spans
+			local cell = row._cells[col.key]
+			if type(cell) == "table" and cell.spans then
+				return cell.spans
 			end
 
-			local hl = row._hls and row._hls[col.key]
+			local hl = default_hl(cell, col.key)
 			if text ~= "" and hl then
 				return {
 					{ start_col = 0, end_col = #text, hl_group = hl },
@@ -121,34 +118,25 @@ function M.render_meta(state, rows)
 	vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
 
 	local top_lines = { "Details" }
-	vim.list_extend(top_lines, lines)
-	local separator_line = #top_lines + 1
-	table.insert(top_lines, string.rep("─", math.max(1, state.content_width)))
-	table.insert(top_lines, layout.title_label or "Title")
-
+	local separator = string.rep("─", math.max(1, state.content_width))
+	local title = layout.title_label or "Title"
 	local top_spans = {
 		{ line = 0, start_col = 0, end_col = #top_lines[1], hl_group = "AtlasLogInfo" },
 		{
-			line = separator_line - 1,
+			line = #lines + 1,
 			start_col = 0,
-			end_col = #top_lines[separator_line],
+			end_col = #separator,
 			hl_group = "AtlasBorder",
 		},
 		{
-			line = #top_lines - 1,
+			line = #lines + 2,
 			start_col = 0,
-			end_col = #top_lines[#top_lines],
+			end_col = #title,
 			hl_group = "AtlasLogInfo",
 		},
 	}
-	for _, span in ipairs(spans or {}) do
-		table.insert(top_spans, {
-			line = span.line + 1,
-			start_col = span.start_col,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.append_block(top_lines, top_spans, { lines = lines, highlights = spans })
+	vim.list_extend(top_lines, { separator, title })
 
 	vim.api.nvim_buf_set_extmark(buf, NS, 0, 0, {
 		virt_lines = virtual_lines.render(top_lines, top_spans),

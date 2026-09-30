@@ -231,6 +231,54 @@ function M.open(request)
 		end)
 	end
 
+	local function append_items(rows, highlights)
+		local first = math.max(1, state.index - picker_layout.item_height + 1)
+		first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
+		for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
+			local item = state.items[index]
+			local marker, marker_hl = "", nil
+			if request.multi then
+				if state.selected[request.key(item)] then
+					marker, marker_hl = icons.picker("selected")
+				else
+					marker, marker_hl = icons.picker("unselected")
+				end
+				marker = marker .. " "
+			end
+			local text, chunks = picker.format_item(request, item)
+			table.insert(rows, marker .. text)
+			local row = #rows
+			if marker_hl then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #marker,
+					hl_group = marker_hl,
+				})
+			end
+			local col = #marker
+			for _, chunk in ipairs(chunks) do
+				if chunk[2] then
+					table.insert(highlights, {
+						line = row,
+						start_col = col,
+						end_col = col + #chunk[1],
+						hl_group = chunk[2],
+					})
+				end
+				col = col + #chunk[1]
+			end
+			if index == state.index then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #rows[row],
+					line_hl_group = "CursorLine",
+				})
+			end
+		end
+	end
+
 	local function render(update_preview)
 		local rows, highlights = {}, {}
 		local has_items = not state.loading and not state.err and #state.items > 0
@@ -257,51 +305,7 @@ function M.open(request)
 				hl_group = "AtlasTextMuted",
 			})
 		else
-			local first = math.max(1, state.index - picker_layout.item_height + 1)
-			first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
-			for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
-				local item = state.items[index]
-				local marker, marker_hl = "", nil
-				if request.multi then
-					if state.selected[request.key(item)] then
-						marker, marker_hl = icons.picker("selected")
-					else
-						marker, marker_hl = icons.picker("unselected")
-					end
-					marker = marker .. " "
-				end
-				local text, chunks = picker.format_item(request, item)
-				table.insert(rows, marker .. text)
-				local row = #rows
-				if marker_hl then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #marker,
-						hl_group = marker_hl,
-					})
-				end
-				local col = #marker
-				for _, chunk in ipairs(chunks) do
-					if chunk[2] then
-						table.insert(highlights, {
-							line = row,
-							start_col = col,
-							end_col = col + #chunk[1],
-							hl_group = chunk[2],
-						})
-					end
-					col = col + #chunk[1]
-				end
-				if index == state.index then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #rows[row],
-						line_hl_group = "CursorLine",
-					})
-				end
-			end
+			append_items(rows, highlights)
 		end
 
 		local separator = string.rep("─", picker_layout.main_width)

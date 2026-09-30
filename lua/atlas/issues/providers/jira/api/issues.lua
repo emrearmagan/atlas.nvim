@@ -316,12 +316,7 @@ function M.update_issue(issue_key, fields, callback)
 	local payload = { fields = fields }
 
 	return service.request("PUT", endpoint, payload, function(_, err)
-		if err ~= nil then
-			callback(false, err)
-			return
-		end
-
-		callback(true, nil)
+		callback(err == nil, err)
 	end, {
 		action = "Update issue",
 		issue_key = issue_key,
@@ -340,16 +335,24 @@ function M.delete_issue(issue_key, callback)
 	local endpoint = string.format("/issue/%s", issue_key)
 
 	return service.request("DELETE", endpoint, nil, function(_, err)
-		if err ~= nil then
-			callback(false, err)
-			return
-		end
-
-		callback(true, nil)
+		callback(err == nil, err)
 	end, {
 		action = "Delete issue",
 		issue_key = issue_key,
 	})
+end
+
+---@param raw_types table[]
+---@return IssueType[]
+local function map_issue_types(raw_types)
+	local issue_types = {}
+	for _, raw in ipairs(raw_types) do
+		local issue_type = normalizer.to_issue_type(raw)
+		if issue_type ~= nil then
+			table.insert(issue_types, issue_type)
+		end
+	end
+	return issue_types
 end
 
 ---@param project_key string
@@ -372,14 +375,7 @@ function M.get_create_meta(project_key, callback)
 			end
 
 			local raw_types = result.values or {}
-			local issue_types = {}
-			for _, raw in ipairs(raw_types) do
-				local issue_type = normalizer.to_issue_type(raw)
-				if issue_type ~= nil then
-					table.insert(issue_types, issue_type)
-				end
-			end
-			callback(issue_types, nil)
+			callback(map_issue_types(raw_types), nil)
 		end, {
 			action = "Fetch create metadata",
 			project_key = project_key,
@@ -407,15 +403,7 @@ function M.get_create_meta(project_key, callback)
 		local project = matched_project or projects[1]
 		local raw_types = json.safe_table(project and project.issuetypes)
 
-		local issue_types = {}
-		for _, raw in ipairs(raw_types) do
-			local issue_type = normalizer.to_issue_type(raw)
-			if issue_type ~= nil then
-				table.insert(issue_types, issue_type)
-			end
-		end
-
-		callback(issue_types, nil)
+		callback(map_issue_types(raw_types), nil)
 	end, {
 		action = "Fetch create metadata",
 		project_key = project_key,
@@ -582,12 +570,7 @@ function M.assign_issue(issue_key, account_id, callback)
 	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
-		if err ~= nil then
-			callback(false, err)
-			return
-		end
-
-		callback(true, nil)
+		callback(err == nil, err)
 	end, {
 		action = "Assign issue",
 		issue_key = issue_key,
@@ -619,14 +602,32 @@ function M.change_reporter(issue_key, account_id, callback)
 	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
-		if err ~= nil then
-			callback(false, err)
-			return
-		end
-
-		callback(true, nil)
+		callback(err == nil, err)
 	end, {
 		action = "Change reporter",
+		issue_key = issue_key,
+	})
+end
+
+---@param issue_key string
+---@param subscribed boolean
+---@param account_id string|nil Required when unsubscribing.
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.set_subscription(issue_key, subscribed, account_id, on_done)
+	local endpoint = "/issue/" .. issue_key .. "/watchers"
+	if not subscribed then
+		local param_name = service.is_server() and "username" or "accountId"
+		endpoint = string.format("%s?%s=%s", endpoint, param_name, url_encode(account_id))
+	end
+	return service.request(subscribed and "POST" or "DELETE", endpoint, nil, function(_, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(subscribed, nil)
+	end, {
+		action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
 		issue_key = issue_key,
 	})
 end

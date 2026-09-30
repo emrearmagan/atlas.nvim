@@ -16,6 +16,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field provider PullsProvider|IssuesProvider
 ---@field statusline AtlasStatusline
 ---@field release AtlasRepositoryReleaseDetails|string|nil
+---@field releases AtlasRepositoryRelease[]|nil
 ---@field selected_id string|nil
 ---@field line_map table<integer, RepositoryReleaseSelection>
 ---@field requests AtlasRequestScope
@@ -106,6 +107,10 @@ local function fetch_releases(state, on_done)
 	if state.release == "loading" then
 		return
 	end
+	if state.releases then
+		on_done(state.releases)
+		return
+	end
 	local repository = state.provider.capabilities.repository
 	local fetch = repository and repository.fetch_releases
 	if not fetch then
@@ -126,6 +131,7 @@ local function fetch_releases(state, on_done)
 			notify.info("No releases found")
 			return
 		end
+		state.releases = releases
 		on_done(releases)
 	end)
 end
@@ -236,6 +242,7 @@ function M.open(opts)
 			resolver.resolve("ui.refresh"),
 			"Refresh release",
 			function()
+				state.releases = nil
 				load(state, state.selected_id)
 			end,
 		},

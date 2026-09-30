@@ -79,47 +79,24 @@ end
 ---@param tree TableTreeTreeOpts|nil
 ---@return table[]
 local function flatten(rows, tree)
-	if tree == nil then
-		local out = {}
-		for _, row in ipairs(rows or {}) do
-			table.insert(
-				out,
-				vim.tbl_extend("force", row, {
-					_tv2_depth = 0,
-					_tv2_has_children = false,
-					_tv2_expanded = false,
-				})
-			)
-		end
-		return out
-	end
-
 	local out = {}
 	local root_count = #(rows or {})
 
 	local function walk(list, depth)
 		for index, row in ipairs(list or {}) do
-			if is_pass_through_row(row) then
-				table.insert(
-					out,
-					vim.tbl_extend("force", row, {
-						_tv2_depth = 0,
-						_tv2_has_children = false,
-						_tv2_expanded = false,
-					})
-				)
-			else
+			local item = vim.tbl_extend("force", row, {
+				_tv2_depth = 0,
+				_tv2_has_children = false,
+				_tv2_expanded = false,
+			})
+			table.insert(out, item)
+			if tree and not is_pass_through_row(row) then
 				local children = row[tree.children_key]
 				local has_children = type(children) == "table" and #children > 0
 				local expanded = row_is_expanded(row, has_children, tree)
-				table.insert(
-					out,
-					vim.tbl_extend("force", row, {
-						_tv2_depth = depth,
-						_tv2_has_children = has_children,
-						_tv2_expanded = expanded,
-					})
-				)
+				item._tv2_depth = depth
+				item._tv2_has_children = has_children
+				item._tv2_expanded = expanded
 
 				if has_children and expanded then
 					walk(children, depth + 1)
@@ -250,6 +227,11 @@ local function compute_widths(columns, rows, available_width, gap_after, tree, f
 		end
 	end
 	local desired = vim.deepcopy(widths)
+	for i, column in ipairs(columns) do
+		if not column.width then
+			widths[i] = math.min(widths[i], available_width)
+		end
+	end
 
 	while total_used() > available_width do
 		local widest_idx = nil
@@ -342,35 +324,26 @@ function M.render(opts)
 		return default_gap
 	end
 
-	local function join_parts(parts)
-		if #parts == 0 then
-			return ""
-		end
-
-		local out = parts[1]
-		for i = 2, #parts do
-			out = out .. string.rep(" ", gap_after(i - 1)) .. parts[i]
-		end
-		return out
-	end
-
 	compute_widths(columns, rows, math.max(width - (margin * 2), 1), gap_after, tree, fill, opts.hide_columns)
 
 	local lines = {}
 	local line_map = {}
 	local spans = {}
 
-	local col_start = margin
 	if show_header then
-		local header_parts = {}
+		local line = string.rep(" ", margin)
 		for i, c in ipairs(columns) do
+			if i > 1 then
+				line = line .. string.rep(" ", gap_after(i - 1))
+			end
+			local col_start = #line
 			local label = truncate(c.name or "", c._computed)
 			local header_align = c.header_align
 			if header_align == nil and c.align_title == true then
 				header_align = c.align
 			end
 			local padded = pad_aligned(label, c._computed, header_align)
-			table.insert(header_parts, padded)
+			line = line .. padded
 
 			table.insert(spans, {
 				line = 0,
@@ -378,10 +351,8 @@ function M.render(opts)
 				end_col = col_start + #padded,
 				hl_group = c.header_hl or "AtlasColumnHeader",
 			})
-
-			col_start = col_start + #padded + gap_after(i)
 		end
-		table.insert(lines, string.rep(" ", margin) .. join_parts(header_parts))
+		table.insert(lines, line)
 		table.insert(lines, "")
 	end
 
@@ -401,12 +372,15 @@ function M.render(opts)
 			line_map[#lines] = row
 			table.insert(lines, "")
 		else
-			local line_parts = {}
-			col_start = margin
+			local line = string.rep(" ", margin)
 			for i, c in ipairs(columns) do
+				if i > 1 then
+					line = line .. string.rep(" ", gap_after(i - 1))
+				end
+				local col_start = #line
 				local cell = truncate(cell_text(row, c, tree), c._computed, c.truncate_from == "start")
 				local padded = pad_aligned(cell, c._computed, c.align)
-				table.insert(line_parts, padded)
+				line = line .. padded
 
 				local cell_spans = nil
 				if type(cell_hl) == "function" then
@@ -469,10 +443,8 @@ function M.render(opts)
 						})
 					end
 				end
-
-				col_start = col_start + #padded + gap_after(i)
 			end
-			table.insert(lines, string.rep(" ", margin) .. join_parts(line_parts))
+			table.insert(lines, line)
 			line_map[#lines] = row._item or row
 
 			if row.separator == true then

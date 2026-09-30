@@ -390,6 +390,23 @@ local function load_view(force_refresh, on_done)
 	end
 end
 
+---@param page_number integer
+---@return boolean
+local function show_cached_page(page_number)
+	local page = state.page_history[page_number]
+	if page == nil then
+		return false
+	end
+	cancel_active_requests()
+	state.current_page = page_number
+	state.set_issues(page.items)
+	state.query = page.query or ""
+	state.error = nil
+	render_if_active()
+	navigation.focus_first_item()
+	return true
+end
+
 function M.next_page()
 	local current = state.page_history[state.current_page]
 	if current == nil or current.next_cursor == nil then
@@ -397,15 +414,7 @@ function M.next_page()
 	end
 
 	local page_number = state.current_page + 1
-	local cached = state.page_history[page_number]
-	if cached ~= nil then
-		cancel_active_requests()
-		state.current_page = page_number
-		state.set_issues(cached.items)
-		state.query = cached.query or ""
-		state.error = nil
-		render_if_active()
-		navigation.focus_first_item()
+	if show_cached_page(page_number) then
 		return
 	end
 
@@ -419,18 +428,7 @@ function M.next_page()
 end
 
 function M.previous_page()
-	local page_number = state.current_page - 1
-	local page = state.page_history[page_number]
-	if page == nil then
-		return
-	end
-	cancel_active_requests()
-	state.current_page = page_number
-	state.set_issues(page.items)
-	state.query = page.query or ""
-	state.error = nil
-	render_if_active()
-	navigation.focus_first_item()
+	show_cached_page(state.current_page - 1)
 end
 
 function M.refresh_view()
@@ -521,7 +519,7 @@ function M.show_issue_details(source_buf)
 		return
 	end
 
-	local lines, highlights = require("atlas.issues.ui.popup").content(issue)
+	local lines, highlights = require("atlas.issues.ui.popup").content(issue, state.provider)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,

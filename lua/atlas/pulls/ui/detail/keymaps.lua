@@ -8,7 +8,7 @@ local actions = require("atlas.pulls.actions")
 local notify = require("atlas.core.notify")
 local links = require("atlas.ui.links")
 
-local custom_registrations = {}
+local registrations = {}
 
 ---@param pr PullRequest
 ---@param buf integer|nil
@@ -76,16 +76,6 @@ local function item(action_id, map_item)
 	local out = vim.tbl_deep_extend("force", {}, map_item)
 	out.key = #keys == 1 and keys[1] or keys
 	return out
-end
-
----@param action_id AtlasKeymapActionId|string
----@return table|nil
-local function remove_item(action_id)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
-		return nil
-	end
-	return { key = (#keys == 1 and keys[1] or keys) }
 end
 
 ---@return boolean
@@ -373,33 +363,17 @@ function M.register(buf)
 		end
 	end)
 	vim.list_extend(general, custom_items)
-	custom_registrations[buf] = custom_items
+	registrations[buf] = general
 	help.register("General", general, { index = 300, buffer = buf })
 end
 
 ---@param buf integer
 function M.remove(buf)
-	help.remove("General", custom_registrations[buf] or {}, { buffer = buf })
-	custom_registrations[buf] = nil
-	local general = {}
-	vim.list_extend(general, links.keymaps(state))
-	utils.insert_if(general, remove_item("ui.next_item"))
-	utils.insert_if(general, remove_item("ui.previous_item"))
-	utils.insert_if(general, remove_item("ui.refresh"))
-	utils.insert_if(general, remove_item("ui.refresh_view"))
-	utils.insert_if(general, remove_item("ui.open_actions"))
-	utils.insert_if(general, remove_item("ui.open_in_browser"))
-	utils.insert_if(general, remove_item("pulls.open_diff"))
-	utils.insert_if(general, remove_item("pulls.checkout"))
-	utils.insert_if(general, remove_item("pulls.edit_title"))
-	utils.insert_if(general, remove_item("pulls.edit_description"))
-	utils.insert_if(general, remove_item("ui.toggle_subscription"))
-	utils.insert_if(general, remove_item("ui.next_panel_tab"))
-	utils.insert_if(general, remove_item("ui.previous_panel_tab"))
-	utils.insert_if(general, remove_item("ui.help"))
-	utils.insert_if(general, remove_item("ui.toggle_panel"))
-	utils.insert_if(general, remove_item("ui.close"))
-	help.remove("General", general, { buffer = buf })
+	local registered = registrations[buf]
+	if registered then
+		help.remove("General", registered, { buffer = buf })
+		registrations[buf] = nil
+	end
 end
 
 return M

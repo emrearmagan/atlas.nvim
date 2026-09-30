@@ -184,7 +184,11 @@ local function check_jira()
 		return
 	end
 
-	check_credentials(provider, { "email", "token" }, "Jira")
+	local credentials = { "base_url", "token" }
+	if provider.auth_method ~= "bearer" then
+		table.insert(credentials, "email")
+	end
+	check_credentials(provider, credentials, "Jira")
 	check_https_url(provider.base_url, "providers.jira.base_url")
 	check_provider_views("jira")
 end

@@ -38,6 +38,15 @@ local function find_command(name)
 	end
 end
 
+---@param arglead string
+---@param options string[]
+---@return string[]
+local function complete_options(arglead, options)
+	return vim.tbl_filter(function(option)
+		return option:find(arglead, 1, true) == 1
+	end, options)
+end
+
 ---@param domain "pulls"|"issues"
 ---@param arglead string
 ---@return string[]
@@ -46,18 +55,7 @@ local function complete_providers(domain, arglead)
 	for _, provider in ipairs(providers.configured(domain)) do
 		table.insert(ids, provider.id)
 	end
-	return vim.tbl_filter(function(provider)
-		return provider:find(arglead, 1, true) == 1
-	end, ids)
-end
-
----@param arglead string
----@param options string[]
----@return string[]
-local function complete_options(arglead, options)
-	return vim.tbl_filter(function(option)
-		return option:find(arglead, 1, true) == 1
-	end, options)
+	return complete_options(arglead, ids)
 end
 
 ---@param args string[]
@@ -382,17 +380,15 @@ local function complete(arglead, cmdline, cursorpos)
 	cmdline = cmdline:sub(1, cursorpos)
 	local words = vim.split(vim.trim(cmdline), "%s+")
 	if #words < 2 or (#words == 2 and not cmdline:match("%s$")) then
-		return vim.tbl_filter(
-			function(name)
-				return name:find(arglead, 1, true) == 1
-			end,
+		return complete_options(
+			arglead:lower(),
 			vim.tbl_map(function(command)
 				return command.name
 			end, M.commands)
 		)
 	end
 
-	local command = find_command(words[2])
+	local command = find_command(words[2]:lower())
 	local args = vim.list_slice(words, 3)
 	if cmdline:match("%s$") then
 		args[#args + 1] = ""

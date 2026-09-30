@@ -1,15 +1,10 @@
 local author_completion = require("atlas.providers.bitbucket.completion.author")
 
 describe("Bitbucket author completion", function()
-	local original_trim
 	local original_tbl_values
 
 	before_each(function()
-		original_trim = vim.trim
 		original_tbl_values = vim.tbl_values
-		vim.trim = function(value)
-			return tostring(value or ""):match("^%s*(.-)%s*$")
-		end
 		vim.tbl_values = function(value)
 			local result = {}
 			for _, item in pairs(value or {}) do
@@ -20,7 +15,6 @@ describe("Bitbucket author completion", function()
 	end)
 
 	after_each(function()
-		vim.trim = original_trim
 		vim.tbl_values = original_tbl_values
 	end)
 

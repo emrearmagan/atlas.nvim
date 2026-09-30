@@ -4,6 +4,7 @@ local help = require("atlas.ui.popups.help")
 local navigation = require("atlas.ui.navigation")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+local registrations = {}
 
 local function domain_dashboard()
 	local domain = require("atlas.ui.state").domain
@@ -21,22 +22,6 @@ local function item(action_id, map_item)
 
 	local out = vim.tbl_deep_extend("force", {}, map_item)
 	out.key = #keys == 1 and keys[1] or keys
-	return out
-end
-
----@param action_id AtlasKeymapActionId|string
----@param mode string|string[]|nil
----@return table|nil
-local function remove_item(action_id, mode)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
-		return nil
-	end
-
-	local out = { key = (#keys == 1 and keys[1] or keys) }
-	if mode ~= nil then
-		out.mode = mode
-	end
 	return out
 end
 
@@ -167,24 +152,17 @@ function M.register(buf)
 	M.remove(buf)
 	navigation.attach(buf)
 	help.register("General", items, { index = 210, buffer = buf })
+	registrations[buf] = items
 end
 
 ---@param buf integer
 function M.remove(buf)
 	navigation.detach(buf)
-	local items = {}
-	utils.insert_if(items, remove_item("ui.next_item"))
-	utils.insert_if(items, remove_item("ui.previous_item"))
-	utils.insert_if(items, remove_item("ui.first_item"))
-	utils.insert_if(items, remove_item("ui.last_item"))
-	utils.insert_if(items, remove_item("ui.help"))
-	utils.insert_if(items, remove_item("ui.close"))
-	utils.insert_if(items, remove_item("ui.toggle_panel"))
-	utils.insert_if(items, remove_item("ui.next_panel_tab"))
-	utils.insert_if(items, remove_item("ui.previous_panel_tab"))
-	utils.insert_if(items, remove_item("ui.notifications.open"))
-
-	help.remove("General", items, { buffer = buf })
+	local registered = registrations[buf]
+	if registered then
+		help.remove("General", registered, { buffer = buf })
+		registrations[buf] = nil
+	end
 end
 
 return M

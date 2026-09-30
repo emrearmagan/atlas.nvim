@@ -14,8 +14,9 @@ local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 local PADDING_X = 1
 
 ---@param buf integer
+---@param lines string[]
 ---@param spans table[]
-local function apply_spans(buf, spans)
+local function apply_spans(buf, lines, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	for _, span in ipairs(spans) do
 		if span.line ~= nil and span.line_hl_group ~= nil then
@@ -23,7 +24,7 @@ local function apply_spans(buf, spans)
 				line_hl_group = span.line_hl_group,
 			})
 		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
-			local line_text = vim.api.nvim_buf_get_lines(buf, span.line, span.line + 1, false)[1] or ""
+			local line_text = lines[span.line + 1] or ""
 			local max_col = #line_text
 			local sc = math.min(span.start_col, max_col)
 			local ec = math.min(span.end_col, max_col)
@@ -152,7 +153,7 @@ function M.render(tab_items, get_tab_module)
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	apply_spans(buf, spans)
+	apply_spans(buf, lines, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
 

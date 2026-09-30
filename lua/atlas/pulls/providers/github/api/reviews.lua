@@ -65,6 +65,14 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
 }
 ]]
 
+local REVIEWER_FIELDS = [[
+... on User{id login name}
+... on Bot{id login}
+... on Mannequin{id login name}
+... on Team{id teamName:name slug organization{login}}
+... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]]
+
 local REVIEW_MENTIONS_QUERY = [[
 query($owner:String!,$repo:String!,$number:Int!){
   repository(owner:$owner,name:$repo){
@@ -74,11 +82,7 @@ query($owner:String!,$repo:String!,$number:Int!){
       reviewRequests(first:100){
         nodes{
           requestedReviewer{
-            ... on User{id login name}
-            ... on Bot{id login}
-            ... on Mannequin{id login name}
-            ... on Team{id teamName:name slug organization{login}}
-            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]] .. REVIEWER_FIELDS .. [[
           }
         }
       }
@@ -101,11 +105,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
       reviewRequests(first:100){
         nodes{
           requestedReviewer{
-            ... on User{id login name}
-            ... on Bot{id login}
-            ... on Mannequin{id login name}
-            ... on Team{id teamName:name slug organization{login}}
-            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]] .. REVIEWER_FIELDS .. [[
           }
         }
       }
@@ -113,11 +113,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
         nodes{
           ... on ReviewRequestedEvent{
             requestedReviewer{
-              ... on User{id login name}
-              ... on Bot{id login}
-              ... on Mannequin{id login name}
-              ... on Team{id teamName:name slug organization{login}}
-              ... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]] .. REVIEWER_FIELDS .. [[
             }
           }
         }
@@ -147,11 +143,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
       reviewRequests(first:100){
         nodes{
           requestedReviewer{
-            ... on User{id login name}
-            ... on Bot{id login}
-            ... on Mannequin{id login name}
-            ... on Team{id teamName:name slug organization{login}}
-            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]] .. REVIEWER_FIELDS .. [[
           }
         }
       }
@@ -159,11 +151,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
         nodes{
           ... on ReviewRequestedEvent{
             requestedReviewer{
-              ... on User{id login name}
-              ... on Bot{id login}
-              ... on Mannequin{id login name}
-              ... on Team{id teamName:name slug organization{login}}
-              ... on EnterpriseTeam{id teamName:name slug combinedSlug}
+]] .. REVIEWER_FIELDS .. [[
             }
           }
         }
@@ -434,34 +422,23 @@ local function finish(pr, review, event, body, on_done)
 		return create(pr, pull_request_id, event, body, done)
 	end
 
-	local cancelled = false
-	local current
-	current = find_pending(pr, function(pull_request_id, pending, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(callback)
+		return find_pending(pr, callback)
+	end, function(pull_request_id, pending, err)
 		if err then
 			done(false, err)
 			return
 		end
 		M.update(review, pending)
-		if pending then
-			current = submit_pending(pr, tostring(pending.id), event, body, done)
-		else
-			current = create(pr, tostring(pull_request_id), event, body, done)
-		end
-		if cancelled and current then
-			current.cancel()
-		end
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
+		requests.run(function(callback)
+			if pending then
+				return submit_pending(pr, tostring(pending.id), event, body, callback)
 			end
-		end,
-	}
+			return create(pr, tostring(pull_request_id), event, body, callback)
+		end, done)
+	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -1062,38 +1039,35 @@ end
 ---@param pr PullRequest
 ---@param review PullsReview|nil
 ---@param commit_oid string
----@param use_review fun(review_id: string): { cancel: fun() }|nil
----@param on_error fun(err: string)
+---@param use_review fun(review_id: string, done: fun(result: any, err: string|nil)): { cancel: fun() }|nil
+---@param on_done fun(result: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.with_pending(pr, review, commit_oid, use_review, on_error)
+function M.with_pending(pr, review, commit_oid, use_review, on_done)
 	---@cast pr GitHubPullRequest
-	local function use(value)
+	local function use(value, done)
 		if commit_oid ~= "" and value.commit_hash and commit_oid ~= value.commit_hash then
-			on_error("Pending review belongs to a different commit")
+			done(nil, "Pending review belongs to a different commit")
 			return nil
 		end
-		return use_review(value.id)
+		return use_review(value.id, done)
 	end
 
 	if review and review.pending and review.id then
-		return use(review)
+		return use(review, on_done)
 	end
 
 	local requests = request_scope.new()
-	local cancelled = false
-	local current_handle
 	local function continue_with(value)
-		current_handle = use(value)
-		if cancelled and current_handle then
-			current_handle.cancel()
-		end
+		requests.run(function(done)
+			return use(value, done)
+		end, on_done)
 	end
 	local function create_review(pull_request_id)
 		requests.run(function(done)
 			return create_pending(pr, pull_request_id, review, commit_oid, done)
 		end, function(review_id, err)
 			if err then
-				on_error(err)
+				on_done(nil, err)
 				return
 			end
 			continue_with({ id = review_id })
@@ -1103,7 +1077,7 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 	local pull_request_id = pr.node_id or ""
 	if review and not review.pending then
 		if pull_request_id == "" then
-			on_error("Missing pull request node id")
+			on_done(nil, "Missing pull request node id")
 			return nil
 		end
 		create_review(pull_request_id)
@@ -1112,7 +1086,7 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 			return find_pending(pr, done)
 		end, function(found_pr_id, pending, err)
 			if err then
-				on_error(err)
+				on_done(nil, err)
 				return
 			end
 			local found = from_node(pending)
@@ -1124,15 +1098,7 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 			end
 		end)
 	end
-	return {
-		cancel = function()
-			cancelled = true
-			requests.cancel()
-			if current_handle then
-				current_handle.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -1140,11 +1106,11 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.start(pr, review, on_done)
-	return M.with_pending(pr, review, pr.source.commit_hash, function()
-		on_done(true, nil)
+	return M.with_pending(pr, review, pr.source.commit_hash, function(_, done)
+		done(true, nil)
 		return nil
-	end, function(err)
-		on_done(false, err)
+	end, function(ok, err)
+		on_done(ok == true, err)
 	end)
 end
 

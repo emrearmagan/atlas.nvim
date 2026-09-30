@@ -198,6 +198,19 @@ function M.reply_comment(issue, parent, body, on_done)
 	})
 end
 
+---@param path string
+---@param iid integer
+---@param note_id string
+---@param discussion_id string
+---@return string
+local function note_endpoint(path, iid, note_id, discussion_id)
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	if discussion_id ~= "" then
+		endpoint = endpoint .. "/discussions/" .. discussion_id
+	end
+	return endpoint .. "/notes/" .. note_id
+end
+
 ---@param issue Issue
 ---@param comment IssueComment
 ---@param body string
@@ -216,16 +229,7 @@ function M.edit_comment(issue, comment, body, on_done)
 
 	local note_id = tostring(comment.id)
 	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
-	if discussion_id ~= "" then
-		endpoint = string.format(
-			"/projects/%s/issues/%d/discussions/%s/notes/%s",
-			service.url_encode(path),
-			iid,
-			discussion_id,
-			note_id
-		)
-	end
+	local endpoint = note_endpoint(path, iid, note_id, discussion_id)
 	return service.request("PUT", endpoint, { body = body }, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -257,16 +261,7 @@ function M.delete_comment(issue, comment, on_done)
 
 	local note_id = tostring(comment.id)
 	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
-	if discussion_id ~= "" then
-		endpoint = string.format(
-			"/projects/%s/issues/%d/discussions/%s/notes/%s",
-			service.url_encode(path),
-			iid,
-			discussion_id,
-			note_id
-		)
-	end
+	local endpoint = note_endpoint(path, iid, note_id, discussion_id)
 	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)

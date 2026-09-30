@@ -1,4 +1,5 @@
 local icons = require("atlas.ui.shared.icons")
+local presentation = require("atlas.pulls.ui.presentation")
 
 local M = {}
 
@@ -143,35 +144,6 @@ local function github()
 end
 
 local function gitlab()
-	local successful = { icons.pulls_status("successful") }
-	local failed = { icons.pulls_status("failed") }
-	local in_progress = { icons.pulls_status("inprogress") }
-	local muted = { icons.pulls_status("inprogress"), "AtlasTextMuted" }
-	local stopped = { icons.pulls_status("stopped") }
-	local statuses = {
-		mergeable = successful,
-		checking = in_progress,
-		unchecked = muted,
-		ci_must_pass = failed,
-		ci_still_running = in_progress,
-		discussions_not_resolved = failed,
-		draft_status = stopped,
-		not_approved = in_progress,
-		not_open = stopped,
-		blocked_status = failed,
-		merge_request_blocked = failed,
-		conflict = failed,
-		need_rebase = failed,
-		preparing = in_progress,
-		requested_changes = failed,
-		status_checks_must_pass = failed,
-		security_policy_violations = failed,
-		jira_association_missing = failed,
-		external_status_checks = in_progress,
-		approvals_syncing = muted,
-		commits_status = muted,
-		policies_denied = failed,
-	}
 	local ci_column = {
 		key = "ci",
 		name = icons.pulls("pipeline") or icons.pulls_status("inprogress"),
@@ -185,12 +157,12 @@ local function gitlab()
 		columns = columns(icons.general("comment"), { ci_column }, {}),
 		values = function(pr)
 			---@cast pr GitLabPullRequest
-			local status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
-			if status == "" then
+			local status = presentation.gitlab_merge_status(pr)
+			if not status then
 				return { ci = "", ci_hl = "AtlasTextMuted" }
 			end
-			local icon = statuses[status] or muted
-			return { ci = icon[1], ci_hl = icon[2] or "AtlasTextMuted" }
+			local icon, hl = icons.pulls_status(status)
+			return { ci = icon, ci_hl = hl }
 		end,
 		highlight = function(row, col, ctx)
 			if col.key == "ci" then
@@ -203,11 +175,6 @@ local function gitlab()
 end
 
 local function bitbucket()
-	local review_icons = {
-		approved = { icons.pulls_status("successful") },
-		changes_requested = { icons.pulls_status("failed") },
-		pending = { icons.pulls_status("inprogress"), "AtlasTextMuted" },
-	}
 	local task_column = {
 		key = "tasks",
 		name = icons.pulls("tasks"),
@@ -228,19 +195,12 @@ local function bitbucket()
 		columns = columns(icons.general("conversation"), { task_column, review_column }, {}),
 		values = function(pr)
 			---@cast pr BitbucketPullRequest
-			local decision = "pending"
-			for _, reviewer in ipairs(pr.reviewers or {}) do
-				if reviewer.decision == "changes_requested" then
-					decision = "changes_requested"
-				elseif reviewer.decision == "approved" and decision == "pending" then
-					decision = "approved"
-				end
-			end
-			local review = review_icons[decision]
+			local status = presentation.review_progress(pr.reviewers)
+			local review, hl = icons.pulls_status(status or "inprogress")
 			return {
 				tasks = tostring(pr.tasks_count or 0),
-				review = review[1],
-				review_hl = review[2] or "AtlasTextMuted",
+				review = review,
+				review_hl = (status == nil or status == "inprogress") and "AtlasTextMuted" or hl,
 			}
 		end,
 		highlight = function(row, col, ctx)

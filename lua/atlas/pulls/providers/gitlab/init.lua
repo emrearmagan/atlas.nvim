@@ -34,46 +34,6 @@ local gitlab_query = require("atlas.providers.gitlab.query")
 local request_scope = require("atlas.core.requests")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_conversation(pr, opts, on_done)
-	local requests = request_scope.new()
-	requests.all({
-		activity = function(done)
-			return activity_api.fetch_activity(pr, opts, done)
-		end,
-		comments = function(done)
-			return comments_api.fetch_conversation_comments(pr, opts, done)
-		end,
-	}, function(values, errors)
-		if values.activity == nil and values.comments == nil then
-			on_done(nil, errors.activity or errors.comments or "Failed to fetch conversation")
-			return
-		end
-		local items = {}
-		for _, comment in ipairs(values.comments or {}) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_on = comment.created_on or "",
-				entity = comment,
-			})
-		end
-		for _, event in ipairs(values.activity or {}) do
-			table.insert(items, {
-				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
-				kind = "activity",
-				created_on = event.date or "",
-				entity = event,
-			})
-		end
-		on_done(items, errors.activity or errors.comments)
-	end)
-	return requests
-end
-
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
 	local options = config.domain_options("gitlab", "pulls") or {}
@@ -165,7 +125,7 @@ return {
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
 			comment_completion = author_completion.for_pulls,
-			fetch_conversation = fetch_conversation,
+			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,

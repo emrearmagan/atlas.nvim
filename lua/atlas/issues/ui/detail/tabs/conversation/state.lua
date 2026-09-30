@@ -157,15 +157,20 @@ function M.toggle_comment(comment)
 end
 
 ---@param root_id any
+---@param has_replies boolean
 ---@return boolean
-function M.is_collapsed(root_id)
-	return M.collapsed[tostring(root_id)] == true
+function M.is_collapsed(root_id, has_replies)
+	local collapsed = M.collapsed[tostring(root_id)]
+	if collapsed == nil then
+		return has_replies
+	end
+	return collapsed
 end
 
 ---@param root_id any
 function M.toggle(root_id)
 	local key = tostring(root_id)
-	M.collapsed[key] = not M.collapsed[key]
+	M.collapsed[key] = not M.is_collapsed(root_id, true)
 end
 
 ---@param threads IssuesCommentThreadNode[]
@@ -176,7 +181,7 @@ function M.toggle_all_threads(threads)
 	for _, thread in ipairs(threads) do
 		if #thread.children > 0 then
 			table.insert(roots, thread.comment)
-			if M.is_collapsed(thread.comment.id) then
+			if M.is_collapsed(thread.comment.id, true) then
 				expand = true
 			end
 		end

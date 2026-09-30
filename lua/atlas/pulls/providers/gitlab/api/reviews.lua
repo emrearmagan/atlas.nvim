@@ -65,10 +65,7 @@ end
 ---@param path string
 ---@param iid integer
 local function invalidate_review_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
+	comments_api.invalidate_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
 	service.delete_memory_cache(metadata_cache_key(path, iid))
 end
@@ -162,18 +159,25 @@ local function fetch_metadata(pr, opts, on_done)
 
 	local reviewers, history = {}, {}
 	local after
-	local current
-	local cancelled = false
+	local requests = request_scope.new()
 
 	local function fetch_page()
-		current = service.graphql(REVIEW_METADATA_QUERY, {
-			path = path,
-			iid = tostring(iid),
-			after = after,
-		}, function(result, err)
-			if cancelled then
-				return
-			end
+		requests.run(function(done)
+			return service.graphql(
+				REVIEW_METADATA_QUERY,
+				{
+					path = path,
+					iid = tostring(iid),
+					after = after,
+				},
+				done,
+				{
+					action = "Fetch MR review metadata",
+					project_path = path,
+					iid = iid,
+				}
+			)
+		end, function(result, err)
 			if err then
 				on_done(nil, err)
 				return
@@ -233,22 +237,11 @@ local function fetch_metadata(pr, opts, on_done)
 			}
 			service.set_memory_cache(cache_key, data)
 			on_done(data, nil)
-		end, {
-			action = "Fetch MR review metadata",
-			project_path = path,
-			iid = iid,
-		})
+		end)
 	end
 
 	fetch_page()
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param refs GitLabPullRequestDiffRefs|nil

@@ -351,7 +351,6 @@ function M.open(opts)
 		end
 		state.root = root
 		state.root_loading = false
-		render(state)
 	end)
 end
 

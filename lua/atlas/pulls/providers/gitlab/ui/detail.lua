@@ -49,14 +49,13 @@ function M.chips(_pr, details, loading)
 			local fg = label.text_color and label.text_color:gsub("^#", "") or nil
 			local hl = "AtlasTabInactive"
 			if bg and bg:match("^%x%x%x%x%x%x$") then
-				hl = "AtlasGLLabel_" .. bg
-				local opts = { bg = "#" .. bg, bold = true }
-				if fg and fg:match("^%x%x%x%x%x%x$") then
-					opts.fg = "#" .. fg
-				else
-					opts.fg = "#1e1e2e"
+				if not fg or not fg:match("^%x%x%x%x%x%x$") then
+					fg = "1e1e2e"
 				end
-				vim.api.nvim_set_hl(0, hl, opts)
+				hl = "AtlasGLLabel_" .. bg .. "_" .. fg
+				if next(vim.api.nvim_get_hl(0, { name = hl, create = false })) == nil then
+					vim.api.nvim_set_hl(0, hl, { bg = "#" .. bg, fg = "#" .. fg, bold = true })
+				end
 			end
 			table.insert(chips, { label = name, hl = hl })
 			shown = shown + 1

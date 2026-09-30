@@ -71,16 +71,6 @@ local function item(action_id, map_item)
 	return out
 end
 
----@param action_id AtlasKeymapActionId|string
----@return table|nil
-local function remove_item(action_id)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
-		return nil
-	end
-	return { key = (#keys == 1 and keys[1] or keys) }
-end
-
 ---@param buf integer
 function M.register(buf)
 	local items = {}
@@ -247,7 +237,7 @@ function M.register(buf)
 	end)
 	vim.list_extend(general, custom_items)
 	help.register("General", general, { index = 300, buffer = buf })
-	registrations[buf] = custom_items
+	registrations[buf] = general
 end
 
 ---@param buf integer
@@ -257,21 +247,6 @@ function M.remove(buf)
 		help.remove("General", registered, { buffer = buf })
 		registrations[buf] = nil
 	end
-	local general = {}
-	vim.list_extend(general, links.keymaps(state))
-	utils.insert_if(general, remove_item("ui.next_item"))
-	utils.insert_if(general, remove_item("ui.previous_item"))
-	utils.insert_if(general, remove_item("ui.refresh"))
-	utils.insert_if(general, remove_item("ui.refresh_view"))
-	utils.insert_if(general, remove_item("ui.open_actions"))
-	utils.insert_if(general, remove_item("ui.open_in_browser"))
-	utils.insert_if(general, remove_item("ui.toggle_subscription"))
-	utils.insert_if(general, remove_item("ui.next_panel_tab"))
-	utils.insert_if(general, remove_item("ui.previous_panel_tab"))
-	utils.insert_if(general, remove_item("ui.help"))
-	utils.insert_if(general, remove_item("ui.toggle_panel"))
-	utils.insert_if(general, remove_item("ui.close"))
-	help.remove("General", general, { buffer = buf })
 end
 
 return M

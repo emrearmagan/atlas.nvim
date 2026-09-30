@@ -7,8 +7,7 @@ local request_scope = require("atlas.core.requests")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
-local labels_api = require("atlas.issues.providers.gitlab.api.labels")
-local milestones_api = require("atlas.issues.providers.gitlab.api.milestones")
+local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local users_api = require("atlas.providers.gitlab.users")
 
 ---@class GitLabIssueEditorLabel
@@ -46,13 +45,13 @@ local users_api = require("atlas.providers.gitlab.users")
 local function default_pickers(project_path)
 	return {
 		list_labels = function(cb)
-			return labels_api.list(project_path, cb)
+			return metadata_api.list_labels(project_path, cb)
 		end,
 		list_assignees = function(cb)
 			return users_api.list_members(project_path, "", cb)
 		end,
 		list_milestones = function(cb)
-			return milestones_api.list(project_path, cb)
+			return metadata_api.list_milestones(project_path, cb)
 		end,
 	}
 end

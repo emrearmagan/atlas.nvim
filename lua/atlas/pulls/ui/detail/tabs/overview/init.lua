@@ -69,6 +69,21 @@ function M.on_select(pr, refresh, opts)
 	end
 end
 
+---@param title string
+---@param message string
+---@param width integer
+---@param lines string[]
+---@param spans table[]
+local function render_error(title, message, width, lines, spans)
+	utils.push(lines, spans, title, "AtlasColumnHeader", PADDING_X)
+	local content = {
+		lines = { message },
+		spans = { { line = 0, start_col = 0, end_col = #message, hl_group = "AtlasLogError" } },
+	}
+	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
+	table.insert(lines, "")
+end
+
 -- Reviewers
 
 local DECISION_GROUPS = { "approved", "changes_requested", "reviewed", "pending" }
@@ -137,19 +152,7 @@ local function render_reviewers(width, lines, spans)
 	end
 
 	if type(state.reviewers) == "string" then
-		utils.push(lines, spans, "Reviewers", "AtlasColumnHeader", PADDING_X)
-		local err_text = state.reviewers
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { err_text },
-					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+		render_error("Reviewers", state.reviewers, width, lines, spans)
 		return
 	end
 
@@ -198,18 +201,11 @@ local function render_reviewers(width, lines, spans)
 		})
 
 		local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
-		local line_offset = #content.lines
-		for _, line in ipairs(other_content.lines) do
-			table.insert(content.lines, line)
-		end
-		for _, span in ipairs(other_content.spans) do
-			table.insert(content.spans, {
-				line = line_offset + span.line,
-				start_col = span.start_col,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
-		end
+		utils.append_block(
+			content.lines,
+			content.spans,
+			{ lines = other_content.lines, highlights = other_content.spans }
+		)
 	end
 
 	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
@@ -231,19 +227,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 	end
 
 	if type(detail.pipelines) == "string" then
-		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = detail.pipelines
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { err_text },
-					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+		render_error("Pipelines", detail.pipelines, width, lines, spans)
 		return
 	end
 

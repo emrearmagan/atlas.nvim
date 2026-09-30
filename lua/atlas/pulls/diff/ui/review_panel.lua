@@ -3,7 +3,7 @@ local M = {}
 local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
 local help = require("atlas.ui.popups.help")
-local highlights = require("atlas.ui.shared.highlights")
+local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local keymap_resolver = require("atlas.core.keymaps")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
@@ -107,16 +107,6 @@ end
 ---@return string
 local function reviewer_name(author)
 	return author and (author.nickname or author.name) or "Unknown"
-end
-
----@param name string
----@return string
-local function reviewer_hl(name)
-	local normalized = vim.trim(name):lower()
-	if normalized == "" or normalized == "unknown" or normalized == "none" then
-		return "AtlasTextMuted"
-	end
-	return highlights.dynamic_for(normalized) or "AtlasTextMuted"
 end
 
 ---@param state PullsReviewHistoryState|"pending"
@@ -244,7 +234,7 @@ local function render_awaiting_reviewers(item, width, expanded)
 				line = #lines - 1,
 				start_col = #prefix,
 				end_col = #lines[#lines],
-				hl_group = reviewer_hl(full_name),
+				hl_group = presentation.author_hl(full_name),
 			})
 			line_map[#lines] = { reviewer_group = item, tree_key = item.key }
 		end
@@ -298,26 +288,22 @@ local function render_reviewer(item, width, expanded, history_expanded, head_rev
 	local name_width = math.max(1, width - vim.api.nvim_strwidth(reviewer_prefix) - vim.api.nvim_strwidth(suffix) - 2)
 	local name = utils.truncate(reviewer_name(item.author), name_width)
 	local line = ""
-	local marks = {}
 	local function add(text, hl)
 		local start_col = #line
 		line = line .. text
 		if hl then
-			table.insert(marks, { start_col, #line, hl })
+			table.insert(spans, { line = 0, start_col = start_col, end_col = #line, hl_group = hl })
 		end
 	end
 	add(expander, expander_hl)
 	add(" ")
 	add(user_icon, user_hl)
 	add(" ")
-	add(name, reviewer_hl(reviewer_name(item.author)))
+	add(name, presentation.author_hl(reviewer_name(item.author)))
 	add("  ")
 	add(state_icon .. " " .. state_label, state_hl)
 	add(previous_text, "AtlasTextMuted")
 	table.insert(lines, line)
-	for _, mark in ipairs(marks) do
-		table.insert(spans, { line = 0, start_col = mark[1], end_col = mark[2], hl_group = mark[3] })
-	end
 	line_map[1] = {
 		reviewer = item,
 		tree_key = #history > 0 and item.key or nil,
@@ -584,33 +570,19 @@ end
 ---@return table[], table[], table[], table[], table[]
 local function panel_items(data)
 	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
-	for _, thread in ipairs(comment_threads.group_comments(data.comments, data.tasks)) do
-		local position = thread.comment.file or thread.comment.inline
-		table.insert(has_pending(thread) and pending or published_comments, {
-			kind = "comment",
+	local comments_and_tasks = vim.list_extend(vim.list_extend({}, data.comments), data.tasks)
+	for _, thread in ipairs(comment_threads.group_comments(comments_and_tasks)) do
+		local comment = thread.comment
+		local position = comment.file or comment.inline
+		local items = comment.is_task and standalone_tasks or (has_pending(thread) and pending or published_comments)
+		table.insert(items, {
+			kind = comment.is_task and "task" or "comment",
 			thread = thread,
-			key = comment_threads.comment_key(thread.comment),
+			key = comment_threads.comment_key(comment),
 			path = position and position.path or "",
-			line = thread.comment.inline and (thread.comment.inline.to or thread.comment.inline.from) or 0,
-			timestamp = tostring(thread.comment.created_on or ""),
+			line = comment.inline and (comment.inline.to or comment.inline.from) or 0,
+			timestamp = tostring(comment.created_on or ""),
 		})
-	end
-	local comment_ids = {}
-	for _, comment in ipairs(data.comments) do
-		comment_ids[tostring(comment.id)] = true
-	end
-	for _, task in ipairs(data.tasks) do
-		if not task.parent_id or not comment_ids[tostring(task.parent_id)] then
-			local position = task.file or task.inline
-			table.insert(standalone_tasks, {
-				kind = "task",
-				thread = { comment = task, children = {} },
-				key = comment_threads.comment_key(task),
-				path = position and position.path or "",
-				line = task.inline and (task.inline.to or task.inline.from) or 0,
-				timestamp = tostring(task.created_on or ""),
-			})
-		end
 	end
 	if data.note_target then
 		for _, note in ipairs(data.notes) do

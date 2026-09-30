@@ -6,8 +6,10 @@ local header = require("atlas.pulls.ui.components.header")
 ---@param hex string
 ---@return string
 local function label_hl(hex)
-	local name = string.format("AtlasGHLabel_%s", hex)
-	vim.api.nvim_set_hl(0, name, { fg = "#1e1e2e", bg = "#" .. hex, bold = true })
+	local name = string.format("AtlasGHLabel_%s_1e1e2e", hex)
+	if next(vim.api.nvim_get_hl(0, { name = name, create = false })) == nil then
+		vim.api.nvim_set_hl(0, name, { fg = "#1e1e2e", bg = "#" .. hex, bold = true })
+	end
 	return name
 end
 

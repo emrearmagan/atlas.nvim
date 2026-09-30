@@ -1,4 +1,5 @@
 local request_scope = require("atlas.core.requests")
+local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 
 ---@class PullsReviewState
 ---@field data PullsReviewData|nil
@@ -55,25 +56,13 @@ function M.toggle_threads(roots)
 end
 
 ---@param comments PullsComment[]
----@return PullsComment[]
-local function thread_roots(comments)
-	local ids = {}
-	for _, comment in ipairs(comments) do
-		ids[tostring(comment.id)] = true
-	end
-	local roots = {}
-	for _, comment in ipairs(comments) do
-		if comment.parent_id == nil or not ids[tostring(comment.parent_id)] then
-			table.insert(roots, comment)
-		end
-	end
-	return roots
-end
-
----@param comments PullsComment[]
 ---@return boolean
 function M.toggle_all_folds(comments)
-	return M.toggle_threads(thread_roots(comments))
+	local roots = {}
+	for _, node in ipairs(comment_threads.group_comments(comments)) do
+		table.insert(roots, node.comment)
+	end
+	return M.toggle_threads(roots)
 end
 
 return M

@@ -13,7 +13,6 @@ local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local cli = require("atlas.providers.github.client")
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local issue_cache = require("atlas.issues.providers.github.api.cache")
 
 ---@param ctx AtlasIssueActionContext
 ---@param on_done fun(slug: string|nil, err: string|nil)
@@ -571,29 +570,17 @@ end
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitHubIssue
-	local node_id = tostring(issue.node_id or "")
-	local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
-	local gql =
-		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	require("atlas.providers.github.client").gh(
-		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
-		function(_, err)
-			if err then
-				notify.error(tostring(err))
-				done(nil, tostring(err))
-				return
-			end
-			issue_cache.invalidate(issue.key)
-			issue.is_subscribed = (next_state == "SUBSCRIBED")
-			notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
-			done({ issue_key = issue.key }, nil)
-		end,
-		{
-			action = issue.is_subscribed and "Unsubscribe from issue" or "Subscribe to issue",
-			key = issue.key,
-		}
-	)
+	issues_api.set_subscription(issue, issue.is_subscribed ~= true, function(subscribed, err)
+		if err then
+			notify.error(tostring(err))
+			done(nil, tostring(err))
+			return
+		end
+		issue.is_subscribed = subscribed
+		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+		done({ issue_key = issue.key }, nil)
+	end)
 end
 
 register({

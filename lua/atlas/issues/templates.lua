@@ -220,6 +220,89 @@ function M.delete(name)
 end
 
 ---@param on_done fun(err: string|nil)
+local function create_template(on_done)
+	markdown_editor.open({
+		key = string.format("template_new_%d", vim.loop.hrtime()),
+		title = " New Issue Template ",
+		initial_text = "",
+		on_save = function(text)
+			local markdown = tostring(text or "")
+			vim.ui.input({ prompt = "Template name: " }, function(name_input)
+				if name_input == nil then
+					on_done()
+					return
+				end
+
+				local name = vim.trim(name_input)
+				if name == "" then
+					on_done("Template name is required")
+					return
+				end
+
+				write_with_confirmation(name, markdown, function(_, err)
+					on_done(err)
+				end)
+			end)
+		end,
+		on_cancel = function()
+			on_done()
+		end,
+	})
+end
+
+---@param selected IssueTemplateInfo
+---@param on_done fun(err: string|nil)
+local function edit_template(selected, on_done)
+	local content, read_err = M.read(selected.name)
+	if read_err then
+		on_done(read_err)
+		return
+	end
+
+	local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
+	markdown_editor.open({
+		key = key,
+		title = string.format(" Template: %s ", selected.name),
+		initial_text = content,
+		actions = {
+			{
+				key = "<C-d>",
+				description = "delete",
+				callback = function(editor_context)
+					vim.ui.input({
+						prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
+					}, function(confirm)
+						if vim.trim(confirm or ""):lower() ~= "y" then
+							return
+						end
+
+						local deleted, delete_err = M.delete(selected.name)
+						if not deleted then
+							on_done(delete_err or "Failed to delete template")
+							return
+						end
+
+						editor_context.close()
+						on_done()
+					end)
+				end,
+			},
+		},
+		on_save = function(text)
+			local ok, write_err = M.write(selected.name, text, { overwrite = true })
+			if not ok then
+				on_done(write_err or "Failed to update template")
+				return
+			end
+			on_done()
+		end,
+		on_cancel = function()
+			on_done()
+		end,
+	})
+end
+
+---@param on_done fun(err: string|nil)
 function M.manage(on_done)
 	local finished = false
 	local function finish(err)
@@ -250,33 +333,7 @@ function M.manage(on_done)
 			end
 
 			if choice.id == "create" then
-				markdown_editor.open({
-					key = string.format("template_new_%d", vim.loop.hrtime()),
-					title = " New Issue Template ",
-					initial_text = "",
-					on_save = function(text)
-						local markdown = tostring(text or "")
-						vim.ui.input({ prompt = "Template name: " }, function(name_input)
-							if name_input == nil then
-								finish()
-								return
-							end
-
-							local name = vim.trim(name_input)
-							if name == "" then
-								finish("Template name is required")
-								return
-							end
-
-							write_with_confirmation(name, markdown, function(_, err)
-								finish(err)
-							end)
-						end)
-					end,
-					on_cancel = function()
-						finish()
-					end,
-				})
+				create_template(finish)
 				return
 			end
 
@@ -296,53 +353,7 @@ function M.manage(on_done)
 					return
 				end
 
-				local content, read_err = M.read(selected.name)
-				if read_err then
-					finish(read_err)
-					return
-				end
-
-				local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
-				markdown_editor.open({
-					key = key,
-					title = string.format(" Template: %s ", selected.name),
-					initial_text = content,
-					actions = {
-						{
-							key = "<C-d>",
-							description = "delete",
-							callback = function(editor_context)
-								vim.ui.input({
-									prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
-								}, function(confirm)
-									if vim.trim(confirm or ""):lower() ~= "y" then
-										return
-									end
-
-									local deleted, delete_err = M.delete(selected.name)
-									if not deleted then
-										finish(delete_err or "Failed to delete template")
-										return
-									end
-
-									editor_context.close()
-									finish()
-								end)
-							end,
-						},
-					},
-					on_save = function(text)
-						local ok, write_err = M.write(selected.name, text, { overwrite = true })
-						if not ok then
-							finish(write_err or "Failed to update template")
-							return
-						end
-						finish()
-					end,
-					on_cancel = function()
-						finish()
-					end,
-				})
+				edit_template(selected, finish)
 			end)
 		end,
 	})

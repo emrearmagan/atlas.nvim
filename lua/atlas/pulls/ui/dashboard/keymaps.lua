@@ -58,7 +58,7 @@ function M.register(buf, views)
 				buf = buf,
 			}, function(result)
 				if pr ~= nil and result ~= nil and result.changed_pr then
-					require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+					controller.refresh_pr(pr)
 				end
 			end)
 		end
@@ -100,7 +100,7 @@ function M.register(buf, views)
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
 				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
-					require("atlas.pulls.ui.dashboard.controller").select_bookmark(node)
+					controller.select_bookmark(node)
 				end
 			end,
 		})
@@ -135,7 +135,7 @@ function M.register(buf, views)
 							buf = buf,
 						}, function(result)
 							if pr ~= nil and result ~= nil and result.changed_pr then
-								require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+								controller.refresh_pr(pr)
 							end
 						end)
 					end
@@ -183,7 +183,7 @@ function M.register(buf, views)
 			desc = "Show PR details",
 			opts = { nowait = true },
 			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").show_pr_details(buf)
+				controller.show_pr_details(buf)
 			end,
 		})
 	)
@@ -198,7 +198,7 @@ function M.register(buf, views)
 					notify.warn("No PR selected")
 					return
 				end
-				require("atlas.pulls.ui.dashboard.controller").toggle_star(pr)
+				controller.toggle_star(pr)
 			end,
 		})
 	)
@@ -264,7 +264,7 @@ function M.register(buf, views)
 					notify.warn("No PR selected")
 					return
 				end
-				require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+				controller.refresh_pr(pr)
 			end,
 		})
 	)
@@ -273,9 +273,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").refresh_view()
-			end,
+			callback = controller.refresh_view,
 		})
 	)
 
@@ -283,9 +281,7 @@ function M.register(buf, views)
 		items,
 		item("ui.previous_page", {
 			desc = "Previous page",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").previous_page()
-			end,
+			callback = controller.previous_page,
 		})
 	)
 
@@ -293,9 +289,7 @@ function M.register(buf, views)
 		items,
 		item("ui.next_page", {
 			desc = "Next page",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").next_page()
-			end,
+			callback = controller.next_page,
 		})
 	)
 

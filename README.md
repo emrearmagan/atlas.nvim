@@ -225,7 +225,6 @@ pulls = {
       id = "show_repo_status",
       label = "Show repository status",
       icon = "",
-      confirmation = true,
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -888,6 +887,7 @@ keymaps = {
       previous_job = { "[j", "<S-Tab>" },
       show_history = "gH",
       toggle_raw_logs = "gL",
+      toggle_auto_refresh = "gR",
     },
     review = {
       open_item = "<CR>", -- Open the selected file, review item, or inline comment/note.

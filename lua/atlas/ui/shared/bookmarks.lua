@@ -162,7 +162,8 @@ function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
 		local preview = item.preview or preview_text(item.value)
 		preview = utils.truncate(preview, preview_w, false)
 
-		local row = string.format(" %s  %s%s%s%s", arrow, item.name, name_pad, string.rep(" ", gap), preview)
+		local prefix = string.format(" %s  %s%s%s", arrow, item.name, name_pad, string.rep(" ", gap))
+		local row = prefix .. preview
 		table.insert(lines, row)
 
 		local lnum = #lines - 1
@@ -171,8 +172,7 @@ function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
 		table.insert(spans, { line = lnum, start_col = arrow_start, end_col = arrow_end, hl_group = "AtlasTextMuted" })
 
 		if preview ~= "" then
-			local preview_start = prefix_w
-			table.insert(spans, { line = lnum, start_col = preview_start, end_col = #row, hl_group = "AtlasTextMuted" })
+			table.insert(spans, { line = lnum, start_col = #prefix, end_col = #row, hl_group = "AtlasTextMuted" })
 		end
 
 		if item.kind == "starred" then

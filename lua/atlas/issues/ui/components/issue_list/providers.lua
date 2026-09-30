@@ -352,9 +352,7 @@ local function jira(opts)
 						table.insert(spans, {
 							start_col = title_start - 1,
 							end_col = #ctx.text,
-							hl_group = helper.issue_title_hl(
-								(tonumber(table_row._tv2_depth) or 0) > 0 and "" or issue.title
-							),
+							hl_group = helper.issue_title_hl(),
 						})
 					end
 					table.insert(spans, {

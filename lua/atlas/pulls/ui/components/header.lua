@@ -98,7 +98,7 @@ function M.render(pr, width, extra_fields)
 	local src = pr.source.branch
 	local dst = pr.destination.branch
 
-	local id_text = string.format("#%s", pr.id)
+	local id_text = string.format("%s%s", pr.provider == "gitlab" and "!" or "#", pr.id)
 	local title_text = pr.title
 	local title_lines = utils.wrap_line(string.format("%s %s", id_text, title_text), math.max(1, width - 1))
 	for index, line in ipairs(title_lines) do

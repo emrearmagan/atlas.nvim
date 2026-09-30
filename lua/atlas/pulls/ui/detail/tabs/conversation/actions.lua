@@ -100,10 +100,7 @@ end
 ---@param refresh fun()
 function M.reply(pr, entry, refresh)
 	local item = entry and entry.conversation_item or nil
-	if not item then
-		return
-	end
-	if item.kind ~= "comment" then
+	if not item or item.kind ~= "comment" then
 		return
 	end
 	---@type PullsComment
@@ -150,10 +147,7 @@ end
 ---@param refresh fun()
 function M.delete(pr, entry, refresh)
 	local item = entry and entry.conversation_item or nil
-	if not item then
-		return
-	end
-	if item.kind ~= "comment" then
+	if not item or item.kind ~= "comment" then
 		return
 	end
 	---@type PullsComment
@@ -184,18 +178,11 @@ function M.react(pr, entry, refresh)
 	end
 	---@type PullsComment
 	local target = item.entity
-	local choices = {}
-	for _, option in ipairs(options) do
-		table.insert(choices, {
-			key = option.key,
-			label = string.format("%s  %s", option.emoji or option.key, option.label or option.key),
-		})
-	end
 	picker.select({
 		title = "Add reaction",
-		items = choices,
-		format_item = function(choice)
-			return choice.label
+		items = options,
+		format_item = function(option)
+			return string.format("%s  %s", option.emoji or option.key, option.label or option.key)
 		end,
 		on_select = function(selected)
 			if selected == nil then

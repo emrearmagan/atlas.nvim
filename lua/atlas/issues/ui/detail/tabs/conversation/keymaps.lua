@@ -8,13 +8,7 @@ local actions = require("atlas.issues.ui.detail.tabs.conversation.actions")
 local detail = require("atlas.issues.ui.detail.state")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 
-local COMMENT_ACTIONS = {
-	"ui.comments.add",
-	"ui.comments.reply",
-	"ui.comments.edit",
-	"ui.delete",
-	"ui.comments.react",
-}
+local registrations = {}
 
 local function cursor_entry()
 	local win = detail.win
@@ -174,18 +168,18 @@ function M.setup(buf, refresh)
 		})
 	)
 
+	M.teardown(buf)
 	help.register("Detail", items, { index = 212, buffer = buf })
+	registrations[buf] = items
 end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {}
-	for _, action_id in ipairs(COMMENT_ACTIONS) do
-		utils.insert_if(items, from_action(action_id, {}))
+	local registered = registrations[buf]
+	if registered then
+		help.remove("Detail", registered, { buffer = buf })
+		registrations[buf] = nil
 	end
-	utils.insert_if(items, from_action("ui.toggle_fold", {}))
-	utils.insert_if(items, from_action("ui.toggle_all_folds", {}))
-	help.remove("Detail", items, { buffer = buf })
 end
 
 return M

@@ -6,8 +6,6 @@ local M = {
 	tab = {},
 }
 
-local _cached_version = nil
-
 ---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
 
 -- Window
@@ -209,27 +207,6 @@ function M.wrap_content(content, width, prefix)
 	return { lines = lines, highlights = spans }
 end
 
-function M.get_version()
-	if _cached_version then
-		return _cached_version
-	end
-
-	_cached_version = "dev"
-	local cwd = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h")
-	pcall(
-		require("atlas.core.git").run,
-		{ "describe", "--tags", "--abbrev=0" },
-		{ cwd = cwd, text = true },
-		function(result)
-			if result.code == 0 and vim.trim(result.stdout or "") ~= "" then
-				_cached_version = vim.trim(result.stdout)
-				vim.cmd("redrawstatus")
-			end
-		end
-	)
-	return _cached_version
-end
-
 ---Convert UTC date components to a Unix epoch without relying on the system timezone
 ---@param y integer @ year (e.g. 2026)
 ---@param m integer @ month 1-12
@@ -259,6 +236,11 @@ function M.relative_time(iso)
 	end
 
 	local then_epoch = utc_epoch(tonumber(y), tonumber(mo), tonumber(d), tonumber(hh), tonumber(mm), tonumber(ss))
+	local sign, offset_hours, offset_minutes = iso:match("([+-])(%d%d):?(%d%d)$")
+	if sign then
+		local offset = (tonumber(offset_hours) * 60 + tonumber(offset_minutes)) * 60
+		then_epoch = then_epoch - (sign == "+" and offset or -offset)
+	end
 
 	local delta = os.time() - then_epoch
 	if delta < 0 then

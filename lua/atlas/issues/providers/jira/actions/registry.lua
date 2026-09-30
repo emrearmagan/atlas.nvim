@@ -52,6 +52,20 @@ local function transition(ctx, done)
 	local current_status = tostring(issue.status or "")
 	local all_items = nil
 
+	local function filter_items(query)
+		local normalized = vim.trim(query):lower()
+		if normalized == "" then
+			return all_items
+		end
+		local filtered = {}
+		for _, item in ipairs(all_items) do
+			if item.label:lower():find(normalized, 1, true) then
+				table.insert(filtered, item)
+			end
+		end
+		return filtered
+	end
+
 	local status_category_icons = {
 		new = icons.fallback(),
 		indeterminate = icons.general("info"),
@@ -69,18 +83,7 @@ local function transition(ctx, done)
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then
-				local normalized = vim.trim(query):lower()
-				if normalized == "" then
-					fetch_done(all_items, nil)
-					return
-				end
-				local filtered = {}
-				for _, item in ipairs(all_items) do
-					if item.label:lower():find(normalized, 1, true) then
-						table.insert(filtered, item)
-					end
-				end
-				fetch_done(filtered, nil)
+				fetch_done(filter_items(query), nil)
 				return
 			end
 
@@ -101,7 +104,7 @@ local function transition(ctx, done)
 						})
 					end
 				end
-				fetch_done(all_items, nil)
+				fetch_done(filter_items(query), nil)
 			end)
 		end,
 		on_select = function(item)
@@ -142,7 +145,6 @@ local function assign(ctx, done)
 		local current_user = ctx.current_user
 		local current_user_id = current_user and current_user.id or nil
 		local current_user_item = nil
-		local seen_current_user = false
 
 		if current_assignee_id then
 			table.insert(items, {
@@ -156,7 +158,6 @@ local function assign(ctx, done)
 			if user.id ~= current_assignee_id then
 				local item = { id = user.id or "", label = user.name or "", value = user }
 				if current_user_id and user.id == current_user_id then
-					seen_current_user = true
 					current_user_item = item
 				else
 					table.insert(items, item)
@@ -164,17 +165,15 @@ local function assign(ctx, done)
 			end
 		end
 
-		if current_user_id and current_user_id ~= current_assignee_id and current_user then
-			if not seen_current_user then
+		if current_user_id and current_user_id ~= current_assignee_id then
+			if not current_user_item then
 				current_user_item = {
 					id = current_user_id,
 					label = current_user.name or "",
 					value = current_user,
 				}
 			end
-			if current_user_item then
-				table.insert(items, 1, current_user_item)
-			end
+			table.insert(items, 1, current_user_item)
 		end
 
 		return items
@@ -402,6 +401,38 @@ local function edit_issue(ctx, done)
 	end)
 end
 
+---@param groups JiraProjectGroup[]
+---@return JiraIssueProject[]
+local function flatten_projects(groups)
+	local projects = {}
+	for _, group in ipairs(groups) do
+		vim.list_extend(projects, group.projects)
+	end
+	return projects
+end
+
+---@param project JiraIssueProject
+---@return string
+local function format_project(project)
+	local label = string.format("%s %s - %s", icons.issues_provider("jira", "provider"), project.key, project.name)
+	local category = project.category and project.category.name or ""
+	return category ~= "" and label .. " (" .. category .. ")" or label
+end
+
+---@param items { label: string, value?: JiraIssueProject }[]
+---@param query string
+---@return table[]
+local function filter_projects(items, query)
+	query = vim.trim(query):lower()
+	return vim.tbl_filter(function(item)
+		local project = item.value
+		local name = project and project.name or ""
+		local category = project and project.category and project.category.name or ""
+		local text = string.format("%s %s %s", item.label, name, category):lower()
+		return text:find(query, 1, true) ~= nil
+	end, items)
+end
+
 ---@param context AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(context, done)
@@ -532,24 +563,11 @@ local function create_issue(context, done)
 		title = "Create Issue",
 		debounce_ms = 0,
 		format_item = function(item)
-			local project = item.value
-			local label =
-				string.format("%s %s - %s", icons.issues_provider("jira", "provider"), item.label, project.name)
-			local category = project.category and project.category.name or ""
-			return category ~= "" and label .. " (" .. category .. ")" or label
+			return format_project(item.value)
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then
-				query = vim.trim(query):lower()
-				fetch_done(
-					vim.tbl_filter(function(item)
-						local project = item.value
-						local category = project.category and project.category.name or ""
-						local text = string.format("%s %s %s", item.label, project.name, category):lower()
-						return text:find(query, 1, true) ~= nil
-					end, all_items),
-					nil
-				)
+				fetch_done(filter_projects(all_items, query), nil)
 				return
 			end
 
@@ -559,10 +577,7 @@ local function create_issue(context, done)
 					return
 				end
 
-				local projects = {}
-				for _, group in ipairs(groups) do
-					vim.list_extend(projects, group.projects)
-				end
+				local projects = flatten_projects(groups)
 
 				local project_ids = {}
 				for _, project in ipairs(projects) do
@@ -608,6 +623,44 @@ local function create_issue(context, done)
 	})
 end
 
+---@param issue Issue
+---@param details JiraIssueDetails
+---@return AtlasPickerPreview
+local function format_preview(issue, details)
+	local assignee = details.assignees[1]
+	local status = "**Status:** " .. (details.status or "Unknown")
+	local assignee_name = "**Assignee:** " .. (assignee and assignee.name or "Unassigned")
+	local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
+	local lines = {
+		status
+			.. string.rep(" ", column - vim.fn.strdisplaywidth(status))
+			.. "**Priority:** "
+			.. (details.priority or "None"),
+		assignee_name
+			.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
+			.. "**Reporter:** "
+			.. (details.reporter and details.reporter.name or "Unknown"),
+	}
+	local labels = vim.tbl_map(function(label)
+		return label.name
+	end, details.labels)
+	if #labels > 0 then
+		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+	end
+	for _, field in ipairs(details.custom_fields) do
+		table.insert(lines, string.format("**%s:** %s", field.name, field.formatted))
+	end
+	table.insert(lines, "")
+	table.insert(lines, "## Description")
+	table.insert(lines, "")
+	local description = vim.trim(details.description)
+	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
+	return {
+		title = string.format("%s - %s", issue.key, issue.title),
+		lines = lines,
+	}
+end
+
 ---@param project JiraIssueProject|nil
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
@@ -626,41 +679,7 @@ local function search_issues(project, ctx, done)
 					return
 				end
 				---@cast details JiraIssueDetails
-				local assignee = details.assignees[1]
-				local status = "**Status:** " .. (details.status or "Unknown")
-				local assignee_name = "**Assignee:** " .. (assignee and assignee.name or "Unassigned")
-				local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
-				local lines = {
-					status
-						.. string.rep(" ", column - vim.fn.strdisplaywidth(status))
-						.. "**Priority:** "
-						.. (details.priority or "None"),
-					assignee_name
-						.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
-						.. "**Reporter:** "
-						.. (details.reporter and details.reporter.name or "Unknown"),
-				}
-				local labels = vim.tbl_map(function(label)
-					return label.name
-				end, details.labels)
-				if #labels > 0 then
-					table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-				end
-				for _, field in ipairs(details.custom_fields) do
-					table.insert(lines, string.format("**%s:** %s", field.name, field.formatted))
-				end
-				table.insert(lines, "")
-				table.insert(lines, "## Description")
-				table.insert(lines, "")
-				local description = vim.trim(details.description)
-				vim.list_extend(
-					lines,
-					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
-				)
-				preview_done({
-					title = string.format("%s - %s", issue.key, issue.title),
-					lines = lines,
-				})
+				preview_done(format_preview(issue, details))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -703,10 +722,7 @@ local function search_issue(ctx, done)
 			return
 		end
 
-		local projects = {}
-		for _, group in ipairs(groups) do
-			vim.list_extend(projects, group.projects)
-		end
+		local projects = flatten_projects(groups)
 		if #projects <= 1 then
 			search_issues(projects[1], ctx, done)
 			return
@@ -726,23 +742,10 @@ local function search_issue(ctx, done)
 				if not project then
 					return icons.issues_provider("jira", "provider") .. " " .. item.label
 				end
-				local label =
-					string.format("%s %s - %s", icons.issues_provider("jira", "provider"), item.label, project.name)
-				local category = project.category and project.category.name or ""
-				return category ~= "" and label .. " (" .. category .. ")" or label
+				return format_project(project)
 			end,
 			fetch = function(query, fetch_done)
-				query = vim.trim(query):lower()
-				fetch_done(
-					vim.tbl_filter(function(item)
-						local project = item.value
-						local name = project and project.name or ""
-						local category = project and project.category and project.category.name or ""
-						local text = string.format("%s %s %s", item.label, name, category):lower()
-						return text:find(query, 1, true) ~= nil
-					end, items),
-					nil
-				)
+				fetch_done(filter_projects(items, query), nil)
 			end,
 			on_select = function(item)
 				search_issues(item.value, ctx, done)
@@ -764,10 +767,7 @@ local function open_project(_, done)
 			return
 		end
 
-		local projects = {}
-		for _, group in ipairs(groups) do
-			vim.list_extend(projects, group.projects)
-		end
+		local projects = flatten_projects(groups)
 		if #projects == 0 then
 			notify.info("No Jira projects found")
 			done(nil, nil)
@@ -776,12 +776,7 @@ local function open_project(_, done)
 		picker.select({
 			title = "Open Project",
 			items = projects,
-			format_item = function(project)
-				local label =
-					string.format("%s %s - %s", icons.issues_provider("jira", "provider"), project.key, project.name)
-				local category = project.category and project.category.name or ""
-				return category ~= "" and label .. " (" .. category .. ")" or label
-			end,
+			format_item = format_project,
 			on_select = function(project)
 				if not project then
 					done(nil, nil)
@@ -853,7 +848,6 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local svc = require("atlas.providers.jira.client")
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
@@ -870,27 +864,12 @@ local function toggle_subscription(ctx, done)
 	end
 
 	if issue.is_subscribed ~= true then
-		svc.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
-			finish(err == nil and true or nil, err)
-		end, { action = "Subscribe to issue", issue_key = issue_key })
+		issues_api.set_subscription(issue_key, true, nil, finish)
 		return
 	end
 
 	local function unsubscribe(account_id)
-		local param_name = "accountId"
-		if service.is_server() then
-			param_name = "username"
-		end
-
-		svc.request(
-			"DELETE",
-			string.format("/issue/%s/watchers?%s=%s", issue_key, param_name, account_id),
-			nil,
-			function(_, err)
-				finish(err == nil and false or nil, err)
-			end,
-			{ action = "Unsubscribe from issue", issue_key = issue_key }
-		)
+		issues_api.set_subscription(issue_key, false, account_id, finish)
 	end
 
 	local current = ctx.current_user

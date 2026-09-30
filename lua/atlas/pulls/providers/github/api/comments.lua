@@ -140,7 +140,10 @@ local function publish_comment(pr, review, commit_oid, add_comment, on_done)
 			return add_comment(review_id, done)
 		end, function(created, create_err)
 			if create_err then
-				on_done(nil, create_err)
+				on_done(
+					nil,
+					"Comment failed; a pending review remains. Refresh and discard it before retrying: " .. create_err
+				)
 				return
 			end
 			requests.run(function(done)
@@ -194,11 +197,9 @@ function M.add_comment(pr, content, opts, on_done)
 				return add_review_thread(pr, content, target, file_level, review_id, nil, done)
 			end, on_done)
 		end
-		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id)
-			return add_review_thread(pr, content, target, file_level, review_id, opts.review, on_done)
-		end, function(err)
-			on_done(nil, err)
-		end)
+		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id, done)
+			return add_review_thread(pr, content, target, file_level, review_id, opts.review, done)
+		end, on_done)
 	end
 
 	return cli.api(
@@ -503,11 +504,7 @@ reply_comment = function(pr, parent, content, opts, on_done)
 		end
 
 		if pending then
-			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, function(review_id)
-				return add_reply(review_id, on_done)
-			end, function(err)
-				on_done(nil, err)
-			end)
+			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
 		end
 		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, function(created, err)
 			if created and parent.state == "RESOLVED" then

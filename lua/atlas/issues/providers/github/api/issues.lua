@@ -333,6 +333,32 @@ function M.get_assignee_options(key, on_done)
 	})
 end
 
+---@param issue GitHubIssue
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(issue, subscribed, on_done)
+	local node_id = tostring(issue.node_id or "")
+	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			cache.invalidate(issue.key)
+			on_done(subscribed, nil)
+		end,
+		{
+			action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
+			key = issue.key,
+		}
+	)
+end
+
 ---@param key string
 ---@param state "open"|"closed"
 ---@param on_done fun(ok: boolean, err: string|nil)

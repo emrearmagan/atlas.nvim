@@ -90,6 +90,11 @@ function M.delete_mem(key)
 	memory.delete(cache_key(key))
 end
 
+---@param prefix string
+function M.clear_mem(prefix)
+	memory.clear_prefix(cache_key(prefix))
+end
+
 ---@param args string[]
 ---@param parse_json boolean
 ---@param callback fun(result: any, err: string|nil, status?: integer)

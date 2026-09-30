@@ -144,7 +144,7 @@ local M = {}
 local notify = require("atlas.core.notify")
 
 ---@type AtlasConfig
-M.options = {
+local defaults = {
 	ui = {
 		statusline = true,
 		picker = "auto",
@@ -319,6 +319,9 @@ M.options = {
 	},
 }
 
+---@type AtlasConfig
+M.options = vim.deepcopy(defaults)
+
 ---@param id AtlasProviderId
 ---@return table|nil
 function M.provider_options(id)
@@ -395,7 +398,7 @@ end
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
 	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
-	M.options = vim.tbl_deep_extend("force", M.options, resolved)
+	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline ~= false then
 		vim.opt.laststatus = 3
 	end

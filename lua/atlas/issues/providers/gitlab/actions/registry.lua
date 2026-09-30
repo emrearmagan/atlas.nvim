@@ -14,7 +14,7 @@ local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.providers.gitlab.users")
-local labels_api = require("atlas.issues.providers.gitlab.api.labels")
+local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
@@ -294,7 +294,7 @@ local function labels(ctx, done)
 			return
 		end
 
-		labels_api.list(path, function(all_labels, labels_err)
+		metadata_api.list_labels(path, function(all_labels, labels_err)
 			if labels_err or all_labels == nil then
 				local message = labels_err or "Failed to load labels"
 				notify.error(message)
@@ -580,28 +580,17 @@ end
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
-	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
-	local endpoint =
-		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	service.request("POST", endpoint, nil, function(result, err)
+	issues_api.set_subscription(issue, issue.is_subscribed ~= true, function(subscribed, err)
 		if err then
 			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
-		local subscribed = type(result) == "table" and result.subscribed
-		if type(subscribed) ~= "boolean" then
-			subscribed = action == "subscribe"
-		end
-		issue.is_subscribed = subscribed == true
+		issue.is_subscribed = subscribed
 		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
-	end, {
-		action = action == "subscribe" and "Subscribe to issue" or "Unsubscribe from issue",
-		project_path = issue.project_path,
-		iid = issue.iid,
-	})
+	end)
 end
 
 register({

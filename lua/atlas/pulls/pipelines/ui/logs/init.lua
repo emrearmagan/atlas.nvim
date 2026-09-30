@@ -33,6 +33,17 @@ function M.render(pane)
 end
 
 ---@param entries (PullsLogLine|PullsLogGroup)[]
+---@param prefix string
+local function set_fold_keys(entries, prefix)
+	for index, entry in ipairs(entries) do
+		if entry.entries then
+			entry.fold_key = prefix .. index
+			set_fold_keys(entry.entries, entry.fold_key .. ".")
+		end
+	end
+end
+
+---@param entries (PullsLogLine|PullsLogGroup)[]
 ---@param target PullsLogLine|PullsLogGroup
 ---@param collapsed table<string, boolean>
 ---@return boolean
@@ -54,14 +65,15 @@ end
 
 ---@param pane PullsPipelinesLogs
 ---@param target PullsLogLine|PullsLogGroup
+---@return boolean
 function M.jump(pane, target)
 	local log = pane.log
 	if type(log) ~= "table" or not utils.window.valid(pane.win) then
-		return
+		return false
 	end
 	if not pane.show_raw then
 		if not reveal(log, target, pane.collapsed) then
-			return
+			return false
 		end
 	end
 	M.render(pane)
@@ -72,10 +84,12 @@ function M.jump(pane, target)
 			vim.cmd("normal! zz")
 		end)
 	end
+	return true
 end
 
 ---@param pane PullsPipelinesLogs
-local function jump_to_step(pane)
+---@return PullsLogLine|PullsLogGroup|nil
+local function step_target(pane)
 	local selection = pane.selection
 	local log = pane.log
 	local resolve = pane.backend and pane.backend.step_target
@@ -84,15 +98,15 @@ local function jump_to_step(pane)
 	end
 	local step = selection.job.steps and selection.job.steps[selection.step]
 	local entries = pane.show_raw and pane.source and pane.source.lines or log
-	local target = step and resolve(entries, step)
-	if target then
-		M.jump(pane, target)
-	end
+	return step and resolve(entries, step)
 end
 
 ---@param pane PullsPipelinesLogs
-local function update(pane)
-	M.render(pane)
+---@param target PullsLogLine|PullsLogGroup|nil
+local function update(pane, target)
+	if not target or not M.jump(pane, target) then
+		M.render(pane)
+	end
 	if pane.on_update then
 		pane.on_update()
 	end
@@ -129,8 +143,7 @@ function M.show(pane, selection, opts)
 	end
 	if same_job and opts.force_refresh ~= true and pane.log ~= nil then
 		pane.selection = selection
-		update(pane)
-		jump_to_step(pane)
+		update(pane, step_target(pane))
 		return
 	end
 
@@ -192,18 +205,19 @@ function M.show(pane, selection, opts)
 			logger.logerror("Fetch job logs failed", { job_id = selection.job.id, error = err })
 			if not background then
 				pane.log = status == 404 and {} or err
-				M.render(pane)
 			end
 		elseif not pane.source or pane.source.raw ~= (log and log.raw or "") then
 			pane.source = log or { raw = "" }
 			pane.log = parser.parse(pane.source, pane.backend.parse)
-			M.render(pane)
-		end
-		if pane.on_update then
-			pane.on_update()
+			set_fold_keys(pane.log, "")
+			if background then
+				M.render(pane)
+			end
 		end
 		if not background then
-			jump_to_step(pane)
+			update(pane, step_target(pane))
+		elseif pane.on_update then
+			pane.on_update()
 		end
 	end)
 end
@@ -254,8 +268,6 @@ function M.toggle_all_folds(pane)
 	if pane.show_raw or type(log) ~= "table" then
 		return
 	end
-	local pending = vim.list_extend({}, log)
-	local groups = {}
 	local collapse = false
 	for _, entry in ipairs(log) do
 		if entry.entries and pane.collapsed[entry.fold_key] == false then
@@ -264,22 +276,15 @@ function M.toggle_all_folds(pane)
 		end
 	end
 
-	while #pending > 0 do
-		local group = table.remove(pending)
-		if group.entries then
-			---@cast group PullsLogGroup
-			groups[#groups + 1] = group
-			for _, entry in ipairs(group.entries) do
-				if entry.entries then
-					pending[#pending + 1] = entry
-				end
+	local function set_collapsed(entries)
+		for _, entry in ipairs(entries) do
+			if entry.entries then
+				pane.collapsed[entry.fold_key] = collapse
+				set_collapsed(entry.entries)
 			end
 		end
 	end
-
-	for _, group in ipairs(groups) do
-		pane.collapsed[group.fold_key] = collapse
-	end
+	set_collapsed(log)
 	M.render(pane)
 end
 

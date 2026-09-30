@@ -158,16 +158,13 @@ end
 ---@param opts AtlasThreadRenderOpts
 ---@param width integer
 local function render_header(lines, spans, line_map, item, depth, pfx, opts, width)
-	local parts = {}
+	local header = pfx.meta_prefix
 	local col_markers = {} -- { {start, end, hl} }
-
-	local cursor = #pfx.meta_prefix
 
 	local icon = item.icon or ""
 	if icon ~= "" then
-		local icon_start = cursor
-		parts[#parts + 1] = icon .. " "
-		cursor = cursor + #icon + 1
+		local icon_start = #header
+		header = header .. icon .. " "
 		local hl = item.icon_hl
 		if opts.icon_hl_fn then
 			hl = opts.icon_hl_fn(item) or hl
@@ -181,12 +178,11 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	if author == "" then
 		author = "Unknown"
 	end
-	local author_start = cursor
-	parts[#parts + 1] = author
-	cursor = cursor + #author
+	local author_start = #header
+	header = header .. author
 	local author_hl_val = opts.author_hl(item, author)
 	if type(author_hl_val) == "string" and author_hl_val ~= "" then
-		col_markers[#col_markers + 1] = { author_start, cursor, author_hl_val }
+		col_markers[#col_markers + 1] = { author_start, #header, author_hl_val }
 	end
 
 	local right_text = tostring(item.right_text or "")
@@ -195,7 +191,7 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	local additional = tostring(item.additional or "")
 	if additional ~= "" then
 		local padding_x = opts.padding_x
-		local used_dw = vim.api.nvim_strwidth(pfx.meta_prefix .. table.concat(parts, ""))
+		local used_dw = vim.api.nvim_strwidth(header)
 		local available = width - padding_x - used_dw - 2 - right_text_dw
 		if available > 0 then
 			local add_dw = vim.api.nvim_strwidth(additional)
@@ -204,10 +200,8 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 			end
 		end
 
-		parts[#parts + 1] = "  " .. additional
-		cursor = cursor + 2
-		local add_start = cursor
-		cursor = cursor + #additional
+		local add_start = #header + 2
+		header = header .. "  " .. additional
 		local add_hl = opts.additional_hl(item, additional)
 		if type(add_hl) == "table" then
 			for _, seg in ipairs(add_hl) do
@@ -221,19 +215,18 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 				end
 			end
 		elseif type(add_hl) == "string" and add_hl ~= "" then
-			col_markers[#col_markers + 1] = { add_start, cursor, add_hl }
+			col_markers[#col_markers + 1] = { add_start, #header, add_hl }
 		end
 	end
 
 	if right_text ~= "" then
 		-- Align by display columns; highlights still use byte offsets.
-		local content_so_far = pfx.meta_prefix .. table.concat(parts, "")
-		local display_so_far = vim.api.nvim_strwidth(content_so_far)
+		local display_so_far = vim.api.nvim_strwidth(header)
 		local display_rt = vim.api.nvim_strwidth(right_text)
 		local right_edge = width - opts.padding_x
 		local needed = math.max(2, right_edge - display_so_far - display_rt)
-		parts[#parts + 1] = string.rep(" ", needed) .. right_text
-		local rt_byte_start = #content_so_far + needed
+		local rt_byte_start = #header + needed
+		header = header .. string.rep(" ", needed) .. right_text
 		local hl = opts.right_text_hl and opts.right_text_hl(item, right_text) or nil
 		if type(hl) == "table" then
 			for _, seg in ipairs(hl) do
@@ -249,7 +242,7 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		end
 	end
 
-	local full_line = utils.truncate(pfx.meta_prefix .. table.concat(parts, ""), width - opts.padding_x)
+	local full_line = utils.truncate(header, width - opts.padding_x)
 	lines[#lines + 1] = full_line
 	line_map[#lines] = make_line_map(item, "header", depth)
 
@@ -364,45 +357,27 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 		footer_prefix = pfx.pad .. "│ "
 	end
 
-	local footer_text = ""
-	local footer_spans = {}
+	local line = footer_prefix
+	local row = #lines
+	if #footer_prefix > 0 then
+		span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+	end
 	for index, footer_item in ipairs(footer_items) do
 		if index > 1 then
-			footer_text = footer_text .. "   "
+			line = line .. "   "
 		end
-		local start_col = #footer_text
-		footer_text = footer_text .. footer_item.text
+		local start_col = #line
+		line = line .. footer_item.text
 		if footer_item.highlights and #footer_item.highlights > 0 then
 			for _, highlight in ipairs(footer_item.highlights) do
-				table.insert(footer_spans, {
-					start_col = start_col + highlight.start_col,
-					end_col = start_col + highlight.end_col,
-					hl_group = highlight.hl_group,
-				})
+				span(spans, row, start_col + highlight.start_col, start_col + highlight.end_col, highlight.hl_group)
 			end
 		else
-			table.insert(footer_spans, {
-				start_col = start_col,
-				end_col = #footer_text,
-				hl_group = footer_item.hl_group or "AtlasTextMuted",
-			})
+			span(spans, row, start_col, #line, footer_item.hl_group or "AtlasTextMuted")
 		end
 	end
-	local full_line = footer_prefix .. footer_text
-	lines[#lines + 1] = full_line
+	lines[#lines + 1] = line
 	line_map[#lines] = make_line_map(item, "footer", depth)
-	if #footer_prefix > 0 then
-		span(spans, #lines - 1, 0, #footer_prefix, "AtlasTextMuted")
-	end
-	for _, highlight in ipairs(footer_spans) do
-		span(
-			spans,
-			#lines - 1,
-			#footer_prefix + highlight.start_col,
-			#footer_prefix + highlight.end_col,
-			highlight.hl_group
-		)
-	end
 end
 
 -- Blank / separator lines

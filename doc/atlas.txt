@@ -144,7 +144,6 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "show_repo_status",
         label = "Show repository status",
         icon = "",
-        confirmation = true,
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -257,6 +256,7 @@ Bitbucket, and GitLab. Shared authentication and endpoints are configured in
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
+>lua
   require("atlas").setup({
     pulls = {
       delete_notes = false, -- delete local notes after approval or merge
@@ -695,6 +695,7 @@ Atlas emits these `User` events after setup or cleanup completes:
           previous_job         = { "[j", "<S-Tab>" },
           show_history         = "gH",
           toggle_raw_logs      = "gL",
+          toggle_auto_refresh  = "gR",
         },
         review = {
           open_item             = "<CR>", -- open file, review item, or comment/note

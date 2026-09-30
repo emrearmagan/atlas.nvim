@@ -177,9 +177,7 @@ function M.register(buf, views)
 		item("ui.refresh", {
 			desc = "Reload selected issue",
 			index = 6,
-			callback = function()
-				controller.refresh_current_issue()
-			end,
+			callback = controller.refresh_current_issue,
 		})
 	)
 
@@ -188,9 +186,7 @@ function M.register(buf, views)
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			index = 7,
-			callback = function()
-				controller.refresh_view()
-			end,
+			callback = controller.refresh_view,
 		})
 	)
 
@@ -199,9 +195,7 @@ function M.register(buf, views)
 		item("ui.toggle_fold", {
 			desc = "Toggle issue children",
 			index = 8,
-			callback = function()
-				controller.toggle_current_issue_collapsed()
-			end,
+			callback = controller.toggle_current_issue_collapsed,
 		})
 	)
 
@@ -210,9 +204,7 @@ function M.register(buf, views)
 		item("ui.toggle_all_folds", {
 			desc = "Toggle all issue children",
 			index = 9,
-			callback = function()
-				controller.toggle_all_issues_collapsed()
-			end,
+			callback = controller.toggle_all_issues_collapsed,
 		})
 	)
 
@@ -344,9 +336,7 @@ function M.register(buf, views)
 		items,
 		item("ui.previous_page", {
 			desc = "Previous page",
-			callback = function()
-				controller.previous_page()
-			end,
+			callback = controller.previous_page,
 		})
 	)
 
@@ -354,9 +344,7 @@ function M.register(buf, views)
 		items,
 		item("ui.next_page", {
 			desc = "Next page",
-			callback = function()
-				controller.next_page()
-			end,
+			callback = controller.next_page,
 		})
 	)
 
