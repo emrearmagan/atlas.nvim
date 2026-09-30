@@ -5,14 +5,31 @@
 --       gitlab = {
 --         base_url = "https://gitlab.com",
 --         token    = vim.env.GITLAB_TOKEN,
---         cache_ttl = 300,
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
+--         -- CI options: https://github.com/emrearmagan/atlas.nvim#pipeline-configuration
 --       },
 --     },
 --     pulls = {
 --       ---@type AtlasGitLabPullsConfig
 --       gitlab = {
 --         views = {
---           { name = "Assigned",  key = "1", scope = "assigned_to_me" },
+--           {
+--             name = "Assigned",
+--             key = "1",
+--             layout = "compact", -- "compact", "grouped", or "plain".
+--             scope = "assigned_to_me",
+--             -- current_repo = true, -- Local repository; alternative to project/group.
+--             -- project = "group/project", -- Project path or numeric ID.
+--             -- group = "group", -- Group path or numeric ID.
+--             -- labels = "bug,backend",
+--             -- milestone = "v1.0",
+--             -- assignee_username = "your-user",
+--             -- author_username = "your-user",
+--             -- search = "fix",
+--             -- order_by = "updated_at",
+--             -- sort = "desc", -- "asc" or "desc".
+--             -- extra_params = { target_branch = "main" },
+--           },
 --           { name = "Created",   key = "2", scope = "created_by_me" },
 --           { name = "Reviewing", key = "3", scope = "reviews_for_me" },
 --         },
@@ -20,7 +37,7 @@
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["Reviewing"]   = { scope = "reviews_for_me" },
+--             ["Reviewing"]   = { layout = "compact", scope = "reviews_for_me" },
 --             ["Created by me"] = { scope = "all", author_username = "me" },
 --           },
 --         },

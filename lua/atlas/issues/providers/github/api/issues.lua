@@ -138,8 +138,7 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local issues_cfg = require("atlas.config").options.issues or {}
-	local with_relationships = issues_cfg.with_relationships ~= false
+	local with_relationships = require("atlas.config").options.issues.with_relationships
 	local cache_key =
 		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_refresh then

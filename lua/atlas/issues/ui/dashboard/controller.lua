@@ -87,15 +87,10 @@ local function fetch_current_user(provider, scope)
 	end)
 end
 
----@return AtlasIssuesConfig
-local function issues_config()
-	return (config.options and config.options.issues) or {}
-end
-
 ---@param view IssuesViewConfig
 ---@return boolean
 local function relationships_enabled(view)
-	return view.layout ~= "compact" and issues_config().with_relationships ~= false
+	return view.layout ~= "compact" and config.options.issues.with_relationships
 end
 
 ---@param issues Issue[]

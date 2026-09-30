@@ -197,6 +197,7 @@ local defaults = {
 		},
 	},
 	issues = {
+		with_relationships = true,
 		jira = {
 			project_config = {
 				story_points_field = "customfield_10016",

@@ -488,6 +488,8 @@ pulls = {
 <details>
 <summary><strong>GitHub</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/github/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasGitHubPullsConfig
@@ -498,6 +500,7 @@ pulls = {
         name = "My PRs",
         key = "1",
         layout = "plain", -- "compact", "grouped", or "plain"
+        -- current_repo = true, -- Limit this view to the local repository.
         search = "author:@me sort:updated-desc",
       },
       {
@@ -536,6 +539,8 @@ pulls = {
 <details>
 <summary><strong>Bitbucket</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/bitbucket/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasBitbucketPullsConfig
@@ -546,6 +551,7 @@ pulls = {
         name = "Me",
         key = "M",
         layout = "compact", -- "compact", "grouped", or "plain"
+        -- current_repo = true, -- Remove repo:/project: targets from search when enabled.
         -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
         search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
       },
@@ -580,6 +586,8 @@ pulls = {
 <details>
 <summary><strong>GitLab</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/gitlab/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasGitLabPullsConfig
@@ -591,6 +599,7 @@ pulls = {
         key = "1",
         layout = "grouped", -- "compact", "grouped", or "plain"
         scope = "assigned_to_me",
+        -- current_repo = true, -- Limit this view to the local repository.
       },
       {
         name = "Reviewing",
@@ -649,6 +658,8 @@ issues = {
 
 > [!IMPORTANT]
 > The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
+
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/jira/config.lua)
 
 ```lua
 issues = {
@@ -725,6 +736,8 @@ issues = {
 <details>
 <summary><strong>GitHub Issues</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/github/config.lua)
+
 ```lua
 issues = {
   ---@type AtlasGitHubIssuesConfig
@@ -735,6 +748,7 @@ issues = {
         name = "Assigned",
         key = "1",
         layout = "plain",
+        -- current_repo = true, -- Limit this view to the local repository.
         search = "assignee:@me is:open",
       },
       {
@@ -770,6 +784,8 @@ issues = {
 <details>
 <summary><strong>GitLab Issues</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/gitlab/config.lua)
+
 ```lua
 issues = {
   ---@type AtlasGitLabIssuesConfig
@@ -781,6 +797,7 @@ issues = {
         key = "1",
         scope = "assigned_to_me",
         state = "opened",
+        -- current_repo = true, -- Limit this view to the local repository.
       },
       {
         name = "Created",
@@ -793,7 +810,7 @@ issues = {
         key = "3",
         scope = "all",
         state = "opened",
-        -- Anything not covered by the explicit fields below can be passed via `extra_params`.
+        -- Pass additional API filters via extra_params.
         extra_params = { ["not[labels]"] = "wontfix" },
       },
     },

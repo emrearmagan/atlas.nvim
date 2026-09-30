@@ -380,6 +380,7 @@ GitHub search expression.
     github = {
       views = {
         { name = "My PRs", key = "1", layout = "plain", -- "compact", "grouped", or "plain"
+          -- current_repo = true, -- Limit this view to the local repository.
           search = "author:@me sort:updated-desc" },
         { name = "Team",   key = "2", layout = "compact",
           search = "org:your-org sort:updated-desc" },
@@ -413,6 +414,7 @@ Bitbucket Cloud only. Auth uses an app password (or API token).
           name   = "Me",
           key    = "M",
           layout = "compact", -- "compact", "grouped", or "plain"
+          -- current_repo = true, -- Remove repo:/project: targets from search when enabled.
           -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
           search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
         },
@@ -448,7 +450,9 @@ self-hosted URL.
     gitlab = {
       views = {
         { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
-          scope = "assigned_to_me" },
+          scope = "assigned_to_me",
+          -- current_repo = true, -- Limit this view to the local repository.
+        },
         { name = "Reviewing", key = "3", scope = "reviews_for_me" },
         -- One project:
         { name = "GitLab",    key = "G", project = "gitlab-org/gitlab",
@@ -566,6 +570,7 @@ issue search expression.
     github = {
       views = {
         { name = "Assigned", key = "1", layout = "plain",
+          -- current_repo = true, -- Limit this view to the local repository.
           search = "assignee:@me is:open" },
         { name = "Created",  key = "2", layout = "compact",
           search = "author:@me is:open" },
@@ -595,7 +600,9 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
     gitlab = {
       views = {
         { name = "Assigned", key = "1",
-          scope = "assigned_to_me", state = "opened" },
+          scope = "assigned_to_me", state = "opened",
+          -- current_repo = true, -- Limit this view to the local repository.
+        },
         { name = "Created",  key = "2",
           scope = "created_by_me", state = "opened" },
         { name = "All open", key = "3",
