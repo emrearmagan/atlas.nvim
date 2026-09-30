@@ -91,7 +91,7 @@ local function transition(ctx, done)
 					if current_status == "" or to_status == "" or to_status ~= current_status then
 						table.insert(all_items, {
 							id = tostring(candidate.id or ""),
-							label = tostring(candidate.name or ""),
+							label = to_status ~= "" and to_status or candidate.name,
 							value = candidate,
 						})
 					end
@@ -109,10 +109,7 @@ local function transition(ctx, done)
 					return
 				end
 
-				notify.success(
-					string.format("Transitioned %s to %s", issue_key, selected.name or ""),
-					{ timeout = 1200 }
-				)
+				notify.success(string.format("Transitioned %s to %s", issue_key, item.label), { timeout = 1200 })
 				done({ issue_key = issue_key }, nil)
 			end)
 		end,
