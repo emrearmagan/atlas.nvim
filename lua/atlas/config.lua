@@ -196,7 +196,25 @@ local defaults = {
 			},
 		},
 	},
-	issues = nil,
+	issues = {
+		jira = {
+			project_config = {
+				story_points_field = "customfield_10016",
+				issue_types = {
+					epic = { icon = "", hl_group = "AtlasJiraEpic" },
+					story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
+					task = { icon = "", hl_group = "AtlasLogInfo" },
+					bug = { icon = "", hl_group = "AtlasLogError" },
+					subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
+				},
+				status_icons = {
+					new = "●",
+					indeterminate = "",
+					done = "",
+				},
+			},
+		},
+	},
 	keymaps = {
 		ui = {
 			next_item = "j",
@@ -398,6 +416,14 @@ end
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
 	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
+	local project = vim.tbl_get(resolved, "issues", "jira", "project_config")
+	if project and project.issue_types then
+		local issue_types = {}
+		for name, style in pairs(project.issue_types) do
+			issue_types[name:lower()] = style
+		end
+		project.issue_types = issue_types
+	end
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline ~= false then
 		vim.opt.laststatus = 3

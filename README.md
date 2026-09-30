@@ -683,11 +683,21 @@ issues = {
     project_config = {
       -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
       story_points_field = "customfield_10016",
+      -- Override issue type styles by name (case-insensitive).
       issue_types = {
-        ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-        ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        bug = { icon = "" },
+        maintenance = { icon = "", hl_group = "AtlasTextWarning" },
+        infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+      },
+      -- Override icons by status name or category.
+      status_icons = {
+        new = "●",
+        indeterminate = "",
+        done = "",
+        ["In Review"] = "",
       },
 
+      -- Custom fields to display per project; replace KAN with your project key.
       KAN = {
         customfield_10003 = {
           name = "Approvers",

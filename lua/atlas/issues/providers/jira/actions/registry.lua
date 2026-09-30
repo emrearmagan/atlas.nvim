@@ -66,20 +66,12 @@ local function transition(ctx, done)
 		return filtered
 	end
 
-	local status_category_icons = {
-		new = icons.fallback(),
-		indeterminate = icons.general("info"),
-		done = icons.general("success"),
-	}
-
 	picker.search({
 		title = string.format("Transition %s", issue_key),
 		debounce_ms = 0,
 		format_item = function(item)
-			local transition_value = item.value
-			local category = transition_value.to_status_category
-			local icon = (category and status_category_icons[category]) or icons.fallback()
-			return string.format("%s %s", icon, item.label)
+			local icon = icons.issues_status(item.value.to_status_category, item.value.to_status_name)
+			return icon ~= "" and string.format("%s %s", icon, item.label) or item.label
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then

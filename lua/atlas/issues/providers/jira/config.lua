@@ -19,8 +19,15 @@
 --         project_config = {
 --           story_points_field = "customfield_10016",
 --           issue_types = {
---             ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
---             ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+--             bug = { icon = "" },
+--             maintenance = { icon = "", hl_group = "AtlasTextWarning" },
+--             infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+--           },
+--           status_icons = {
+--             new = "●",
+--             indeterminate = "",
+--             done = "",
+--             ["In Review"] = "",
 --           },
 --           KAN = {
 --             customfield_10038 = {
@@ -69,6 +76,7 @@
 ---@class AtlasJiraProjectConfig
 ---@field story_points_field string|nil
 ---@field issue_types AtlasJiraIssueTypesConfig|nil
+---@field status_icons table<string, string>|nil
 ---@field [string] AtlasJiraProjectFieldsConfig
 
 ---@class AtlasJiraBookmarkConfig : AtlasIssuesBookmarkConfig

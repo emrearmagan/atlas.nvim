@@ -7,15 +7,8 @@ local config = require("atlas.config")
 local users_api = require("atlas.providers.jira.users")
 local url_encode = require("atlas.core.utils").url_encode
 
-local function project_config()
-	return (config.domain_options("jira", "issues") or {}).project_config or {}
-end
-
-local function story_points_field()
-	return tostring(project_config().story_points_field or "customfield_10016")
-end
-
-local function search_fields()
+---@param story_points_field string
+local function search_fields(story_points_field)
 	return {
 		"summary",
 		"status",
@@ -30,7 +23,7 @@ local function search_fields()
 		"created",
 		"updated",
 		"resolutiondate",
-		story_points_field(),
+		story_points_field,
 	}
 end
 
@@ -68,9 +61,10 @@ function M.search_issues(jql, on_done, opts)
 		end
 	end
 
+	local story_points_field = config.options.issues.jira.project_config.story_points_field
 	local data = {
 		jql = jql,
-		fields = search_fields(),
+		fields = search_fields(story_points_field),
 		maxResults = opts.pagelen,
 	}
 	local endpoint = "/search/jql"
@@ -89,7 +83,7 @@ function M.search_issues(jql, on_done, opts)
 			return
 		end
 
-		local items = normalizer.to_issues_list(result.issues or {}, story_points_field())
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
 		local next_cursor
 		local total_pages
 		if service.is_server() then
@@ -190,7 +184,7 @@ function M.fetch_issue(ref, opts, callback)
 	end
 
 	local project_key = issue_key:match("^([^-]+)-")
-	local configured = project_config()[project_key] or {}
+	local configured = config.options.issues.jira.project_config[project_key] or {}
 	local extra_fields = custom_field_ids(configured)
 	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(extra_fields), ","))
 

@@ -79,13 +79,6 @@ local ICONS = {
 
 	issues = {
 		issue = { icon = "", hl_group = "AtlasTextPositive" },
-		type = {
-			epic = { icon = "", hl_group = "AtlasJiraEpic" },
-			story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
-			task = { icon = "", hl_group = "AtlasLogInfo" },
-			bug = { icon = "", hl_group = "AtlasLogError" },
-			subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
-		},
 
 		priority = {
 			highest = { icon = "", hl_group = "AtlasLogError" },
@@ -130,7 +123,7 @@ ICONS.actions = {
 	pipeline = ICONS.pulls.pipeline,
 	checkout = ICONS.pulls.branch,
 	open_in_browser = { icon = "󰖟", hl_group = "AtlasTextMuted" },
-	transition = ICONS.general.progress,
+	transition = { icon = "", hl_group = "AtlasTextMuted" },
 	delete = ICONS.general.delete,
 	run = { icon = "", hl_group = "AtlasTextMuted" },
 	stop = ICONS.pulls.status.stopped,
@@ -201,6 +194,15 @@ end
 
 -- Issues
 
+---@param category string|nil
+---@param name string|nil
+---@return string, string
+function M.issues_status(category, name)
+	local configured = config.options.issues.jira.project_config.status_icons
+	local hl_group = category == "done" and ICONS.general.success.hl_group or ICONS.fallback.hl_group
+	return configured[name] or configured[category] or ICONS.fallback.icon, hl_group
+end
+
 ---@param name string
 ---@return string, string
 function M.issues(name)
@@ -210,20 +212,12 @@ end
 ---@param name string|nil
 ---@return string, string
 function M.issues_type(name)
-	local key = tostring(name or "")
-	local default = ICONS.issues.type[key:lower()]
-	local jira = config.domain_options("jira", "issues") or {}
-	local configured = ((jira.project_config or {}).issue_types or {})[key]
-
-	if configured then
-		return configured.icon or (default and default.icon) or "",
-			configured.hl_group or (default and default.hl_group) or "AtlasTextMuted"
+	local key = tostring(name or ""):lower()
+	local style = config.options.issues.jira.project_config.issue_types[key]
+	if style then
+		return style.icon or "", style.hl_group or "AtlasTextMuted"
 	end
-	if default then
-		return get(default)
-	end
-	local hl_group =
-		require("atlas.ui.shared.highlights").dynamic_for(key ~= "" and ("jira-issue-type:" .. key:lower()) or nil)
+	local hl_group = require("atlas.ui.shared.highlights").dynamic_for(key ~= "" and ("jira-issue-type:" .. key) or nil)
 	return "", hl_group or "AtlasTextMuted"
 end
 
