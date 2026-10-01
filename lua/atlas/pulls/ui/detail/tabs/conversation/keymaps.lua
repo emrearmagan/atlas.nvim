@@ -145,7 +145,7 @@ function M.setup(buf, refresh)
 		})
 	)
 	if has_tasks then
-		local toggle_task = from_action("pulls.review.diff.toggle_resolved", {
+		local toggle_task = from_action("pulls.review.toggle_resolved", {
 			desc = "Toggle task",
 			opts = { nowait = true, silent = true },
 			callback = function()

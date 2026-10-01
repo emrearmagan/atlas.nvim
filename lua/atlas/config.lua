@@ -37,6 +37,7 @@
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
+---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
 
 ---@class AtlasPullsDiffReviewPanelConfig
@@ -192,6 +193,7 @@ local defaults = {
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
+				focus_on_select = false,
 				ignore = { ".git/**", ".jj/**" },
 			},
 		},
@@ -268,7 +270,6 @@ local defaults = {
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
-			external_help = "gA", -- Atlas help in external diff viewers.
 			open_repository = "o",
 			toggle_repo_issue_state = "t",
 			edit_title = "T",
@@ -282,43 +283,42 @@ local defaults = {
 				toggle_auto_refresh = "gR",
 			},
 			review = {
-				open_item = "<CR>",
-				show_details = "K",
-				approve = "<leader>ga",
-				request_changes = "<leader>gr",
-				submit_review = "<leader>gs",
-				add_task = "<leader>t",
-				comment_templates = "gT",
-				find_file = "<leader>ff",
-				explorer = {
+				-- toggle_file_reviewed = "-",
+				-- next_comment = "]r",
+				-- prev_comment = "[r",
+				-- next_note = "]n",
+				-- prev_note = "[n",
+				-- add_comment = "c",
+				-- submit_comment = "C",
+				-- add_suggestion = "s",
+				-- submit_suggestion = "S",
+				-- add_note = "<leader>n",
+				-- toggle_resolved = "x",
+				-- approve = "<leader>ga",
+				-- request_changes = "<leader>gr",
+				-- submit_review = "<leader>gs",
+				-- add_task = "<leader>t",
+				-- comment_templates = "gT",
+				view = {
+					external_help = "gA", -- Atlas help in external diff viewers.
 					toggle_explorer = "<leader>b",
-					find_file = { "f", "<leader>ff" },
+					focus_explorer = "<leader>e",
 					next_file = { "]f", "<Tab>" },
-					previous_file = { "[f", "<S-Tab>" },
+					prev_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
-					previous_unreviewed_file = "[u",
-					toggle_grouping = "T",
-					toggle_file_reviewed = "-",
+					prev_unreviewed_file = "[u",
+					find_file = "<leader>f",
 					toggle_commits = "gC",
+					-- toggle_review_panel = "gR",
+					-- toggle_detail_panel = "gD",
+					-- toggle_comments = "gH",
+					-- next_hunk = "]c",
+					-- prev_hunk = "[c",
+					-- toggle_layout = "t",
+					-- toggle_compact = "gc",
 				},
-				diff = {
-					toggle_layout = "t",
-					toggle_compact = "gc",
-					next_hunk = "]h",
-					previous_hunk = "[h",
-					toggle_review_panel = "gR",
-					toggle_detail_panel = "gD",
-					toggle_comments = "gH",
-					next_comment = "]c",
-					previous_comment = "[c",
-					next_note = "]n",
-					previous_note = "[n",
-					add_comment = "c",
-					submit_comment = "C",
-					add_suggestion = "s",
-					submit_suggestion = "S",
-					add_note = "<leader>n",
-					toggle_resolved = "x",
+				explorer = {
+					toggle_view_mode = "i",
 				},
 			},
 			filters = {

@@ -18,14 +18,17 @@ local function run(root, args, on_done)
 			on_done(nil, vim.trim(result.stderr))
 			return
 		end
+
 		on_done(result.stdout, nil)
 	end)
 end
 
 ---@param source { root: string, base_revision: string, head_revision: string }
+---@param on_done fun(result: { base_revision: string, files: AtlasDiffV2File[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.load(source, on_done)
 	local requests = request_scope.new()
+
 	requests.run(function(done)
 		return run(source.root, { "merge-base", source.base_revision, source.head_revision }, done)
 	end, function(output, err)
@@ -33,6 +36,7 @@ function M.load(source, on_done)
 			on_done(nil, err)
 			return
 		end
+
 		local merge_base = vim.trim(output)
 		local function diff(format, done)
 			return run(source.root, {
@@ -48,6 +52,7 @@ function M.load(source, on_done)
 				"--",
 			}, done)
 		end
+
 		requests.all({
 			files = function(done)
 				return diff("--name-status", done)
@@ -61,21 +66,26 @@ function M.load(source, on_done)
 				on_done(nil, diff_err)
 				return
 			end
-			local fields = vim.split(outputs.files, "\0", { plain = true, trimempty = true })
+
+			local status_fields = vim.split(outputs.files, "\0", { plain = true, trimempty = true })
+			---@type AtlasDiffV2File[]
 			local files = {}
-			local by_path = {}
+			---@type table<string, AtlasDiffV2File>
+			local files_by_path = {}
 			local index = 1
 
-			while index <= #fields do
-				local status = fields[index]:sub(1, 1)
-				local path = fields[index + 1]
+			while index <= #status_fields do
+				local status = status_fields[index]:sub(1, 1)
+				local path = status_fields[index + 1]
 				local old_path
 				index = index + 2
+
 				if status == "R" or status == "C" then
 					old_path = path
-					path = fields[index]
+					path = status_fields[index]
 					index = index + 1
 				end
+
 				local file = {
 					path = path,
 					old_path = old_path,
@@ -83,26 +93,32 @@ function M.load(source, on_done)
 					binary = false,
 				}
 				files[#files + 1] = file
-				by_path[path] = file
+				files_by_path[path] = file
 			end
 
-			fields = vim.split(outputs.stats, "\0", { plain = true, trimempty = true })
+			local stat_fields = vim.split(outputs.stats, "\0", { plain = true, trimempty = true })
 			index = 1
-			while index <= #fields do
-				local additions, deletions, path = fields[index]:match("^([^\t]+)\t([^\t]+)\t(.*)$")
+
+			while index <= #stat_fields do
+				local additions, deletions, path = stat_fields[index]:match("^([^\t]+)\t([^\t]+)\t(.*)$")
 				index = index + 1
+
+				-- Renames put the old and new paths in the next two fields.
 				if path == "" then
-					path = fields[index + 1]
+					path = stat_fields[index + 1]
 					index = index + 2
 				end
-				local file = by_path[path]
+
+				local file = files_by_path[path]
 				file.additions = tonumber(additions)
 				file.deletions = tonumber(deletions)
 				file.binary = additions == "-"
 			end
+
 			on_done({ base_revision = merge_base, files = files }, nil)
 		end)
 	end)
+
 	return { cancel = requests.cancel }
 end
 

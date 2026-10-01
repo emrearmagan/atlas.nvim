@@ -96,7 +96,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.toggle_resolved", {
+		from_action("pulls.review.toggle_resolved", {
 			desc = "Toggle resolved",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -110,7 +110,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.show_details", {
+		from_action("ui.show_details", {
 			desc = "Show details",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -161,7 +161,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.next_hunk", {
+		from_action("pulls.review.view.next_hunk", {
 			desc = "Next hunk",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -184,7 +184,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.previous_hunk", {
+		from_action("pulls.review.view.prev_hunk", {
 			desc = "Previous hunk",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -225,12 +225,12 @@ function M.teardown(buf)
 	utils.insert_if(items, remove_item("ui.comments.edit"))
 	utils.insert_if(items, remove_item("pulls.review.add_task"))
 	utils.insert_if(items, remove_item("ui.delete"))
-	utils.insert_if(items, remove_item("pulls.review.diff.toggle_resolved"))
+	utils.insert_if(items, remove_item("pulls.review.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
-	utils.insert_if(items, remove_item("pulls.review.diff.next_hunk"))
-	utils.insert_if(items, remove_item("pulls.review.diff.previous_hunk"))
-	utils.insert_if(items, remove_item("pulls.review.show_details"))
+	utils.insert_if(items, remove_item("pulls.review.view.next_hunk"))
+	utils.insert_if(items, remove_item("pulls.review.view.prev_hunk"))
+	utils.insert_if(items, remove_item("ui.show_details"))
 	help.remove("Detail", items, { buffer = buf })
 end
 

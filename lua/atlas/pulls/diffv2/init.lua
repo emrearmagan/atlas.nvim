@@ -8,16 +8,25 @@ local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
+local viewer = require("atlas.pulls.diffv2.viewer")
 local worktree = require("atlas.core.git.worktree")
 
 local M = {}
+
+---@class AtlasDiffV2File
+---@field path string
+---@field old_path string|nil
+---@field status "added"|"deleted"|"modified"|"renamed"|"copied"|"type_changed"
+---@field additions integer|nil
+---@field deletions integer|nil
+---@field binary boolean
 
 ---@class AtlasDiffV2Result
 ---@field kind "pr"|"commit"|"range"
 ---@field root string
 ---@field base_revision string
 ---@field head_revision string
----@field files { path: string, old_path?: string, status: string, additions?: integer, deletions?: integer, binary: boolean }[]
+---@field files AtlasDiffV2File[]
 ---@field options AtlasPullsDiffConfig
 ---@field pr PullRequest|nil
 ---@field commits PullsCommit[]
@@ -46,6 +55,7 @@ local function resolve_commit(root, revision, on_done)
 			on_done(nil, vim.trim(result.stderr))
 			return
 		end
+
 		on_done(vim.trim(result.stdout), nil)
 	end)
 end
@@ -64,6 +74,7 @@ local function prepare_commits(root, base, head, requests, on_prepared, fail)
 			fail("Unable to resolve commit: " .. head, head_err)
 			return
 		end
+
 		requests.run(function(done)
 			return resolve_commit(root, base or head_hash .. "^", done)
 		end, function(base_hash, base_err)
@@ -71,6 +82,7 @@ local function prepare_commits(root, base, head, requests, on_prepared, fail)
 				fail("Unable to resolve base commit", base_err)
 				return
 			end
+
 			on_prepared(base and "range" or "commit", {
 				root = root,
 				base_revision = base_hash,
@@ -89,17 +101,21 @@ local function start_loading(message, context, on_done)
 		options.open_cmd = "AtlasDiff"
 	end
 	context.command = options.open_cmd
+
 	---@type AtlasDiffV2Result|nil
 	local result
 	local pending_worktree
+
 	local function release_worktree()
 		if pending_worktree then
 			worktree.discard(pending_worktree.repo_root, pending_worktree.root)
 			pending_worktree = nil
 		end
+
 		if result and result.worktree_root then
 			worktree.discard(result.root, result.worktree_root)
 		end
+
 		result = nil
 	end
 
@@ -107,17 +123,21 @@ local function start_loading(message, context, on_done)
 		requests.cancel()
 		release_worktree()
 	end
+
 	local view = loading.open(message, cancel)
 
 	local function fail(title, description)
 		cancel()
+
 		local err = title
 		if description and description ~= "" then
 			err = title .. "\n\n" .. description
 		end
+
 		context.error = err
 		logger.logerror("diff.open failed", context)
 		view:error(err)
+
 		if on_done then
 			on_done(err)
 		end
@@ -131,6 +151,7 @@ local function start_loading(message, context, on_done)
 			context.root = source.root
 			context.base = source.base_revision
 			context.head = source.head_revision
+
 			view:update("Loading changed files...")
 			requests.run(function(done)
 				return diff_git.load(source, done)
@@ -139,6 +160,7 @@ local function start_loading(message, context, on_done)
 					fail("Unable to load changed files", load_err)
 					return
 				end
+
 				local function complete(worktree_root)
 					result = {
 						kind = kind,
@@ -156,12 +178,24 @@ local function start_loading(message, context, on_done)
 						release = release_worktree,
 					}
 					pending_worktree = nil
+
+					local opened, open_err = pcall(viewer.open, result)
+					if not opened then
+						fail("Unable to open diff", open_err)
+						return
+					end
+
+					view:finish()
+					if on_done then
+						on_done(nil)
+					end
 				end
 
 				if options.open_cmd ~= "AtlasDiff" or not options.lsp.enabled or #diff.files == 0 then
 					complete()
 					return
 				end
+
 				view:update("Preparing worktree...")
 				local pr = pr_data.pr
 				local dir, claim_err = worktree.claim({
@@ -175,8 +209,10 @@ local function start_loading(message, context, on_done)
 					complete()
 					return
 				end
+
 				pending_worktree = { repo_root = source.root, root = dir }
 				worktree.prune(source.root)
+
 				requests.run(function(done)
 					return worktree.ensure({
 						repo_root = source.root,
@@ -189,6 +225,7 @@ local function start_loading(message, context, on_done)
 						release_worktree()
 						notify.warn("LSP worktree unavailable: " .. prepare_err)
 					end
+
 					complete(path)
 				end)
 			end)
@@ -206,6 +243,7 @@ function M.open_pr(ref, on_done)
 		repo = ref.repo_full_name,
 		pr_id = ref.id,
 	}, on_done)
+
 	if not config.provider_options(ref.provider) then
 		fail("Pull request provider is not configured: " .. ref.provider)
 		return
@@ -226,6 +264,7 @@ function M.open_pr(ref, on_done)
 			fail("Unable to load pull request", err)
 			return
 		end
+
 		local capabilities = provider.capabilities
 		local starts = {
 			repository = function(done)
@@ -236,25 +275,30 @@ function M.open_pr(ref, on_done)
 						fail("Unable to prepare repository", prepare_err)
 						return
 					end
+
 					done(source, nil)
 				end)
 			end,
 		}
+
 		if capabilities.core.fetch_commits then
 			starts.commits = function(done)
 				return capabilities.core.fetch_commits(pr, { force_refresh = true }, done)
 			end
 		end
+
 		if capabilities.reviews then
 			starts.review = function(done)
 				return capabilities.reviews.fetch(pr, { force_refresh = true }, done)
 			end
+
 			if capabilities.reviews.fetch_review_context then
 				starts.review_context = function(done)
 					return capabilities.reviews.fetch_review_context(pr, { force_refresh = true }, done)
 				end
 			end
 		end
+
 		if capabilities.users then
 			starts.current_user = capabilities.users.fetch_user
 		end
@@ -271,6 +315,7 @@ function M.open_pr(ref, on_done)
 					notify.warn("Unable to load " .. item[2] .. ": " .. errors[item[1]])
 				end
 			end
+
 			local target, notes_err = notes.target_for_pull_request(pr)
 			local local_notes
 			if target then
@@ -279,6 +324,7 @@ function M.open_pr(ref, on_done)
 			if notes_err then
 				notify.warn("Unable to load notes: " .. notes_err)
 			end
+
 			on_prepared("pr", values.repository, {
 				pr = pr,
 				commits = values.commits,
@@ -301,6 +347,7 @@ function M.open_commit(opts, on_done)
 		root = cwd,
 		commit = opts.commit,
 	}, on_done)
+
 	requests.run(function(done)
 		return git.repo_root(cwd, done)
 	end, function(root, err)
@@ -308,6 +355,7 @@ function M.open_commit(opts, on_done)
 			fail("Unable to open diff", err)
 			return
 		end
+
 		prepare_commits(root, nil, opts.commit, requests, on_prepared, fail)
 	end)
 end
@@ -323,6 +371,7 @@ function M.open_range(opts, on_done)
 		base = opts.base,
 		head = opts.head,
 	}, on_done)
+
 	requests.run(function(done)
 		return git.repo_root(cwd, done)
 	end, function(root, err)
@@ -330,6 +379,7 @@ function M.open_range(opts, on_done)
 			fail("Unable to open diff", err)
 			return
 		end
+
 		prepare_commits(root, opts.base, opts.head, requests, on_prepared, fail)
 	end)
 end

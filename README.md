@@ -94,7 +94,7 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
-> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim), [Diffview](https://github.com/sindrets/diffview.nvim), and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
+> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v4.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) requires the **latest main branch**. [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) is also supported. These viewers can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 <details>
 <summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
@@ -462,6 +462,7 @@ pulls = {
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       preview = false, -- Show a file as soon as the explorer cursor moves onto it.
+      focus_on_select = false, -- Move into the diff after selecting a file.
       ignore = { ".git/**", ".jj/**" },
     },
   },
@@ -903,58 +904,56 @@ keymaps = {
   pulls = {
     open_diff = "gd",
     checkout = "gc",
-    external_help = "gA", -- Atlas help in external diff viewers
     open_repository = "o",
     toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",
     edit_search = "i",
+    review = {
+      -- toggle_file_reviewed = "-",
+      -- approve = "<leader>ga",
+      -- request_changes = "<leader>gr",
+      -- submit_review = "<leader>gs",
+      -- add_task = "<leader>t",
+      -- comment_templates = "gT",
+      -- toggle_resolved = "x",
+      -- next_comment = "]r",
+      -- prev_comment = "[r",
+      -- next_note = "]n",
+      -- prev_note = "[n",
+      -- add_comment = "c",
+      -- submit_comment = "C",
+      -- add_suggestion = "s",
+      -- submit_suggestion = "S",
+      -- add_note = "<leader>n",
+      view = {
+        external_help = "gA", -- Atlas help in external diff viewers.
+        toggle_explorer = "<leader>b",
+        focus_explorer = "<leader>e",
+        next_file = { "]f", "<Tab>" },
+        prev_file = { "[f", "<S-Tab>" },
+        next_unreviewed_file = "]u",
+        prev_unreviewed_file = "[u",
+        find_file = "<leader>f",
+        toggle_commits = "gC",
+        -- toggle_review_panel = "gR",
+        -- toggle_detail_panel = "gD",
+        -- toggle_comments = "gH",
+        -- next_hunk = "]c",
+        -- prev_hunk = "[c",
+        -- toggle_layout = "t",
+        -- toggle_compact = "gc",
+      },
+      explorer = {
+        toggle_view_mode = "i",
+      },
+    },
     pipelines = {
       next_job = { "]j", "<Tab>" },
       previous_job = { "[j", "<S-Tab>" },
       show_history = "gH",
       toggle_raw_logs = "gL",
       toggle_auto_refresh = "gR",
-    },
-    review = {
-      open_item = "<CR>", -- Open the selected file, review item, or inline comment/note.
-      show_details = "K",
-      approve = "<leader>ga",
-      request_changes = "<leader>gr",
-      submit_review = "<leader>gs",
-      add_task = "<leader>t",
-      find_file = "<leader>ff",
-      comment_templates = "gT",
-      explorer = {
-        toggle_explorer = "<leader>b",
-        find_file = { "f", "<leader>ff" },
-        next_file = { "]f", "<Tab>" },
-        previous_file = { "[f", "<S-Tab>" },
-        next_unreviewed_file = "]u",
-        previous_unreviewed_file = "[u",
-        toggle_grouping = "T",
-        toggle_file_reviewed = "-",
-        toggle_commits = "gC",
-      },
-      diff = {
-        toggle_layout = "t",
-        toggle_compact = "gc",
-        next_hunk = "]h",
-        previous_hunk = "[h",
-        toggle_review_panel = "gR",
-        toggle_detail_panel = "gD",
-        toggle_comments = "gH",
-        next_comment = "]c",
-        previous_comment = "[c",
-        next_note = "]n",
-        previous_note = "[n",
-        add_comment = "c",
-        submit_comment = "C",
-        add_suggestion = "s",
-        submit_suggestion = "S",
-        add_note = "<leader>n",
-        toggle_resolved = "x",
-      },
     },
     filters = {
       open = "gpo",

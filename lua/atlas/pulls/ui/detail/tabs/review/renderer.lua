@@ -48,7 +48,7 @@ end
 ---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
 local function emit_comments(lines, spans, line_map, nodes, width)
-	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
+	local toggle_keys = keymaps.resolve("pulls.review.toggle_resolved")
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local thread_lines, thread_spans, thread_map = comment_threads.render(nodes, math.max(1, width - 4), {

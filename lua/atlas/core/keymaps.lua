@@ -52,47 +52,46 @@ local config = require("atlas.config")
 ---@field toggle? AtlasKeymapValue
 ---@field close? AtlasKeymapValue
 
----@class AtlasPullsReviewExplorerKeymaps
+---@class AtlasPullsReviewViewKeymaps
+---@field external_help? AtlasKeymapValue
 ---@field toggle_explorer? AtlasKeymapValue
+---@field focus_explorer? AtlasKeymapValue
 ---@field find_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
----@field previous_file? AtlasKeymapValue
+---@field prev_file? AtlasKeymapValue
 ---@field next_unreviewed_file? AtlasKeymapValue
----@field previous_unreviewed_file? AtlasKeymapValue
----@field toggle_grouping? AtlasKeymapValue
----@field toggle_file_reviewed? AtlasKeymapValue
+---@field prev_unreviewed_file? AtlasKeymapValue
 ---@field toggle_commits? AtlasKeymapValue
-
----@class AtlasPullsReviewDiffKeymaps
----@field toggle_layout? AtlasKeymapValue
----@field toggle_compact? AtlasKeymapValue
----@field next_hunk? AtlasKeymapValue
----@field previous_hunk? AtlasKeymapValue
 ---@field toggle_review_panel? AtlasKeymapValue
 ---@field toggle_detail_panel? AtlasKeymapValue
 ---@field toggle_comments? AtlasKeymapValue
+---@field toggle_layout? AtlasKeymapValue
+---@field toggle_compact? AtlasKeymapValue
+---@field next_hunk? AtlasKeymapValue
+---@field prev_hunk? AtlasKeymapValue
+
+---@class AtlasPullsReviewExplorerKeymaps
+---@field toggle_view_mode? AtlasKeymapValue
+
+---@class AtlasPullsReviewKeymaps
+---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
----@field previous_comment? AtlasKeymapValue
+---@field prev_comment? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
----@field previous_note? AtlasKeymapValue
+---@field prev_note? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
 ---@field add_suggestion? AtlasKeymapValue
 ---@field submit_suggestion? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
-
----@class AtlasPullsReviewKeymaps
----@field open_item? AtlasKeymapValue
----@field show_details? AtlasKeymapValue
 ---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
 ---@field add_task? AtlasKeymapValue
 ---@field comment_templates? AtlasKeymapValue
----@field find_file? AtlasKeymapValue
+---@field view? AtlasPullsReviewViewKeymaps
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
----@field diff? AtlasPullsReviewDiffKeymaps
 
 ---@class AtlasPullsFilterKeymaps
 ---@field open? AtlasKeymapValue
@@ -117,7 +116,6 @@ local config = require("atlas.config")
 ---@field custom? AtlasPullsCustomKeymap[]
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
----@field external_help? AtlasKeymapValue
 ---@field open_repository? AtlasKeymapValue
 ---@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
@@ -192,7 +190,6 @@ local config = require("atlas.config")
 ---| "picker.close"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
----| "pulls.external_help"
 ---| "pulls.open_repository"
 ---| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
@@ -203,40 +200,39 @@ local config = require("atlas.config")
 ---| "pulls.pipelines.show_history"
 ---| "pulls.pipelines.toggle_raw_logs"
 ---| "pulls.pipelines.toggle_auto_refresh"
----| "pulls.review.open_item"
----| "pulls.review.show_details"
+---| "pulls.review.view.external_help"
+---| "pulls.review.view.toggle_explorer"
+---| "pulls.review.view.focus_explorer"
+---| "pulls.review.view.next_file"
+---| "pulls.review.view.prev_file"
+---| "pulls.review.view.next_unreviewed_file"
+---| "pulls.review.view.prev_unreviewed_file"
+---| "pulls.review.view.find_file"
+---| "pulls.review.view.toggle_commits"
+---| "pulls.review.view.toggle_review_panel"
+---| "pulls.review.view.toggle_detail_panel"
+---| "pulls.review.view.toggle_comments"
+---| "pulls.review.view.next_hunk"
+---| "pulls.review.view.prev_hunk"
+---| "pulls.review.view.toggle_layout"
+---| "pulls.review.view.toggle_compact"
+---| "pulls.review.explorer.toggle_view_mode"
+---| "pulls.review.toggle_file_reviewed"
+---| "pulls.review.next_comment"
+---| "pulls.review.prev_comment"
+---| "pulls.review.next_note"
+---| "pulls.review.prev_note"
+---| "pulls.review.add_comment"
+---| "pulls.review.submit_comment"
+---| "pulls.review.add_suggestion"
+---| "pulls.review.submit_suggestion"
+---| "pulls.review.add_note"
+---| "pulls.review.toggle_resolved"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
 ---| "pulls.review.add_task"
 ---| "pulls.review.comment_templates"
----| "pulls.review.find_file"
----| "pulls.review.explorer.toggle_explorer"
----| "pulls.review.explorer.find_file"
----| "pulls.review.explorer.next_file"
----| "pulls.review.explorer.previous_file"
----| "pulls.review.explorer.next_unreviewed_file"
----| "pulls.review.explorer.previous_unreviewed_file"
----| "pulls.review.explorer.toggle_grouping"
----| "pulls.review.explorer.toggle_file_reviewed"
----| "pulls.review.explorer.toggle_commits"
----| "pulls.review.diff.toggle_layout"
----| "pulls.review.diff.toggle_compact"
----| "pulls.review.diff.next_hunk"
----| "pulls.review.diff.previous_hunk"
----| "pulls.review.diff.toggle_review_panel"
----| "pulls.review.diff.toggle_detail_panel"
----| "pulls.review.diff.toggle_comments"
----| "pulls.review.diff.next_comment"
----| "pulls.review.diff.previous_comment"
----| "pulls.review.diff.next_note"
----| "pulls.review.diff.previous_note"
----| "pulls.review.diff.add_comment"
----| "pulls.review.diff.submit_comment"
----| "pulls.review.diff.add_suggestion"
----| "pulls.review.diff.submit_suggestion"
----| "pulls.review.diff.add_note"
----| "pulls.review.diff.toggle_resolved"
 ---| "pulls.filters.open"
 ---| "pulls.filters.merged"
 ---| "pulls.filters.declined"
@@ -365,18 +361,10 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
-		{ "ui.select", "pulls.review.open_item" },
-		{ "ui.show_details", "pulls.review.show_details" },
 		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
-		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
-		{ "ui.next_panel_tab", "pulls.review.explorer.next_file", "pulls.pipelines.next_job" },
-		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file", "pulls.pipelines.previous_job" },
-		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
-		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
-		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
-		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
-		{ "pulls.pipelines.show_history", "pulls.review.diff.toggle_comments" },
-		{ "pulls.pipelines.toggle_auto_refresh", "pulls.review.diff.toggle_review_panel" },
+		{ "ui.next_panel_tab", "pulls.pipelines.next_job" },
+		{ "ui.previous_panel_tab", "pulls.pipelines.previous_job" },
+		{ "ui.comments.reply", "issues.create_issue" },
 		{ "ui.comments.react", "issues.change_reporter" },
 	}
 
@@ -413,7 +401,7 @@ function M.validate()
 					custom_keys[id] = normalize(mapping.key)
 					table.insert(action_ids, id)
 				end
-			elseif not notification_action then
+			elseif not notification_action and action_id ~= "pulls.review" then
 				if normalize(value) then
 					table.insert(action_ids, action_id)
 				elseif type(value) == "table" then
@@ -423,7 +411,7 @@ function M.validate()
 		end
 	end
 
-	local keymaps = require("atlas.config").options.keymaps
+	local keymaps = config.options.keymaps
 	local function actions_for(namespaces)
 		local action_ids = {}
 		for _, namespace in ipairs(namespaces) do
@@ -455,7 +443,13 @@ function M.validate()
 	local result = {
 		picker = conflicts_for(actions_for({ "picker" })),
 		ui = conflicts_for(actions_for({ "ui" })),
-		pulls = conflicts_for(actions_for({ "ui", "pulls" })),
+		pulls = conflicts_for(vim.list_extend(actions_for({ "ui", "pulls" }), {
+			"pulls.review.approve",
+			"pulls.review.request_changes",
+			"pulls.review.submit_review",
+			"pulls.review.add_task",
+			"pulls.review.comment_templates",
+		})),
 		issues = conflicts_for(actions_for({ "ui", "issues" })),
 		notifications = conflicts_for({
 			"ui.notifications.mark_read",
