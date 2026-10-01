@@ -151,20 +151,27 @@ describe("Markdown parsing", function()
 		}, markdown.parse(prefix .. first .. second .. " **live**"))
 	end)
 
-	it("preserves multiline comments through their close or EOF and resumes Markdown afterward", function()
+	it("preserves comment blocks through the closing line or EOF and resumes Markdown on the next line", function()
 		assert.are.same({
-			lines = { "  <!--", "# raw", "", "```lua", "- item", "--> live", "After" },
+			lines = { "  <!--", "# raw", "", "```lua", "- item", "--> **live**", "After" },
 			targets = {},
 			highlights = {
 				span(0, 0, #"  <!--", "AtlasMarkdownComment"),
 				span(1, 0, #"# raw", "AtlasMarkdownComment"),
 				span(3, 0, #"```lua", "AtlasMarkdownComment"),
 				span(4, 0, #"- item", "AtlasMarkdownComment"),
-				span(5, 0, 3, "AtlasMarkdownComment"),
-				span(5, 4, 8, "AtlasMarkdownStrong"),
+				span(5, 0, #"--> **live**", "AtlasMarkdownComment"),
 				span(6, 0, 5, "AtlasMarkdownHeading2"),
 			},
 		}, markdown.parse("  <!--\n# raw\n\n```lua\n- item\n--> **live**\n## After"))
+		assert.are.same({
+			lines = { "<!-- draft --> **ready**", "After" },
+			targets = {},
+			highlights = {
+				span(0, 0, #"<!-- draft --> **ready**", "AtlasMarkdownComment"),
+				span(1, 0, 5, "AtlasMarkdownStrong"),
+			},
+		}, markdown.parse("<!-- draft --> **ready**\n**After**"))
 		assert.are.same({
 			lines = { "<!-->", "**raw**", "" },
 			targets = {},
@@ -303,6 +310,59 @@ describe("Markdown parsing", function()
 				highlights = { span(0, #"é ", #"é 󰋩 " + #case[2], "AtlasMarkdownImage") },
 			}, markdown.parse("é " .. case[1] .. "!"))
 		end
+	end)
+
+	it("skips empty HTML anchors and keeps following heading highlights aligned", function()
+		assert.are.same({
+			lines = { "before", "GitHub" },
+			targets = {},
+			highlights = { span(1, 0, #"GitHub", "AtlasMarkdownHeading3") },
+		}, markdown.parse('before\n<a id="github"></a>\n### GitHub'))
+	end)
+
+	it("renders images inside standalone HTML paragraph tags", function()
+		local url = "https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"
+		assert.are.same({
+			lines = { "  󰋩 GitHub", "after" },
+			targets = { target("image", url, 0, 2, #"  󰋩 GitHub") },
+			highlights = { span(0, 2, #"  󰋩 GitHub", "AtlasMarkdownImage") },
+		}, markdown.parse('<p align="center">\n  <img alt="GitHub" src="' .. url .. '">\n</p>\nafter'))
+	end)
+
+	it("renders details summaries and keeps their Markdown body visible", function()
+		local result = markdown.parse(table.concat({
+			"<details>",
+			'<summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>',
+			"",
+			"```lua",
+			"print(1)",
+			"```",
+			"</details>",
+			"",
+			"**after**",
+		}, "\n"))
+		assert.same({
+			"▾ Using lazy.nvim",
+			"",
+			"       lua  ",
+			"  print(1)  ",
+			"            ",
+			"",
+			"after",
+		}, result.lines)
+		assert.same({}, result.targets)
+		has_group(result, "AtlasMarkdownCode", 3)
+		has_group(result, "AtlasMarkdownStrong", 6)
+	end)
+
+	it("renders a linked image label and keeps the outer destination", function()
+		local url = "https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml"
+		local text = "é [![CI](" .. url .. "/badge.svg)](" .. url .. ")!"
+		assert.are.same({
+			lines = { "é 󰋩 CI!" },
+			targets = { target("link", url, 0, #"é ", #"é 󰋩 CI") },
+			highlights = { span(0, #"é ", #"é 󰋩 CI", "AtlasMarkdownLink") },
+		}, markdown.parse(text))
 	end)
 
 	it("returns link and image destinations with rendered Unicode byte ranges", function()
@@ -546,6 +606,8 @@ describe("Markdown parsing", function()
 		for _, case in ipairs({
 			{ "NOTE", "AtlasMarkdownNote", "▎ 󰋽  Note" },
 			{ "TIP", "AtlasMarkdownTip", "▎ 󰌶  Tip" },
+			{ "tip", "AtlasMarkdownTip", "▎ 󰌶  Tip" },
+			{ "TiP", "AtlasMarkdownTip", "▎ 󰌶  Tip" },
 			{ "IMPORTANT", "AtlasMarkdownImportant", "▎ 󰅾  Important" },
 			{ "WARNING", "AtlasMarkdownWarning", "▎ 󰀪  Warning" },
 			{ "CAUTION", "AtlasMarkdownCaution", "▎ 󰳦  Caution" },
@@ -635,7 +697,7 @@ describe("Markdown parsing", function()
 	end)
 
 	it("handles adjacent callouts independently", function()
-		local result = markdown.parse("> [!NOTE]\n> first\n> [!WARNING]\n> second")
+		local result = markdown.parse("> [!NOTE]\n> first\n> [!wArNiNg]\n> second")
 		assert.are.same({ "▎ 󰋽  Note", "▎ first", "▎ 󰀪  Warning", "▎ second" }, result.lines)
 		has_span(result, span(0, 0, #"▎ 󰋽  Note", "AtlasMarkdownNote"))
 		has_span(result, span(2, 0, #"▎ 󰀪  Warning", "AtlasMarkdownWarning"))
