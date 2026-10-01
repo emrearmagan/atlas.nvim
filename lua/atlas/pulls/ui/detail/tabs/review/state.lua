@@ -1,5 +1,5 @@
 local request_scope = require("atlas.core.requests")
-local comment_threads = require("atlas.pulls.ui.components.comment_threads")
+local review_actions = require("atlas.pulls.actions.review")
 
 ---@class PullsReviewState
 ---@field data PullsReviewData|nil
@@ -27,13 +27,17 @@ end
 ---@param root PullsComment
 ---@return boolean
 function M.is_thread_expanded(root)
-	return M.expanded_threads[tostring(root.id)] == true
+	local expanded = M.expanded_threads[tostring(root.id)]
+	if expanded ~= nil then
+		return expanded
+	end
+	return root.state ~= "RESOLVED"
 end
 
 ---@param root PullsComment
 ---@param expanded boolean
 local function set_expanded(root, expanded)
-	M.expanded_threads[tostring(root.id)] = expanded and true or nil
+	M.expanded_threads[tostring(root.id)] = expanded
 end
 
 ---@param roots PullsComment[]
@@ -59,7 +63,7 @@ end
 ---@return boolean
 function M.toggle_all_folds(comments)
 	local roots = {}
-	for _, node in ipairs(comment_threads.group_comments(comments)) do
+	for _, node in ipairs(review_actions.group_comments(comments)) do
 		table.insert(roots, node.comment)
 	end
 	return M.toggle_threads(roots)

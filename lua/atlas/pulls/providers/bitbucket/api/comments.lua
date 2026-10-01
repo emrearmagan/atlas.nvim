@@ -108,7 +108,7 @@ function M.add_comment(pr, content, opts, on_done)
 		parent_id = parent and (parent.parent_id or parent.id) or nil,
 		file = opts and opts.file or nil,
 		inline = opts and opts.inline or nil,
-		pending = (opts and opts.pending == true) or (parent ~= nil and parent.state == "PENDING"),
+		pending = (opts and opts.pending == true) or (parent ~= nil and parent.pending == true),
 	})
 	return service.request("POST", comments_url, nil, body, function(result, err)
 		if err then

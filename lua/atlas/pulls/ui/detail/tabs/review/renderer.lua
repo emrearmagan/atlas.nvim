@@ -5,11 +5,35 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local diff = require("atlas.ui.components.diff_hunks")
 local keymaps = require("atlas.core.keymaps")
+local review_actions = require("atlas.pulls.actions.review")
 local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local detail = require("atlas.pulls.ui.detail.state")
 
 local PADDING_X = 1
+
+---@param action AtlasKeymapActionId
+---@return string|nil
+local function action_key(action)
+	local keys = keymaps.resolve(action)
+	return keys and keys[1]
+end
+
+---@param comment PullsComment
+---@return string
+local function comment_location(comment)
+	local inline = comment.inline
+	if not inline then
+		return comment.file and vim.fs.basename(comment.file.path) or ""
+	end
+	local line = inline.to or inline.from
+	if not line then
+		return ""
+	end
+	local side = inline.to and "R" or "L"
+	local first = (inline.to and inline.start_to or inline.start_from) or line
+	return first == line and (side .. line) or string.format("%s%d-%s%d", side, first, side, line)
+end
 
 ---@param tasks PullsComment[]
 ---@return string
@@ -26,13 +50,15 @@ end
 ---@param line_map table<integer, table>
 ---@param task PullsComment
 ---@param width integer
-local function emit_task(lines, spans, line_map, task, width)
+---@param format_text (fun(text: string): string)|nil
+local function emit_task(lines, spans, line_map, task, width, format_text)
 	local task_lines, task_spans, task_map = comment_threads.render_task_compact(
 		{ comment = task, children = {} },
 		width,
 		{
 			padding_x = PADDING_X,
 			show_task_label = false,
+			format_text = format_text,
 		}
 	)
 	local offset = #lines
@@ -47,17 +73,26 @@ end
 ---@param line_map table<integer, table>
 ---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
-local function emit_comments(lines, spans, line_map, nodes, width)
-	local toggle_keys = keymaps.resolve("pulls.review.toggle_resolved")
+---@param format_text (fun(text: string): string)|nil
+local function emit_comments(lines, spans, line_map, nodes, width, format_text)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
+	local tasks = provider and provider.capabilities.tasks
 	local thread_lines, thread_spans, thread_map = comment_threads.render(nodes, math.max(1, width - 4), {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
 		end,
 		padding_x = 0,
-		toggle_resolved_key = toggle_keys and table.concat(toggle_keys, " / ") or nil,
+		location = comment_location,
+		action_keys = {
+			reply = action_key("ui.comments.reply"),
+			edit = action_key("ui.comments.edit"),
+			delete = action_key("ui.delete"),
+			add_task = tasks and tasks.add_task and action_key("pulls.review.add_task") or nil,
+			toggle_resolved = action_key("pulls.review.toggle_resolved"),
+		},
 		reaction_options = comments and comments.reaction_options,
+		format_text = format_text,
 	})
 	local result = box.render({ { lines = thread_lines, spans = thread_spans, line_map = thread_map } }, {
 		width = width,
@@ -70,21 +105,49 @@ local function emit_comments(lines, spans, line_map, nodes, width)
 	end
 end
 
+---@param hunk DiffHunk
+---@param position PullsInlineCommentPosition
+---@return DiffHunk|nil
+local function surrounding_hunk(hunk, position)
+	local line_field = position.to and "new_line" or "old_line"
+	local end_line = position.to or position.from
+	local start_line = (position.to and position.start_to or position.start_from) or end_line
+	local first, last
+	for index, line in ipairs(hunk.lines) do
+		local number = line[line_field]
+		if number and end_line and number >= start_line and number <= end_line then
+			first = first or index
+			last = index
+		end
+	end
+	if first then
+		return vim.tbl_extend("force", hunk, {
+			lines = vim.list_slice(hunk.lines, math.max(1, first - 2), math.min(#hunk.lines, last + 2)),
+		})
+	end
+end
+
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
 ---@param width integer
 ---@param thread AtlasCommentThreadNode
-local function emit_thread(lines, spans, line_map, width, thread)
+---@param show_file_header boolean
+---@param format_text (fun(text: string): string)|nil
+local function emit_thread(lines, spans, line_map, width, thread, show_file_header, format_text)
 	local comment = thread.comment
 	local position = comment.file or comment.inline
 	if position then
 		local hunk = comment.inline and comment.outdated ~= true and comment.hunk or nil
+		if hunk then
+			hunk = surrounding_hunk(hunk, comment.inline)
+		end
 		local file = { path = position.path, status = "modified", hunks = hunk and { hunk } or {} }
 		local code_lines, code_spans, code_map = diff.hunks({ file }, {
 			max_width = width,
 			padding_x = PADDING_X,
 			show_line_numbers = false,
+			show_file_header = show_file_header,
 		})
 		local offset = #lines
 		utils.append_block(lines, spans, { lines = code_lines, highlights = code_spans })
@@ -92,14 +155,15 @@ local function emit_thread(lines, spans, line_map, width, thread)
 			line_map[offset + line] = entry
 		end
 	end
-	emit_comments(lines, spans, line_map, { thread }, width)
+	emit_comments(lines, spans, line_map, { thread }, width, format_text)
 end
 
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
+---@param format_text (fun(text: string): string)|nil
 ---@return string[], table[], table<integer, table>
-function M.render(width, comments, tasks)
+function M.render(width, comments, tasks, format_text)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -121,7 +185,7 @@ function M.render(width, comments, tasks)
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
 		for _, task in ipairs(sorted_tasks) do
-			emit_task(lines, spans, line_map, task, max_width)
+			emit_task(lines, spans, line_map, task, max_width, format_text)
 		end
 		table.insert(lines, "")
 	end
@@ -146,10 +210,25 @@ function M.render(width, comments, tasks)
 		return lines, spans, line_map
 	end
 
-	local roots = comment_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
+	local roots = review_actions.group_comments(comments, type(tasks) == "table" and tasks or nil)
+	local groups, by_path = {}, {}
 	for _, thread in ipairs(roots) do
-		emit_thread(lines, spans, line_map, max_width, thread)
-		table.insert(lines, "")
+		if not thread.comment.is_task then
+			local position = thread.comment.file or thread.comment.inline
+			local path = position and position.path or ""
+			if not by_path[path] then
+				by_path[path] = { file_comments = {}, other_comments = {} }
+				table.insert(groups, by_path[path])
+			end
+			local group = by_path[path]
+			table.insert(thread.comment.file and group.file_comments or group.other_comments, thread)
+		end
+	end
+	for _, group in ipairs(groups) do
+		for index, thread in ipairs(vim.list_extend(group.file_comments, group.other_comments)) do
+			emit_thread(lines, spans, line_map, max_width, thread, index == 1, format_text)
+			table.insert(lines, "")
+		end
 	end
 
 	return lines, spans, line_map

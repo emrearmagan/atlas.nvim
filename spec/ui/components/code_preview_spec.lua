@@ -100,11 +100,11 @@ describe("ui.components.code_preview", function()
 			anchor_start = 8,
 			anchor_line = 9,
 			padding = 2,
-			background_hl_group = "AtlasDiffChangeLine",
+			background_hl_group = "DiffChange",
 		})
 		assert.same({ " 12    local x = 1  ", "123    print(x)  ", "124    return x  " }, result.lines)
 		assert.equals("local x = 1\nprint(x)\nreturn x", parsed_source)
-		assert.equals("AtlasDiffChangeLine", result.highlights[1].line_hl_group)
+		assert.equals("DiffChange", result.highlights[1].line_hl_group)
 		assert.equals("CursorLineNr", result.highlights[2].hl_group)
 		assert.equals("CursorLineNr", result.highlights[4].hl_group)
 		assert.equals("AtlasTextMuted", result.highlights[6].hl_group)
@@ -206,14 +206,13 @@ describe("ui.components.code_preview", function()
 		assert.same(plain, preview.render(opts))
 	end)
 
-	it("does not hide query or parser execution errors", function()
+	it("keeps code visible when query or parser execution fails", function()
 		local opts = { lines = { "local x = 1" }, language = "lua" }
+		local plain = preview.render({ lines = opts.lines })
 		vim.treesitter.query.get = function()
 			error("Invalid query", 0)
 		end
-		assert.has_error(function()
-			preview.render(opts)
-		end, "Invalid query")
+		assert.same(plain, preview.render(opts))
 		vim.treesitter.get_string_parser = function()
 			return {
 				parse = function()
@@ -221,8 +220,6 @@ describe("ui.components.code_preview", function()
 				end,
 			}
 		end
-		assert.has_error(function()
-			preview.render(opts)
-		end, "Parse error")
+		assert.same(plain, preview.render(opts))
 	end)
 end)

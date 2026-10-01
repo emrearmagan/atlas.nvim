@@ -16,6 +16,7 @@ local popup = { buf = nil, win = nil, owner = nil, line_map = {} }
 ---@field old_path string
 ---@field new_path string
 ---@field reaction_options PullsReactionOption[]|nil
+---@field format_text (fun(text: string): string)|nil
 
 ---@param buf integer
 ---@return integer
@@ -71,6 +72,7 @@ function M.thread_lines(context, buf, list)
 		end,
 		padding_x = 0,
 		reaction_options = context.reaction_options,
+		format_text = context.format_text,
 		location = comment_location,
 	})
 	local rendered = box.render({ { lines = lines, spans = spans } }, { width = width, padding_x = 0 })
@@ -206,6 +208,7 @@ end
 ---@field title string|nil
 ---@field toggle_resolved_keys string[]|nil
 ---@field reaction_options PullsReactionOption[]|nil
+---@field format_text (fun(text: string): string)|nil
 ---@field on_action fun(action: AtlasCommentThreadAction, comment: PullsComment, close: fun())
 
 ---@param opts AtlasDiffThreadPopupOptions
@@ -220,7 +223,6 @@ function M.open_popup(opts)
 		toggle = opts.toggle_resolved_keys,
 	}
 	local width = math.min(100, math.max(1, vim.o.columns - 4))
-	local toggle_key = key_label(keys.toggle)
 	local lines, spans, line_map = threads.render(opts.nodes, width, {
 		expanded = function()
 			return true
@@ -229,11 +231,11 @@ function M.open_popup(opts)
 			reply = key_label(keys.reply),
 			edit = key_label(keys.edit),
 			delete = key_label(keys.delete),
-			toggle_resolved = toggle_key,
+			toggle_resolved = key_label(keys.toggle),
 		},
 		padding_x = 1,
-		toggle_resolved_key = toggle_key,
 		reaction_options = opts.reaction_options,
+		format_text = opts.format_text,
 		location = comment_location,
 	})
 	if #lines == 0 then

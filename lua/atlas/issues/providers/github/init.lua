@@ -14,7 +14,7 @@
 ---@field milestone GitHubIssueMilestone|nil
 ---@field sub_issues GitHubIssue[]
 
-local author_completion = require("atlas.providers.github.completion.author")
+local mentions = require("atlas.providers.github.mentions")
 local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
 local client = require("atlas.providers.github.client")
@@ -234,7 +234,7 @@ return {
 		},
 		comments = {
 			reaction_options = emojis.github(),
-			comment_completion = author_completion.for_issues,
+			comment_completion = mentions.for_issues,
 			fetch_conversation = fetch_conversation,
 			add_comment = comments_api.add,
 			edit_comment = comments_api.edit,

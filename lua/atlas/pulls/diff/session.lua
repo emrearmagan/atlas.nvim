@@ -158,7 +158,7 @@ local function statusline_items(session)
 	end
 	local pending = 0
 	for _, comment in ipairs(review_comments) do
-		if comment.state == "PENDING" then
+		if comment.pending then
 			pending = pending + 1
 		end
 	end

@@ -130,6 +130,7 @@ function M.open(opts)
 			{
 				key = state.refresh_keys,
 				desc = "Reload overview",
+				index = 25,
 				callback = function()
 					load(state)
 				end,
@@ -138,6 +139,7 @@ function M.open(opts)
 			{
 				key = state.browser_keys,
 				desc = "Open repository in browser",
+				index = 33,
 				callback = function()
 					if state.repo.html_url then
 						vim.ui.open(state.repo.html_url)

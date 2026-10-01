@@ -67,7 +67,7 @@ function M.open(opts)
 		height = height,
 		style = "minimal",
 		border = "rounded",
-		title = " Local notes ",
+		title = " Notes ",
 		title_pos = "center",
 		zindex = 250,
 	})

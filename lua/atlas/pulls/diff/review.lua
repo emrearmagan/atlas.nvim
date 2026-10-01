@@ -3,27 +3,18 @@ local M = {}
 local request_scope = require("atlas.core.requests")
 
 ---@param review AtlasDiffReview
----@return AtlasMarkdownCompletionProvider|nil
-local function comment_completion(review)
+---@return (fun(text: string): string)|nil
+function M.comment_formatter(review)
 	local comments = review.provider.capabilities.comments
-	return comments
-			and comments.comment_completion
-			and comments.comment_completion({
-				pr = review.pr,
-				comments = review.data.comments,
-				tasks = review.data.tasks,
-				reviewers = review.data.reviewers,
-				review_context = review.context,
-			})
-		or nil
-end
-
----@param review AtlasDiffReview
-local function resolve_items(review)
-	local completion = comment_completion(review)
-	if completion and completion.resolve_items then
-		completion.resolve_items()
+	if not comments or not comments.comment_formatter then
+		return nil
 	end
+
+	return comments.comment_formatter({
+		pr = review.pr,
+		data = review.data,
+		review_context = review.context,
+	})
 end
 
 ---@param session AtlasDiffSession
@@ -79,7 +70,6 @@ local function load(context, on_done)
 		if not errors.review and values.review then
 			context.data = values.review
 		end
-		resolve_items(context)
 		on_done(context, warnings)
 	end)
 	return pending
@@ -120,7 +110,7 @@ function M.action_context(session, comment)
 		current_user = review.current_user,
 		data = review.data,
 		items = comment and comment.is_task and review.data.tasks or review.data.comments,
-		completion = comment_completion(review),
+		review_context = review.context,
 		notify = function(level, message, duration)
 			notify(session, level, message, duration)
 		end,

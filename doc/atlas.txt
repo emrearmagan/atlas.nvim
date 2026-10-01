@@ -221,7 +221,7 @@ Use `ctx.output(title)` to show output from a custom action:
         `.` uses the current branch.
 
 :Atlas notes [target]
-        Open the local-notes manager, optionally filtered to a target.
+        Open the notes manager, optionally filtered to a target.
 
 :Atlas create [pr|issue]
         Start the pull-request or issue creation flow. Without an argument,
@@ -242,7 +242,7 @@ Use `ctx.output(title)` to show output from a custom action:
 
 :Atlas clear [cache|notes|stars]
         Clear all Atlas data, or only cached data and cloned repositories,
-        local review notes, or locally starred items.
+        notes, or locally starred items.
 
 :Atlas logs
         Toggle the Atlas log buffer.
@@ -259,7 +259,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
 >lua
   require("atlas").setup({
     pulls = {
-      delete_notes = false, -- delete local notes after approval or merge
+      delete_notes = false, -- delete notes after approval or merge
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_branch = false,
       git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -285,7 +285,6 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
-        compact_context_lines = 3, -- context lines around hunks in compact mode
         lsp = {
           enabled = false, -- real files on the new side, so LSP attaches
           dir = nil,       -- absolute path or fun(ctx): string|nil
@@ -298,6 +297,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
           width = 40,
           initial_focus = "explorer", -- "explorer" or "diff"
           preview = false, -- show a file when the explorer cursor moves onto it
+          focus_on_select = false, -- move into the diff after selecting a file
           ignore = { ".git/**", ".jj/**" },
         },
       },
@@ -683,6 +683,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         copy_url                = "Y",
         show_details            = "K",
         search                  = "?",
+        edit_search             = "i",
       },
       picker = {
         next_item    = { "<Down>", "<C-n>", "<C-j>" },
@@ -696,17 +697,14 @@ Atlas emits these `User` events after setup or cleanup completes:
         change_assignee  = "ga",
         change_reporter  = "gr",
         edit_issue       = "ge",
-        edit_search      = "i",
         create_issue     = "c",
       },
       pulls = {
         open_diff              = "gd",
         checkout               = "gc",
         open_repository        = "o",
-        toggle_repo_issue_state = "t",
         edit_title             = "T",
         edit_description       = "D",
-        edit_search            = "i",
         pipelines = {
           next_job             = { "]j", "<Tab>" },
           previous_job         = { "[j", "<S-Tab>" },
@@ -715,41 +713,43 @@ Atlas emits these `User` events after setup or cleanup completes:
           toggle_auto_refresh  = "gR",
         },
         review = {
-          -- toggle_file_reviewed = "-",
-          -- approve = "<leader>ga",
-          -- request_changes = "<leader>gr",
-          -- submit_review = "<leader>gs",
-          -- add_task = "<leader>t",
-          -- comment_templates = "gT",
-          -- toggle_resolved = "x",
-          -- next_comment = "]r",
-          -- prev_comment = "[r",
-          -- next_note = "]n",
-          -- prev_note = "[n",
-          -- add_comment = "c",
-          -- submit_comment = "C",
-          -- add_suggestion = "s",
-          -- submit_suggestion = "S",
-          -- add_note = "<leader>n",
+          show_details = "K", -- File/commit details.
+          toggle_file_reviewed = "-",
+          approve = "<leader>ga",
+          request_changes = "<leader>gr",
+          submit_review = "<leader>gs",
+          add_task = "<leader>t",
+          comment_templates = "gT",
+          toggle_resolved = "x",
+          next_comment = "]c",
+          prev_comment = "[c",
+          next_note = "]n",
+          prev_note = "[n",
+          add_comment = "c",
+          submit_comment = "C",
+          add_suggestion = "s",
+          submit_suggestion = "S",
+          add_note = "<leader>n",
           view = {
             external_help = "gA", -- Atlas help in external diff viewers.
+            toggle_review_panel = "gR",
+            toggle_detail_panel = "gD",
+            toggle_comments = "gH",
+            next_hunk = "]h",
+            prev_hunk = "[h",
+            toggle_layout = "t",
+            toggle_compact = "gc",
+          },
+          explorer = {
             toggle_explorer = "<leader>b",
             focus_explorer = "<leader>e",
+            toggle_commits = "gC",
             next_file = { "]f", "<Tab>" },
             prev_file = { "[f", "<S-Tab>" },
             next_unreviewed_file = "]u",
             prev_unreviewed_file = "[u",
             find_file = "<leader>f",
-            toggle_commits = "gC",
-            -- toggle_review_panel = "gR",
-            -- toggle_detail_panel = "gD",
-            -- toggle_comments = "gH",
-            -- next_hunk = "]c",
-            -- prev_hunk = "[c",
-            -- toggle_layout = "t",
-            -- toggle_compact = "gc",
-          },
-          explorer = {
+            open_file = "gf",
             toggle_view_mode = "i",
           },
         },

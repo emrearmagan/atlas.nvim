@@ -202,12 +202,12 @@ function M.edit(session, note)
 	end
 	note_editor.edit(session.note_target, note, function(updated, err)
 		if not updated then
-			notify(session, "error", err or "Unable to update local note")
+			notify(session, "error", err or "Unable to update note")
 			return
 		end
 		upsert(session.notes, updated)
 		session:render()
-		notify(session, "success", "Local note updated")
+		notify(session, "success", "Note updated")
 	end)
 end
 
@@ -217,14 +217,14 @@ function M.delete(session, note)
 	if not session.note_target then
 		return
 	end
-	vim.ui.input({ prompt = "Delete local note? [y/N]: " }, function(answer)
+	vim.ui.input({ prompt = "Delete note? [y/N]: " }, function(answer)
 		answer = vim.trim(tostring(answer or "")):lower()
 		if answer ~= "y" and answer ~= "yes" then
 			return
 		end
 		local deleted, err = store.delete(session.note_target, note.id)
 		if not deleted then
-			notify(session, "error", err or "Unable to delete local note")
+			notify(session, "error", err or "Unable to delete note")
 			return
 		end
 		for index = #session.notes, 1, -1 do
@@ -233,7 +233,7 @@ function M.delete(session, note)
 			end
 		end
 		session:render()
-		notify(session, "success", "Local note deleted")
+		notify(session, "success", "Note deleted")
 	end)
 end
 
@@ -262,7 +262,7 @@ function M.add_at_cursor(session, buf)
 	end
 	local document = current.document
 	if document.binary or document.status == "deleted" then
-		notify(session, "warn", "Local notes require a text file on the new side")
+		notify(session, "warn", "Notes require a text file on the new side")
 		return
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -279,12 +279,12 @@ function M.add_at_cursor(session, buf)
 		context = { start_line = first, lines = context },
 	}, function(saved, err)
 		if not saved then
-			notify(session, "error", err or "Unable to save local note")
+			notify(session, "error", err or "Unable to save note")
 			return
 		end
 		upsert(session.notes, saved)
 		session:render()
-		notify(session, "success", "Local note added")
+		notify(session, "success", "Note added")
 	end)
 end
 
@@ -330,7 +330,7 @@ function M.reload(session)
 	end
 	local notes, err = store.list(session.note_target)
 	if not notes then
-		notify(session, "error", err or "Unable to load local notes")
+		notify(session, "error", err or "Unable to load notes")
 		return
 	end
 	session.notes = notes
@@ -345,12 +345,12 @@ function M.load(review)
 	end
 	local target, target_err = store.target_for_pull_request(review.pr)
 	if not target then
-		core_notify.error(target_err or "Unable to load local notes", { vim_notify = true })
+		core_notify.error(target_err or "Unable to load notes", { vim_notify = true })
 		return nil, {}
 	end
 	local items, list_err = store.list(target)
 	if not items then
-		core_notify.error(list_err or "Unable to load local notes", { vim_notify = true })
+		core_notify.error(list_err or "Unable to load notes", { vim_notify = true })
 	end
 	return target, items or {}
 end

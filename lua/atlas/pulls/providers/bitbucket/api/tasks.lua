@@ -74,7 +74,7 @@ function M.add_task(pr, content, parent, on_done)
 	}
 	if parent then
 		payload.comment = { id = tonumber(parent.id) or parent.id }
-		if parent.state == "PENDING" then
+		if parent.pending then
 			payload.pending = true
 		end
 	end

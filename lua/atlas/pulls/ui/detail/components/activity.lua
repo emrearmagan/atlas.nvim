@@ -44,7 +44,7 @@ local EVENT = {
 }
 
 ---@param entry PullsActivityEntry
----@return { icon: string, icon_hl: string|nil, additional: string|nil, content: string|nil }
+---@return { icon: string, icon_hl: string|nil, additional: string, content: string|nil }
 function M.classify(entry)
 	local icon = EVENT[entry.kind] or icons.pulls("activity")
 	local icon_hl = "AtlasTextMuted"
@@ -73,12 +73,19 @@ local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
 		local classified = M.classify(e)
+		local additional_hl = "AtlasTextMuted"
+		if e.kind == "approval" then
+			additional_hl = "AtlasTextPositive"
+		elseif e.kind == "unapproval" or e.kind == "changes_requested" then
+			additional_hl = "AtlasTextWarning"
+		end
+
 		items[#items + 1] = {
 			icon = classified.icon,
 			icon_hl = classified.icon_hl,
 			author = actor_name(e.actor),
-			right_text = utils.relative_time(e.date),
-			additional = classified.additional,
+			right_text = { { utils.relative_time(e.date), "AtlasTextMuted" } },
+			additional = { { classified.additional, additional_hl } },
 			content = classified.content,
 			line_map = {
 				kind = "activity",
@@ -89,23 +96,6 @@ local function to_thread_items(entries, run_id)
 		}
 	end
 	return items
-end
-
----@param item AtlasThreadItem
----@param _text string
----@return string|nil
-local function additional_hl(item, _text)
-	local entry = item.line_map and item.line_map.activity_entry
-	if entry == nil then
-		return "AtlasTextMuted"
-	end
-	if entry.kind == "approval" then
-		return "AtlasTextPositive"
-	end
-	if entry.kind == "unapproval" or entry.kind == "changes_requested" then
-		return "AtlasTextWarning"
-	end
-	return "AtlasTextMuted"
 end
 
 ---@param item AtlasThreadItem
@@ -138,7 +128,6 @@ function M.render(entries, width, opts)
 		to_thread_items(entries, opts.run_id),
 		width,
 		vim.tbl_extend("force", opts, {
-			additional_hl = additional_hl,
 			content_hl = content_hl,
 		})
 	)

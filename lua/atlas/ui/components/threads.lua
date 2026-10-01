@@ -15,8 +15,9 @@ local markdown = require("atlas.formats.markdown")
 ---@field icon string|nil Icon string rendered before author
 ---@field icon_hl string|nil Highlight group for the icon
 ---@field author string|nil Display name of the author
----@field additional string|nil Extra text between author and timestamp
----@field right_text string|nil Right-aligned text (e.g. timestamp, hash)
+---@field author_hl string|nil Highlight group for the author
+---@field additional [string, string][]|nil Extra text and highlight chunks after the author
+---@field right_text [string, string][]|nil Right-aligned text and highlight chunks (e.g. timestamp, hash)
 ---@field content string|nil Body text (may contain newlines)
 ---@field markdown boolean|nil
 ---@field language string|nil
@@ -35,11 +36,7 @@ local markdown = require("atlas.formats.markdown")
 ---@field content_max_lines integer|fun(item: AtlasThreadItem): integer|nil Max visible content lines per item (nil = unlimited).
 ---@field content_truncated_key string|nil Key shown when expandable content is truncated.
 ---@field content_prefix string|nil Prefix placed before root content after padding
----@field author_hl? fun(item: AtlasThreadItem, author: string): string|nil Returns hl group for author
----@field additional_hl? fun(item: AtlasThreadItem, additional: string): string|table[]|nil Returns a group or highlighted segments
 ---@field content_hl? fun(item: AtlasThreadItem, row: string, row_index: integer): table[]|nil Returns segments for content
----@field right_text_hl? fun(item: AtlasThreadItem, text: string): string|table[]|nil Returns hl group or {start_col,end_col,hl_group}[] segments for right_text
----@field icon_hl_fn (fun(item: AtlasThreadItem): string|nil)|nil Override icon highlight
 
 ---@class AtlasThreadSpan
 ---@field line integer 0-indexed line number
@@ -90,10 +87,9 @@ local function span(spans, line, start_col, end_col, hl_group)
 	}
 end
 
----@param _ AtlasThreadItem
 ---@param author string
 ---@return string|nil
-local function default_author_hl(_, author)
+local function default_author_hl(author)
 	local normalized = vim.trim(author):lower()
 	if normalized == "" or normalized == "unknown" or normalized == "none" or normalized == "unassigned" then
 		return "AtlasTextMuted"
@@ -166,9 +162,6 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		local icon_start = #header
 		header = header .. icon .. " "
 		local hl = item.icon_hl
-		if opts.icon_hl_fn then
-			hl = opts.icon_hl_fn(item) or hl
-		end
 		if hl then
 			col_markers[#col_markers + 1] = { icon_start, icon_start + #icon, hl }
 		end
@@ -180,15 +173,23 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	end
 	local author_start = #header
 	header = header .. author
-	local author_hl_val = opts.author_hl(item, author)
-	if type(author_hl_val) == "string" and author_hl_val ~= "" then
-		col_markers[#col_markers + 1] = { author_start, #header, author_hl_val }
+	local author_hl = item.author_hl or default_author_hl(author)
+	if author_hl and author_hl ~= "" then
+		col_markers[#col_markers + 1] = { author_start, #header, author_hl }
 	end
 
-	local right_text = tostring(item.right_text or "")
+	local right_chunks = item.right_text or {}
+	local right_text = ""
+	for _, chunk in ipairs(right_chunks) do
+		right_text = right_text .. chunk[1]
+	end
 	local right_text_dw = right_text ~= "" and (2 + vim.api.nvim_strwidth(right_text)) or 0
 
-	local additional = tostring(item.additional or "")
+	local additional_chunks = item.additional or {}
+	local additional = ""
+	for _, chunk in ipairs(additional_chunks) do
+		additional = additional .. chunk[1]
+	end
 	if additional ~= "" then
 		local padding_x = opts.padding_x
 		local used_dw = vim.api.nvim_strwidth(header)
@@ -202,20 +203,14 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 
 		local add_start = #header + 2
 		header = header .. "  " .. additional
-		local add_hl = opts.additional_hl(item, additional)
-		if type(add_hl) == "table" then
-			for _, seg in ipairs(add_hl) do
-				local end_col = math.min(seg.end_col, #additional)
-				if seg.start_col < end_col then
-					col_markers[#col_markers + 1] = {
-						add_start + seg.start_col,
-						add_start + end_col,
-						seg.hl_group,
-					}
-				end
+		local offset = 0
+		for _, chunk in ipairs(additional_chunks) do
+			local chunk_end = offset + #chunk[1]
+			local end_col = math.min(chunk_end, #additional)
+			if offset < end_col then
+				col_markers[#col_markers + 1] = { add_start + offset, add_start + end_col, chunk[2] }
 			end
-		elseif type(add_hl) == "string" and add_hl ~= "" then
-			col_markers[#col_markers + 1] = { add_start, #header, add_hl }
+			offset = chunk_end
 		end
 	end
 
@@ -227,18 +222,10 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		local needed = math.max(2, right_edge - display_so_far - display_rt)
 		local rt_byte_start = #header + needed
 		header = header .. string.rep(" ", needed) .. right_text
-		local hl = opts.right_text_hl and opts.right_text_hl(item, right_text) or nil
-		if type(hl) == "table" then
-			for _, seg in ipairs(hl) do
-				col_markers[#col_markers + 1] = {
-					rt_byte_start + seg.start_col,
-					rt_byte_start + seg.end_col,
-					seg.hl_group,
-				}
-			end
-		else
-			local group = type(hl) == "string" and hl or "AtlasTextMuted"
-			col_markers[#col_markers + 1] = { rt_byte_start, rt_byte_start + #right_text, group }
+		for _, chunk in ipairs(right_chunks) do
+			local chunk_end = rt_byte_start + #chunk[1]
+			col_markers[#col_markers + 1] = { rt_byte_start, chunk_end, chunk[2] }
+			rt_byte_start = chunk_end
 		end
 	end
 
@@ -465,8 +452,6 @@ function M.render(items, width, opts)
 		mode = "tree",
 		show_connectors = true,
 		separator = "─",
-		author_hl = default_author_hl,
-		additional_hl = noop_hl,
 		content_hl = noop_hl,
 	}, opts or {})
 

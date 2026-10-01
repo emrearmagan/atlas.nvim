@@ -1,6 +1,7 @@
 local checkout = require("atlas.core.git.checkout")
 local config = require("atlas.config")
 local diff_git = require("atlas.pulls.diffv2.git")
+local diff_worktree = require("atlas.pulls.diffv2.worktree")
 local git = require("atlas.core.git")
 local loading = require("atlas.ui.loading")
 local logger = require("atlas.core.logger")
@@ -26,6 +27,8 @@ local M = {}
 ---@field root string
 ---@field base_revision string
 ---@field head_revision string
+---@field base_ref string|nil
+---@field head_ref string|nil
 ---@field files AtlasDiffV2File[]
 ---@field options AtlasPullsDiffConfig
 ---@field pr PullRequest|nil
@@ -87,6 +90,8 @@ local function prepare_commits(root, base, head, requests, on_prepared, fail)
 				root = root,
 				base_revision = base_hash,
 				head_revision = head_hash,
+				base_ref = base,
+				head_ref = head,
 			})
 		end)
 	end)
@@ -113,6 +118,7 @@ local function start_loading(message, context, on_done)
 		end
 
 		if result and result.worktree_root then
+			diff_worktree.cleanup(result.worktree_root)
 			worktree.discard(result.root, result.worktree_root)
 		end
 
@@ -143,100 +149,101 @@ local function start_loading(message, context, on_done)
 		end
 	end
 
-	return view,
-		requests,
-		fail,
-		function(kind, source, pr_data)
-			pr_data = pr_data or {}
-			context.root = source.root
-			context.base = source.base_revision
-			context.head = source.head_revision
+	local function on_prepared(kind, source, pr_data)
+		pr_data = pr_data or {}
+		context.root = source.root
+		context.base = source.base_revision
+		context.head = source.head_revision
 
-			view:update("Loading changed files...")
+		view:update("Loading changed files...")
+		requests.run(function(done)
+			return diff_git.load(source, done)
+		end, function(diff, load_err)
+			if not diff then
+				fail("Unable to load changed files", load_err)
+				return
+			end
+
+			local function complete(worktree_root)
+				result = {
+					kind = kind,
+					root = source.root,
+					base_revision = diff.base_revision,
+					head_revision = source.head_revision,
+					base_ref = source.base_ref,
+					head_ref = source.head_ref,
+					files = diff.files,
+					options = options,
+					pr = pr_data.pr,
+					commits = pr_data.commits or {},
+					review = pr_data.review,
+					current_user = pr_data.current_user,
+					notes = pr_data.notes,
+					worktree_root = worktree_root,
+					release = release_worktree,
+				}
+				pending_worktree = nil
+
+				local opened, open_err = pcall(viewer.open, result)
+				if not opened then
+					fail("Unable to open diff", open_err)
+					return
+				end
+
+				view:finish()
+				if on_done then
+					on_done(nil)
+				end
+			end
+
+			if options.open_cmd ~= "AtlasDiff" or not options.lsp.enabled or #diff.files == 0 then
+				complete()
+				return
+			end
+
+			view:update("Preparing worktree...")
+			local pr = pr_data.pr
+			local dir, claim_err = worktree.claim({
+				repo_root = source.root,
+				head_sha = source.head_revision,
+				repo_full_name = pr and pr.repo_full_name,
+				pr_id = pr and pr.id,
+			}, options.lsp)
+			if not dir then
+				notify.warn("LSP worktree unavailable: " .. claim_err)
+				complete()
+				return
+			end
+
+			pending_worktree = { repo_root = source.root, root = dir }
+			worktree.prune(source.root)
+
 			requests.run(function(done)
-				return diff_git.load(source, done)
-			end, function(diff, load_err)
-				if not diff then
-					fail("Unable to load changed files", load_err)
-					return
-				end
-
-				local function complete(worktree_root)
-					result = {
-						kind = kind,
-						root = source.root,
-						base_revision = diff.base_revision,
-						head_revision = source.head_revision,
-						files = diff.files,
-						options = options,
-						pr = pr_data.pr,
-						commits = pr_data.commits or {},
-						review = pr_data.review,
-						current_user = pr_data.current_user,
-						notes = pr_data.notes,
-						worktree_root = worktree_root,
-						release = release_worktree,
-					}
-					pending_worktree = nil
-
-					local opened, open_err = pcall(viewer.open, result)
-					if not opened then
-						fail("Unable to open diff", open_err)
-						return
-					end
-
-					view:finish()
-					if on_done then
-						on_done(nil)
-					end
-				end
-
-				if options.open_cmd ~= "AtlasDiff" or not options.lsp.enabled or #diff.files == 0 then
-					complete()
-					return
-				end
-
-				view:update("Preparing worktree...")
-				local pr = pr_data.pr
-				local dir, claim_err = worktree.claim({
+				return worktree.ensure({
 					repo_root = source.root,
 					head_sha = source.head_revision,
-					repo_full_name = pr and pr.repo_full_name,
-					pr_id = pr and pr.id,
-				}, options.lsp)
-				if not dir then
-					notify.warn("LSP worktree unavailable: " .. claim_err)
-					complete()
-					return
+					dir = dir,
+					link = options.lsp.link,
+				}, done)
+			end, function(path, prepare_err)
+				if not path then
+					release_worktree()
+					notify.warn("LSP worktree unavailable: " .. prepare_err)
 				end
 
-				pending_worktree = { repo_root = source.root, root = dir }
-				worktree.prune(source.root)
-
-				requests.run(function(done)
-					return worktree.ensure({
-						repo_root = source.root,
-						head_sha = source.head_revision,
-						dir = dir,
-						link = options.lsp.link,
-					}, done)
-				end, function(path, prepare_err)
-					if not path then
-						release_worktree()
-						notify.warn("LSP worktree unavailable: " .. prepare_err)
-					end
-
-					complete(path)
-				end)
+				complete(path)
 			end)
-		end
+		end)
+	end
+
+	return view, requests, fail, on_prepared
 end
 
 -- Accepts a PR reference: provider ID, repository name and PR ID.
----@param ref { provider: string, repo_full_name: string, id: string|number }
+---@param ref { provider: string, repo_full_name: string, id: string|number, root?: string }
 ---@param on_done (fun(err: string|nil))|nil
 function M.open_pr(ref, on_done)
-	local cwd = git.default_cwd()
+	local cwd = ref.root or git.default_cwd()
 	local view, requests, fail, on_prepared = start_loading("Loading pull request...", {
 		kind = "pr",
 		provider = ref.provider,
@@ -317,9 +324,9 @@ function M.open_pr(ref, on_done)
 			end
 
 			local target, notes_err = notes.target_for_pull_request(pr)
-			local local_notes
+			local note_items
 			if target then
-				local_notes, notes_err = notes.list(target)
+				note_items, notes_err = notes.list(target)
 			end
 			if notes_err then
 				notify.warn("Unable to load notes: " .. notes_err)
@@ -331,7 +338,7 @@ function M.open_pr(ref, on_done)
 				review = (values.review or values.review_context)
 					and { data = values.review, context = values.review_context },
 				current_user = values.current_user,
-				notes = target and { target = target, items = local_notes or {} },
+				notes = target and { target = target, items = note_items or {} },
 			})
 		end)
 	end)

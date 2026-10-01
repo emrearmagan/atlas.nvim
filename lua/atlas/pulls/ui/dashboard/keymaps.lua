@@ -96,6 +96,7 @@ function M.register(buf, views)
 		items,
 		item("ui.select", {
 			desc = "Run bookmark",
+			index = 2,
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
@@ -106,12 +107,13 @@ function M.register(buf, views)
 		})
 	)
 
-	for _, status in ipairs(state.available_states) do
+	for index, status in ipairs(state.available_states) do
 		local value = status
 		utils.insert_if(
 			items,
 			item("pulls.filters." .. value, {
 				desc = string.format("Toggle %s filter", value),
+				index = 40 + index,
 				callback = function()
 					controller.toggle_status_filter(value)
 				end,
@@ -148,6 +150,7 @@ function M.register(buf, views)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
+			index = 5,
 			opts = { nowait = true },
 			callback = function()
 				run_action("open_in_browser", true)
@@ -159,6 +162,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_url", {
 			desc = "Copy PR URL",
+			index = 6,
 			opts = { nowait = true },
 			callback = function()
 				run_action("copy_url", true)
@@ -170,6 +174,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_id", {
 			desc = "Copy PR ID",
+			index = 7,
 			opts = { nowait = true },
 			callback = function()
 				run_action("copy_id", true)
@@ -181,6 +186,7 @@ function M.register(buf, views)
 		items,
 		item("ui.show_details", {
 			desc = "Show PR details",
+			index = 3,
 			opts = { nowait = true },
 			callback = function()
 				controller.show_pr_details(buf)
@@ -192,6 +198,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_star", {
 			desc = "Star or unstar PR",
+			index = 21,
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
@@ -207,6 +214,7 @@ function M.register(buf, views)
 		items,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
+			index = 4,
 			opts = { nowait = true },
 			callback = function()
 				run_action("open_diff", true)
@@ -218,6 +226,7 @@ function M.register(buf, views)
 		items,
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
+			index = 20,
 			opts = { nowait = true },
 			callback = function()
 				run_action("checkout", true)
@@ -237,6 +246,7 @@ function M.register(buf, views)
 			items,
 			item("ui.search", {
 				desc = "Search",
+				index = 30,
 				callback = function()
 					run_action("search", false)
 				end,
@@ -246,8 +256,9 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.edit_search", {
+		item("ui.edit_search", {
 			desc = "Edit Current Search",
+			index = 31,
 			callback = function()
 				run_action("edit_search", false)
 			end,
@@ -258,6 +269,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh", {
 			desc = "Refetch selected PR",
+			index = 60,
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
@@ -273,6 +285,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
+			index = 61,
 			callback = controller.refresh_view,
 		})
 	)
@@ -281,6 +294,7 @@ function M.register(buf, views)
 		items,
 		item("ui.previous_page", {
 			desc = "Previous page",
+			index = 10,
 			callback = controller.previous_page,
 		})
 	)
@@ -289,6 +303,7 @@ function M.register(buf, views)
 		items,
 		item("ui.next_page", {
 			desc = "Next page",
+			index = 11,
 			callback = controller.next_page,
 		})
 	)
@@ -318,6 +333,7 @@ function M.register(buf, views)
 		general,
 		item("pulls.open_repository", {
 			desc = "Open repository browser",
+			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local node = require("atlas.ui.navigation").current_item()

@@ -123,7 +123,7 @@ function M.inline_deleted_lines(document, right_buf, comments, hints)
 					local row = virtual_lines.render({ content }, highlights, {
 						width = math.max(0, width - textoff),
 						start_col = textoff,
-						background_hl_group = "AtlasDiffRemoveLine",
+						background_hl_group = "DiffDelete",
 					})[1]
 					table.insert(rows, row)
 					vim.list_extend(rows, (comments and comments[line]) or {})
@@ -163,13 +163,13 @@ function M.file(document, opts)
 	vim.api.nvim_buf_clear_namespace(right_buf, inline_namespace, 0, -1)
 	local hunks = document.changes
 	if document.status == "added" then
-		highlight_lines(right_buf, 1, #document.new.lines, "AtlasDiffAddLine")
+		highlight_lines(right_buf, 1, #document.new.lines, "DiffAdd")
 	elseif document.status == "deleted" then
-		highlight_lines(left_buf, 1, #document.old.lines, "AtlasDiffRemoveLine")
+		highlight_lines(left_buf, 1, #document.old.lines, "DiffDelete")
 	elseif opts.layout == "inline" and not document.binary then
 		for _, hunk in ipairs(hunks) do
 			if hunk.new_count > 0 then
-				highlight_lines(right_buf, hunk.new_start, hunk.new_count, "AtlasDiffAddLine")
+				highlight_lines(right_buf, hunk.new_start, hunk.new_count, "DiffAdd")
 			end
 		end
 	end

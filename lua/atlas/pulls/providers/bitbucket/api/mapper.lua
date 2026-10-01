@@ -375,7 +375,6 @@ function M.to_comment(result)
 	local outdated = raw_inline ~= nil and raw_inline.outdated == true
 	local inline, file = comment_position(raw_inline)
 	local state = entry.deleted == true and "DELETED"
-		or (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
 		or (outdated and "OUTDATED")
 		or nil
@@ -395,6 +394,7 @@ function M.to_comment(result)
 		file = file,
 		inline = inline,
 		is_task = nil,
+		pending = entry.pending == true and entry.deleted ~= true,
 		state = state,
 		outdated = outdated,
 		url = tostring((as_table(links.self) or {}).href or ""),
@@ -440,9 +440,8 @@ function M.to_tasks_list(result)
 			resolved_on = type(task.resolved_on) == "string" and task.resolved_on or nil,
 			resolved_by = resolved_by and actor(resolved_by) or nil,
 			is_task = true,
-			state = task.pending == true and "PENDING"
-				or (tostring(task.state or "") == "RESOLVED" and "RESOLVED")
-				or nil,
+			pending = task.pending == true,
+			state = tostring(task.state or "") == "RESOLVED" and "RESOLVED" or nil,
 			url = tostring((as_table(links.self) or {}).href or ""),
 			html_url = tostring((as_table(links.html) or {}).href or ""),
 		})

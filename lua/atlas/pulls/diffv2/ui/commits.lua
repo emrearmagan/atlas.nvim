@@ -1,4 +1,4 @@
-local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local info = require("atlas.ui.popups.info")
 local utils = require("atlas.ui.shared.utils")
 
@@ -8,19 +8,17 @@ local namespace = vim.api.nvim_create_namespace("atlas.diffv2.commits")
 local function render(state)
 	local view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
 	local width = vim.api.nvim_win_get_width(state.win)
-	local icon, icon_hl = icons.pulls("commit")
 	local lines = { string.format("Commits (%d)", #state.items) }
 	local highlights = { { 0, 0, #lines[1], "AtlasLogInfo" } }
 
 	for _, commit in ipairs(state.items) do
 		local hash = (commit.short_hash or commit.hash):sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
-		local prefix = icon .. " " .. hash .. " "
+		local prefix = hash .. " "
 
 		lines[#lines + 1] = prefix
 			.. utils.truncate(vim.fn.strtrans(message), math.max(1, width - vim.fn.strdisplaywidth(prefix)))
-		highlights[#highlights + 1] = { #lines - 1, 0, #icon, icon_hl }
-		highlights[#highlights + 1] = { #lines - 1, #icon + 1, #icon + 1 + #hash, "AtlasTextMuted" }
+		highlights[#highlights + 1] = { #lines - 1, 0, #hash, "AtlasTextMuted" }
 	end
 
 	vim.bo[state.buf].modifiable = true
@@ -141,9 +139,36 @@ end
 function M.close(state)
 	if state.win then
 		state.cursor_row = vim.api.nvim_win_get_cursor(state.win)[1]
-		info.close(state.win)
 		vim.api.nvim_win_close(state.win, true)
-		state.win = nil
+	end
+end
+
+---@return PullsCommit|nil
+function M.current(state)
+	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
+	return state.items[row - 1]
+end
+
+function M.copy_hash(state)
+	local commit = M.current(state)
+	if not commit then
+		return
+	end
+
+	vim.fn.setreg("+", commit.hash)
+	notify.success("Copied commit SHA")
+end
+
+function M.open_in_browser(state)
+	local commit = M.current(state)
+	if not commit then
+		return
+	end
+
+	if commit.html_url and commit.html_url ~= "" then
+		vim.ui.open(commit.html_url)
+	else
+		notify.warn("No URL available for this commit")
 	end
 end
 

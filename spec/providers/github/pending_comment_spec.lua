@@ -26,7 +26,7 @@ local function pending_comment(overrides)
 	return vim.tbl_extend("force", {
 		id = 4242,
 		content_raw = "updated body",
-		state = "PENDING",
+		pending = true,
 		inline = { path = "lua/init.lua", to = 12 },
 		thread_id = "PRRT_node",
 		_raw = {
@@ -76,7 +76,7 @@ describe("github review comments", function()
 			for index, state in ipairs({ "PENDING", "COMMENTED" }) do
 				review_state = state
 				local comment = pending_comment()
-				comment.state = state == "PENDING" and state or nil
+				comment.pending = state == "PENDING"
 				local updated, err
 				api.edit_comment(pull_request(), comment, function(result, e)
 					updated, err = result, e
@@ -90,7 +90,7 @@ describe("github review comments", function()
 				assert.is_truthy(flags.query:find("updatePullRequestReviewComment", 1, true))
 				assert.equal(4242, updated.id)
 				assert.equal("updated body", updated.content_raw)
-				assert.equal(comment.state, updated.state)
+				assert.equal(comment.pending, updated.pending)
 				assert.equal("lua/init.lua", updated.inline.path)
 				assert.equal(12, updated.inline.to)
 				assert.equal("PRRT_node", updated.thread_id)
@@ -153,7 +153,7 @@ describe("github review comments", function()
 
 			for index, state in ipairs({ "PENDING", "COMMENTED" }) do
 				local comment = pending_comment()
-				comment.state = state == "PENDING" and state or nil
+				comment.pending = state == "PENDING"
 				local ok, err
 				api.delete_comment(pull_request(), comment, function(success, e)
 					ok, err = success, e

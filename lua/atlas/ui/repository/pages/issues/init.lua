@@ -267,6 +267,7 @@ local function register(state, buf, actions)
 			items[#items + 1] = {
 				key = keys,
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { silent = true, nowait = true },
 			}
@@ -316,6 +317,7 @@ function M.open(opts)
 				state.page, state.cursors = 1, {}
 				load(state, true)
 			end,
+			index = 25,
 		},
 		{
 			resolver.resolve("ui.search"),
@@ -323,15 +325,17 @@ function M.open(opts)
 			function()
 				search(state)
 			end,
+			index = 20,
 		},
 		{
-			resolver.resolve("pulls.toggle_repo_issue_state"),
+			{ "t" },
 			"Toggle open/closed issues",
 			function()
 				state.filter = state.filter == "open" and "closed" or "open"
 				state.page, state.cursors = 1, {}
 				load(state)
 			end,
+			index = 21,
 		},
 		{
 			resolver.resolve("ui.next_page"),
@@ -344,6 +348,7 @@ function M.open(opts)
 				state.cursors[state.page] = state.next_cursor
 				load(state)
 			end,
+			index = 11,
 		},
 		{
 			resolver.resolve("ui.previous_page"),
@@ -354,6 +359,7 @@ function M.open(opts)
 					load(state)
 				end
 			end,
+			index = 10,
 		},
 	}
 	register(state, state.sidebar_buf, actions)
@@ -368,6 +374,7 @@ function M.open(opts)
 			function()
 				open_panel(state)
 			end,
+			index = 30,
 		},
 		{
 			resolver.resolve("ui.open_in_browser"),
@@ -378,6 +385,7 @@ function M.open(opts)
 					vim.ui.open(issue.url)
 				end
 			end,
+			index = 33,
 		},
 	})
 	register(state, state.buf, actions)

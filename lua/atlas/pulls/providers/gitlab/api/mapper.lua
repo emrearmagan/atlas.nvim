@@ -331,7 +331,7 @@ function M.to_draft_comment(draft, discussion_first_id)
 	if draft.author_id ~= nil and draft.author_id ~= vim.NIL then
 		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
 	end
-	comment.state = "PENDING"
+	comment.pending = true
 	comment._raw = vim.tbl_extend("force", comment._raw or {}, { draft_note_id = draft.id })
 	return comment
 end

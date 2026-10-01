@@ -38,11 +38,12 @@ local function render_context(session)
 	end
 	local capability = current_review.provider.capabilities.comments
 	return {
-		threads = comment_threads.group_comments(current_review.data.comments, current_review.data.tasks),
+		threads = actions.group_comments(current_review.data.comments, current_review.data.tasks),
 		expanded_threads = session.expanded_threads,
 		old_path = current.document.old.path,
 		new_path = current.document.new.path,
 		reaction_options = capability and capability.reaction_options,
+		format_text = review.comment_formatter(current_review),
 	}
 end
 
@@ -178,13 +179,14 @@ end
 ---@param buf integer
 ---@param line integer
 ---@param list AtlasCommentThreadNode[]
-local function add_line_hints(target, buf, line, list)
+---@param format_text (fun(text: string): string)|nil
+local function add_line_hints(target, buf, line, list, format_text)
 	for _, node in ipairs(list) do
 		target[#target + 1] = {
 			buf = buf,
 			line = line,
 			kind = "comment",
-			text = node.comment.content_display or node.comment.content_raw,
+			text = format_text and format_text(node.comment.content_raw) or node.comment.content_raw,
 		}
 	end
 end
@@ -192,9 +194,10 @@ end
 ---@param target AtlasDiffHint[]
 ---@param buf integer
 ---@param by_line table<integer, AtlasCommentThreadNode[]>
-local function add_hints(target, buf, by_line)
+---@param format_text (fun(text: string): string)|nil
+local function add_hints(target, buf, by_line, format_text)
 	for line, list in pairs(by_line) do
-		add_line_hints(target, buf, line, list)
+		add_line_hints(target, buf, line, list, format_text)
 	end
 end
 
@@ -209,14 +212,14 @@ function M.hints(session, inline_deleted_lines)
 	end
 	local placed = placed_threads(session, context, inline_deleted_lines)
 	local items = {}
-	add_hints(items, current.right.buf, placed.right)
-	add_hints(items, current.left.buf, placed.left)
-	add_line_hints(items, current.right.buf, 1, placed.right_file)
-	add_line_hints(items, current.left.buf, 1, placed.left_file)
+	add_hints(items, current.right.buf, placed.right, context.format_text)
+	add_hints(items, current.left.buf, placed.left, context.format_text)
+	add_line_hints(items, current.right.buf, 1, placed.right_file, context.format_text)
+	add_line_hints(items, current.left.buf, 1, placed.left_file, context.format_text)
 	local deleted_hints = {}
 	for line, list in pairs(placed.deleted) do
 		deleted_hints[line] = {}
-		add_line_hints(deleted_hints[line], current.right.buf, line, list)
+		add_line_hints(deleted_hints[line], current.right.buf, line, list, context.format_text)
 	end
 	return items, deleted_hints
 end
@@ -426,6 +429,7 @@ function M.open_at_cursor(session, buf)
 			title = popup_title(current_nodes),
 			toggle_resolved_keys = keymaps.resolve("pulls.review.diff.toggle_resolved"),
 			reaction_options = capability and capability.reaction_options,
+			format_text = review.comment_formatter(current_review),
 			on_action = function(action, comment, close)
 				M.run_action(session, action, comment, function()
 					close()

@@ -59,7 +59,6 @@
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
 ---@field compact boolean|nil
----@field compact_context_lines integer|nil
 ---@field comment_display "virtual_lines"|"virtual_text"|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
@@ -174,7 +173,6 @@ local defaults = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",
 			compact = true,
-			compact_context_lines = 3,
 			comment_display = "virtual_lines",
 			review_panel = {
 				hidden = true,
@@ -259,6 +257,7 @@ local defaults = {
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
+			edit_search = "i",
 		},
 		picker = {
 			next_item = { "<Down>", "<C-n>", "<C-j>" },
@@ -271,10 +270,8 @@ local defaults = {
 			open_diff = "gd",
 			checkout = "gc",
 			open_repository = "o",
-			toggle_repo_issue_state = "t",
 			edit_title = "T",
 			edit_description = "D",
-			edit_search = "i",
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },
@@ -283,41 +280,43 @@ local defaults = {
 				toggle_auto_refresh = "gR",
 			},
 			review = {
-				-- toggle_file_reviewed = "-",
-				-- next_comment = "]r",
-				-- prev_comment = "[r",
-				-- next_note = "]n",
-				-- prev_note = "[n",
-				-- add_comment = "c",
-				-- submit_comment = "C",
-				-- add_suggestion = "s",
-				-- submit_suggestion = "S",
-				-- add_note = "<leader>n",
-				-- toggle_resolved = "x",
-				-- approve = "<leader>ga",
-				-- request_changes = "<leader>gr",
-				-- submit_review = "<leader>gs",
-				-- add_task = "<leader>t",
-				-- comment_templates = "gT",
+				show_details = "K", -- File/commit details.
+				toggle_file_reviewed = "-",
+				next_comment = "]c",
+				prev_comment = "[c",
+				next_note = "]n",
+				prev_note = "[n",
+				add_comment = "c",
+				submit_comment = "C",
+				add_suggestion = "s",
+				submit_suggestion = "S",
+				add_note = "<leader>n",
+				toggle_resolved = "x",
+				approve = "<leader>ga",
+				request_changes = "<leader>gr",
+				submit_review = "<leader>gs",
+				add_task = "<leader>t",
+				comment_templates = "gT",
 				view = {
 					external_help = "gA", -- Atlas help in external diff viewers.
+					toggle_review_panel = "gR",
+					toggle_detail_panel = "gD",
+					toggle_comments = "gH",
+					next_hunk = "]h",
+					prev_hunk = "[h",
+					toggle_layout = "t",
+					toggle_compact = "gc",
+				},
+				explorer = {
 					toggle_explorer = "<leader>b",
 					focus_explorer = "<leader>e",
+					toggle_commits = "gC",
 					next_file = { "]f", "<Tab>" },
 					prev_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
 					prev_unreviewed_file = "[u",
 					find_file = "<leader>f",
-					toggle_commits = "gC",
-					-- toggle_review_panel = "gR",
-					-- toggle_detail_panel = "gD",
-					-- toggle_comments = "gH",
-					-- next_hunk = "]c",
-					-- prev_hunk = "[c",
-					-- toggle_layout = "t",
-					-- toggle_compact = "gc",
-				},
-				explorer = {
+					open_file = "gf",
 					toggle_view_mode = "i",
 				},
 			},
@@ -332,7 +331,6 @@ local defaults = {
 			change_assignee = "ga",
 			change_reporter = "gr",
 			edit_issue = "ge",
-			edit_search = "i",
 			create_issue = "c",
 		},
 	},

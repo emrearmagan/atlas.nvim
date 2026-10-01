@@ -218,9 +218,7 @@ function M.configure_content_window(session, win)
 	-- Neovim marks lines that only exist in either buffer as DiffAdd. In the old buffer those are removals.
 	-- Mostly taken from Diffview.nvim:
 	-- https://github.com/sindrets/diffview.nvim/blob/main/lua/diffview/scene/views/standard/standard_view.lua
-	options.winhighlight = side_by_side
-			and (is_left and "DiffAdd:AtlasDiffRemoveLine,DiffDelete:AtlasDiffDeleteFiller" or "DiffAdd:AtlasDiffAddLine,DiffDelete:AtlasDiffDeleteFiller")
-		or ""
+	options.winhighlight = side_by_side and is_left and "DiffAdd:DiffDelete" or ""
 
 	local file = state.files[state.selected_index]
 	local path = is_left and state.document.old.path or state.document.new.path

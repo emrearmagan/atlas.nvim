@@ -1,42 +1,29 @@
 local M = {}
 
+local action_runner = require("atlas.core.actions")
 local request_scope = require("atlas.core.requests")
-local md_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
-local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
+local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state")
+local utils = require("atlas.ui.shared.utils")
 
-local THREAD_ACTIONS = {
-	add_comment = function(context, comment, on_done)
-		return review.add_comment(context, { parent = comment }, on_done)
-	end,
-	edit = review.edit_comment,
-	delete = review.delete_comment,
-	toggle_task = review.toggle_task,
-	toggle_resolved = review.toggle_resolved,
-}
-
----@return AtlasMarkdownCompletionProvider|nil
-local function author_completion()
+---@param pr PullRequest
+---@return (fun(text: string): string)|nil
+local function comment_formatter(pr)
 	local provider = detail.provider
-	local comments_capability = provider and provider.capabilities.comments
-	local data = state.data
-	local pr = detail.current_pr
-	if not provider or not pr or not data or not comments_capability or not comments_capability.comment_completion then
+	local comments = provider and provider.capabilities.comments
+	if not comments or not comments.comment_formatter then
 		return nil
 	end
-	local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state").comments(false)
-	return comments_capability.comment_completion({
+	return comments.comment_formatter({
 		pr = pr,
 		details = detail.current_details,
-		comments = data.comments,
-		tasks = data.tasks,
-		reviewers = data.reviewers,
-		conversation = conversation,
+		data = state.data,
+		conversation = conversation.comments(),
 	})
 end
 
@@ -95,20 +82,16 @@ function M.on_select(pr, refresh, opts)
 	end)
 end
 
----@param _pr PullRequest
+---@param pr PullRequest
 ---@param _details PullRequestDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(_pr, _details, width)
-	local completion = author_completion()
-	if completion and completion.resolve_items then
-		completion.resolve_items()
-	end
+function M.render(pr, _details, width)
 	if state.status then
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil, comment_formatter(pr))
 end
 
 ---@param _lnum integer
@@ -141,12 +124,17 @@ end
 ---@param buf integer
 function M.show_details(entry, buf)
 	local task = entry and entry.entity_kind == "task" and entry.comment or nil
-	if task == nil then
+	local pr = detail.current_pr
+	if not task or not pr then
 		return
 	end
 
-	local utils = require("atlas.ui.shared.utils")
-	local content = utils.task_text(task.content_display or task.content_raw)
+	local content = task.content_raw or ""
+	local format_text = comment_formatter(pr)
+	if format_text then
+		content = format_text(content)
+	end
+	content = utils.task_text(content)
 	local empty = string.format("(empty %s)", (task.task_label or "task"):lower())
 	local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
 	lines[1] = (task.state == "RESOLVED" and "[x] " or "[ ] ") .. lines[1]
@@ -183,21 +171,19 @@ function M.deactivate(buf)
 end
 
 ---@param pr PullRequest
----@param key "comments"|"tasks"
 ---@return AtlasReviewActionContext|nil
-local function action_context(pr, key)
+local function action_context(pr)
 	local provider = detail.provider
 	local data = state.data
 	if not provider or not data then
 		return nil
 	end
-	local items = data[key]
 	return {
 		provider = provider,
 		pr = pr,
-		items = items,
 		data = data,
-		completion = author_completion(),
+		details = detail.current_details,
+		conversation = conversation.comments(),
 		notify = function(level, message, duration)
 			if is_current(pr) then
 				notify.show(level, message, { timeout = duration })
@@ -208,7 +194,7 @@ end
 
 -- Actions
 
----@param action AtlasCommentThreadAction
+---@param action "add_comment"|"edit_comment"|"delete_comment"|"toggle_task"|"toggle_resolved"
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
@@ -217,13 +203,13 @@ local function run_comment_action(action, pr, entry, refresh)
 	if not comment then
 		return
 	end
-	local context = action_context(pr, comment.is_task and "tasks" or "comments")
-	local handler = THREAD_ACTIONS[action]
-	if not context or not handler then
+	local context = action_context(pr)
+	if not context then
 		return
 	end
+	context.comment = comment
 	local on_update = detail.on_update
-	handler(context, comment, function(result, err)
+	action_runner.run(review[action], context, function(result, err)
 		if not result or err then
 			return
 		end
@@ -250,14 +236,14 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit_comment(pr, entry, refresh)
-	run_comment_action("edit", pr, entry, refresh)
+	run_comment_action("edit_comment", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
-	run_comment_action("delete", pr, entry, refresh)
+	run_comment_action("delete_comment", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
@@ -273,18 +259,10 @@ end
 ---@param pr PullRequest
 ---@param refresh fun()
 function M.add_task(pr, refresh)
-	local provider = detail.provider
-	local tasks_capability = provider and provider.capabilities.tasks
-	if not tasks_capability or not tasks_capability.add_task then
-		notify.error("Provider does not support tasks")
+	local context = action_context(pr)
+	if not context then
 		return
 	end
-	local add_task = tasks_capability.add_task
-	local data = state.data
-	if not data then
-		return
-	end
-	local tasks = data.tasks
 
 	local win = detail.win
 	local parent = nil
@@ -295,43 +273,12 @@ function M.add_task(pr, refresh)
 			parent = ent.comment
 		end
 	end
-	local preview
-	if parent then
-		preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
-	end
-
-	md_editor.open({
-		key = "pr-task-add-" .. tostring(pr.id or ""),
-		title = " Add Task ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
-		completion = author_completion(),
-		preview = preview,
-		on_save = function(text)
-			if not is_current(pr) then
-				return
-			end
-			if not text or vim.trim(text) == "" then
-				notify.warn("Task cannot be empty")
-				return
-			end
-			notify.loading("Adding task...")
-			add_task(pr, text, parent, function(task, err)
-				if not is_current(pr) then
-					return
-				end
-				if err then
-					notify.error(tostring(err))
-					return
-				end
-				if task then
-					table.insert(tasks, task)
-				end
-				notify.success("Task added", { timeout = 1200 })
-				refresh()
-			end)
-		end,
-	})
+	context.comment = parent
+	action_runner.run(review.add_task, context, function(result, err)
+		if result and not err and is_current(pr) then
+			refresh()
+		end
+	end)
 end
 
 return M

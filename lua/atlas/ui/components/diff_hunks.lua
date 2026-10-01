@@ -7,6 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field max_width integer
 ---@field padding_x integer|nil                       default 1
 ---@field show_line_numbers boolean|nil
+---@field show_file_header boolean|nil                default true
 
 local DEFAULT_PADDING = 1
 
@@ -131,9 +132,9 @@ local function render_hunk(lines, spans, line_map, file, hunk, opts)
 
 			local body_lnum
 			if dl.kind == "add" then
-				body_lnum = push(text, "AtlasDiffAddLine", highlights)
+				body_lnum = push(text, "DiffAdd", highlights)
 			elseif dl.kind == "remove" then
-				body_lnum = push(text, "AtlasDiffRemoveLine", highlights)
+				body_lnum = push(text, "DiffDelete", highlights)
 			else
 				body_lnum = push(text, preview_backgrounds[preview_index], highlights)
 			end
@@ -159,7 +160,9 @@ function M.hunks(files, opts)
 	local line_map = {}
 
 	for fi, file in ipairs(files) do
-		emit_file_header(lines, spans, file, padding_x, opts.max_width)
+		if opts.show_file_header ~= false then
+			emit_file_header(lines, spans, file, padding_x, opts.max_width)
+		end
 
 		for hi, hunk in ipairs(file.hunks) do
 			if hi > 1 then

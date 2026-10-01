@@ -49,6 +49,7 @@ function M.activate(buf, refresh)
 			{
 				key = #toggle_keys == 1 and toggle_keys[1] or toggle_keys,
 				desc = "Toggle description mode",
+				index = 10,
 				opts = { nowait = true, silent = true },
 				callback = function()
 					view_mode = view_mode == "raw" and "markdown" or "raw"
@@ -71,6 +72,7 @@ function M.activate(buf, refresh)
 		{
 			key = #keys == 1 and keys[1] or keys,
 			desc = "Edit description",
+			index = 20,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local issue = detail.current_issue

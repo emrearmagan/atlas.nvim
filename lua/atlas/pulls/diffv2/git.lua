@@ -23,6 +23,16 @@ local function run(root, args, on_done)
 	end)
 end
 
+---@param root string
+---@param revision string
+---@param path string
+---@param on_done fun(content: string|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.read(root, revision, path, on_done)
+	-- TODO: Submodules point to commits, not file contents. Show their hashes instead.
+	return run(root, { "cat-file", "blob", revision .. ":" .. path }, on_done)
+end
+
 ---@param source { root: string, base_revision: string, head_revision: string }
 ---@param on_done fun(result: { base_revision: string, files: AtlasDiffV2File[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
@@ -67,6 +77,7 @@ function M.load(source, on_done)
 				return
 			end
 
+			-- Paths can contain tabs or newlines, so Git separates them with NULs.
 			local status_fields = vim.split(outputs.files, "\0", { plain = true, trimempty = true })
 			---@type AtlasDiffV2File[]
 			local files = {}

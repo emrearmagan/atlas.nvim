@@ -330,6 +330,7 @@ function M.keymaps(state)
 		{
 			key = #keys == 1 and keys[1] or keys,
 			desc = "Open references",
+			index = 3,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				M.select(state)

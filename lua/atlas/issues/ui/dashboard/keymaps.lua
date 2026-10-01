@@ -86,6 +86,7 @@ function M.register(buf, views)
 		items,
 		item("ui.select", {
 			desc = "Run bookmark",
+			index = 0,
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
@@ -140,8 +141,9 @@ function M.register(buf, views)
 	if actions.is_available("edit_search", context(nil)) then
 		utils.insert_if(
 			items,
-			item("issues.edit_search", {
+			item("ui.edit_search", {
 				desc = "Edit Current Search",
+				index = 4,
 				callback = function()
 					actions.run("edit_search", context(nil), controller.apply_action_result)
 				end,
@@ -153,7 +155,7 @@ function M.register(buf, views)
 		items,
 		item("ui.show_details", {
 			desc = "Show issue details",
-			index = 4,
+			index = 5,
 			opts = { nowait = true },
 			callback = function()
 				controller.show_issue_details(buf)
@@ -165,7 +167,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_star", {
 			desc = "Star or unstar issue",
-			index = 5,
+			index = 7,
 			callback = function()
 				controller.toggle_issue_star(selected_issue())
 			end,
@@ -176,7 +178,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh", {
 			desc = "Reload selected issue",
-			index = 6,
+			index = 8,
 			callback = controller.refresh_current_issue,
 		})
 	)
@@ -185,7 +187,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
-			index = 7,
+			index = 9,
 			callback = controller.refresh_view,
 		})
 	)
@@ -194,7 +196,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_fold", {
 			desc = "Toggle issue children",
-			index = 8,
+			index = 10,
 			callback = controller.toggle_current_issue_collapsed,
 		})
 	)
@@ -203,7 +205,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_all_folds", {
 			desc = "Toggle all issue children",
-			index = 9,
+			index = 11,
 			callback = controller.toggle_all_issues_collapsed,
 		})
 	)
@@ -212,7 +214,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_id", {
 			desc = "Copy issue key",
-			index = 10,
+			index = 12,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -229,7 +231,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_url", {
 			desc = "Copy issue URL",
-			index = 10,
+			index = 13,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -248,7 +250,7 @@ function M.register(buf, views)
 			items,
 			item("issues.transition_issue", {
 				desc = "Transition issue",
-				index = 11,
+				index = 14,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -266,7 +268,7 @@ function M.register(buf, views)
 			items,
 			item("issues.change_assignee", {
 				desc = "Change assignee",
-				index = 12,
+				index = 15,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -284,7 +286,7 @@ function M.register(buf, views)
 			items,
 			item("issues.change_reporter", {
 				desc = "Change reporter",
-				index = 13,
+				index = 16,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -302,7 +304,7 @@ function M.register(buf, views)
 			items,
 			item("issues.edit_issue", {
 				desc = "Edit issue",
-				index = 14,
+				index = 17,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -319,7 +321,7 @@ function M.register(buf, views)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
-			index = 15,
+			index = 6,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -336,6 +338,7 @@ function M.register(buf, views)
 		items,
 		item("ui.previous_page", {
 			desc = "Previous page",
+			index = 18,
 			callback = controller.previous_page,
 		})
 	)
@@ -344,6 +347,7 @@ function M.register(buf, views)
 		items,
 		item("ui.next_page", {
 			desc = "Next page",
+			index = 19,
 			callback = controller.next_page,
 		})
 	)

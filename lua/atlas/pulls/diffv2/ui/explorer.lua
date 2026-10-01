@@ -29,7 +29,7 @@ local statuses = {
 ---@field annotated_paths table<string, { comments?: boolean, notes?: boolean }>
 ---@field selected AtlasDiffV2File|nil
 ---@field cursor_row integer|nil
----@field on_select fun(file: AtlasDiffV2File)
+---@field on_select fun(file: AtlasDiffV2File, focus?: boolean)
 
 ---@param files AtlasDiffV2File[]
 ---@param ignore_patterns string[]|nil
@@ -373,11 +373,6 @@ end
 function M.update(state, reviewed_files, review_data, notes)
 	state.reviewed_files = reviewed_files
 	state.annotated_paths = collect_annotations(review_data, notes)
-
-	if state.selected then
-		expand_parents(state, state.selected)
-	end
-
 	render(state)
 end
 
@@ -404,10 +399,15 @@ function M.current_index(state)
 end
 
 ---@param state AtlasDiffV2Explorer
----@param file AtlasDiffV2File
+---@param file AtlasDiffV2File|nil
 function M.reveal(state, file)
+	file = vim.tbl_contains(state.files, file) and file or nil
 	state.selected = file
 	local row = highlight_selection(state)
+	if not file then
+		return
+	end
+
 	if not row then
 		expand_parents(state, file)
 		render(state, { file = file })
@@ -448,14 +448,60 @@ function M.show_details(state)
 	})
 end
 
+---@param state AtlasDiffV2Explorer
+function M.toggle_folder(state)
+	local row = state.rows[current_row(state)]
+	if row and row.file then
+		local parent = row.file.path:match("^.*/")
+		row = vim.iter(state.rows):find(function(item)
+			return item.path ~= nil and item.path == parent and item.section == row.section
+		end)
+	end
+
+	if not row or not row.path then
+		return
+	end
+
+	local collapsed = state.collapsed[row.section]
+	collapsed[row.path] = not collapsed[row.path] or nil
+	render(state, row)
+end
+
+---@param state AtlasDiffV2Explorer
+function M.toggle_all_folders(state)
+	if not state.options.grouped then
+		return
+	end
+
+	local before = state.rows[current_row(state)]
+	local collapse = vim.iter(state.rows):any(function(row)
+		return row.path ~= nil and not state.collapsed[row.section][row.path]
+	end)
+
+	state.collapsed = { files = {}, reviewed = {} }
+	if collapse then
+		local path = before and (before.path or before.file and before.file.path)
+		local rows = build_rows(state)
+		for _, row in ipairs(rows) do
+			if row.path then
+				state.collapsed[row.section][row.path] = true
+				if path and row.section == before.section and path:sub(1, #row.path) == row.path then
+					before = row
+					path = nil
+				end
+			end
+		end
+	end
+
+	render(state, before)
+end
+
 function M.activate(state)
 	local row = state.rows[current_row(state)]
 	if row and row.file then
-		state.on_select(row.file)
-	elseif row and row.path then
-		local collapsed = state.collapsed[row.section]
-		collapsed[row.path] = not collapsed[row.path] or nil
-		render(state, row)
+		state.on_select(row.file, state.options.focus_on_select)
+	else
+		M.toggle_folder(state)
 	end
 end
 
@@ -475,9 +521,7 @@ end
 function M.toggle(state)
 	if state.win then
 		state.cursor_row = current_row(state)
-		info.close(state.win)
 		vim.api.nvim_win_close(state.win, true)
-		state.win = nil
 		return
 	end
 
@@ -526,7 +570,7 @@ end
 --- reviewed_files?: table<string, boolean>,
 --- review_data?: PullsReviewData,
 --- notes?: AtlasNote[],
---- on_select: fun(file: AtlasDiffV2File),
+--- on_select: fun(file: AtlasDiffV2File, focus?: boolean),
 ---}
 ---@return AtlasDiffV2Explorer
 function M.create(opts)

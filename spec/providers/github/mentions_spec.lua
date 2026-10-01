@@ -1,4 +1,4 @@
-local author_completion = require("atlas.providers.github.completion.author")
+local mentions = require("atlas.providers.github.mentions")
 
 local function words(completion, query)
 	local result = {}
@@ -8,9 +8,9 @@ local function words(completion, query)
 	return result
 end
 
-describe("GitHub author completion", function()
+describe("GitHub mentions", function()
 	it("completes issue reporters, assignees, and comment authors by login", function()
-		local completion = author_completion.for_issues({
+		local completion = mentions.for_issues({
 			issue = {
 				reporter = { username = "reporter", name = "Reporter Name" },
 				assignee = { username = "reporter", name = "Duplicate" },
@@ -33,18 +33,43 @@ describe("GitHub author completion", function()
 	end)
 
 	it("preserves pull request completion sources and mention formatting", function()
-		local completion = author_completion.for_pulls({
+		local context = {
 			pr = {
 				author = { nickname = "pull-author", name = "Pull Author" },
 			},
 			details = { assignees = { { username = "assignee" } } },
-			comments = { { author = { nickname = "commenter" } } },
-			reviewers = { { nickname = "reviewer" } },
+			data = {
+				comments = { { author = { nickname = "commenter" } } },
+				tasks = { { author = { nickname = "task-author" } } },
+				reviewers = { { nickname = "reviewer" } },
+			},
 			review_context = { mention_candidates = { { nickname = "review-author" } } },
-		})
+		}
+		local original = vim.deepcopy(context)
+		local completion = mentions.for_pulls(context)
 
-		assert.same({ "@assignee", "@commenter", "@pull-author", "@review-author", "@reviewer" }, words(completion))
+		assert.same(
+			{ "@assignee", "@commenter", "@pull-author", "@review-author", "@reviewer", "@task-author" },
+			words(completion)
+		)
 		assert.equal("@octocat", completion.format_mention({ nickname = "octocat", name = "Octo Cat" }))
 		assert.equal(6, completion.find_start("hello @oct"))
+		assert.same(original, context)
+	end)
+
+	it("uses conversation authors and separately fetched reviewers without review data", function()
+		local context = {
+			pr = {},
+			conversation = {
+				{ author = { nickname = "commenter" } },
+				{ author = { nickname = "task-author" }, is_task = true },
+			},
+			reviewers = { { nickname = "reviewer" } },
+		}
+		local original = vim.deepcopy(context)
+		local completion = mentions.for_pulls(context)
+
+		assert.same({ "@commenter", "@reviewer", "@task-author" }, words(completion))
+		assert.same(original, context)
 	end)
 end)

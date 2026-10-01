@@ -4,7 +4,7 @@ local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
-local comment_threads = require("atlas.pulls.ui.components.comment_threads")
+local review_actions = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.detail.tabs.conversation.actions")
 
@@ -98,6 +98,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.add", {
 			desc = "Add comment",
+			index = 20,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_simple(refresh, actions.add)
@@ -108,6 +109,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.reply", {
 			desc = "Reply to comment",
+			index = 21,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.reply)
@@ -118,6 +120,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.edit", {
 			desc = has_tasks and "Edit comment / task" or "Edit comment",
+			index = 30,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.edit)
@@ -128,6 +131,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.delete", {
 			desc = has_tasks and "Delete comment / task" or "Delete comment",
+			index = 41,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.delete)
@@ -138,6 +142,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.react", {
 			desc = "Add reaction",
+			index = 22,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.react)
@@ -147,6 +152,7 @@ function M.setup(buf, refresh)
 	if has_tasks then
 		local toggle_task = from_action("pulls.review.toggle_resolved", {
 			desc = "Toggle task",
+			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.toggle_task)
@@ -161,6 +167,7 @@ function M.setup(buf, refresh)
 		table.insert(items, {
 			key = fold_keys,
 			desc = "Expand / collapse comment or thread",
+			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				toggle_fold(refresh)
@@ -169,11 +176,12 @@ function M.setup(buf, refresh)
 	end
 	local toggle_all = from_action("ui.toggle_all_folds", {
 		desc = "Expand / collapse all threads",
+		index = 11,
 		opts = { nowait = true, silent = true },
 		callback = function()
 			local comments = state.comments(false)
 			local task_comments = state.comments(true)
-			if state.toggle_all_threads(comment_threads.group_comments(comments, task_comments)) then
+			if state.toggle_all_threads(review_actions.group_comments(comments, task_comments)) then
 				refresh()
 			end
 		end,

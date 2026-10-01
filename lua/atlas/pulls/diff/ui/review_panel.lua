@@ -555,7 +555,7 @@ end
 ---@param thread AtlasCommentThreadNode
 ---@return boolean
 local function has_pending(thread)
-	if thread.comment.state == "PENDING" then
+	if thread.comment.pending then
 		return true
 	end
 	for _, child in ipairs(thread.children) do
@@ -570,8 +570,7 @@ end
 ---@return table[], table[], table[], table[], table[]
 local function panel_items(data)
 	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
-	local comments_and_tasks = vim.list_extend(vim.list_extend({}, data.comments), data.tasks)
-	for _, thread in ipairs(comment_threads.group_comments(comments_and_tasks)) do
+	for _, thread in ipairs(review_actions.group_comments(data.comments, data.tasks)) do
 		local comment = thread.comment
 		local position = comment.file or comment.inline
 		local items = comment.is_task and standalone_tasks or (has_pending(thread) and pending or published_comments)
@@ -637,7 +636,7 @@ function M.render(panel, session)
 	local published, pending = 0, 0
 	for _, items in ipairs({ data.comments, data.tasks }) do
 		for _, item in ipairs(items) do
-			if item.state == "PENDING" then
+			if item.pending then
 				pending = pending + 1
 			elseif not item.is_task then
 				published = published + 1
@@ -648,6 +647,7 @@ function M.render(panel, session)
 	local task_icon = icons.pulls("tasks")
 	local note_icon = icons.general("pin")
 	local pending_icon = icons.pulls_status("inprogress")
+	local format_text = panel.session.review and review.comment_formatter(panel.session.review)
 	local comment_action_keys = {
 		reply = key_label("pulls.review.diff.add_comment"),
 		edit = key_label("ui.comments.edit"),
@@ -744,7 +744,7 @@ function M.render(panel, session)
 							comment_location(item.thread.comment),
 							{
 								action_keys = item.kind == "task" and task_action_keys or comment_action_keys,
-								toggle_resolved_key = item.kind == "task" and task_action_keys.toggle_resolved or nil,
+								format_text = format_text,
 							}
 						)
 					else

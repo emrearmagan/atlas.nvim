@@ -89,17 +89,17 @@ require("atlas").setup({})
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
 
 - Browse files, commits, hunks, and review history.
-- Comment, suggest changes, manage threads, or leave local notes.
+- Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
-> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v4.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) requires the **latest main branch**. [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) is also supported. These viewers can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
+> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v4.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) requires the **latest main branch**. [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) is also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 <details>
 <summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
 
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
+Notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
 
 #### Script and integration
 
@@ -402,8 +402,8 @@ At some point there will probably an extension for lualine.
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
 - `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
-- `:Atlas notes [target]` - Inspect local review notes
-- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
+- `:Atlas notes [target]` - Inspect notes
+- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
 
 ## Pulls
@@ -415,7 +415,7 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 
 ```lua
 pulls = {
-  delete_notes = false, -- Delete local PR notes after approval or merge.
+  delete_notes = false, -- Delete notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -442,7 +442,6 @@ pulls = {
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
-    compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
     lsp = {
       -- Back the new side of the diff with a detached worktree at the PR head so it is made of
       -- real files and your language servers attach to it (AtlasDiff only). Off by default.
@@ -885,6 +884,7 @@ keymaps = {
     copy_url = "Y",
     show_details = "K",
     search = "?",
+    edit_search = "i",
   },
   picker = {
     next_item = { "<Down>", "<C-n>", "<C-j>" },
@@ -898,53 +898,52 @@ keymaps = {
     change_assignee = "ga",
     change_reporter = "gr",
     edit_issue = "ge",
-    edit_search = "i",
     create_issue = "c",
   },
   pulls = {
     open_diff = "gd",
     checkout = "gc",
     open_repository = "o",
-    toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",
-    edit_search = "i",
     review = {
-      -- toggle_file_reviewed = "-",
-      -- approve = "<leader>ga",
-      -- request_changes = "<leader>gr",
-      -- submit_review = "<leader>gs",
-      -- add_task = "<leader>t",
-      -- comment_templates = "gT",
-      -- toggle_resolved = "x",
-      -- next_comment = "]r",
-      -- prev_comment = "[r",
-      -- next_note = "]n",
-      -- prev_note = "[n",
-      -- add_comment = "c",
-      -- submit_comment = "C",
-      -- add_suggestion = "s",
-      -- submit_suggestion = "S",
-      -- add_note = "<leader>n",
+      show_details = "K", -- File/commit details.
+      toggle_file_reviewed = "-",
+      approve = "<leader>ga",
+      request_changes = "<leader>gr",
+      submit_review = "<leader>gs",
+      add_task = "<leader>t",
+      comment_templates = "gT",
+      toggle_resolved = "x",
+      next_comment = "]c",
+      prev_comment = "[c",
+      next_note = "]n",
+      prev_note = "[n",
+      add_comment = "c",
+      submit_comment = "C",
+      add_suggestion = "s",
+      submit_suggestion = "S",
+      add_note = "<leader>n",
       view = {
         external_help = "gA", -- Atlas help in external diff viewers.
+        toggle_review_panel = "gR",
+        toggle_detail_panel = "gD",
+        toggle_comments = "gH",
+        next_hunk = "]h",
+        prev_hunk = "[h",
+        toggle_layout = "t",
+        toggle_compact = "gc",
+      },
+      explorer = {
         toggle_explorer = "<leader>b",
         focus_explorer = "<leader>e",
+        toggle_commits = "gC",
         next_file = { "]f", "<Tab>" },
         prev_file = { "[f", "<S-Tab>" },
         next_unreviewed_file = "]u",
         prev_unreviewed_file = "[u",
         find_file = "<leader>f",
-        toggle_commits = "gC",
-        -- toggle_review_panel = "gR",
-        -- toggle_detail_panel = "gD",
-        -- toggle_comments = "gH",
-        -- next_hunk = "]c",
-        -- prev_hunk = "[c",
-        -- toggle_layout = "t",
-        -- toggle_compact = "gc",
-      },
-      explorer = {
+        open_file = "gf",
         toggle_view_mode = "i",
       },
     },

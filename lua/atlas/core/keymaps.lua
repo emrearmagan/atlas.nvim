@@ -33,6 +33,7 @@ local config = require("atlas.config")
 ---@field copy_url? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
+---@field edit_search? AtlasKeymapValue
 
 ---@class AtlasUICommentKeymaps
 ---@field add? AtlasKeymapValue
@@ -54,14 +55,6 @@ local config = require("atlas.config")
 
 ---@class AtlasPullsReviewViewKeymaps
 ---@field external_help? AtlasKeymapValue
----@field toggle_explorer? AtlasKeymapValue
----@field focus_explorer? AtlasKeymapValue
----@field find_file? AtlasKeymapValue
----@field next_file? AtlasKeymapValue
----@field prev_file? AtlasKeymapValue
----@field next_unreviewed_file? AtlasKeymapValue
----@field prev_unreviewed_file? AtlasKeymapValue
----@field toggle_commits? AtlasKeymapValue
 ---@field toggle_review_panel? AtlasKeymapValue
 ---@field toggle_detail_panel? AtlasKeymapValue
 ---@field toggle_comments? AtlasKeymapValue
@@ -71,9 +64,19 @@ local config = require("atlas.config")
 ---@field prev_hunk? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
+---@field toggle_explorer? AtlasKeymapValue
+---@field focus_explorer? AtlasKeymapValue
+---@field toggle_commits? AtlasKeymapValue
+---@field next_file? AtlasKeymapValue
+---@field prev_file? AtlasKeymapValue
+---@field next_unreviewed_file? AtlasKeymapValue
+---@field prev_unreviewed_file? AtlasKeymapValue
+---@field find_file? AtlasKeymapValue
+---@field open_file? AtlasKeymapValue
 ---@field toggle_view_mode? AtlasKeymapValue
 
 ---@class AtlasPullsReviewKeymaps
+---@field show_details? AtlasKeymapValue
 ---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field prev_comment? AtlasKeymapValue
@@ -117,10 +120,8 @@ local config = require("atlas.config")
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field open_repository? AtlasKeymapValue
----@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
----@field edit_search? AtlasKeymapValue
 ---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
@@ -138,7 +139,6 @@ local config = require("atlas.config")
 ---@field change_assignee? AtlasKeymapValue
 ---@field change_reporter? AtlasKeymapValue
 ---@field edit_issue? AtlasKeymapValue
----@field edit_search? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
@@ -183,6 +183,7 @@ local config = require("atlas.config")
 ---| "ui.copy_url"
 ---| "ui.show_details"
 ---| "ui.search"
+---| "ui.edit_search"
 ---| "picker.next_item"
 ---| "picker.previous_item"
 ---| "picker.select"
@@ -191,24 +192,14 @@ local config = require("atlas.config")
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.open_repository"
----| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
----| "pulls.edit_search"
 ---| "pulls.pipelines.next_job"
 ---| "pulls.pipelines.previous_job"
 ---| "pulls.pipelines.show_history"
 ---| "pulls.pipelines.toggle_raw_logs"
 ---| "pulls.pipelines.toggle_auto_refresh"
 ---| "pulls.review.view.external_help"
----| "pulls.review.view.toggle_explorer"
----| "pulls.review.view.focus_explorer"
----| "pulls.review.view.next_file"
----| "pulls.review.view.prev_file"
----| "pulls.review.view.next_unreviewed_file"
----| "pulls.review.view.prev_unreviewed_file"
----| "pulls.review.view.find_file"
----| "pulls.review.view.toggle_commits"
 ---| "pulls.review.view.toggle_review_panel"
 ---| "pulls.review.view.toggle_detail_panel"
 ---| "pulls.review.view.toggle_comments"
@@ -216,7 +207,17 @@ local config = require("atlas.config")
 ---| "pulls.review.view.prev_hunk"
 ---| "pulls.review.view.toggle_layout"
 ---| "pulls.review.view.toggle_compact"
+---| "pulls.review.explorer.toggle_explorer"
+---| "pulls.review.explorer.focus_explorer"
+---| "pulls.review.explorer.toggle_commits"
+---| "pulls.review.explorer.next_file"
+---| "pulls.review.explorer.prev_file"
+---| "pulls.review.explorer.next_unreviewed_file"
+---| "pulls.review.explorer.prev_unreviewed_file"
+---| "pulls.review.explorer.find_file"
+---| "pulls.review.explorer.open_file"
 ---| "pulls.review.explorer.toggle_view_mode"
+---| "pulls.review.show_details"
 ---| "pulls.review.toggle_file_reviewed"
 ---| "pulls.review.next_comment"
 ---| "pulls.review.prev_comment"
@@ -240,7 +241,6 @@ local config = require("atlas.config")
 ---| "issues.change_assignee"
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
----| "issues.edit_search"
 ---| "issues.create_issue"
 
 ---@param value AtlasKeymapValue
@@ -361,7 +361,7 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
-		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
+		{ "ui.comments.add", "ui.edit_search" },
 		{ "ui.next_panel_tab", "pulls.pipelines.next_job" },
 		{ "ui.previous_panel_tab", "pulls.pipelines.previous_job" },
 		{ "ui.comments.reply", "issues.create_issue" },

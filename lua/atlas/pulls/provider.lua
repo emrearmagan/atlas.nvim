@@ -15,11 +15,10 @@
 ---@field next_cursor table<string, string>|nil
 ---@field total_pages integer|nil
 
----@class AtlasPullsCommentCompletionContext
+---@class AtlasPullsCommentContext
 ---@field pr PullRequest
 ---@field details PullRequestDetails|nil
----@field comments PullsComment[]
----@field tasks PullsComment[]|nil
+---@field data PullsReviewData|nil
 ---@field reviewers PullsReviewer[]|nil
 ---@field conversation PullsComment[]|nil
 ---@field review_context PullsReviewContext|nil
@@ -69,7 +68,8 @@
 
 ---@class PullsCommentsCapability
 ---@field reaction_options PullsReactionOption[]|nil
----@field comment_completion (fun(context: AtlasPullsCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
+---@field comment_completion (fun(context: AtlasPullsCommentContext): AtlasMarkdownCompletionProvider|nil)|nil
+---@field comment_formatter (fun(context: AtlasPullsCommentContext): fun(text: string): string)|nil
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: PullsConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil

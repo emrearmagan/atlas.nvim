@@ -62,7 +62,7 @@ function M.update(session)
 
 	local pending_comments = 0
 	for _, comment in ipairs(comments) do
-		if comment.state == "PENDING" then
+		if comment.pending then
 			pending_comments = pending_comments + 1
 		end
 	end

@@ -32,6 +32,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field line integer
 ---@field body string
 ---@field type AtlasNoteType
+---@field resolved boolean
 ---@field context AtlasNoteContext|nil
 ---@field created_at string
 ---@field updated_at string|nil
@@ -39,6 +40,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@class AtlasNotePatch
 ---@field body string|nil
 ---@field type AtlasNoteType|nil
+---@field resolved boolean|nil
 
 ---@class AtlasNotesDocument
 ---@field target AtlasNoteTarget
@@ -172,6 +174,7 @@ local function normalize_note(value)
 		line = line,
 		body = value.body,
 		type = note_type,
+		resolved = value.resolved == true,
 		context = context,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
@@ -378,10 +381,14 @@ function M.update(target, id, patch)
 					line = note.line,
 					body = patch.body or note.body,
 					type = patch.type or note.type,
+					resolved = note.resolved,
 					context = note.context,
 					created_at = note.created_at,
 					updated_at = now(),
 				}
+				if patch.resolved ~= nil then
+					candidate.resolved = patch.resolved
+				end
 				local updated, update_error = normalize_note(candidate)
 				if not updated then
 					return nil, update_error
@@ -430,12 +437,12 @@ function M.clear_for_pull_request(pr)
 	end
 	local target, target_err = M.target_for_pull_request(pr)
 	if not target then
-		notify.warn(target_err or "Unable to find local notes", { vim_notify = true })
+		notify.warn(target_err or "Unable to find notes", { vim_notify = true })
 		return
 	end
 	local ok, err = M.clear(target)
 	if not ok then
-		notify.warn(err or "Unable to delete local notes", { vim_notify = true })
+		notify.warn(err or "Unable to delete notes", { vim_notify = true })
 		return
 	end
 	local ui = package.loaded["atlas.pulls.notes.ui"]

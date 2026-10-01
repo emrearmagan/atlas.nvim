@@ -41,17 +41,20 @@ local function comment_item(comment, reaction_options)
 	end
 
 	local author = author_name(comment.author)
+	local author_hl = helper.person_hl(author)
 	local user_icon = icons.general("user")
 	return {
 		icon = user_icon,
+		icon_hl = author_hl,
 		author = author,
-		additional = utils.relative_time(comment.created),
+		author_hl = author_hl,
+		additional = { { utils.relative_time(comment.created), "AtlasTextMuted" } },
 		content = content,
 		markdown = not deleted,
 		footer_items = footer_items,
 		children = {},
 		line_map = { comment = comment, entity_kind = "comment" },
-		meta = { author = author, deleted = deleted },
+		meta = { deleted = deleted },
 	}
 end
 
@@ -72,15 +75,6 @@ local function render_options(padding_x, opts)
 		padding_x = padding_x,
 		content_max_lines = max_lines,
 		content_truncated_key = opts.content_truncated_key,
-		author_hl = function(item)
-			return helper.person_hl(item.meta.author)
-		end,
-		icon_hl_fn = function(item)
-			return helper.person_hl(item.meta.author)
-		end,
-		additional_hl = function()
-			return "AtlasTextMuted"
-		end,
 		content_hl = function(item, row)
 			if item.meta.deleted then
 				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }

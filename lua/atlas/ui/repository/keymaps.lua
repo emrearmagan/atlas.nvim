@@ -12,12 +12,14 @@ function M.setup(session, close, select_page)
 			{
 				key = resolver.resolve("ui.close") or {},
 				desc = "Close repository",
+				index = 101,
 				callback = close,
 				opts = { nowait = true, silent = true },
 			},
 			{
 				key = resolver.resolve("ui.help") or {},
 				desc = "Toggle help",
+				index = 100,
 				callback = function()
 					help.toggle({ buffer = pane.buf })
 				end,
@@ -25,12 +27,13 @@ function M.setup(session, close, select_page)
 			},
 		}
 		for _, direction in ipairs({
-			{ "ui.next_panel_tab", "Next page", 1 },
-			{ "ui.previous_panel_tab", "Previous page", -1 },
+			{ "ui.next_panel_tab", "Next page", 1, 11 },
+			{ "ui.previous_panel_tab", "Previous page", -1, 10 },
 		}) do
 			table.insert(items, {
 				key = resolver.resolve(direction[1]) or {},
 				desc = direction[2],
+				index = direction[4],
 				callback = function()
 					local index = (session.sidebar.selected - 1 + direction[3]) % #session.sidebar.pages + 1
 					select_page(index)
@@ -42,6 +45,7 @@ function M.setup(session, close, select_page)
 			table.insert(items, {
 				key = resolver.resolve("ui.select") or {},
 				desc = "Open page",
+				index = 20,
 				callback = function()
 					select_page(vim.api.nvim_win_get_cursor(pane.win)[1])
 					vim.api.nvim_set_current_win(session.content.win)

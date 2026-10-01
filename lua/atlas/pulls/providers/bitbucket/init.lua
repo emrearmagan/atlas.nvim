@@ -20,7 +20,7 @@
 ---@class BitbucketPullRequestDetails : PullRequestDetails
 ---@field close_source_branch boolean|nil
 
-local author_completion = require("atlas.providers.bitbucket.completion.author")
+local mentions = require("atlas.providers.bitbucket.mentions")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
 local checks_api = require("atlas.pulls.providers.bitbucket.api.checks")
@@ -129,7 +129,8 @@ return {
 			fetch_commits = changes_api.fetch_commits,
 		},
 		comments = {
-			comment_completion = author_completion.for_pulls,
+			comment_completion = mentions.for_pulls,
+			comment_formatter = mentions.formatter,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

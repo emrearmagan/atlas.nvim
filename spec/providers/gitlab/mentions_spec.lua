@@ -1,4 +1,4 @@
-local author_completion = require("atlas.providers.gitlab.completion.author")
+local mentions = require("atlas.providers.gitlab.mentions")
 
 local function words(items)
 	local result = {}
@@ -8,9 +8,9 @@ local function words(items)
 	return result
 end
 
-describe("GitLab author completion", function()
+describe("GitLab mentions", function()
 	it("completes issue reporters, assignees, and comment authors by username", function()
-		local completion = author_completion.for_issues({
+		local completion = mentions.for_issues({
 			issue = {
 				reporter = { username = "reporter", name = "Issue Reporter" },
 				assignee = { username = "alice", name = "Alice" },
@@ -38,22 +38,29 @@ describe("GitLab author completion", function()
 	end)
 
 	it("preserves pull request username completion sources", function()
-		local completion = author_completion.for_pulls({
+		local context = {
 			pr = {
 				author = { username = "author-username", nickname = "author", name = "Author" },
 			},
 			details = { assignees = { { username = "assignee", name = "Assignee" } } },
-			reviewers = { { username = "reviewer", name = "Reviewer" } },
+			data = {
+				reviewers = { { username = "reviewer", name = "Reviewer" } },
+				comments = {
+					{ author = { username = "comment-username", nickname = "commenter", name = "Commenter" } },
+				},
+				tasks = { { author = { nickname = "task-author" } } },
+			},
 			review_context = {
 				mention_candidates = {
 					{ username = "review-username", nickname = "review-author", name = "Review Author" },
 				},
 			},
-			comments = { { author = { username = "comment-username", nickname = "commenter", name = "Commenter" } } },
 			conversation = {
 				{ author = { username = "conversation-username", nickname = "conversation", name = "Conversation" } },
 			},
-		})
+		}
+		local original = vim.deepcopy(context)
+		local completion = mentions.for_pulls(context)
 
 		assert.same({
 			"@assignee",
@@ -62,6 +69,7 @@ describe("GitLab author completion", function()
 			"@conversation",
 			"@review-author",
 			"@reviewer",
+			"@task-author",
 		}, words(completion.complete("")))
 		assert.equal(
 			"@gitlab-user",
@@ -71,5 +79,22 @@ describe("GitLab author completion", function()
 				name = "Display Name",
 			})
 		)
+		assert.same(original, context)
+	end)
+
+	it("uses conversation authors and separately fetched reviewers without review data", function()
+		local context = {
+			pr = {},
+			conversation = {
+				{ author = { nickname = "commenter" } },
+				{ author = { nickname = "task-author" }, is_task = true },
+			},
+			reviewers = { { username = "reviewer" } },
+		}
+		local original = vim.deepcopy(context)
+		local completion = mentions.for_pulls(context)
+
+		assert.same({ "@commenter", "@reviewer", "@task-author" }, words(completion.complete("")))
+		assert.same(original, context)
 	end)
 end)

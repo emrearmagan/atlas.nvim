@@ -45,12 +45,12 @@ local function with_item(session, buf, on_comment, on_note)
 	if has_comment and has_note then
 		picker.select({
 			title = "Select review item",
-			items = { "Comment thread", "Local notes" },
+			items = { "Comment thread", "Notes" },
 			size = { width = 0.35, height = 0.15 },
 			on_select = function(choice)
 				if choice == "Comment thread" then
 					on_comment()
-				elseif choice == "Local notes" then
+				elseif choice == "Notes" then
 					on_note()
 				end
 			end,
@@ -236,7 +236,7 @@ function M.register(session, opts)
 					end)
 				end)
 				if session.note_target and session.current and buf == session.current.right.buf then
-					add(items, "pulls.review.diff.add_note", "Add local note", function()
+					add(items, "pulls.review.diff.add_note", "Add note", function()
 						notes.add_at_cursor(session, buf)
 					end)
 				end

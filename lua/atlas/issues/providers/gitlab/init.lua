@@ -4,7 +4,7 @@
 ---@field confidential boolean|nil
 
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-local author_completion = require("atlas.providers.gitlab.completion.author")
+local mentions = require("atlas.providers.gitlab.mentions")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local git = require("atlas.core.git")
@@ -140,7 +140,7 @@ return {
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
-			comment_completion = author_completion.for_issues,
+			comment_completion = mentions.for_issues,
 			fetch_conversation = fetch_conversation,
 			add_comment = notes_api.add_comment,
 			reply_comment = notes_api.reply_comment,

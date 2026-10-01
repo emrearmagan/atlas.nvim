@@ -471,7 +471,7 @@ local function options(explorer_options)
 	return {
 		layout = diff_config.layout == "inline" and "inline" or "side-by-side",
 		compact = diff_config.compact ~= false,
-		compact_context_lines = diff_config.compact_context_lines or 3,
+		compact_context_lines = math.max(1, tonumber(vim.o.diffopt:match("context:(%d+)")) or 6),
 		show_review_panel = (diff_config.review_panel or {}).hidden == false,
 		explorer = explorer_options,
 	}

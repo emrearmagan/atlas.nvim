@@ -13,11 +13,6 @@ local groups = {
 	AtlasPRMergedChip = { fg = "#0b1320", bg = "#93c5fd", bold = true },
 	AtlasPRDeclinedChip = { fg = "#0b1320", bg = "#fca5a5", bold = true },
 	AtlasPRDraftChip = { fg = "#111827", bg = "#fcd34d", bold = true },
-
-	AtlasDiffAddLine = { link = "DiffAdd" },
-	AtlasDiffChangeLine = { link = "DiffChange" },
-	AtlasDiffDeleteFiller = { fg = vim.api.nvim_get_hl(0, { name = "Comment", link = false }).fg, italic = false },
-	AtlasDiffRemoveLine = { link = "DiffDelete" },
 }
 
 function M.setup()

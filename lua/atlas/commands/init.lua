@@ -222,7 +222,7 @@ M.register({
 
 M.register({
 	name = "notes",
-	description = "Open local review notes",
+	description = "Open review notes",
 	complete = function(arglead, args)
 		return require("atlas.pulls.notes").complete(arglead, args)
 	end,
@@ -250,7 +250,7 @@ end
 M.register({
 	name = "clear",
 	usage = "clear [cache|notes|stars]",
-	description = "Clear Atlas data, caches, local notes, or starred items",
+	description = "Clear Atlas data, caches, notes, or starred items",
 	complete = function(arglead)
 		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
@@ -283,10 +283,10 @@ M.register({
 			return
 		end
 
-		confirm("Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: ", function()
+		confirm("Delete Atlas caches, cloned repositories, notes, starred items, and logs? [y/N]: ", function()
 			local cleared, err = require("atlas.pulls.notes").clear_all()
 			if not cleared then
-				notify.error(err or "Unable to delete local notes", { vim_notify = true })
+				notify.error(err or "Unable to delete notes", { vim_notify = true })
 				return
 			end
 			local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
@@ -348,7 +348,7 @@ local function pick_command()
 		elseif command.name == "clear" then
 			add(command, {}, "Clear caches, clones, notes, stars, and logs")
 			add(command, { "cache" }, "Clear caches and cloned repositories")
-			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "notes" }, "Clear review notes")
 			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)
