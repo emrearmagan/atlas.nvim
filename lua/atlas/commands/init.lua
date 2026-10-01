@@ -134,9 +134,7 @@ M.register({
 			notify.error("Usage: :Atlas browse [repository URL|.] [page]", { vim_notify = true })
 			return
 		end
-		with_argument({ args[1] }, "Repository URL: ", function(value)
-			require("atlas.commands.repository").open(value, args[2])
-		end)
+		require("atlas.commands.repository").open(args[1], args[2])
 	end,
 })
 
