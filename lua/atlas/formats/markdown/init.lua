@@ -1,6 +1,7 @@
 local M = {}
 
 local elements = require("atlas.formats.markdown.elements")
+local html = require("atlas.formats.markdown.html")
 local parse_table = require("atlas.formats.markdown.table")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
 local utils = require("atlas.ui.shared.utils")
@@ -12,7 +13,11 @@ local utils = require("atlas.ui.shared.utils")
 -- Paragraph matches any line (even "# Title"), so it must stay last.
 local block_handlers = {
 	elements.block.code,
-	elements.block.comment,
+	html.block.comment,
+	html.block.anchor,
+	html.block.paragraph,
+	html.block.details,
+	html.block.summary,
 	parse_table,
 	elements.block.callout,
 	elements.block.heading,

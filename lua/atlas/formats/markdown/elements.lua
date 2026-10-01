@@ -1,5 +1,6 @@
 local code_preview = require("atlas.ui.components.code_preview")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
+local html = require("atlas.formats.markdown.html")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -45,6 +46,9 @@ local function parse_link(text, is_image)
 
 		label = "󰋩 " .. label
 		style = "image"
+	elseif label:match("^!%b[]%b()$") then
+		local image = parse_link(label, true)
+		label = image.text
 	end
 
 	return { text = label, style = style, url = url }, consumed_bytes
@@ -57,33 +61,10 @@ function M.inline.link(text)
 end
 
 -- ![logo](https://example.com/logo.png)
--- <img src="https://example.com/logo.png" alt="logo" />
 -- { text = "󰋩 logo", style = "image", url = "https://example.com/logo.png" }.
 -- An empty label displays "image".
 function M.inline.image(text)
-	local fragment, consumed_bytes = parse_link(text, true)
-	if fragment then
-		return fragment, consumed_bytes
-	end
-
-	local tag = text:match("^<img%s[^>]*>")
-	if not tag then
-		return
-	end
-
-	local attributes = {}
-	for name, _, value in tag:gmatch("([%w_-]+)%s*=%s*(['\"])(.-)%2") do
-		attributes[name] = value
-	end
-	if not attributes.src or attributes.src == "" then
-		return
-	end
-
-	local label = attributes.alt
-	if not label or label == "" then
-		label = "image"
-	end
-	return { text = "󰋩 " .. label, style = "image", url = attributes.src }, #tag
+	return parse_link(text, true)
 end
 
 -- `**bold**`
@@ -149,27 +130,14 @@ function M.inline.emphasis(text, previous_character)
 	return { text = display_text, style = style }, consumed_bytes
 end
 
--- <!-- **draft** -->
--- { text = "<!-- **draft** -->", style = "comment" }.
--- Inline comments must close on the same line.
-function M.inline.comment(text)
-	if text:sub(1, 4) ~= "<!--" then
-		return
-	end
-
-	local _, closing_end = text:find("-->", 5, true)
-	if closing_end then
-		return { text = text:sub(1, closing_end), style = "comment" }, closing_end
-	end
-end
-
 ---@type (fun(text: string, previous_character: string): table?, integer?)[]
 local inline_handlers = {
 	M.inline.escape,
 	M.inline.image,
+	html.inline.image,
 	M.inline.link,
 	M.inline.code,
-	M.inline.comment,
+	html.inline.comment,
 	M.inline.emphasis,
 }
 
@@ -355,39 +323,6 @@ function M.block.code(lines, index, opts)
 	return rows, index
 end
 
---   <!--
---   **draft**
---   -->
--- the same lines, muted, with Markdown markers kept literal.
--- Text after the closing marker is parsed normally.
-function M.block.comment(lines, index)
-	local opening_end = lines[index]:match("^%s*<!%-%-()")
-	if not opening_end then
-		return
-	end
-
-	local rows = {}
-
-	while index <= #lines do
-		local line = lines[index]
-		local _, closing_end = line:find("-->", opening_end, true)
-
-		if closing_end then
-			local row = M.parse_inline(line:sub(closing_end + 1))
-			table.insert(row, 1, { text = line:sub(1, closing_end), style = "comment" })
-			rows[#rows + 1] = row
-
-			return rows, index + 1
-		end
-
-		rows[#rows + 1] = { { text = line, style = "comment" } }
-		index = index + 1
-		opening_end = 1
-	end
-
-	return rows, index
-end
-
 local callout_styles = {
 	NOTE = { icon = "󰋽", hl = "panel_info" },
 	TIP = { icon = "󰌶", hl = "panel_success" },
@@ -411,7 +346,8 @@ end
 --   ▎ 󰌶  Try this
 --   ▎ Use x
 function M.block.callout(lines, index, opts)
-	local kind, title = lines[index]:match("^>%s?%[!(%u+)%]%s*(.*)$")
+	local kind, title = lines[index]:match("^>%s?%[!(%a+)%]%s*(.*)$")
+	kind = kind and kind:upper()
 	local style = callout_styles[kind]
 	if not style then
 		return
@@ -430,7 +366,7 @@ function M.block.callout(lines, index, opts)
 
 	while index <= #lines do
 		local content = lines[index]:match("^>%s?(.*)$")
-		if not content or content:match("^%[!%u+%]") then
+		if not content or content:match("^%[!%a+%]") then
 			break
 		end
 
