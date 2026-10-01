@@ -35,6 +35,7 @@ local function setup_window(win)
 		cursorline = false,
 		conceallevel = 0,
 		concealcursor = "",
+		winhighlight = "",
 	}) do
 		vim.api.nvim_set_option_value(option, value, { win = win })
 	end
