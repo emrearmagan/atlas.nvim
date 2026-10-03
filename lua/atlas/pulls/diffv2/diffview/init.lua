@@ -6,12 +6,15 @@ local lib = require("diffview.lib")
 local RevType = require("diffview.vcs.rev").RevType
 local StandardView = require("diffview.scene.views.standard.standard_view").StandardView
 local annotation_ui = require("atlas.pulls.diffv2.ui.annotations")
+local annotations = require("atlas.pulls.diffv2.diffview.annotations")
+local diff = require("atlas.pulls.diffv2.diff")
 local keymaps = require("atlas.pulls.diffv2.diffview.keymaps")
 
 ---@class AtlasDiffV2DiffviewView: AtlasDiffV2View
 ---@field diffview CDiffView
 ---@field group integer
----@field on_done (fun(err?: string))|nil
+---@field pending_file { file: AtlasDiffV2File, on_done: fun(err?: string) }|nil
+---@field hunks integer[][]
 
 local statuses = {
 	added = "A",
@@ -28,11 +31,6 @@ local function update_panes(view)
 	view.right = { buf = vim.api.nvim_win_get_buf(layout.b.id), win = layout.b.id }
 	view.left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id }
 		or { buf = view.right.buf }
-end
-
----@param _view AtlasDiffV2DiffviewView
-local function redraw(_view)
-	-- TODO: Display comments and notes on Diffview's buffers.
 end
 
 ---@param result AtlasDiffV2Result
@@ -92,31 +90,45 @@ local function open(result, callbacks)
 		diffview = diffview,
 		group = vim.api.nvim_create_augroup("AtlasDiffV2Diffview" .. diffview.tabpage, { clear = true }),
 		annotations = {},
+		hunks = {},
 		left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id } or { buf = right.buf },
 		right = right,
 	}
 
 	diffview.emitter:on("file_open_pre", function()
 		annotation_ui.close(view.tabpage)
+		annotations.clear(view)
 	end)
-	diffview.emitter:on("file_open_post", function(_, entry)
-		if entry ~= diffview.cur_entry then
-			return
-		end
+	-- Diffview adjusts scrolling after this event on a file's first open.
+	diffview.emitter:on(
+		"file_open_post",
+		vim.schedule_wrap(function(_, entry)
+			if entry ~= diffview.cur_entry or not vim.api.nvim_tabpage_is_valid(view.tabpage) then
+				return
+			end
 
-		update_panes(view)
-		local file = vim.iter(result.files):find(function(item)
-			return item.path == entry.path
+			local pending = view.pending_file
+			if pending and pending.file.path ~= entry.path then
+				diffview:set_file_by_path(pending.file.path, false)
+				return
+			end
+			view.pending_file = nil
+
+			update_panes(view)
+			local file = vim.iter(result.files):find(function(item)
+				return item.path == entry.path
+			end)
+			local old = table.concat(vim.api.nvim_buf_get_lines(view.left.buf, 0, -1, false), "\n")
+			local new = table.concat(vim.api.nvim_buf_get_lines(view.right.buf, 0, -1, false), "\n")
+			view.hunks = diff.compute_split(old, new)
+			callbacks.on_file(file)
+			annotations.render(view)
+
+			if pending then
+				pending.on_done()
+			end
 		end)
-		callbacks.on_file(file)
-		redraw(view)
-
-		local on_done = view.on_done
-		view.on_done = nil
-		if on_done then
-			on_done()
-		end
-	end)
+	)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = view.group,
@@ -135,7 +147,13 @@ end
 ---@param file AtlasDiffV2File
 ---@param on_done fun(err?: string)
 local function show_file(view, file, on_done)
-	view.on_done = on_done
+	local loading = view.pending_file ~= nil
+	view.pending_file = { file = file, on_done = on_done }
+	-- Let Diffview finish loading before opening the latest selected file.
+	if loading then
+		return
+	end
+
 	view.diffview:set_file_by_path(file.path, false)
 end
 
@@ -160,6 +178,7 @@ end
 ---@param view AtlasDiffV2DiffviewView
 local function dispose(view)
 	vim.api.nvim_del_augroup_by_id(view.group)
+	annotations.clear(view)
 	view.diffview:close()
 	lib.dispose_view(view.diffview)
 end
@@ -168,10 +187,10 @@ end
 local M = {
 	open = open,
 	show_file = show_file,
-	redraw = redraw,
+	redraw = annotations.render,
 	get_selection = get_selection,
 	navigate_annotation = navigate_annotation,
-	resize = redraw,
+	resize = annotations.render,
 	setup_keymaps = setup_keymaps,
 	dispose = dispose,
 }
