@@ -1,6 +1,6 @@
 local annotation_ui = require("atlas.pulls.diffv2.ui.annotations")
 local annotations = require("atlas.pulls.diffv2.atlas.annotations")
-local diff = require("atlas.pulls.diffv2.atlas.diff")
+local diff = require("atlas.pulls.diffv2.diff")
 local git = require("atlas.pulls.diffv2.git")
 local help = require("atlas.ui.popups.help")
 local keymaps = require("atlas.pulls.diffv2.atlas.keymaps")

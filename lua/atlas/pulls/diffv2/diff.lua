@@ -34,11 +34,8 @@ end
 
 ---@param old string
 ---@param new string
----@return integer[][] hunks, integer[][] split_hunks
-function M.compute(old, new)
-	local hunks = diff(old, new, { result_type = "indices", algorithm = "histogram" })
-	---@cast hunks integer[][]
-
+---@return integer[][] split_hunks
+function M.compute_split(old, new)
 	local flags = {}
 	for _, option in ipairs(vim.opt.diffopt:get()) do
 		flags[option] = true
@@ -70,7 +67,16 @@ function M.compute(old, new)
 	-- This follows Neovim's built-in diff, not a custom diffexpr.
 	local split_hunks = diff(text.old, text.new, options)
 	---@cast split_hunks integer[][]
-	return hunks, split_hunks
+	return split_hunks
+end
+
+---@param old string
+---@param new string
+---@return integer[][] hunks, integer[][] split_hunks
+function M.compute(old, new)
+	local hunks = diff(old, new, { result_type = "indices", algorithm = "histogram" })
+	---@cast hunks integer[][]
+	return hunks, M.compute_split(old, new)
 end
 
 return M

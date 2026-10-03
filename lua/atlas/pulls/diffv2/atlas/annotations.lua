@@ -1,4 +1,4 @@
-local diff = require("atlas.pulls.diffv2.atlas.diff")
+local diff = require("atlas.pulls.diffv2.diff")
 local render = require("atlas.pulls.diffv2.atlas.render")
 local ui = require("atlas.pulls.diffv2.ui.annotations")
 local notes = require("atlas.pulls.notes")
