@@ -2,6 +2,7 @@ local config = require("atlas.config")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
+local picker = require("atlas.ui.picker")
 local repository = require("atlas.ui.repository")
 local pages = require("atlas.ui.repository.pages")
 local request_scope = require("atlas.core.requests")
@@ -16,6 +17,42 @@ local function page_names(provider)
 	return vim.tbl_map(function(page)
 		return page.key
 	end, pages.get(provider))
+end
+
+local function search_repository()
+	local actions = require("atlas.pulls.actions")
+	local available = {}
+	for _, configured in ipairs(providers.configured("pulls")) do
+		local provider = providers.load(configured.id, "pulls")
+		if
+			provider
+			and provider.capabilities.repository
+			and actions.is_available("browse_repositories", { provider = provider })
+		then
+			table.insert(available, provider)
+		end
+	end
+
+	local function browse(provider)
+		if provider then
+			actions.run("browse_repositories", { provider = provider })
+		end
+	end
+
+	if #available == 0 then
+		notify.error("No repository browsing providers configured", { vim_notify = true })
+	elseif #available == 1 then
+		browse(available[1])
+	else
+		picker.select({
+			title = "Browse Repository - Provider",
+			items = available,
+			format_item = function(provider)
+				return provider.name
+			end,
+			on_select = browse,
+		})
+	end
 end
 
 ---@param arglead string
@@ -84,11 +121,16 @@ local function open_repository(target, page, err)
 	repository.open(target.repo_full_name, provider, { page = page })
 end
 
----@param value string
+---@param value string|nil
 ---@param page string|nil
 function M.open(value, page)
 	requests.cancel()
 	requests = request_scope.new()
+	if not value then
+		search_repository()
+		return
+	end
+
 	value = vim.trim(value)
 	if value == "." then
 		requests.run(function(done)
