@@ -84,6 +84,11 @@ local function check_pulls()
 		return
 	end
 
+	local diff_cmd = config.diff_command()
+	local configured = vim.trim((pulls.diff or {}).open_cmd or "auto")
+	local automatic = configured == "auto" or configured == ""
+	vim.health.ok(string.format("Diff viewer: %s%s", diff_cmd, automatic and " (auto)" or ""))
+
 	local repo_paths = (pulls.repo_config or {}).paths or {}
 	if vim.tbl_isempty(repo_paths) and #providers.configured("pulls") == 0 then
 		vim.health.info("Pulls not configured")
@@ -99,15 +104,6 @@ local function check_pulls()
 				vim.tbl_count(repo_paths) == 1 and "" or "s"
 			)
 		)
-	end
-
-	local diff_cmd = tostring((pulls.diff or {}).open_cmd or "")
-	if diff_cmd == "" then
-		vim.health.warn("pulls.diff.open_cmd is empty")
-	elseif diff_cmd == "AtlasDiff" then
-		vim.health.ok("Using default diff viewer: AtlasDiff")
-	else
-		vim.health.ok(string.format("Configured diff viewer: %s", diff_cmd))
 	end
 
 	local lsp = (pulls.diff or {}).lsp or {}

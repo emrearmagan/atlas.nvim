@@ -273,9 +273,8 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         },
       },
       diff = {
-        -- Any command that accepts explicit <base>...<head> Git revisions.
-        -- Other viewers use their own UI, without Atlas panels or review features.
-        open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
+        -- "auto", or a command that accepts explicit <base>...<head> Git revisions.
+        open_cmd = "auto", -- CodeDiff, DiffviewOpen or AtlasDiff
         comment_display = "virtual_lines", -- or compact "virtual_text" hints
         review_panel = {
           hidden = true, -- set false to show the review panel initially

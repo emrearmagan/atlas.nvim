@@ -14,6 +14,11 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
+<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
+
+> [!CAUTION]
+> **Still in early development, will have breaking changes!**
+
 **Quick links**
 
 - [Configuration](#configuration)
@@ -23,19 +28,12 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
 - [Bitbucket](#bitbucket)
 - [Jira](#jira)
 
-<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
-
-> [!CAUTION]
-> **Still in early development, will have breaking changes!**
-
 ## Installation
 
 <details>
 <summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>
 
 ```lua
----@module "atlas"
-
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
@@ -94,7 +92,7 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
-> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v4.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) requires the **latest main branch**. [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) is also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
+> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v3.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) are also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 <details>
 <summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
@@ -120,7 +118,7 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 <details>
 <summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
 
-Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff.
+Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff or CodeDiff.
 
 ```lua
 pulls = {
@@ -431,8 +429,8 @@ pulls = {
   },
 
   diff = {
-    -- Any command that accepts explicit <base>...<head> Git revisions.
-    open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
+    -- "auto", or a command that accepts explicit <base>...<head> Git revisions.
+    open_cmd = "auto", -- CodeDiff, DiffviewOpen or AtlasDiff
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
     review_panel = {
       hidden = true, -- Set false to show the review panel when a diff opens.

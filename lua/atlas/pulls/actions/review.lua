@@ -503,55 +503,58 @@ M.delete_comment = {
 			on_done(nil, message)
 			return false
 		end
-		vim.ui.input({ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " }, function(input)
-			local confirmed = input and vim.trim(input):lower()
-			if confirmed ~= "y" and confirmed ~= "yes" then
-				return
-			end
-			if context.on_submit then
-				context.on_submit()
-			end
-			notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...")
-			local callback = function(ok, err)
-				if err then
-					notify(context, "error", "Delete failed: " .. err)
-					on_done(nil, err)
+		vim.ui.input(
+			{ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " },
+			function(input)
+				local confirmed = input and vim.trim(input):lower()
+				if confirmed ~= "y" and confirmed ~= "yes" then
 					return
 				end
-				if not ok then
-					notify(context, "error", "Delete failed")
-					on_done(nil, "Delete failed")
-					return
+				if context.on_submit then
+					context.on_submit()
 				end
-				local pending = comment.pending
-				local message = comment.is_task and "Task deleted" or "Comment deleted"
-				-- Deleting the final pending item can also remove its draft review.
-				if pending and context.data and not has_other_pending_items(context.data, comment) then
-					context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
-						if data then
-							context.data.review = data.review
-							context.data.comments = data.comments
-							context.data.tasks = data.tasks
-							context.data.reviewers = data.reviewers
-							context.data.history = data.history
-						else
-							remove_comment(context, comment)
-						end
-						notify(context, "success", message, 1200)
-						on_done({ changed_pr = false, message = message }, nil)
-					end)
-					return
+				notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...")
+				local callback = function(ok, err)
+					if err then
+						notify(context, "error", "Delete failed: " .. err)
+						on_done(nil, err)
+						return
+					end
+					if not ok then
+						notify(context, "error", "Delete failed")
+						on_done(nil, "Delete failed")
+						return
+					end
+					local pending = comment.pending
+					local message = comment.is_task and "Task deleted" or "Comment deleted"
+					-- Deleting the final pending item can also remove its draft review.
+					if pending and context.data and not has_other_pending_items(context.data, comment) then
+						context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
+							if data then
+								context.data.review = data.review
+								context.data.comments = data.comments
+								context.data.tasks = data.tasks
+								context.data.reviewers = data.reviewers
+								context.data.history = data.history
+							else
+								remove_comment(context, comment)
+							end
+							notify(context, "success", message, 1200)
+							on_done({ changed_pr = false, message = message }, nil)
+						end)
+						return
+					end
+					remove_comment(context, comment)
+					notify(context, "success", message, 1200)
+					on_done({ changed_pr = false, message = message }, nil)
 				end
-				remove_comment(context, comment)
-				notify(context, "success", message, 1200)
-				on_done({ changed_pr = false, message = message }, nil)
+				if comment.is_task then
+					remove(comment, callback)
+				else
+					remove(context.pr, comment, callback)
+				end
 			end
-			if comment.is_task then
-				remove(comment, callback)
-			else
-				remove(context.pr, comment, callback)
-			end
-		end)
+		)
 		return true
 	end,
 }

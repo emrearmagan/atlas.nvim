@@ -24,6 +24,9 @@ local renderers = {
 
 ---@class AtlasDiffV2View
 ---@field tabpage integer
+---@field result AtlasDiffV2Result
+---@field callbacks AtlasDiffV2Callbacks
+---@field current_file AtlasDiffV2File|nil
 ---@field left { buf: integer, win?: integer }
 ---@field right { buf: integer, win: integer }
 ---@field annotations table<integer, table<integer, AtlasDiffV2Annotation[]>> Stores comment/note annotations by buffer and line.
@@ -38,7 +41,7 @@ local renderers = {
 
 ---@class AtlasDiffV2Callbacks
 ---@field on_file fun(file: AtlasDiffV2File|nil)
----@field show_details fun(): boolean
+---@field show_details fun()
 
 ---@class AtlasDiffV2Renderer
 ---@field open fun(result: AtlasDiffV2Result, callbacks: AtlasDiffV2Callbacks): AtlasDiffV2View
@@ -47,7 +50,7 @@ local renderers = {
 ---@field get_selection fun(view: AtlasDiffV2View): AtlasDiffV2Selection|nil, string|nil
 ---@field navigate_annotation fun(view: AtlasDiffV2View, direction: 1|-1, kind: "comment"|"note", from_edge?: boolean): boolean
 ---@field resize fun(view: AtlasDiffV2View)
----@field setup_keymaps fun(view: AtlasDiffV2View, bindings: AtlasDiffV2Keymaps)
+---@field setup_keymaps fun(session: AtlasDiffV2Session, bindings: AtlasDiffV2Keymaps)
 ---@field dispose fun(view: AtlasDiffV2View)
 
 ---@class AtlasDiffV2Session
@@ -62,7 +65,6 @@ local renderers = {
 ---@field statusline AtlasStatusline
 ---@field group integer|nil
 ---@field closed boolean
----@field current_file AtlasDiffV2File|nil
 
 local function close_tab(tabpage)
 	if #vim.api.nvim_list_tabpages() == 1 then
@@ -74,8 +76,8 @@ local function close_tab(tabpage)
 end
 
 ---@param result AtlasDiffV2Result
+---@return boolean, string|nil
 local function open_command(result)
-	-- TODO: Test me better
 	vim.cmd.tabnew()
 	local tabpage = vim.api.nvim_get_current_tabpage()
 
@@ -100,10 +102,11 @@ local function open_command(result)
 	end
 
 	if not opened then
-		error(err, 0)
+		return false, err
 	end
 
 	result.release()
+	return true
 end
 
 ---@param session AtlasDiffV2Session
@@ -162,7 +165,7 @@ local function select_file(session, file, focus, on_done)
 				error = err,
 			})
 			notify.error("Unable to open " .. file.path .. "\n\n" .. err, { vim_notify = true })
-			explorer.reveal(session.explorer, session.current_file)
+			explorer.reveal(session.explorer, session.view.current_file)
 			return
 		end
 
@@ -195,13 +198,13 @@ local function update_review(session)
 end
 
 ---@param session AtlasDiffV2Session
----@return boolean
 local function show_details(session)
-	local file = session.current_file
+	local file = session.view.current_file
 	local by_line = session.view.annotations[vim.api.nvim_get_current_buf()]
 	local items = by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
 	if not file or not items then
-		return false
+		vim.lsp.buf.hover()
+		return
 	end
 
 	annotations.open(session.view.tabpage, session.data, file.path, items, function(action, target, on_submit)
@@ -217,7 +220,6 @@ local function show_details(session)
 			update_review(session)
 		end)
 	end)
-	return true
 end
 
 ---@param session AtlasDiffV2Session
@@ -287,7 +289,7 @@ local function navigate_annotation(session, direction, kind)
 	local files = session.explorer.files
 	local index = direction == 1 and 0 or 1
 	for position, file in ipairs(files) do
-		if file == session.current_file then
+		if file == session.view.current_file then
 			index = position
 			break
 		end
@@ -314,7 +316,7 @@ local function current_file(session)
 	if vim.api.nvim_get_current_buf() == session.explorer.buf then
 		return explorer.current_file(session.explorer)
 	end
-	return session.current_file
+	return session.view.current_file
 end
 
 ---@param session AtlasDiffV2Session
@@ -667,22 +669,43 @@ local function setup_keymaps(session)
 	})
 end
 
+---@param result AtlasDiffV2Result
+---@param err any
+local function fallback(result, err)
+	local command = result.options.open_cmd
+	logger.logwarn("diff.open fallback", {
+		command = command,
+		kind = result.kind,
+		provider = result.pr and result.pr.provider,
+		repo = result.pr and result.pr.repo_full_name,
+		pr_id = result.pr and result.pr.id,
+		root = result.root,
+		base = result.base_revision,
+		head = result.head_revision,
+		error = tostring(err),
+	})
+	notify.warn(command .. " failed to open. Opening Atlas instead.", { vim_notify = true })
+	result.options.open_cmd = "AtlasDiff"
+end
+
 ---@param session AtlasDiffV2Session
 ---@param module string
 local function open_view(session, module)
 	local result = session.data
 	local callbacks = {
 		on_file = function(file)
-			session.current_file = file
+			session.view.current_file = file
 			if session.explorer.selected ~= file then
 				explorer.reveal(session.explorer, file)
 			end
-			if file then
-				setup_keymaps(session)
+
+			setup_keymaps(session)
+			for _, pane in pairs({ session.view.left, session.view.right }) do
+				session.statusline:attach(pane.win)
 			end
 		end,
 		show_details = function()
-			return show_details(session)
+			show_details(session)
 		end,
 	}
 
@@ -698,21 +721,7 @@ local function open_view(session, module)
 			error(view, 0)
 		end
 
-		local command = result.options.open_cmd
-		logger.logwarn("diff.open fallback", {
-			command = command,
-			kind = result.kind,
-			provider = result.pr and result.pr.provider,
-			repo = result.pr and result.pr.repo_full_name,
-			pr_id = result.pr and result.pr.id,
-			root = result.root,
-			base = result.base_revision,
-			head = result.head_revision,
-			error = tostring(view),
-		})
-		notify.warn(command .. " failed to open. Opening Atlas instead.", { vim_notify = true })
-
-		result.options.open_cmd = "AtlasDiff"
+		fallback(result, view)
 		renderer = atlas
 		view = renderer.open(result, callbacks)
 	end
@@ -788,8 +797,13 @@ end
 function M.open(result)
 	local module = renderers[result.options.open_cmd]
 	if not module then
-		open_command(result)
-		return
+		local opened, err = open_command(result)
+		if opened then
+			return
+		end
+
+		fallback(result, err)
+		module = renderers.AtlasDiff
 	end
 
 	local review_context = result.review and result.review.context

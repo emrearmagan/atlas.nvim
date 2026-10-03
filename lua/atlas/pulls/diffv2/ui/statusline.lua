@@ -1,3 +1,4 @@
+local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 
 local M = {}
@@ -78,6 +79,9 @@ function M.update(session)
 		}
 	end
 
+	local help_action = result.options.open_cmd == "AtlasDiff" and "ui.help" or "pulls.review.view.external_help"
+	local help_keys = keymaps.resolve(help_action)
+	session.statusline.options.help_key = help_keys and help_keys[1] or nil
 	session.statusline:set_items(items)
 end
 

@@ -11,14 +11,12 @@ local requests = require("atlas.core.requests")
 local worktree = require("atlas.pulls.diffv2.worktree")
 
 ---@class AtlasDiffV2NativeView: AtlasDiffV2View
----@field result AtlasDiffV2Result
 ---@field requests AtlasRequestScope
 ---@field preferred_layout "inline"|"side-by-side"
 ---@field inline_hunk_lines integer[] Buffer lines to jump to in inline mode.
 ---@field document AtlasDiffV2Document|nil
 ---@field revision_buf integer
 ---@field group integer
----@field callbacks AtlasDiffV2Callbacks
 
 ---@class AtlasDiffV2Document
 ---@field file AtlasDiffV2File
@@ -548,14 +546,11 @@ local M = {
 		resize(view)
 		redraw(view)
 	end,
-	setup_keymaps = function(view, bindings)
+	setup_keymaps = function(session, bindings)
+		local view = session.view
 		---@cast view AtlasDiffV2NativeView
-		keymaps.setup(view, bindings, {
-			show_details = function()
-				if not view.callbacks.show_details() then
-					vim.lsp.buf.hover()
-				end
-			end,
+		keymaps.setup(session, bindings, {
+			show_details = view.callbacks.show_details,
 			navigate_hunk = function(direction)
 				navigate_hunk(view, direction)
 			end,

@@ -44,7 +44,7 @@
 ---@field hidden boolean|nil
 ---@field height integer|nil
 
----@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+---@alias AtlasPullsDiffOpenCommand "auto"|"AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 -- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
 -- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
@@ -170,7 +170,7 @@ local defaults = {
 			},
 		},
 		diff = {
-			open_cmd = "AtlasDiff",
+			open_cmd = "auto",
 			layout = "inline",
 			compact = true,
 			comment_display = "virtual_lines",
@@ -338,6 +338,21 @@ local defaults = {
 
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
+
+---@return string
+function M.diff_command()
+	local command = vim.trim(M.options.pulls.diff.open_cmd or "auto")
+	if command ~= "auto" and command ~= "" then
+		return command
+	end
+
+	for _, candidate in ipairs({ "CodeDiff", "DiffviewOpen" }) do
+		if vim.fn.exists(":" .. candidate) == 2 then
+			return candidate
+		end
+	end
+	return "AtlasDiff"
+end
 
 ---@param id AtlasProviderId
 ---@return table|nil

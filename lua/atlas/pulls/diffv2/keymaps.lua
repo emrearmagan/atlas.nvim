@@ -13,7 +13,8 @@ local M = {}
 ---@class AtlasDiffV2Keymaps
 ---@field shared AtlasDiffV2KeymapGroup[]
 ---@field review AtlasDiffV2KeymapGroup[]
----@field buffers integer[]
+---@field explorer_items AtlasHelpKeyItem[]
+---@field actions AtlasDiffV2KeymapActions
 
 ---@class AtlasDiffV2KeymapActions
 ---@field close fun()
@@ -79,11 +80,6 @@ local function shared_items(actions)
 
 	local view_items = {}
 	add(view_items, "ui.refresh_view", "Reload the diff", 50, actions.reload)
-	add(view_items, "ui.close", "Close review", 101, function()
-		if not help.is_open() then
-			actions.close()
-		end
-	end)
 
 	return explorer_items, view_items
 end
@@ -91,7 +87,18 @@ end
 ---@param session AtlasDiffV2Session
 ---@param actions AtlasDiffV2KeymapActions
 function M.setup(session, actions)
-	local shared_explorer_items, view_items = shared_items(actions)
+	local navigation_items, view_items = shared_items(actions)
+	local shared_explorer_items = vim.list_extend({}, navigation_items)
+	add(shared_explorer_items, "pulls.review.explorer.open_file", "Open local file", 31, actions.open_file)
+
+	local commits_view_items = vim.list_extend({}, view_items)
+	add(commits_view_items, "ui.help", "Toggle help", 100, help.toggle)
+	add(view_items, "ui.close", "Close review", 101, function()
+		if not help.is_open() then
+			actions.close()
+		end
+	end)
+
 	local review_items = {}
 	local review_view_items = {}
 	local has_review = session.data.review and session.data.review.data
@@ -152,23 +159,10 @@ function M.setup(session, actions)
 		end)
 	end
 
-	local help_items = {}
-	add(help_items, "ui.help", "Toggle help", 100, help.toggle)
-	for _, panel in ipairs({ session.explorer, session.commits }) do
-		for _, groups in ipairs({ shared, review }) do
-			for _, group in ipairs(groups) do
-				help.register(group.name, group.items, { buffer = panel.buf, index = group.index })
-			end
-		end
-		help.register("View", help_items, { buffer = panel.buf })
-	end
-
 	local explorer_items = {}
 	add(explorer_items, "ui.select", "Select file / toggle folder", 1, function()
 		explorer.activate(session.explorer)
 	end)
-	add(explorer_items, "pulls.review.explorer.open_file", "Open local file", 31, actions.open_file)
-
 	add(explorer_items, "pulls.review.show_details", "Show file details", 2, function()
 		explorer.show_details(session.explorer)
 	end)
@@ -183,16 +177,15 @@ function M.setup(session, actions)
 		explorer.toggle_all_folders(session.explorer)
 	end)
 
+	local file_comment_items = {}
 	if has_review then
-		add(explorer_items, "pulls.review.add_comment", "Add pending file comment", 60, function()
+		add(file_comment_items, "pulls.review.add_comment", "Add pending file comment", 60, function()
 			actions.add_comment(true)
 		end)
-		add(explorer_items, "pulls.review.submit_comment", "Post file comment", 61, function()
+		add(file_comment_items, "pulls.review.submit_comment", "Post file comment", 61, function()
 			actions.add_comment(false)
 		end)
 	end
-	help.register("Explorer", explorer_items, { buffer = session.explorer.buf })
-
 	local commits_items = {}
 	add(commits_items, "ui.close", "Close commits", 101, function()
 		if not help.is_open() then
@@ -209,39 +202,55 @@ function M.setup(session, actions)
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
 		commits.show_details(session.commits)
 	end)
-	help.remove("View", commits_items, { buffer = session.commits.buf })
-	help.register("Commits", commits_items, { buffer = session.commits.buf, index = 0 })
-
-	add(shared_explorer_items, "pulls.review.explorer.open_file", "Open local file", 31, actions.open_file)
 
 	-- These actions need a line in the diff.
+	local diff_review_items = vim.list_extend({}, review_items)
+	local diff_view_items = vim.list_extend({}, review_view_items)
 	if has_review or session.data.notes then
-		add(review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, actions.toggle_resolved)
-		add(review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
+		add(diff_review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, actions.toggle_resolved)
+		add(diff_review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
 	end
 	if has_review then
-		add(review_view_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
+		add(diff_view_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
 			actions.add_comment(true)
 		end, { "n", "x" })
-		add(review_view_items, "pulls.review.submit_comment", "Post line/selection comment", 31, function()
+		add(diff_view_items, "pulls.review.submit_comment", "Post line/selection comment", 31, function()
 			actions.add_comment(false)
 		end, { "n", "x" })
-		add(review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
+		add(diff_review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
 			actions.add_comment(true, true)
 		end, { "n", "x" })
-		add(review_items, "pulls.review.submit_suggestion", "Post suggestion", 33, function()
+		add(diff_review_items, "pulls.review.submit_suggestion", "Post suggestion", 33, function()
 			actions.add_comment(false, true)
 		end, { "n", "x" })
 	end
 	if session.data.notes then
-		add(review_items, "pulls.review.add_note", "Add note", 34, actions.add_note, { "n", "x" })
+		add(diff_review_items, "pulls.review.add_note", "Add note", 34, actions.add_note, { "n", "x" })
 	end
 
-	session.renderer.setup_keymaps(session.view, {
+	vim.list_extend(commits_view_items, review_view_items)
+	for _, group in ipairs({
+		{ name = "Explorer", items = navigation_items, index = 1 },
+		{ name = "View", items = commits_view_items, index = 2 },
+		{ name = "Review", items = review_items, index = 3 },
+		{ name = "Commits", items = commits_items, index = 0 },
+	}) do
+		help.register(group.name, group.items, { buffer = session.commits.buf, index = group.index })
+	end
+
+	session.renderer.setup_keymaps(session, {
 		shared = shared,
-		review = review,
-		buffers = { session.explorer.buf, session.commits.buf, session.view.left.buf, session.view.right.buf },
+		review = {
+			{ name = "View", items = diff_view_items, index = 2 },
+			{ name = "Review", items = diff_review_items, index = 3 },
+		},
+		explorer_items = explorer_items,
+		actions = actions,
 	})
+	for _, group in ipairs(review) do
+		help.register(group.name, group.items, { buffer = session.explorer.buf, index = group.index })
+	end
+	help.register("Explorer", file_comment_items, { buffer = session.explorer.buf })
 end
 
 return M

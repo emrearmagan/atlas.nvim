@@ -8,7 +8,8 @@ local StandardView = require("diffview.scene.views.standard.standard_view").Stan
 local keymaps = require("atlas.pulls.diffv2.diffview.keymaps")
 
 ---@param result AtlasDiffV2Result
-local function open(result)
+---@param callbacks AtlasDiffV2Callbacks
+local function open(result, callbacks)
 	local view = CDiffView({
 		git_root = result.root,
 		left = GitRev(RevType.COMMIT, result.base_revision),
@@ -35,7 +36,14 @@ local function open(result)
 			left = { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id }
 		end
 
-		return { tabpage = view.tabpage, left = left, right = right, diffview = view }
+		return {
+			tabpage = view.tabpage,
+			result = result,
+			callbacks = callbacks,
+			left = left,
+			right = right,
+			diffview = view,
+		}
 	end)
 
 	if ok then

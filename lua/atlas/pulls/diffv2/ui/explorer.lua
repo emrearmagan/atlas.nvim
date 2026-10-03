@@ -603,6 +603,9 @@ function M.create(opts)
 	vim.api.nvim_create_autocmd("CursorMoved", {
 		group = state.group,
 		buffer = buf,
+		-- Allow other autocmds to run here. Mainly needed for CodeDiff's BufReadCmd
+		-- during cursor previews, otherwise added/deleted files stay empty.
+		nested = true,
 		callback = function()
 			local row = current_row(state)
 			if row == state.cursor_row then

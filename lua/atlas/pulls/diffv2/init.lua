@@ -101,10 +101,7 @@ local function start_loading(message, context, on_done)
 	local requests = request_scope.new()
 	local options = vim.deepcopy(config.options.pulls.diff)
 	---@cast options AtlasPullsDiffConfig
-	options.open_cmd = vim.trim(options.open_cmd)
-	if options.open_cmd == "" then
-		options.open_cmd = "AtlasDiff"
-	end
+	options.open_cmd = config.diff_command()
 	context.command = options.open_cmd
 
 	---@type AtlasDiffV2Result|nil
@@ -196,7 +193,7 @@ local function start_loading(message, context, on_done)
 				end
 			end
 
-			if options.open_cmd ~= "AtlasDiff" or not options.lsp.enabled or #diff.files == 0 then
+			if not options.lsp.enabled or #diff.files == 0 then
 				complete()
 				return
 			end
