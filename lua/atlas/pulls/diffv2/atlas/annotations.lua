@@ -188,67 +188,9 @@ function M.navigate(view, direction, kind, from_edge)
 		return false
 	end
 
-	local function display_line(pane, line)
-		if not view.left.win then
-			return line
-		end
-
-		local source, other = pane == 1 and 1 or 3, pane == 1 and 3 or 1
-		local row = line
-		-- Filler rows make different line numbers line up across the panes.
-		for _, hunk in ipairs(document.split_hunks) do
-			local start, count = hunk[source], hunk[source + 1]
-			if line < start + count or (count == 0 and line == start) then
-				break
-			end
-			row = row + math.max(0, hunk[other + 1] - count)
-		end
-		return row
-	end
-
-	local locations = {}
-	local field = kind == "comment" and "thread" or "note"
-	for index, pane in ipairs({ view.left, view.right }) do
-		if pane.win then
-			for line, items in pairs(view.annotations[pane.buf] or {}) do
-				if vim.iter(items):any(function(item)
-					return item[field] ~= nil
-				end) then
-					locations[#locations + 1] = {
-						pane = index,
-						win = pane.win,
-						line = line,
-						row = display_line(index, line),
-					}
-				end
-			end
-		end
-	end
-	if #locations == 0 then
-		return false
-	end
-
-	table.sort(locations, function(a, b)
-		return a.row == b.row and a.pane < b.pane or a.row < b.row
+	return ui.navigate(view, direction, kind, from_edge, function(pane, line)
+		return view.left.win and diff.display_line(document.split_hunks, pane, line) or line
 	end)
-	local pane = vim.api.nvim_get_current_win() == view.left.win and 1 or 2
-	local win = pane == 1 and view.left.win or view.right.win
-	local cursor = display_line(pane, vim.api.nvim_win_get_cursor(win)[1])
-	local first = direction == 1 and 1 or #locations
-	local last = direction == 1 and #locations or 1
-
-	for index = first, last, direction do
-		local location = locations[index]
-		local distance = location.row == cursor and location.pane - pane or location.row - cursor
-		if from_edge or distance * direction > 0 then
-			vim.api.nvim_set_current_win(location.win)
-			vim.api.nvim_win_set_cursor(location.win, { location.line, 0 })
-			vim.cmd("normal! zv")
-			return true
-		end
-	end
-
-	return false
 end
 
 ---@param buf integer

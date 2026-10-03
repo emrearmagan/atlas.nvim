@@ -193,7 +193,8 @@ local function start_loading(message, context, on_done)
 				end
 			end
 
-			if not options.lsp.enabled or #diff.files == 0 then
+			-- Diffview uses revision buffers, so it doesn't need an LSP worktree.
+			if not options.lsp.enabled or options.open_cmd == "DiffviewOpen" or #diff.files == 0 then
 				complete()
 				return
 			end

@@ -442,7 +442,7 @@ pulls = {
     compact = true, -- Start with only changed hunks and surrounding context visible.
     lsp = {
       -- Back the new side of the diff with a detached worktree at the PR head so it is made of
-      -- real files and your language servers attach to it (AtlasDiff only). Off by default.
+      -- real files and your language servers attach to it (AtlasDiff and CodeDiff). Off by default.
       enabled = false,
       -- Defaults to `stdpath("cache")/atlas/worktrees/<repo>/pr-<id>` (or `<repo>/<sha>` without a PR).
       -- May be an absolute path, or a function receiving

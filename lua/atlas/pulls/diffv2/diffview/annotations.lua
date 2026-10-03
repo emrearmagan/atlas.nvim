@@ -104,7 +104,7 @@ function M.render(view)
 				local other = panes[side == "LEFT" and "RIGHT" or "LEFT"]
 				if other then
 					-- Keep the diff lines below each card aligned across the panes.
-					local target = line == 0 and 0 or diff.map_line(view.hunks, side, line)
+					local target = line == 0 and 0 or diff.map_line(view.split_hunks, side, line)
 					local padding = {}
 					for _ = 1, #rows do
 						padding[#padding + 1] = { { "", "Normal" } }
@@ -143,6 +143,21 @@ function M.render(view)
 	for win, value in pairs(scrollbind) do
 		vim.wo[win].scrollbind = value
 	end
+end
+
+---@param view AtlasDiffV2DiffviewView
+---@param direction 1|-1
+---@param kind "comment"|"note"
+---@param from_edge boolean|nil
+---@return boolean moved
+function M.navigate(view, direction, kind, from_edge)
+	if view.pending_file then
+		return false
+	end
+
+	return ui.navigate(view, direction, kind, from_edge, function(pane, line)
+		return diff.display_line(view.split_hunks, pane, line)
+	end)
 end
 
 return M

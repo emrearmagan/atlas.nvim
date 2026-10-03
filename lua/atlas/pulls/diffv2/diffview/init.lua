@@ -15,6 +15,7 @@ local keymaps = require("atlas.pulls.diffv2.diffview.keymaps")
 ---@field group integer
 ---@field pending_file { file: AtlasDiffV2File, on_done: fun(err?: string) }|nil
 ---@field hunks integer[][]
+---@field split_hunks integer[][]
 
 local statuses = {
 	added = "A",
@@ -91,6 +92,7 @@ local function open(result, callbacks)
 		group = vim.api.nvim_create_augroup("AtlasDiffV2Diffview" .. diffview.tabpage, { clear = true }),
 		annotations = {},
 		hunks = {},
+		split_hunks = {},
 		left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id } or { buf = right.buf },
 		right = right,
 	}
@@ -120,7 +122,7 @@ local function open(result, callbacks)
 			end)
 			local old = table.concat(vim.api.nvim_buf_get_lines(view.left.buf, 0, -1, false), "\n")
 			local new = table.concat(vim.api.nvim_buf_get_lines(view.right.buf, 0, -1, false), "\n")
-			view.hunks = diff.compute_split(old, new)
+			view.hunks, view.split_hunks = diff.compute(old, new)
 			callbacks.on_file(file)
 			annotations.render(view)
 
@@ -157,16 +159,72 @@ local function show_file(view, file, on_done)
 	view.diffview:set_file_by_path(file.path, false)
 end
 
+---@param view AtlasDiffV2DiffviewView
 ---@return AtlasDiffV2Selection|nil, string|nil
-local function get_selection()
-	-- TODO: Read selections from Diffview's panes.
-	return nil, "Diffview selections are not implemented yet"
-end
+local function get_selection(view)
+	local file = view.current_file
+	local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+	local left = win == view.left.win and buf == view.left.buf
+	local right = win == view.right.win and buf == view.right.buf
 
----@return boolean
-local function navigate_annotation()
-	-- TODO: Navigate comments and notes in Diffview.
-	return false
+	if not file or not (left or right) then
+		return nil, "Select a line in the diff"
+	end
+	if view.pending_file then
+		return nil, "The diff is still loading"
+	end
+
+	local layout = view.diffview.cur_layout
+	local native_file = left and layout.a.file or layout.b.file
+	if file.binary or native_file.binary then
+		return nil, "Binary files do not have review lines"
+	end
+	if native_file.nulled then
+		return nil, "The selected side has no file"
+	end
+
+	local side = left and "LEFT" or "RIGHT"
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local first = vim.api.nvim_win_get_cursor(win)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		first, last = math.min(first, last), math.max(first, last)
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	local function position(line)
+		local from = side == "LEFT" and line or nil
+		local to = side == "RIGHT" and line or nil
+		if file.status ~= "added" and file.status ~= "deleted" then
+			local opposite, hunk = diff.map_line(view.hunks, side, line)
+			-- GitLab needs both positions for unchanged lines.
+			if not hunk then
+				if side == "LEFT" then
+					to = opposite
+				else
+					from = opposite
+				end
+			end
+		end
+		return { from = from, to = to }
+	end
+
+	local inline = position(last)
+	if first ~= last then
+		local start = position(first)
+		if (start.to ~= nil) ~= (inline.to ~= nil) then
+			return nil, "The selected lines cannot be represented as one review range"
+		end
+		inline.start_from = start.from
+		inline.start_to = start.to
+	end
+	inline.path = file.path
+	inline.old_path = file.old_path
+	inline.commit_hash = view.result.head_revision
+
+	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
 end
 
 ---@param session AtlasDiffV2Session
@@ -189,7 +247,7 @@ local M = {
 	show_file = show_file,
 	redraw = annotations.render,
 	get_selection = get_selection,
-	navigate_annotation = navigate_annotation,
+	navigate_annotation = annotations.navigate,
 	resize = annotations.render,
 	setup_keymaps = setup_keymaps,
 	dispose = dispose,

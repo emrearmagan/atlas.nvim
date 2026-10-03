@@ -32,6 +32,24 @@ function M.map_line(hunks, side, line)
 	return line + offset
 end
 
+---@param hunks integer[][]
+---@param pane integer
+---@param line integer
+---@return integer
+function M.display_line(hunks, pane, line)
+	local source, other = pane == 1 and 1 or 3, pane == 1 and 3 or 1
+	local row = line
+	-- Filler rows make different line numbers line up across the panes.
+	for _, hunk in ipairs(hunks) do
+		local start, count = hunk[source], hunk[source + 1]
+		if line < start + count or (count == 0 and line == start) then
+			break
+		end
+		row = row + math.max(0, hunk[other + 1] - count)
+	end
+	return row
+end
+
 ---@param old string
 ---@param new string
 ---@return integer[][] split_hunks
