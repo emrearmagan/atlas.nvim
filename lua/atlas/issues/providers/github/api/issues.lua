@@ -138,8 +138,7 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local issues_cfg = require("atlas.config").options.issues or {}
-	local with_relationships = issues_cfg.with_relationships ~= false
+	local with_relationships = require("atlas.config").options.issues.with_relationships
 	local cache_key =
 		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_refresh then
@@ -331,6 +330,32 @@ function M.get_assignee_options(key, on_done)
 		slug = slug,
 		number = number,
 	})
+end
+
+---@param issue GitHubIssue
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(issue, subscribed, on_done)
+	local node_id = tostring(issue.node_id or "")
+	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			cache.invalidate(issue.key)
+			on_done(subscribed, nil)
+		end,
+		{
+			action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
+			key = issue.key,
+		}
+	)
 end
 
 ---@param key string

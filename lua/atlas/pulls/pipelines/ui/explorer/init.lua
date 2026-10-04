@@ -182,6 +182,19 @@ function M.render(pane, selection)
 end
 
 ---@param pane PullsPipelinesExplorer
+local function begin_loading(pane)
+	if pane.requests then
+		pane.requests.cancel()
+	end
+	pane.requests = requests.new()
+	pane.pipelines = "loading"
+	if pane.on_select then
+		pane.on_select(nil)
+	end
+	start_spinner(pane)
+end
+
+---@param pane PullsPipelinesExplorer
 ---@param pipelines PullsPipeline[]|nil
 ---@param err string|nil
 local function finish_loading(pane, pipelines, err)
@@ -209,15 +222,7 @@ end
 function M.refresh(pane, selection)
 	selection = selection or pane.selection
 	pane.selection = selection and selection.pipeline and selection or nil
-	if pane.requests then
-		pane.requests.cancel()
-	end
-	pane.requests = requests.new()
-	pane.pipelines = "loading"
-	if pane.on_select then
-		pane.on_select(nil)
-	end
-	start_spinner(pane)
+	begin_loading(pane)
 
 	local backend = pane.backend
 	if not backend then
@@ -240,13 +245,7 @@ local function load_pipeline(pane, run, index)
 		return
 	end
 	local pipelines = index and pane.pipelines or {}
-	if pane.requests then
-		pane.requests.cancel()
-	end
-	pane.requests = requests.new()
-	pane.pipelines = "loading"
-	pane.on_select(nil)
-	start_spinner(pane)
+	begin_loading(pane)
 	pane.requests.run(function(done)
 		return pane.backend.fetch(pane.context, { pipeline = run, force_refresh = true }, done)
 	end, function(result, err)

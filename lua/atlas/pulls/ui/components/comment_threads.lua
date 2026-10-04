@@ -3,7 +3,7 @@ local M = {}
 
 local threads = require("atlas.ui.components.threads")
 local emojis = require("atlas.ui.shared.emojis")
-local highlights = require("atlas.ui.shared.highlights")
+local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -109,16 +109,6 @@ local function comment_status(comment, marker, marker_hl)
 	return text, spans
 end
 
----@param name string|nil
----@return string
-local function author_hl(name)
-	local normalized = name and vim.trim(name):lower() or ""
-	if normalized == "" or normalized == "unknown" or normalized == "none" then
-		return "AtlasTextMuted"
-	end
-	return highlights.dynamic_for(normalized) or "AtlasTextMuted"
-end
-
 ---@param comment PullsComment
 ---@return string text, string|table[] hl
 function M.status_marker(comment)
@@ -161,6 +151,23 @@ end
 local function comment_item(comment, opts, is_root)
 	local is_deleted = comment.state == "DELETED"
 	local is_resolved = comment.state == "RESOLVED"
+	local author = author_name(comment.author)
+	local user_icon, user_icon_hl = icons.general("user")
+	local footer_items = {}
+	local item = {
+		icon = user_icon,
+		icon_hl = user_icon_hl,
+		author = author,
+		additional = utils.relative_time(comment.created_on),
+		children = {},
+		footer_items = footer_items,
+		line_map = { comment = comment, entity_kind = comment.is_task and "task" or "comment" },
+		meta = { comment = comment, author_hl_name = author },
+	}
+	if comment.is_task or is_root then
+		local marker, marker_hl = M.status_marker(comment)
+		item.right_text, item.meta.right_text_hl = comment_status(comment, marker, marker_hl)
+	end
 
 	if comment.is_task then
 		local checkbox = is_resolved and "[x]" or "[ ]"
@@ -168,10 +175,10 @@ local function comment_item(comment, opts, is_root)
 		if title == "" then
 			title = "(empty task)"
 		end
-		local creator = author_name(comment.author)
-		local timestamp = utils.relative_time(comment.created_on)
-		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
-		local footer_items = {}
+		item.additional = item.additional ~= "" and ("TASK  " .. item.additional) or "TASK"
+		item.content = string.format("%s %s", checkbox, title)
+		item.meta.is_task = true
+		item.meta.is_resolved = is_resolved
 		local edit_key = is_root and opts.action_keys and opts.action_keys.edit
 		if edit_key then
 			table.insert(footer_items, {
@@ -193,27 +200,7 @@ local function comment_item(comment, opts, is_root)
 			})
 		end
 
-		local user_icon, user_icon_hl = icons.general("user")
-		local marker, marker_hl = M.status_marker(comment)
-		marker, marker_hl = comment_status(comment, marker, marker_hl)
-		return {
-			icon = user_icon,
-			icon_hl = user_icon_hl,
-			author = creator,
-			additional = additional,
-			right_text = marker,
-			content = string.format("%s %s", checkbox, title),
-			footer_items = footer_items,
-			children = {},
-			line_map = { comment = comment, entity_kind = "task" },
-			meta = {
-				comment = comment,
-				author_hl_name = creator,
-				is_task = true,
-				is_resolved = is_resolved,
-				right_text_hl = marker_hl,
-			},
-		}
+		return item
 	end
 
 	local text = is_deleted and "(deleted comment)" or (comment.content_display or comment.content_raw or "")
@@ -221,8 +208,6 @@ local function comment_item(comment, opts, is_root)
 		text = "(empty comment)"
 	end
 
-	local author = author_name(comment.author)
-	local footer_items = {}
 	local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
 	if reactions ~= "" then
 		table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
@@ -252,38 +237,18 @@ local function comment_item(comment, opts, is_root)
 		end
 	end
 
-	local marker, marker_hl
-	if is_root then
-		marker, marker_hl = M.status_marker(comment)
-		marker, marker_hl = comment_status(comment, marker, marker_hl)
-	end
-	local user_icon, user_icon_hl = icons.general("user")
-	local additional = utils.relative_time(comment.created_on)
 	local location = is_root and opts.location and opts.location(comment) or ""
 	if location ~= "" then
-		additional = additional ~= "" and (additional .. "  " .. location) or location
+		item.additional = item.additional ~= "" and (item.additional .. "  " .. location) or location
 	end
 
-	return {
-		icon = user_icon,
-		icon_hl = user_icon_hl,
-		author = tostring(author),
-		additional = additional,
-		right_text = marker,
-		content = text,
-		markdown = not is_deleted,
-		file_path = comment.inline and comment.inline.path,
-		language_aliases = comment.inline and { suggestion = vim.filetype.match({ filename = comment.inline.path }) },
-		children = {},
-		footer_items = footer_items,
-		line_map = { comment = comment, entity_kind = "comment" },
-		meta = {
-			comment = comment,
-			author_hl_name = author,
-			is_deleted = is_deleted,
-			right_text_hl = marker_hl,
-		},
-	}
+	item.author = tostring(author)
+	item.content = text
+	item.markdown = not is_deleted
+	item.file_path = comment.inline and comment.inline.path
+	item.language_aliases = comment.inline and { suggestion = vim.filetype.match({ filename = comment.inline.path }) }
+	item.meta.is_deleted = is_deleted
+	return item
 end
 
 ---@param padding_x integer
@@ -311,12 +276,12 @@ local function threads_opts(padding_x, opts)
 		author_hl = function(item, author)
 			local meta = item and item.meta or nil
 			local author_hl_name = meta and meta.author_hl_name or author
-			return author_hl(author_hl_name)
+			return presentation.author_hl(author_hl_name)
 		end,
 		icon_hl_fn = function(item)
 			local meta = item and item.meta or nil
 			local author_hl_name = meta and meta.author_hl_name or tostring(item.author or "")
-			return author_hl(author_hl_name)
+			return presentation.author_hl(author_hl_name)
 		end,
 		content_hl = function(item, row)
 			local meta = item and item.meta or {}
@@ -481,7 +446,7 @@ local function build_item(node, opts, is_root, root)
 	local item = comment_item(node.comment, opts, is_root)
 	item.line_map.thread_root = root
 	item.line_map.thread_has_replies = not is_root or #node.children > 0
-	if is_root and not node.comment.is_task and not opts.expanded(node.comment) then
+	if is_root and not node.comment.is_task and opts.expanded and not opts.expanded(node.comment) then
 		item.children = {}
 		if node.comment.state == "RESOLVED" or node.comment.state == "OUTDATED" or node.comment.outdated == true then
 			item.content = nil
@@ -525,9 +490,6 @@ end
 ---@return string[], table[], table<integer, table>
 function M.render(nodes, width, opts)
 	opts = opts or {}
-	opts.expanded = opts.expanded or function()
-		return true
-	end
 	local rendered = {}
 	for _, node in ipairs(nodes or {}) do
 		table.insert(rendered, build_item(node, opts, true, nil))
@@ -541,10 +503,8 @@ end
 ---@param opts AtlasCommentThreadRenderOptions|nil
 ---@return string[], table[], table<integer, table>
 function M.render_task_compact(node, width, opts)
-	opts = opts or {}
-	opts.expanded = function()
-		return true
-	end
+	opts = vim.tbl_extend("force", {}, opts or {})
+	opts.expanded = nil
 	local item = build_item(node, opts, true, nil)
 	local task = node.comment
 	local label = tostring(task.task_label or "")
@@ -563,13 +523,19 @@ end
 ---@param opts AtlasCommentThreadRenderOptions|nil
 ---@return string[], AtlasUIHighlight[], table<integer, table>
 function M.render_compact(node, width, expanded, location, opts)
-	opts = opts or {}
-	opts.expanded = function()
-		return true
-	end
-	local item = build_item(node, opts, true, nil)
-
+	opts = vim.tbl_extend("force", {}, opts or {})
+	opts.expanded = nil
 	local comment = node.comment
+	local item
+	if expanded then
+		item = build_item(node, opts, true, nil)
+	else
+		item = comment_item(comment, opts, true)
+		item.line_map.thread_root = comment
+		item.line_map.thread_has_replies = #node.children > 0
+		item.content = nil
+		item.footer_items = {}
+	end
 	local replies = descendant_count(node)
 	local marker, marker_hl = M.status_marker(comment)
 	local fields = {
@@ -600,12 +566,6 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.right_text, item.meta.right_text_hl = comment_status(comment, marker, marker_hl)
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
-	if not expanded then
-		item.content = nil
-		item.children = {}
-		item.footer_items = {}
-	end
-
 	return threads.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
 end
 

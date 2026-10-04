@@ -20,17 +20,9 @@ local PADDING_X = 1
 ---@param src_map table<integer, table>|nil
 local function splice(dst_lines, dst_spans, dst_map, src_lines, src_spans, src_map)
 	local offset = #dst_lines
-	for _, l in ipairs(src_lines) do
-		table.insert(dst_lines, l)
-	end
-	for _, s in ipairs(src_spans) do
-		s.line = s.line + offset
-		table.insert(dst_spans, s)
-	end
-	if src_map then
-		for lnum, data in pairs(src_map) do
-			dst_map[offset + lnum] = data
-		end
+	utils.append_block(dst_lines, dst_spans, { lines = src_lines, highlights = src_spans })
+	for lnum, data in pairs(src_map or {}) do
+		dst_map[offset + lnum] = data
 	end
 end
 
@@ -237,11 +229,7 @@ local function render_entry(entry, width, has_next, by_entity)
 			attach_entities(line_map, by_entity)
 			return lines, spans, line_map
 		end
-		local key = tostring(root.id)
-		if #thread.children > 0 and state.collapsed[key] == nil then
-			state.collapsed[key] = true
-		end
-		local lines, spans, line_map = render_thread(thread, state.is_collapsed(root.id), width)
+		local lines, spans, line_map = render_thread(thread, state.is_collapsed(root.id, #thread.children > 0), width)
 		attach_entities(line_map, by_entity)
 		return lines, spans, line_map
 	elseif entry.type == "review" and entry.item then

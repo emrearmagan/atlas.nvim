@@ -300,110 +300,79 @@ function M.to_activity(item)
 	local actor_login = json.safe_str(json.safe_table(item.actor).login)
 		or json.safe_str(json.safe_table(item.user).login)
 		or ""
-	local actor = actor_from_login(actor_login)
-	local date = tostring(item.created_at or item.submitted_at or "")
+	local entry = {
+		kind = event,
+		actor = actor_from_login(actor_login),
+		date = tostring(item.created_at or item.submitted_at or ""),
+	}
 
 	if event == "commented" then
 		local body = body_text(item.body)
-		return {
-			kind = "comment",
-			actor = actor,
-			date = date,
-			label = "commented",
-			body = body ~= "" and body or nil,
-		}
+		entry.kind = "comment"
+		entry.label = "commented"
+		entry.body = body ~= "" and body or nil
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
 		if state_label == "pending" then
 			return nil
 		end
-		local kind = state_label == "approved" and "approval"
+		entry.kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
 			or "review"
-		local verb = kind == "approval" and "approved"
-			or kind == "changes_requested" and "requested changes"
+		entry.label = entry.kind == "approval" and "approved"
+			or entry.kind == "changes_requested" and "requested changes"
 			or "left a review"
 		local body = body_text(item.body)
-		return {
-			kind = kind,
-			actor = actor,
-			date = date,
-			label = verb,
-			body = body ~= "" and body or nil,
-		}
+		entry.body = body ~= "" and body or nil
 	elseif event == "review_dismissed" then
-		return {
-			kind = "review_dismissed",
-			actor = actor,
-			date = date,
-			label = "dismissed their review",
-		}
+		entry.label = "dismissed their review"
 	elseif event == "closed" or event == "merged" or event == "reopened" then
-		return { kind = event, actor = actor, date = date, label = event }
+		entry.label = event
 	elseif event == "head_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "force pushed" }
+		entry.kind = "force_pushed"
+		entry.label = "force pushed"
 	elseif event == "committed" then
 		local author = json.safe_table(item.author)
 		local author_name = tostring(author.name or "")
 		local msg = tostring(item.message or ""):match("([^\n]+)") or ""
 		local sha = tostring(item.sha or ""):sub(1, 8)
-		return {
-			kind = "committed",
-			actor = actor_from_login(author_name),
-			date = tostring(author.date or date),
-			label = sha ~= "" and string.format("%s %s", sha, msg) or msg,
-		}
+		entry.actor = actor_from_login(author_name)
+		entry.date = tostring(author.date or entry.date)
+		entry.label = sha ~= "" and string.format("%s %s", sha, msg) or msg
 	elseif event == "base_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "base branch force pushed" }
+		entry.kind = "force_pushed"
+		entry.label = "base branch force pushed"
 	elseif event == "labeled" or event == "unlabeled" then
 		local label = json.safe_str(json.safe_table(item.label).name) or ""
 		if label == "" then
 			return nil
 		end
 		local verb = event == "labeled" and "added label" or "removed label"
-		return { kind = event, actor = actor, date = date, label = verb .. ": " .. label }
+		entry.label = verb .. ": " .. label
 	elseif event == "assigned" or event == "unassigned" then
 		local assignee = json.safe_str(json.safe_table(item.assignee).login) or ""
 		if assignee == "" then
 			return nil
 		end
 		local verb = event == "assigned" and "assigned" or "unassigned"
-		return { kind = event, actor = actor, date = date, label = verb .. " " .. assignee }
+		entry.label = verb .. " " .. assignee
 	elseif event == "review_requested" then
 		local reviewer = json.safe_str(json.safe_table(item.requested_reviewer).login) or ""
-		return {
-			kind = "review_requested",
-			actor = actor,
-			date = date,
-			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
-		}
+		entry.label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review"
 	elseif event == "renamed" then
 		local rename = item.rename or {}
-		return {
-			kind = "renamed",
-			actor = actor,
-			date = date,
-			label = "changed the title",
-			body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or "")),
-		}
+		entry.label = "changed the title"
+		entry.body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or ""))
 	elseif event == "comment_deleted" then
-		return {
-			kind = "comment_deleted",
-			actor = actor,
-			date = date,
-			label = "deleted a comment",
-		}
+		entry.label = "deleted a comment"
 	elseif event == "ready_for_review" then
-		return {
-			kind = "ready_for_review",
-			actor = actor,
-			date = date,
-			label = "marked as ready for review",
-		}
+		entry.label = "marked as ready for review"
 	elseif event == "convert_to_draft" then
-		return { kind = "convert_to_draft", actor = actor, date = date, label = "marked as draft" }
+		entry.label = "marked as draft"
+	else
+		return nil
 	end
-	return nil
+	return entry
 end
 
 ---@param raw table
@@ -427,10 +396,7 @@ end
 ---@return PullsComment
 function M.to_activity_comment(raw)
 	local raw_user = json.nilify(raw.user) or json.nilify(raw.actor)
-	local result = comment(raw, raw_user)
-	result.parent_id = nil
-	result.inline = nil
-	return result
+	return comment(raw, raw_user)
 end
 
 ---@param raw table

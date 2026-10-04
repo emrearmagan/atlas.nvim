@@ -169,7 +169,7 @@ local function close_session(session_id, reason, close_tab)
 	require("atlas.ui.detail").close(state.tab)
 	dispose_domain()
 	reset_ui_state()
-	if state.buf and utils.buffer.valid(state.buf) then
+	if state.buf then
 		require("atlas.ui.keymaps").remove(state.buf)
 	end
 	if close_tab and utils.window.valid(state.win) then

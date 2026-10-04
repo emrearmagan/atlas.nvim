@@ -12,19 +12,8 @@ local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.providers.bitbucket.users")
 local repositories = require("atlas.providers.bitbucket.repositories")
-local core_notify = require("atlas.core.notify")
 
----@param ctx AtlasPullActionContext
----@param level "loading"|"success"|"warn"|"error"|"info"
----@param message string
----@param duration integer|nil
-local function notify(ctx, level, message, duration)
-	if ctx.notify then
-		ctx.notify(level, message, duration)
-		return
-	end
-	core_notify.show(level, message, { timeout = duration })
-end
+local notify = action_utils.notify
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}

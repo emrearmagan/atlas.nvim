@@ -37,7 +37,7 @@ end
 ---@param findstart integer
 ---@param base string
 ---@return integer|table[]
-_G.__atlas_markdown_complete = function(findstart, base)
+local function complete(findstart, base)
 	local buf = vim.api.nvim_get_current_buf()
 	local provider = completion_provider_by_buf[buf]
 	if type(provider) ~= "table" then
@@ -63,6 +63,8 @@ _G.__atlas_markdown_complete = function(findstart, base)
 	end
 	return items
 end
+
+_G.__atlas_markdown_complete = complete
 
 ---@class AtlasEditorAction
 ---@field key string
@@ -246,22 +248,14 @@ function M.open(opts)
 				return
 			end
 
-			local cursor = vim.api.nvim_win_get_cursor(0)
-			local cursor_row = tonumber(cursor[1]) or 1
-			local cursor_col = tonumber(cursor[2]) or 0
-			local line = vim.api.nvim_buf_get_lines(buf, cursor_row - 1, cursor_row, false)[1] or ""
-			if type(line) ~= "string" then
+			local start = complete(1, "")
+			if type(start) ~= "number" or start < 0 then
 				return
 			end
 
-			local before = line:sub(1, cursor_col)
-			local start = provider.find_start(before, line, cursor_col)
-			if type(start) ~= "number" then
-				return
-			end
-
-			local base = before:sub(start + 1)
-			local items = provider.complete(tostring(base or ""), line, cursor_col)
+			local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
+			local base = vim.api.nvim_get_current_line():sub(start + 1, cursor_col)
+			local items = complete(0, base)
 			if type(items) ~= "table" or #items == 0 then
 				return
 			end

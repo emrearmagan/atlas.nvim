@@ -203,45 +203,33 @@ end
 
 ---@param bstate table
 ---@return table[]
-local function collect_all_groups(bstate)
-	local all_groups = {}
+local function collect_groups(bstate)
+	local groups = {}
 
 	for group_name, items in pairs(bstate.keys) do
-		table.insert(all_groups, {
-			name = group_name,
-			items = items,
-			index = group_index(bstate, group_name),
-		})
+		if #items > 0 then
+			table.sort(items, function(a, b)
+				if a.index == b.index then
+					return a.key < b.key
+				end
+				return a.index < b.index
+			end)
+			table.insert(groups, {
+				name = group_name,
+				items = items,
+				index = group_index(bstate, group_name),
+			})
+		end
 	end
 
-	table.sort(all_groups, function(a, b)
+	table.sort(groups, function(a, b)
 		if a.index == b.index then
 			return a.name < b.name
 		end
 		return a.index < b.index
 	end)
 
-	return all_groups
-end
-
----@param all_groups table[]
----@return table[]
-local function collect_valid_groups(all_groups)
-	local valid_groups = {}
-
-	for _, group in ipairs(all_groups) do
-		if #group.items > 0 then
-			table.sort(group.items, function(a, b)
-				if a.index == b.index then
-					return a.key < b.key
-				end
-				return a.index < b.index
-			end)
-			table.insert(valid_groups, group)
-		end
-	end
-
-	return valid_groups
+	return groups
 end
 
 ---@param valid_groups table[]
@@ -332,27 +320,23 @@ local function get_layout(bufnr, max_width)
 		return { lines = {}, highlights = {}, height = 0 }
 	end
 
-	local valid_groups = collect_valid_groups(collect_all_groups(bstate))
+	local valid_groups = collect_groups(bstate)
 	if #valid_groups == 0 then
 		return { lines = { "  No bindings registered  " }, highlights = {}, height = 1 }
 	end
 
 	local lines = { "" }
 	local highlights = {}
-	local height = 1
 
 	local render_items = build_render_items(valid_groups)
 	local num_cols, col_width, key_widths = columns_for(render_items, max_width)
 
 	local current_line = ""
-	local line_idx = 1
 	local col_idx = 0
 
 	local function flush_line()
 		if current_line ~= "" then
 			table.insert(lines, current_line)
-			height = height + 1
-			line_idx = line_idx + 1
 			current_line = ""
 			col_idx = 0
 		end
@@ -360,8 +344,6 @@ local function get_layout(bufnr, max_width)
 
 	local function add_empty_line()
 		table.insert(lines, "")
-		height = height + 1
-		line_idx = line_idx + 1
 		col_idx = 0
 	end
 
@@ -375,7 +357,7 @@ local function get_layout(bufnr, max_width)
 			end
 
 			local txt = render_item.text
-			add_highlight(highlights, "Title", line_idx, 2, 2 + #txt)
+			add_highlight(highlights, "Title", #lines, 2, 2 + #txt)
 			current_line = "  " .. txt
 			flush_line()
 		else
@@ -406,12 +388,12 @@ local function get_layout(bufnr, max_width)
 			local pad_len = math.max(0, content_width - display_width(display_str))
 
 			local start_col = #current_line + 2
-			add_highlight(highlights, "Special", line_idx, start_col, start_col + #left_str)
+			add_highlight(highlights, "Special", #lines, start_col, start_col + #left_str)
 			if right_str ~= "" then
 				add_highlight(
 					highlights,
 					"Comment",
-					line_idx,
+					#lines,
 					start_col + #padded_left,
 					start_col + #padded_left + #right_str
 				)
@@ -427,7 +409,7 @@ local function get_layout(bufnr, max_width)
 		add_empty_line()
 	end
 
-	return { lines = lines, highlights = highlights, height = height }
+	return { lines = lines, highlights = highlights, height = #lines }
 end
 
 local function cleanup_ui()

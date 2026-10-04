@@ -57,9 +57,6 @@ end
 
 local function enforce_max_size(path)
 	local max_bytes = 1024 * 1024
-	if max_bytes <= 0 then
-		return
-	end
 
 	local st = vim.uv.fs_stat(path)
 	if not st or not st.size or st.size <= max_bytes then
@@ -72,7 +69,7 @@ local function enforce_max_size(path)
 	end
 
 	-- Keep newest tail that fits max_bytes (approx by byte length of lines + newlines).
-	local kept = {}
+	local first = #lines + 1
 	local total = 0
 	for i = #lines, 1, -1 do
 		local line = lines[i]
@@ -80,11 +77,11 @@ local function enforce_max_size(path)
 		if total + cost > max_bytes then
 			break
 		end
-		table.insert(kept, 1, line)
+		first = i
 		total = total + cost
 	end
 
-	vim.fn.writefile(kept, path)
+	vim.fn.writefile(vim.list_slice(lines, first), path)
 end
 
 ---@param level AtlasLogLevel

@@ -17,6 +17,51 @@ local VIEWERS = {
 	DiffviewOpen = { id = "diffview", open = require("atlas.pulls.diff.diffview").open },
 }
 
+local completion = {}
+
+---@param arglead string
+---@param args string[]|nil
+---@return string[]
+function M.complete(arglead, args)
+	if (args and #args > 1) or arglead:find("://", 1, true) then
+		return {}
+	end
+	local cwd = git.default_cwd()
+	if completion.cwd ~= cwd then
+		if completion.request then
+			completion.request.cancel()
+		end
+		completion = { cwd = cwd }
+	end
+	local cache = completion
+	if not cache.request then
+		cache.request = git.run({
+			"for-each-ref",
+			"--format=%(refname:short)",
+			"refs/heads",
+			"refs/remotes",
+		}, { cwd = cwd, text = true }, function(res)
+			cache.refs = {}
+			if res.code == 0 then
+				cache.refs = { "HEAD" }
+				vim.list_extend(cache.refs, vim.split(res.stdout, "\n", { plain = true, trimempty = true }))
+			end
+			cache.request = nil
+		end)
+	end
+
+	local separator = arglead:find("...", 1, true)
+	local range = separator and arglead:sub(1, separator + 2) or ""
+	local prefix = arglead:sub(#range + 1)
+	local matches = {}
+	for _, ref in ipairs(cache.refs or {}) do
+		if ref:find(prefix, 1, true) == 1 then
+			table.insert(matches, range .. ref)
+		end
+	end
+	return matches
+end
+
 ---@param command string|nil
 ---@return string
 local function diff_command(command)
@@ -310,9 +355,11 @@ function M.open_pr(opts, on_done)
 	)
 end
 
----@param opts { root: string, base: string, head: string, command?: string }
+---@param opts { root?: string, base: string, head: string, command?: string }
 ---@param on_done (fun(err: string|nil))|nil
+---@return AtlasRequestScope
 function M.open_range(opts, on_done)
+	local cwd = opts.root or git.default_cwd()
 	local command = diff_command(opts.command)
 	local viewer = VIEWERS[command]
 	local source = {
@@ -329,16 +376,34 @@ function M.open_range(opts, on_done)
 	local view, requests, finish = start_loading("Preparing diff...", context, on_done)
 	local data = { source = source, commits = {}, warnings = {} }
 
-	requests.run(function(done)
-		return open_viewer(command, data, view, function(reopen_done)
-			M.open_range({
-				root = source.root,
-				base = source.base_revision,
-				head = source.head_revision,
-				command = command,
-			}, reopen_done)
-		end, done)
-	end, finish)
+	local function open()
+		requests.run(function(done)
+			return open_viewer(command, data, view, function(reopen_done)
+				M.open_range({
+					root = source.root,
+					base = source.base_revision,
+					head = source.head_revision,
+					command = command,
+				}, reopen_done)
+			end, done)
+		end, finish)
+	end
+	if source.root then
+		open()
+	else
+		requests.run(function(done)
+			return git.repo_root(cwd, done)
+		end, function(root, err)
+			if not root then
+				finish(err or "Not in a git repository")
+				return
+			end
+			source.root = root
+			context.root = root
+			open()
+		end)
+	end
+	return requests
 end
 
 ---@param value string
@@ -385,13 +450,7 @@ function M.open_argument(value)
 		notify.error("Expected an explicit base...head range", { vim_notify = true })
 		return
 	end
-	local root, err = git.repo_root()
-	if not root then
-		notify.error(err or "Not in a git repository", { vim_notify = true })
-		return
-	end
-
-	M.open_range({ root = root, base = base, head = head, command = "AtlasDiff" }, function(open_err)
+	return M.open_range({ base = base, head = head, command = "AtlasDiff" }, function(open_err)
 		if open_err then
 			notify.error(open_err, { vim_notify = true })
 		end

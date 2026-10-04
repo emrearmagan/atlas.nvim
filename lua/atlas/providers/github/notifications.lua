@@ -117,6 +117,7 @@ function M.mark_read(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
+		client.clear_mem("github:notifications:")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification read",
@@ -133,6 +134,7 @@ function M.mark_done(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
+		client.clear_mem("github:notifications:")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification done",

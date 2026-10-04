@@ -1,6 +1,7 @@
 local M = {}
 
 local core_git = require("atlas.core.git")
+local requests = require("atlas.core.requests")
 
 ---@class AtlasNativeDiffRange: AtlasDiffSource
 ---@field head_revision string Immutable commit hash.
@@ -9,13 +10,6 @@ local core_git = require("atlas.core.git")
 ---@field range AtlasNativeDiffRange
 ---@field files DiffFile[]
 ---@field document AtlasDiffDocument
-
----@class AtlasNativeDiffGitOperation
----@field cancelled boolean
----@field finished boolean
----@field handles { cancel: fun() }[]
----@field cancel fun()
----@field finish fun(self: AtlasNativeDiffGitOperation, result: any, err: string|nil)
 
 -- Git requests
 
@@ -34,69 +28,6 @@ local function command_error(res, fallback)
 		message = string.format("%s (exit code %d)", fallback, res.code)
 	end
 	return message
-end
-
----@param callback fun(result: any, err: string|nil)
----@return AtlasNativeDiffGitOperation
-local function new_operation(callback)
-	---@type AtlasNativeDiffGitOperation
-	local op = {
-		cancelled = false,
-		finished = false,
-		handles = {},
-	}
-	local function cancel_handles()
-		for _, handle in ipairs(op.handles) do
-			handle.cancel()
-		end
-		op.handles = {}
-	end
-
-	op.cancel = function()
-		if op.cancelled or op.finished then
-			return
-		end
-		op.cancelled = true
-		cancel_handles()
-	end
-
-	---@param ... any
-	function op:finish(...)
-		if self.cancelled or self.finished then
-			return
-		end
-		self.finished = true
-		cancel_handles()
-		callback(...)
-	end
-
-	return op
-end
-
----@param op AtlasNativeDiffGitOperation
----@param args string[]
----@param opts vim.SystemOpts
----@param on_exit fun(res: vim.SystemCompleted)
-local function run_git(op, args, opts, on_exit)
-	if op.cancelled or op.finished then
-		return
-	end
-
-	local ok, handle = pcall(core_git.run, args, opts, function(res)
-		if not op.cancelled and not op.finished then
-			on_exit(res)
-		end
-	end)
-	if ok and handle then
-		table.insert(op.handles, handle)
-		return
-	end
-
-	vim.schedule(function()
-		if not op.cancelled and not op.finished then
-			op:finish(nil, ok and "Failed to start git" or tostring(handle))
-		end
-	end)
 end
 
 -- Changed files
@@ -270,183 +201,188 @@ end
 
 -- Range and files
 
----@param op AtlasNativeDiffGitOperation
 ---@param root string
 ---@param base_revision string
 ---@param head_revision string
----@param on_done fun(range: AtlasNativeDiffRange)
-local function resolve_range(op, root, base_revision, head_revision, on_done)
+---@param on_done fun(range: AtlasNativeDiffRange|nil, err: string|nil)
+---@return AtlasRequestScope
+local function resolve_range(root, base_revision, head_revision, on_done)
+	local scope = requests.new()
 	root = tostring(root or "")
 	base_revision = trim(base_revision)
 	head_revision = trim(head_revision)
 
 	if root == "" or base_revision == "" or head_revision == "" then
-		vim.schedule(function()
-			op:finish(nil, "Repository path, base revision, and head revision are required")
-		end)
-		return
+		scope.run(function(done)
+			vim.schedule(function()
+				done(nil, "Repository path, base revision, and head revision are required")
+			end)
+		end, on_done)
+		return scope
 	end
 
-	run_git(
-		op,
-		{ "rev-parse", "--verify", "--end-of-options", head_revision .. "^{commit}" },
-		{ cwd = root, text = true },
-		function(head_res)
-			local head_hash = trim(head_res.stdout)
-			if head_res.code ~= 0 or head_hash == "" then
-				op:finish(nil, command_error(head_res, "Failed to resolve head revision"))
+	scope.run(function(done)
+		return core_git.run(
+			{ "rev-parse", "--verify", "--end-of-options", head_revision .. "^{commit}" },
+			{ cwd = root, text = true },
+			done
+		)
+	end, function(head_res)
+		local head_hash = trim(head_res.stdout)
+		if head_res.code ~= 0 or head_hash == "" then
+			on_done(nil, command_error(head_res, "Failed to resolve head revision"))
+			return
+		end
+		scope.run(function(done)
+			return core_git.run({ "merge-base", "--", base_revision, head_hash }, { cwd = root, text = true }, done)
+		end, function(merge_res)
+			local merge_base = trim(merge_res.stdout)
+			if merge_res.code ~= 0 or merge_base == "" then
+				on_done(nil, command_error(merge_res, "Failed to resolve merge base"))
 				return
 			end
-			run_git(
-				op,
-				{ "merge-base", "--", base_revision, head_hash },
-				{ cwd = root, text = true },
-				function(merge_res)
-					local merge_base = trim(merge_res.stdout)
-					if merge_res.code ~= 0 or merge_base == "" then
-						op:finish(nil, command_error(merge_res, "Failed to resolve merge base"))
-						return
-					end
-					on_done({ root = root, base_revision = merge_base, head_revision = head_hash })
-				end
-			)
-		end
-	)
+			on_done({ root = root, base_revision = merge_base, head_revision = head_hash }, nil)
+		end)
+	end)
+	return scope
 end
 
----@param op AtlasNativeDiffGitOperation
 ---@param range AtlasNativeDiffRange
----@param on_done fun(files: DiffFile[])
-local function list_files(op, range, on_done)
-	local root = tostring(range and range.root or "")
-	local base = trim(range and range.base_revision)
-	local head = trim(range and range.head_revision)
-	if root == "" or base == "" or head == "" then
-		vim.schedule(function()
-			op:finish(nil, "A resolved diff range is required")
-		end)
-		return
-	end
-
-	local diff_range = base .. ".." .. head
-	run_git(
-		op,
-		{ "diff", "--find-renames", "--name-status", "-z", diff_range, "--" },
-		{ cwd = root, text = false },
-		function(res)
-			if res.code ~= 0 then
-				op:finish(nil, command_error(res, "Failed to list changed files"))
-				return
-			end
-			local files = parse_name_status(res.stdout or "")
-			if #files == 0 then
-				on_done(files)
-				return
-			end
-			run_git(
-				op,
-				{ "diff", "--find-renames", "--numstat", "-z", diff_range, "--" },
-				{ cwd = root, text = false },
-				function(stats_res)
-					if stats_res.code ~= 0 then
-						op:finish(nil, command_error(stats_res, "Failed to load diff statistics"))
-						return
-					end
-					apply_stats(files, parse_numstat(stats_res.stdout or ""))
-					on_done(files)
-				end
-			)
+---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
+---@return AtlasRequestScope
+local function list_files(range, on_done)
+	local scope = requests.new()
+	local diff_range = range.base_revision .. ".." .. range.head_revision
+	scope.run(function(done)
+		return core_git.run(
+			{ "diff", "--find-renames", "--name-status", "-z", diff_range, "--" },
+			{ cwd = range.root, text = false },
+			done
+		)
+	end, function(res)
+		if res.code ~= 0 then
+			on_done(nil, command_error(res, "Failed to list changed files"))
+			return
 		end
-	)
+		local files = parse_name_status(res.stdout or "")
+		if #files == 0 then
+			on_done(files, nil)
+			return
+		end
+		scope.run(function(done)
+			return core_git.run(
+				{ "diff", "--find-renames", "--numstat", "-z", diff_range, "--" },
+				{ cwd = range.root, text = false },
+				done
+			)
+		end, function(stats_res)
+			if stats_res.code ~= 0 then
+				on_done(nil, command_error(stats_res, "Failed to load diff statistics"))
+				return
+			end
+			apply_stats(files, parse_numstat(stats_res.stdout or ""))
+			on_done(files, nil)
+		end)
+	end)
+	return scope
 end
 
 -- Documents
 
----@param op AtlasNativeDiffGitOperation
 ---@param root string
 ---@param revision string
 ---@param path string
 ---@param on_done fun(content: string|nil, err: string|nil)
-local function load_content(op, root, revision, path, on_done)
+---@return AtlasRequestScope|nil
+local function load_content(root, revision, path, on_done)
 	if path == "" then
-		vim.schedule(function()
-			if not op.cancelled and not op.finished then
-				on_done("", nil)
-			end
-		end)
+		on_done("", nil)
 		return
 	end
 
+	local scope = requests.new()
 	local object = revision .. ":" .. path
-	run_git(op, { "cat-file", "blob", object }, { cwd = root, text = false }, function(res)
+	scope.run(function(done)
+		return core_git.run({ "cat-file", "blob", object }, { cwd = root, text = false }, done)
+	end, function(res)
 		if res.code == 0 then
 			on_done(res.stdout or "", nil)
 			return
 		end
 		local original_error = command_error(res, "Failed to load file content")
-		run_git(
-			op,
-			{ "rev-parse", "--verify", "--end-of-options", object },
-			{ cwd = root, text = true },
-			function(object_res)
-				local object_id = trim(object_res.stdout)
-				if object_res.code ~= 0 or object_id == "" then
-					on_done(nil, original_error)
+		scope.run(function(done)
+			return core_git.run(
+				{ "rev-parse", "--verify", "--end-of-options", object },
+				{ cwd = root, text = true },
+				done
+			)
+		end, function(object_res)
+			local object_id = trim(object_res.stdout)
+			if object_res.code ~= 0 or object_id == "" then
+				on_done(nil, original_error)
+				return
+			end
+			scope.run(function(done)
+				return core_git.run({ "cat-file", "-t", object_id }, { cwd = root, text = true }, done)
+			end, function(type_res)
+				if type_res.code == 0 and trim(type_res.stdout) == "commit" then
+					on_done("Subproject commit " .. object_id .. "\n", nil)
 					return
 				end
-				run_git(op, { "cat-file", "-t", object_id }, { cwd = root, text = true }, function(type_res)
-					if type_res.code == 0 and trim(type_res.stdout) == "commit" then
-						on_done("Subproject commit " .. object_id .. "\n", nil)
-						return
-					end
-					on_done(nil, original_error)
-				end)
-			end
-		)
+				on_done(nil, original_error)
+			end)
+		end)
 	end)
+	return scope
 end
 
----@param op AtlasNativeDiffGitOperation
 ---@param range AtlasNativeDiffRange
 ---@param file DiffFile
----@param on_done fun(document: AtlasDiffDocument)
-local function load_document(op, range, file, on_done)
+---@param on_done fun(document: AtlasDiffDocument|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.document(range, file, on_done)
+	local scope = requests.new()
 	local root = tostring(range and range.root or "")
 	local base = trim(range and range.base_revision)
 	local head = trim(range and range.head_revision)
+	local validation_err
 	if root == "" or base == "" or head == "" then
-		vim.schedule(function()
-			op:finish(nil, "A resolved diff range is required")
-		end)
-		return
+		validation_err = "A resolved diff range is required"
+	elseif file.path == "" then
+		validation_err = "A changed file is required"
 	end
-	if file.path == "" then
-		vim.schedule(function()
-			op:finish(nil, "A changed file is required")
-		end)
-		return
+	if validation_err then
+		scope.run(function(done)
+			vim.schedule(function()
+				done(nil, validation_err)
+			end)
+		end, on_done)
+		return scope
 	end
 
 	local old_path = file.old_path or file.path
 	local old_query = file.status == "added" and "" or old_path
 	local new_query = file.status == "deleted" and "" or file.path
-	local result = {}
-
-	local function complete()
-		if result.old == nil or result.new == nil then
+	scope.all({
+		old = function(done)
+			return load_content(root, base, old_query, done)
+		end,
+		new = function(done)
+			return load_content(root, head, new_query, done)
+		end,
+	}, function(contents, errors)
+		local err = errors.old or errors.new
+		if err then
+			on_done(nil, err)
 			return
 		end
-		if result.error then
-			op:finish(nil, result.error)
-			return
-		end
 
-		local old_lines, old_binary = content_lines(result.old)
-		local new_lines, new_binary = content_lines(result.new)
+		local old_lines, old_binary = content_lines(contents.old)
+		local new_lines, new_binary = content_lines(contents.new)
 		local binary = old_binary or new_binary
-		local hunks, hunk_error = diff_hunks(old_lines, new_lines, result.old, result.new, binary)
+		local hunks, hunk_error = diff_hunks(old_lines, new_lines, contents.old, contents.new, binary)
 		if not hunks then
-			op:finish(nil, hunk_error)
+			on_done(nil, hunk_error)
 			return
 		end
 		on_done({
@@ -455,62 +391,58 @@ local function load_document(op, range, file, on_done)
 			new = { path = file.path, lines = new_lines },
 			changes = hunks,
 			binary = binary,
-		})
-	end
-
-	load_content(op, root, base, old_query, function(content, err)
-		result.old = content or ""
-		result.error = result.error or err
-		complete()
+		}, nil)
 	end)
-	load_content(op, root, head, new_query, function(content, err)
-		result.new = content or ""
-		result.error = result.error or err
-		complete()
-	end)
-end
-
----@param range AtlasNativeDiffRange
----@param file DiffFile
----@param on_done fun(document: AtlasDiffDocument|nil, err: string|nil)
----@return { cancel: fun() }
-function M.document(range, file, on_done)
-	local op = new_operation(on_done)
-	load_document(op, range, file, function(document)
-		op:finish(document, nil)
-	end)
-	return op
+	return scope
 end
 
 -- Initial diff data
 
 ---@param options { git_root: string, base_revision: string, head_revision: string, filter: (fun(files: DiffFile[]): DiffFile[])|nil }
 ---@param on_done fun(result: AtlasNativeDiffData|nil, err: string|nil)
----@return { cancel: fun() }
+---@return AtlasRequestScope
 function M.load(options, on_done)
-	local op = new_operation(on_done)
-	resolve_range(op, options.git_root, options.base_revision, options.head_revision, function(range)
-		list_files(op, range, function(files)
+	local scope = requests.new()
+	scope.run(function(done)
+		return resolve_range(options.git_root, options.base_revision, options.head_revision, done)
+	end, function(range, range_err)
+		if not range then
+			on_done(nil, range_err)
+			return
+		end
+		scope.run(function(done)
+			return list_files(range, done)
+		end, function(files, files_err)
+			if not files then
+				on_done(nil, files_err)
+				return
+			end
 			if options.filter then
 				local ok, filtered = pcall(options.filter, files)
 				if not ok then
-					op:finish(nil, "Unable to filter changed files: " .. tostring(filtered))
+					on_done(nil, "Unable to filter changed files: " .. tostring(filtered))
 					return
 				end
 				files = filtered
 			end
 			if #files == 0 then
-				op:finish(nil, "The range has no visible changed files")
+				on_done(nil, "The range has no visible changed files")
 				return
 			end
 
-			load_document(op, range, files[1], function(document)
-				op:finish({ range = range, files = files, document = document }, nil)
+			scope.run(function(done)
+				return M.document(range, files[1], done)
+			end, function(document, err)
+				if not document then
+					on_done(nil, err)
+					return
+				end
+				on_done({ range = range, files = files, document = document }, nil)
 			end)
 		end)
 	end)
 
-	return op
+	return scope
 end
 
 return M

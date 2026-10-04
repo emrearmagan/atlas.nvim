@@ -11,6 +11,7 @@
 
 ---@class PullsPage
 ---@field items PullRequest[]
+---@field query string|nil
 ---@field next_cursor table<string, string>|nil
 ---@field total_pages integer|nil
 
@@ -39,7 +40,6 @@
 ---@field reviews PullsReviewsCapability|nil
 ---@field tasks PullsTasksCapability|nil
 ---@field pipelines PullsPipelineBackend|nil
----@field actions PullsActionsCapability|nil
 ---@field ui PullsUICapability|nil
 
 ---@class PullsCoreCapability
@@ -93,11 +93,6 @@
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_task (fun(task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_task (fun(task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
-
----@class PullsActionsCapability
----@field items AtlasPullAction[]
----@field is_available fun(action_id: string, ctx: AtlasPullActionContext): boolean
----@field run fun(action_id: string, ctx: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean
 
 ---@class PullsUICapability
 ---@field detail PullsProviderDetail|nil

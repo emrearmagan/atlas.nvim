@@ -1,18 +1,6 @@
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
 
-local function deep_copy(value)
-	if type(value) ~= "table" then
-		return value
-	end
-
-	local copy = {}
-	for k, v in pairs(value) do
-		copy[k] = deep_copy(v)
-	end
-	return copy
-end
-
 local default_keymaps = {
 	ui = {
 		toggle_panel = "p",
@@ -20,16 +8,16 @@ local default_keymaps = {
 	},
 }
 
-local shipped_keymaps = deep_copy(config.options.keymaps)
+local shipped_keymaps = vim.deepcopy(config.options.keymaps)
 
 describe("core.keymaps", function()
 	after_each(function()
-		config.options.keymaps = deep_copy(shipped_keymaps)
+		config.options.keymaps = vim.deepcopy(shipped_keymaps)
 	end)
 
 	describe("resolver", function()
 		before_each(function()
-			config.options.keymaps = deep_copy(default_keymaps)
+			config.options.keymaps = vim.deepcopy(default_keymaps)
 		end)
 
 		it("normalizes string and list mappings", function()
@@ -46,7 +34,7 @@ describe("core.keymaps", function()
 
 	describe("conflicts", function()
 		before_each(function()
-			config.options.keymaps = deep_copy(shipped_keymaps)
+			config.options.keymaps = vim.deepcopy(shipped_keymaps)
 		end)
 
 		it("reports no conflicts for the shipped defaults", function()

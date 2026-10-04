@@ -13,6 +13,7 @@ return {
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.bitbucket",
+			actions = "atlas.pulls.providers.bitbucket.actions.registry",
 			icon = { icon = "", hl_group = "AtlasBitbucketTheme" },
 			bookmark_key = "S",
 		},

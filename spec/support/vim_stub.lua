@@ -32,10 +32,27 @@ local function strchars(text)
 	return count
 end
 
+local function deepcopy(value, seen)
+	if type(value) ~= "table" then
+		return value
+	end
+	seen = seen or {}
+	if seen[value] then
+		return seen[value]
+	end
+	local copy = {}
+	seen[value] = copy
+	for key, item in pairs(value) do
+		copy[deepcopy(key, seen)] = deepcopy(item, seen)
+	end
+	return setmetatable(copy, getmetatable(value))
+end
+
 _G.vim = {
 	-- Sentinel used by the Neovim C layer for JSON null / GraphQL null values.
 	NIL = {},
 	o = { background = "dark" },
+	deepcopy = deepcopy,
 
 	split = function(s, sep, opts)
 		local plain = opts and opts.plain
@@ -49,6 +66,14 @@ _G.vim = {
 			end
 			table.insert(result, s:sub(from, start - 1))
 			from = finish + 1
+		end
+		if opts and opts.trimempty then
+			while result[#result] == "" do
+				table.remove(result)
+			end
+			while result[1] == "" do
+				table.remove(result, 1)
+			end
 		end
 		return result
 	end,

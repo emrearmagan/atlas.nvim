@@ -5,14 +5,30 @@
 --       gitlab = {
 --         base_url = "https://gitlab.com",
 --         token    = vim.env.GITLAB_TOKEN,
---         cache_ttl = 300,
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
 --       },
 --     },
 --     issues = {
 --       ---@type AtlasGitLabIssuesConfig
 --       gitlab = {
 --         views = {
---           { name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+--           {
+--             name = "Assigned",
+--             key = "1",
+--             layout = "compact", -- "compact" or "plain".
+--             scope = "assigned_to_me",
+--             state = "opened", -- "opened", "closed", or "all".
+--             -- current_repo = true, -- Local repository; alternative to project.
+--             -- project = "group/project", -- Project path or numeric ID.
+--             -- labels = "bug,backend",
+--             -- milestone = "v1.0",
+--             -- assignee_username = "your-user",
+--             -- author_username = "your-user",
+--             -- search = "fix",
+--             -- order_by = "updated_at",
+--             -- sort = "desc", -- "asc" or "desc".
+--             -- extra_params = { ["not[labels]"] = "wontfix" },
+--           },
 --           { name = "Created",  key = "2", scope = "created_by_me",  state = "opened" },
 --           { name = "All open", key = "3", scope = "all",            state = "opened" },
 --         },
@@ -20,7 +36,7 @@
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["No labels"] = { scope = "all", state = "opened",
+--             ["No labels"] = { layout = "compact", scope = "all", state = "opened",
 --                               extra_params = { ["not[labels]"] = "*" } },
 --             ["Closed"]    = { scope = "created_by_me", state = "closed" },
 --           },

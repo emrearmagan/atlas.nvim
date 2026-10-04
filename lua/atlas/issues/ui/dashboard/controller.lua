@@ -9,19 +9,9 @@ local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
 local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
-local bookmarks = require("atlas.ui.shared.bookmarks")
 
 local active_requests = requests.new()
 local issue_reload_requests = requests.new()
-
----@param view IssuesViewConfig|nil
-local function resolve_view(view)
-	if view ~= nil then
-		state.query = state.provider.resolve_search(view)
-	else
-		state.query = ""
-	end
-end
 
 local function render_if_active()
 	local provider = state.provider
@@ -97,15 +87,10 @@ local function fetch_current_user(provider, scope)
 	end)
 end
 
----@return AtlasIssuesConfig
-local function issues_config()
-	return (config.options and config.options.issues) or {}
-end
-
 ---@param view IssuesViewConfig
 ---@return boolean
 local function relationships_enabled(view)
-	return view.layout ~= "compact" and issues_config().with_relationships ~= false
+	return view.layout ~= "compact" and config.options.issues.with_relationships
 end
 
 ---@param issues Issue[]
@@ -145,12 +130,6 @@ local function merge_issues(issues, additions)
 		end
 	end
 	return issues
-end
-
----@param items AtlasStarredItem[]
-local function cache_starred_items(items)
-	state.starred_items = items
-	state.views = bookmarks.views(state.provider_views, state.bookmarks, items)
 end
 
 ---@param issues Issue[]
@@ -193,29 +172,24 @@ end
 ---@param issues Issue[]
 ---@param force_refresh boolean
 ---@param scope AtlasRequestScope
----@param on_done fun(issues: Issue[])
+---@param on_done fun(issues: Issue[], err: string|nil)
 local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
 	local fetch = provider.capabilities.core.fetch_by_refs
 	if not relationships_enabled(view) then
-		on_done(issues)
+		on_done(issues, nil)
 		return
 	end
 
 	local refs = missing_parent_refs(issues)
 	if #refs == 0 then
-		on_done(issues)
+		on_done(issues, nil)
 		return
 	end
 
 	scope.run(function(done)
 		return fetch(refs, { force_refresh = force_refresh }, done)
 	end, function(parents, err)
-		if err then
-			notify.warn("Failed to fetch parent issues: " .. tostring(err))
-			on_done(issues)
-			return
-		end
-		on_done(merge_issues(issues, parents))
+		on_done(merge_issues(issues, parents), err)
 	end)
 end
 
@@ -271,6 +245,7 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 			finish_loading()
 			if page_number == 1 then
 				state.error = tostring(err)
+				state.query = page.query or ""
 				state.set_issues({})
 			end
 			notify.error(string.format("Failed to fetch issues: %s", tostring(err)))
@@ -280,12 +255,17 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 		end
 
 		state.error = nil
-		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched)
+		state.query = page.query or ""
+		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched, parent_err)
 			state.set_issues(mark_starred(enriched))
 			page.items = state.issues
 			state.page_history[page_number] = page
 			finish_loading()
-			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
+			if parent_err then
+				notify.warn("Some parent issues could not be fetched: " .. tostring(parent_err))
+			else
+				notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
+			end
 			render_if_active()
 			on_done()
 		end)
@@ -310,7 +290,7 @@ local function load_starred(on_done)
 	if saved == nil then
 		state.error = err
 	elseif #saved == 0 then
-		cache_starred_items({})
+		state.starred_items = {}
 		state.bookmarks.selection = nil
 		local detail = require("atlas.issues.ui.detail")
 		if detail.is_open() then
@@ -318,11 +298,11 @@ local function load_starred(on_done)
 		end
 		state.set_issues({})
 		if next(state.bookmarks.items) == nil then
-			M.switch_view(state.provider_views[1])
+			M.switch_view(state.views[1])
 			return
 		end
 	else
-		cache_starred_items(saved)
+		state.starred_items = saved
 		local refs = {}
 		for _, item in ipairs(saved) do
 			table.insert(refs, item.item)
@@ -364,6 +344,7 @@ end
 ---@param force_refresh boolean
 ---@param on_done fun()|nil
 local function load_view(force_refresh, on_done)
+	state.query = ""
 	state.current_page = 1
 	state.page_history = {}
 	if state.view == nil then
@@ -404,6 +385,23 @@ local function load_view(force_refresh, on_done)
 	end
 end
 
+---@param page_number integer
+---@return boolean
+local function show_cached_page(page_number)
+	local page = state.page_history[page_number]
+	if page == nil then
+		return false
+	end
+	cancel_active_requests()
+	state.current_page = page_number
+	state.set_issues(page.items)
+	state.query = page.query or ""
+	state.error = nil
+	render_if_active()
+	navigation.focus_first_item()
+	return true
+end
+
 function M.next_page()
 	local current = state.page_history[state.current_page]
 	if current == nil or current.next_cursor == nil then
@@ -411,13 +409,7 @@ function M.next_page()
 	end
 
 	local page_number = state.current_page + 1
-	local cached = state.page_history[page_number]
-	if cached ~= nil then
-		state.current_page = page_number
-		state.set_issues(cached.items)
-		state.error = nil
-		render_if_active()
-		navigation.focus_first_item()
+	if show_cached_page(page_number) then
 		return
 	end
 
@@ -431,21 +423,10 @@ function M.next_page()
 end
 
 function M.previous_page()
-	local page_number = state.current_page - 1
-	local page = state.page_history[page_number]
-	if page == nil then
-		return
-	end
-	cancel_active_requests()
-	state.current_page = page_number
-	state.set_issues(page.items)
-	state.error = nil
-	render_if_active()
-	navigation.focus_first_item()
+	show_cached_page(state.current_page - 1)
 end
 
 function M.refresh_view()
-	resolve_view(state.search_view())
 	local provider = state.provider
 	local refresh = provider and provider.capabilities.core.refresh
 	if refresh then
@@ -482,7 +463,6 @@ end
 function M.switch_view(view)
 	state.view = view
 	state.bookmarks.selection = nil
-	resolve_view(state.search_view())
 	load_view(false, function()
 		navigation.focus_first_item()
 	end)
@@ -491,7 +471,6 @@ end
 ---@param bookmark AtlasBookmarkSelection
 function M.select_bookmark(bookmark)
 	state.bookmarks.selection = bookmark
-	resolve_view(state.search_view())
 	load_view(false)
 end
 
@@ -515,7 +494,7 @@ function M.toggle_issue_star(issue)
 		return
 	end
 	local saved = starred.list("issues", state.provider.id) or {}
-	cache_starred_items(saved)
+	state.starred_items = saved
 	state.set_issues(mark_starred(state.issues))
 	update_current_page()
 	render_if_active()
@@ -535,7 +514,7 @@ function M.show_issue_details(source_buf)
 		return
 	end
 
-	local lines, highlights = require("atlas.issues.ui.popup").content(issue)
+	local lines, highlights = require("atlas.issues.ui.popup").content(issue, state.provider)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,

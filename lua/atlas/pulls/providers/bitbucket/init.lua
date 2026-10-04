@@ -20,7 +20,6 @@
 ---@class BitbucketPullRequestDetails : PullRequestDetails
 ---@field close_source_branch boolean|nil
 
-local actions = require("atlas.pulls.providers.bitbucket.actions")
 local author_completion = require("atlas.providers.bitbucket.completion.author")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
@@ -32,6 +31,7 @@ local git = require("atlas.core.git")
 local pipelines = require("atlas.pulls.pipelines.bitbucket")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repository_ui = require("atlas.providers.bitbucket.ui.repository")
+local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local search_query = require("atlas.providers.bitbucket.query")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
@@ -47,23 +47,51 @@ local function view_for_target(target)
 end
 
 ---@param view AtlasBitbucketViewConfig
----@param opts PullsFetchOpts
----@param on_done fun(page: PullsPage, err: string[]|nil)
+---@param on_done fun(view: AtlasBitbucketViewConfig)
 ---@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
-	---@cast view AtlasBitbucketViewConfig
-	local parsed, parse_err = search_query.parse(view.search)
-	if parsed == nil then
-		on_done({ items = {}, next_cursor = nil }, { parse_err })
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
 		return nil
 	end
-	local states = view._states or parsed.states or { "open" }
-	return pullrequests_api.fetch_for_targets(parsed.targets, {
-		cursor = opts.cursor,
-		force_refresh = opts.force_refresh == true,
-		pagelen = opts.pagelen,
-		query = search_query.filter(parsed, states),
-	}, on_done)
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		if target and target.provider == "bitbucket" and target.workspace and target.repo then
+			resolved.search = search_query.for_repo(target.workspace, target.repo, view.search)
+		end
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasBitbucketViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return AtlasRequestScope
+local function fetch_pullrequests(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		local query = search_query.query(resolved)
+		local parsed, parse_err = search_query.parse(resolved.search)
+		if parsed == nil then
+			on_done({ items = {}, next_cursor = nil, query = query }, { parse_err })
+			return
+		end
+		local states = resolved._states or parsed.states or { "open" }
+		requests.run(function(done)
+			return pullrequests_api.fetch_for_targets(parsed.targets, {
+				cursor = opts.cursor,
+				force_refresh = opts.force_refresh == true,
+				pagelen = opts.pagelen,
+				query = search_query.filter(parsed, states),
+			}, done)
+		end, function(page, err)
+			page.query = query
+			on_done(page, err)
+		end)
+	end)
+	return requests
 end
 
 ---@return AtlasBitbucketViewConfig[]
@@ -73,24 +101,9 @@ local function views()
 	if #configured == 0 then
 		configured = { { name = "Pull Requests", key = "1", layout = "compact", current_repo = true } }
 	end
-	local current_repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "bitbucket" and target.workspace and target.repo then
-				current_repo = { workspace = target.workspace, repo = target.repo }
-			end
-			break
-		end
-	end
-	local result = {}
-	for i, view in ipairs(configured) do
-		result[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and current_repo then
-			result[i].search = search_query.for_repo(current_repo.workspace, current_repo.repo, view.search)
-		end
-	end
-	return result
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
 end
 
 return {
@@ -138,7 +151,6 @@ return {
 			edit_task = tasks_api.edit_task,
 			delete_task = tasks_api.delete_task,
 		},
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

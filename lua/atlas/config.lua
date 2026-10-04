@@ -144,7 +144,7 @@ local M = {}
 local notify = require("atlas.core.notify")
 
 ---@type AtlasConfig
-M.options = {
+local defaults = {
 	ui = {
 		statusline = true,
 		picker = "auto",
@@ -196,7 +196,26 @@ M.options = {
 			},
 		},
 	},
-	issues = nil,
+	issues = {
+		with_relationships = true,
+		jira = {
+			project_config = {
+				story_points_field = "customfield_10016",
+				issue_types = {
+					epic = { icon = "", hl_group = "AtlasJiraEpic" },
+					story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
+					task = { icon = "", hl_group = "AtlasLogInfo" },
+					bug = { icon = "", hl_group = "AtlasLogError" },
+					subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
+				},
+				status_icons = {
+					new = "●",
+					indeterminate = "",
+					done = "",
+				},
+			},
+		},
+	},
 	keymaps = {
 		ui = {
 			next_item = "j",
@@ -319,6 +338,9 @@ M.options = {
 	},
 }
 
+---@type AtlasConfig
+M.options = vim.deepcopy(defaults)
+
 ---@param id AtlasProviderId
 ---@return table|nil
 function M.provider_options(id)
@@ -395,7 +417,15 @@ end
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
 	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
-	M.options = vim.tbl_deep_extend("force", M.options, resolved)
+	local project = vim.tbl_get(resolved, "issues", "jira", "project_config")
+	if project and project.issue_types then
+		local issue_types = {}
+		for name, style in pairs(project.issue_types) do
+			issue_types[name:lower()] = style
+		end
+		project.issue_types = issue_types
+	end
+	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline ~= false then
 		vim.opt.laststatus = 3
 	end

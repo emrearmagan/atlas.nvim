@@ -1,6 +1,5 @@
 local M = {}
 
-local state = require("atlas.issues.state")
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -46,10 +45,6 @@ local function generic_rows(issue)
 	return rows
 end
 
-local function github_rows(_issue)
-	return {}
-end
-
 local function gitlab_rows(issue)
 	local rows = {}
 	---@cast issue GitLabIssue
@@ -75,7 +70,6 @@ local function jira_rows(issue)
 end
 
 local provider_rows = {
-	github = github_rows,
 	gitlab = gitlab_rows,
 	jira = jira_rows,
 }
@@ -92,7 +86,7 @@ local function render(issue, rows)
 			line = 0,
 			start_col = 3 + #key,
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(title),
+			hl_group = helper.issue_title_hl(),
 		}
 	end
 
@@ -127,10 +121,10 @@ local function render(issue, rows)
 end
 
 ---@param issue Issue
+---@param provider IssuesProvider|nil
 ---@return string[], AtlasUIHighlight[]
-function M.content(issue)
+function M.content(issue, provider)
 	local rows = generic_rows(issue)
-	local provider = state.provider
 	local extend = provider and provider_rows[provider.id] or nil
 	if extend then
 		vim.list_extend(rows, extend(issue))

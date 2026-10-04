@@ -6,9 +6,9 @@
 --         base_url = "https://your-domain.atlassian.net",
 --         email    = vim.env.JIRA_EMAIL,
 --         token    = vim.env.JIRA_TOKEN,
---         api_type = "cloud",
+--         api_type = "cloud", -- "cloud" | "server"
 --         auth_method = "basic", -- "basic" | "bearer"
---         cache_ttl = 300,
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
 --       },
 --     },
 --     issues = {
@@ -18,10 +18,20 @@
 --         -- Global Jira display settings and per-project custom fields
 --         project_config = {
 --           story_points_field = "customfield_10016",
+--           -- Override issue type styles by name (case-insensitive).
 --           issue_types = {
---             ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
---             ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+--             bug = { icon = "" },
+--             maintenance = { icon = "", hl_group = "AtlasTextWarning" },
+--             infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
 --           },
+--           -- Override icons by status name or category.
+--           status_icons = {
+--             new = "●",
+--             indeterminate = "",
+--             done = "",
+--             ["In Review"] = "",
+--           },
+--           -- Custom fields to display per project; replace KAN with your project key.
 --           KAN = {
 --             customfield_10038 = {
 --               name    = "Team",
@@ -32,7 +42,12 @@
 --           },
 --         },
 --         views = {
---           { name = "Open",       key = "1", jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
+--           {
+--             name = "Open",
+--             key = "1",
+--             layout = "plain", -- "compact" | "plain"
+--             jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+--           },
 --           { name = "Reported",   key = "2", jql = "reporter = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
 --           { name = "Watching",   key = "3", jql = "watcher = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
 --           { name = "Sprint",     key = "4", jql = "sprint in openSprints() AND assignee = currentUser() ORDER BY rank" },
@@ -42,7 +57,10 @@
 --           -- label = "JQL", -- default
 --           items = {
 --             ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
---             ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+--             ["Next sprint"] = {
+--               layout = "compact",
+--               jql = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+--             },
 --           },
 --         },
 --       },
@@ -69,6 +87,7 @@
 ---@class AtlasJiraProjectConfig
 ---@field story_points_field string|nil
 ---@field issue_types AtlasJiraIssueTypesConfig|nil
+---@field status_icons table<string, string>|nil
 ---@field [string] AtlasJiraProjectFieldsConfig
 
 ---@class AtlasJiraBookmarkConfig : AtlasIssuesBookmarkConfig

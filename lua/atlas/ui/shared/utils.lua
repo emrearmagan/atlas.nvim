@@ -6,8 +6,6 @@ local M = {
 	tab = {},
 }
 
-local _cached_version = nil
-
 ---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
 
 -- Window
@@ -16,6 +14,13 @@ local _cached_version = nil
 ---@return boolean
 function M.window.valid(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
+---@param win integer|nil
+---@param buf integer|nil
+---@return boolean
+function M.window.has_buffer(win, buf)
+	return M.window.valid(win) and vim.api.nvim_win_get_buf(win) == buf
 end
 
 ---@param anchor integer
@@ -202,26 +207,6 @@ function M.wrap_content(content, width, prefix)
 	return { lines = lines, highlights = spans }
 end
 
-function M.get_version()
-	if _cached_version then
-		return _cached_version
-	end
-
-	local ok, version = pcall(function()
-		return vim.fn.system(
-			"git -C " .. vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h:h") .. " describe --tags --abbrev=0"
-		)
-	end)
-
-	if ok and type(version) == "string" and version ~= "" then
-		_cached_version = version:gsub("%s+", "")
-	else
-		_cached_version = "dev"
-	end
-
-	return _cached_version
-end
-
 ---Convert UTC date components to a Unix epoch without relying on the system timezone
 ---@param y integer @ year (e.g. 2026)
 ---@param m integer @ month 1-12
@@ -251,6 +236,11 @@ function M.relative_time(iso)
 	end
 
 	local then_epoch = utc_epoch(tonumber(y), tonumber(mo), tonumber(d), tonumber(hh), tonumber(mm), tonumber(ss))
+	local sign, offset_hours, offset_minutes = iso:match("([+-])(%d%d):?(%d%d)$")
+	if sign then
+		local offset = (tonumber(offset_hours) * 60 + tonumber(offset_minutes)) * 60
+		then_epoch = then_epoch - (sign == "+" and offset or -offset)
+	end
 
 	local delta = os.time() - then_epoch
 	if delta < 0 then
@@ -464,23 +454,21 @@ function M.truncate(str, max_dw, from_start)
 	local marker = max_dw == 1 and "." or ".."
 
 	local nchars = strchars(str, true)
-	if from_start then
-		for i = 1, nchars do
-			local tail = strcharpart(str, i, nchars - i, true)
-			if strwidth(marker .. tail) <= max_dw then
-				return marker .. tail
-			end
-		end
-		return marker
-	end
-
-	for i = nchars - 1, 0, -1 do
-		local head = strcharpart(str, 0, i, true)
-		if strwidth(head .. marker) <= max_dw then
-			return head .. marker
+	local low, high = 0, nchars - 1
+	local result = marker
+	while low <= high do
+		local count = math.floor((low + high) / 2)
+		local start = from_start and (nchars - count) or 0
+		local part = strcharpart(str, start, count, true)
+		local candidate = from_start and (marker .. part) or (part .. marker)
+		if strwidth(candidate) <= max_dw then
+			result = candidate
+			low = count + 1
+		else
+			high = count - 1
 		end
 	end
-	return marker
+	return result
 end
 
 ---@param name string|nil

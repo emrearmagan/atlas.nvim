@@ -144,7 +144,6 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "show_repo_status",
         label = "Show repository status",
         icon = "",
-        confirmation = true,
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -211,9 +210,9 @@ Use `ctx.output(title)` to show output from a custom action:
         an open or draft pull request, and open its diff. With a URL, open that
         pull request directly.
 
-:Atlas diff [target]
+:Atlas diff <target>
         Open a Git range (`base...head`) or pull-request URL in native
-        AtlasDiff. Without a target, Atlas prompts for one.
+        AtlasDiff. A target is required.
 
 :Atlas pipelines [target|.]
         Open pipelines by branch name, PR URL or number (`123`, `#123`, or
@@ -248,11 +247,6 @@ Use `ctx.output(title)` to show output from a custom action:
 :Atlas logs
         Toggle the Atlas log buffer.
 
-                                                                   *:AtlasDiff*
-:AtlasDiff <target>
-        Open a Git range (`base...head`) or pull-request URL directly in
-        native AtlasDiff.
-
 ==============================================================================
 5. PULLS                                                          *atlas-pulls*
 
@@ -262,6 +256,7 @@ Bitbucket, and GitLab. Shared authentication and endpoints are configured in
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
+>lua
   require("atlas").setup({
     pulls = {
       delete_notes = false, -- delete local notes after approval or merge
@@ -306,10 +301,11 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         },
       },
       repo_config = {
-        -- Map `workspace/repo` -> local path for checkout / diffs / actions.
+        -- Map `namespace/repo` -> local path for checkout / diffs / actions.
         paths = {
           ["your-workspace/*"]    = "~/code/repos/*",
           ["your-workspace/atlas"] = "~/code/atlas",
+          ["group/subgroup/*"]    = "~/code/subgroup/*",
         },
         settings = {
           ["your-workspace/atlas"] = {
@@ -348,12 +344,16 @@ with `host`, `user`, and `password`.
             done(job, nil)
           end,
           fetch_job_log = function(context, pipeline, job, done)
+            -- Fetch the job's raw log output.
             done({ raw = "Your log output here" }, nil)
           end,
           parse = function(log)
             -- Return cleaned lines or your own nested groups.
             return log.lines
           end,
+          actions = {
+            -- Add your actions here.
+          },
         },
         highlights = {
           { pattern = "^FAIL%s", level = "error" },
@@ -380,6 +380,7 @@ GitHub search expression.
     github = {
       views = {
         { name = "My PRs", key = "1", layout = "plain", -- "compact", "grouped", or "plain"
+          -- current_repo = true, -- Limit this view to the local repository.
           search = "author:@me sort:updated-desc" },
         { name = "Team",   key = "2", layout = "compact",
           search = "org:your-org sort:updated-desc" },
@@ -413,6 +414,7 @@ Bitbucket Cloud only. Auth uses an app password (or API token).
           name   = "Me",
           key    = "M",
           layout = "compact", -- "compact", "grouped", or "plain"
+          -- current_repo = true, -- Remove repo:/project: targets from search when enabled.
           -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
           search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
         },
@@ -448,7 +450,9 @@ self-hosted URL.
     gitlab = {
       views = {
         { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
-          scope = "assigned_to_me" },
+          scope = "assigned_to_me",
+          -- current_repo = true, -- Limit this view to the local repository.
+        },
         { name = "Reviewing", key = "3", scope = "reviews_for_me" },
         -- One project:
         { name = "GitLab",    key = "G", project = "gitlab-org/gitlab",
@@ -506,11 +510,21 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
       project_config = {
         -- Global story points field. Defaults to "customfield_10016".
         story_points_field = "customfield_10016",
+        -- Override issue type styles by name (case-insensitive).
         issue_types = {
-          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+          bug = { icon = "" },
+          maintenance = { icon = "", hl_group = "AtlasTextWarning" },
+          infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        },
+        -- Override icons by status name or category.
+        status_icons = {
+          new = "●",
+          indeterminate = "",
+          done = "",
+          ["In Review"] = "",
         },
 
+        -- Custom fields to display per project; replace KAN with your project key.
         KAN = {
           customfield_10003 = {
             name = "Approvers",
@@ -556,6 +570,7 @@ issue search expression.
     github = {
       views = {
         { name = "Assigned", key = "1", layout = "plain",
+          -- current_repo = true, -- Limit this view to the local repository.
           search = "assignee:@me is:open" },
         { name = "Created",  key = "2", layout = "compact",
           search = "author:@me is:open" },
@@ -585,7 +600,9 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
     gitlab = {
       views = {
         { name = "Assigned", key = "1",
-          scope = "assigned_to_me", state = "opened" },
+          scope = "assigned_to_me", state = "opened",
+          -- current_repo = true, -- Limit this view to the local repository.
+        },
         { name = "Created",  key = "2",
           scope = "created_by_me", state = "opened" },
         { name = "All open", key = "3",
@@ -695,6 +712,7 @@ Atlas emits these `User` events after setup or cleanup completes:
           previous_job         = { "[j", "<S-Tab>" },
           show_history         = "gH",
           toggle_raw_logs      = "gL",
+          toggle_auto_refresh  = "gR",
         },
         review = {
           open_item             = "<CR>", -- open file, review item, or comment/note

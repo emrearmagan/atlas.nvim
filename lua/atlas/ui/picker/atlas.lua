@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
-local markdown = require("atlas.formats.markdown")
+local picker = require("atlas.ui.picker")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -195,18 +195,11 @@ function M.open(request)
 	---@param buf integer
 	---@param win integer
 	local function draw_preview(buf, win)
-		local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
-		local result = markdown.parse(table.concat(state.preview_lines, "\n"), { width = width })
+		local result = picker.format_preview(state.preview_lines, win)
 		vim.bo[buf].modifiable = true
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
 		vim.bo[buf].modifiable = false
-		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
-		for _, span in ipairs(result.highlights) do
-			vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
-		end
+		picker.highlight_preview(buf, result.highlights)
 	end
 
 	local function render_preview()
@@ -238,6 +231,54 @@ function M.open(request)
 		end)
 	end
 
+	local function append_items(rows, highlights)
+		local first = math.max(1, state.index - picker_layout.item_height + 1)
+		first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
+		for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
+			local item = state.items[index]
+			local marker, marker_hl = "", nil
+			if request.multi then
+				if state.selected[request.key(item)] then
+					marker, marker_hl = icons.picker("selected")
+				else
+					marker, marker_hl = icons.picker("unselected")
+				end
+				marker = marker .. " "
+			end
+			local text, chunks = picker.format_item(request, item)
+			table.insert(rows, marker .. text)
+			local row = #rows
+			if marker_hl then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #marker,
+					hl_group = marker_hl,
+				})
+			end
+			local col = #marker
+			for _, chunk in ipairs(chunks) do
+				if chunk[2] then
+					table.insert(highlights, {
+						line = row,
+						start_col = col,
+						end_col = col + #chunk[1],
+						hl_group = chunk[2],
+					})
+				end
+				col = col + #chunk[1]
+			end
+			if index == state.index then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #rows[row],
+					line_hl_group = "CursorLine",
+				})
+			end
+		end
+	end
+
 	local function render(update_preview)
 		local rows, highlights = {}, {}
 		local has_items = not state.loading and not state.err and #state.items > 0
@@ -264,51 +305,7 @@ function M.open(request)
 				hl_group = "AtlasTextMuted",
 			})
 		else
-			local first = math.max(1, state.index - picker_layout.item_height + 1)
-			first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
-			for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
-				local item = state.items[index]
-				local marker, marker_hl = "", nil
-				if request.multi then
-					if state.selected[request.key(item)] then
-						marker, marker_hl = icons.picker("selected")
-					else
-						marker, marker_hl = icons.picker("unselected")
-					end
-					marker = marker .. " "
-				end
-				local text, chunks = require("atlas.ui.picker").format_item(request, item)
-				table.insert(rows, marker .. text)
-				local row = #rows
-				if marker_hl then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #marker,
-						hl_group = marker_hl,
-					})
-				end
-				local col = #marker
-				for _, chunk in ipairs(chunks) do
-					if chunk[2] then
-						table.insert(highlights, {
-							line = row,
-							start_col = col,
-							end_col = col + #chunk[1],
-							hl_group = chunk[2],
-						})
-					end
-					col = col + #chunk[1]
-				end
-				if index == state.index then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #rows[row],
-						line_hl_group = "CursorLine",
-					})
-				end
-			end
+			append_items(rows, highlights)
 		end
 
 		local separator = string.rep("─", picker_layout.main_width)

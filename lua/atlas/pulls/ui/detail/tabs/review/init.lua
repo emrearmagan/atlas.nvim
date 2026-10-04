@@ -53,20 +53,6 @@ function M.reset()
 	notify.clear()
 end
 
----@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasEditorPreview|nil, on_save: fun(text: string|nil) }
-local function open_md_editor(opts)
-	md_editor.open({
-		key = opts.key,
-		title = opts.title,
-		width_ratio = 0.5,
-		height_ratio = 0.18,
-		initial_text = opts.initial_text,
-		completion = author_completion(),
-		preview = opts.preview,
-		on_save = opts.on_save,
-	})
-end
-
 -- Lifecycle
 
 ---@param pr PullRequest
@@ -228,27 +214,29 @@ end
 ---@param refresh fun()
 local function run_comment_action(action, pr, entry, refresh)
 	local comment = entry and entry.comment
-	local context = comment and action_context(pr, comment.is_task and "tasks" or "comments") or nil
-	if comment and context then
-		local handler = THREAD_ACTIONS[action]
-		if handler then
-			local on_update = detail.on_update
-			local on_done = function(result, err)
-				if result and not err then
-					if result.changed_pr then
-						if on_update then
-							on_update(pr, result)
-						else
-							require("atlas.pulls.ui.detail").refresh()
-						end
-					elseif is_current(pr) then
-						refresh()
-					end
-				end
-			end
-			handler(context, comment, on_done)
-		end
+	if not comment then
+		return
 	end
+	local context = action_context(pr, comment.is_task and "tasks" or "comments")
+	local handler = THREAD_ACTIONS[action]
+	if not context or not handler then
+		return
+	end
+	local on_update = detail.on_update
+	handler(context, comment, function(result, err)
+		if not result or err then
+			return
+		end
+		if result.changed_pr then
+			if on_update then
+				on_update(pr, result)
+			else
+				require("atlas.pulls.ui.detail").refresh()
+			end
+		elseif is_current(pr) then
+			refresh()
+		end
+	end)
 end
 
 ---@param pr PullRequest
@@ -312,9 +300,12 @@ function M.add_task(pr, refresh)
 		preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
 	end
 
-	open_md_editor({
+	md_editor.open({
 		key = "pr-task-add-" .. tostring(pr.id or ""),
 		title = " Add Task ",
+		width_ratio = 0.5,
+		height_ratio = 0.18,
+		completion = author_completion(),
 		preview = preview,
 		on_save = function(text)
 			if not is_current(pr) then

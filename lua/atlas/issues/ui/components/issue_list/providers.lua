@@ -7,7 +7,7 @@ local M = {}
 local function columns()
 	return {
 		{ key = "icon", name = "", can_grow = false, align = "center" },
-		{ key = "name", name = "Issue" },
+		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "assignee",
 			name = string.format("%s Assignee", icons.general("user")),
@@ -352,9 +352,7 @@ local function jira(opts)
 						table.insert(spans, {
 							start_col = title_start - 1,
 							end_col = #ctx.text,
-							hl_group = helper.issue_title_hl(
-								(tonumber(table_row._tv2_depth) or 0) > 0 and "" or issue.title
-							),
+							hl_group = helper.issue_title_hl(),
 						})
 					end
 					table.insert(spans, {

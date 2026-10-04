@@ -68,7 +68,6 @@ local function custom_action(item)
 			end
 			local pr = assert(context.pr)
 			local repo_path = git_checkout.resolve_repo_path_for_pr(pr, {
-				require_git = false,
 				require_existing = false,
 			})
 			local ok, err = pcall(item.run, pr, {

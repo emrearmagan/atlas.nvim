@@ -3,9 +3,8 @@ local fzf_actions = require("fzf-lua.actions")
 local fzf_utils = require("fzf-lua.utils")
 
 local M = {}
-local markdown = require("atlas.formats.markdown")
+local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
-local namespace = vim.api.nvim_create_namespace("atlas.picker.fzf-lua")
 
 ---@param handle { cancel: fun() }|nil
 local function cancel(handle)
@@ -69,7 +68,7 @@ function M.open(request)
 		local key = request.key(item)
 		item_by_id[id] = item
 		local marker = request.multi and (selected[key] and "✓ " or "  ") or ""
-		local _, chunks = require("atlas.ui.picker").format_item(request, item)
+		local _, chunks = picker.format_item(request, item)
 		local parts = {}
 		for _, chunk in ipairs(chunks) do
 			parts[#parts + 1] = chunk[2] and fzf_utils.ansi_from_hl(chunk[2], chunk[1]) or chunk[1]
@@ -169,9 +168,7 @@ function M.open(request)
 								return
 							end
 							local preview_win = self.win.preview_winid
-							local width = vim.api.nvim_win_get_width(preview_win)
-								- vim.fn.getwininfo(preview_win)[1].textoff
-							local result = markdown.parse(table.concat(preview.lines, "\n"), { width = width })
+							local result = picker.format_preview(preview.lines, preview_win)
 							vim.bo[buf].modifiable = true
 							vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
 							vim.bo[buf].modifiable = false
@@ -179,12 +176,7 @@ function M.open(request)
 							vim.bo[buf].syntax = "OFF"
 							vim.wo[preview_win].wrap = true
 							vim.wo[preview_win].linebreak = true
-							for _, span in ipairs(result.highlights) do
-								vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
-									end_col = span.end_col,
-									hl_group = span.hl_group,
-								})
-							end
+							picker.highlight_preview(buf, result.highlights)
 							self.win:update_preview_title(preview.title or request.title)
 						end)
 					end)

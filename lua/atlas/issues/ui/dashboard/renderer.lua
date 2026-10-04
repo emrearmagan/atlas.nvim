@@ -78,7 +78,7 @@ function M.render(opts)
 	end
 	statusline.set_items(statusline_items)
 
-	local views = state.views
+	local views = bookmarks.views(state.views, state.bookmarks, state.starred_items)
 	local view = state.view
 	local active_id = view_id(view)
 

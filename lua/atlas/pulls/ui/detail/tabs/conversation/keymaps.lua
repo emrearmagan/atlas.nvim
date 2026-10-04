@@ -8,13 +8,7 @@ local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.detail.tabs.conversation.actions")
 
-local COMMENT_ACTIONS = {
-	"ui.comments.add",
-	"ui.comments.reply",
-	"ui.comments.edit",
-	"ui.delete",
-	"ui.comments.react",
-}
+local registrations = {}
 
 local function cursor_entry()
 	local win = detail.win
@@ -187,32 +181,18 @@ function M.setup(buf, refresh)
 	if toggle_all then
 		table.insert(items, toggle_all)
 	end
+	M.teardown(buf)
 	help.register("Detail", items, { index = 212, buffer = buf })
+	registrations[buf] = items
 end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {}
-	for _, action_id in ipairs(COMMENT_ACTIONS) do
-		utils.insert_if(items, from_action(action_id, {}))
+	local registered = registrations[buf]
+	if registered then
+		help.remove("Detail", registered, { buffer = buf })
+		registrations[buf] = nil
 	end
-	local fold_keys = resolver.resolve("ui.toggle_fold")
-	if fold_keys ~= nil then
-		table.insert(items, { key = fold_keys })
-	end
-	local toggle_all_keys = resolver.resolve("ui.toggle_all_folds")
-	if toggle_all_keys ~= nil then
-		table.insert(items, { key = #toggle_all_keys == 1 and toggle_all_keys[1] or toggle_all_keys })
-	end
-	local provider = detail.provider
-	local tasks = provider and provider.capabilities.tasks
-	if tasks and tasks.edit_task then
-		local toggle_task_keys = resolver.resolve("pulls.review.diff.toggle_resolved")
-		if toggle_task_keys ~= nil then
-			table.insert(items, { key = #toggle_task_keys == 1 and toggle_task_keys[1] or toggle_task_keys })
-		end
-	end
-	help.remove("Detail", items, { buffer = buf })
 end
 
 return M

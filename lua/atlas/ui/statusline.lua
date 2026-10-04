@@ -10,6 +10,7 @@ local BACKGROUND_HL = "AtlasFooterBackground"
 ---@type table<integer, AtlasStatusline>
 local instances = {}
 local next_id = 0
+local cached_version = nil
 
 ---@class AtlasStatuslineSegment
 ---@field text string
@@ -45,6 +46,27 @@ local function redraw()
 	if M.enabled() then
 		vim.cmd("redrawstatus")
 	end
+end
+
+local function get_version()
+	if cached_version then
+		return cached_version
+	end
+
+	cached_version = "dev"
+	local cwd = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h")
+	pcall(
+		require("atlas.core.git").run,
+		{ "describe", "--tags", "--abbrev=0" },
+		{ cwd = cwd, text = true },
+		function(result)
+			if result.code == 0 and vim.trim(result.stdout or "") ~= "" then
+				cached_version = vim.trim(result.stdout)
+				vim.cmd("redrawstatus")
+			end
+		end
+	)
+	return cached_version
 end
 
 ---@param text any
@@ -173,7 +195,7 @@ function M.format(segments, current_notice, available, options)
 	end
 	if options.show_version then
 		fitted[#fitted + 1] = {
-			text = string.format("atlas (%s)", utils.get_version()),
+			text = string.format("atlas (%s)", get_version()),
 			hl_group = "AtlasFooterText",
 			align = "right",
 			priority = 0,
@@ -232,7 +254,7 @@ end
 ---@return string
 local function sanitize_notice(text)
 	local message = tostring(text or ""):gsub("[\r\n]+", " | ")
-	return #message > 60 and message:sub(1, 57) .. "..." or message
+	return utils.truncate(message, 60)
 end
 
 ---@param level "success"|"warn"|"error"|"info"|"loading"

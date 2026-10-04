@@ -18,7 +18,6 @@
 ---@class GitLabPullsActivityEntry : PullsActivityEntry
 ---@field inline_thread boolean|nil
 
-local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local author_completion = require("atlas.providers.gitlab.completion.author")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
@@ -26,54 +25,14 @@ local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
+local git = require("atlas.core.git")
 local links_api = require("atlas.providers.gitlab.links")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local gitlab_query = require("atlas.providers.gitlab.query")
-local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_conversation(pr, opts, on_done)
-	local requests = request_scope.new()
-	requests.all({
-		activity = function(done)
-			return activity_api.fetch_activity(pr, opts, done)
-		end,
-		comments = function(done)
-			return comments_api.fetch_conversation_comments(pr, opts, done)
-		end,
-	}, function(values, errors)
-		if values.activity == nil and values.comments == nil then
-			on_done(nil, errors.activity or errors.comments or "Failed to fetch conversation")
-			return
-		end
-		local items = {}
-		for _, comment in ipairs(values.comments or {}) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_on = comment.created_on or "",
-				entity = comment,
-			})
-		end
-		for _, event in ipairs(values.activity or {}) do
-			table.insert(items, {
-				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
-				kind = "activity",
-				created_on = event.date or "",
-				entity = event,
-			})
-		end
-		on_done(items, errors.activity or errors.comments)
-	end)
-	return requests
-end
 
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
@@ -85,25 +44,48 @@ local function views()
 			{ name = "Created", key = "2", scope = "created_by_me" },
 		}
 	end
-	local repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "gitlab" then
-				repo = target.repo_full_name
-			end
-			break
-		end
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
+end
+
+---@param view AtlasGitLabPullsViewConfig
+---@param on_done fun(view: AtlasGitLabPullsViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
 	end
-	local resolved = {}
-	for i, view in ipairs(configured) do
-		resolved[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and repo then
-			resolved[i].project = repo
-			resolved[i].scope = view.scope or "all"
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		local repo = target and target.provider == "gitlab" and target.repo_full_name or nil
+		if repo then
+			resolved.project = repo
+			resolved.scope = view.scope or "all"
 		end
-	end
-	return resolved
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasGitLabPullsViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return AtlasRequestScope
+local function fetch_pullrequests(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		local query = gitlab_query.query(resolved)
+		requests.run(function(done)
+			return pullrequests_api.fetch_states(resolved, gitlab_query.api_states(resolved), opts, done)
+		end, function(page, err)
+			page.query = query
+			on_done(page, err)
+		end)
+	end)
+	return requests
 end
 
 ---@param target AtlasTarget
@@ -123,10 +105,7 @@ return {
 	resolve_search = gitlab_query.query,
 	capabilities = {
 		core = {
-			fetch_pullrequests = function(view, opts, on_done)
-				---@cast view AtlasGitLabPullsViewConfig
-				return pullrequests_api.fetch_states(view, gitlab_query.api_states(view), opts, on_done)
-			end,
+			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_links = links_api.fetch_pullrequest,
@@ -146,7 +125,7 @@ return {
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
 			comment_completion = author_completion.for_pulls,
-			fetch_conversation = fetch_conversation,
+			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -163,7 +142,6 @@ return {
 			discard_review = reviews_api.discard,
 		},
 		pipelines = require("atlas.pulls.pipelines.gitlab"),
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

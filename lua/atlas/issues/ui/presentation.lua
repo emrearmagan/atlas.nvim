@@ -2,9 +2,8 @@ local M = {}
 
 local highlights = require("atlas.ui.shared.highlights")
 
----@param _title string|nil
 ---@return string
-function M.issue_title_hl(_title)
+function M.issue_title_hl()
 	return "Normal"
 end
 

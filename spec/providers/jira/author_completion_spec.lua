@@ -9,19 +9,6 @@ local function by_word(items)
 end
 
 describe("Jira author completion", function()
-	local original_trim
-
-	before_each(function()
-		original_trim = vim.trim
-		vim.trim = function(value)
-			return tostring(value or ""):match("^%s*(.-)%s*$")
-		end
-	end)
-
-	after_each(function()
-		vim.trim = original_trim
-	end)
-
 	it("completes issue participants and comment authors", function()
 		local completion = author_completion.for_issues({
 			issue = {

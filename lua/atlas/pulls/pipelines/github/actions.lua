@@ -34,7 +34,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.rerun(ctx.context, ctx.pipeline, true, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -47,7 +47,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.rerun(ctx.context, ctx.pipeline, false, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -61,7 +61,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.cancel(ctx.context, ctx.pipeline, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -77,7 +77,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.rerun_job(ctx.context, ctx.job, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},

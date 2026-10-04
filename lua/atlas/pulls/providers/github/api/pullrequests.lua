@@ -6,6 +6,12 @@ local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 
+---@param repo string
+---@param number integer|string
+local function invalidate_details(repo, number)
+	cli.delete_mem(string.format("github:pr:%s:%s", repo, tostring(number)))
+end
+
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -318,6 +324,93 @@ function M.get_description(pr, opts, on_done)
 	})
 end
 
+---@param pr GitHubPullRequest
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(pr, subscribed, on_done)
+	local node_id = pr.node_id or ""
+	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done(subscribed, nil)
+		end,
+		{
+			action = subscribed and "Subscribe to PR" or "Unsubscribe from PR",
+			repo = pr.repo_full_name,
+			number = pr.id,
+		}
+	)
+end
+
+---@param pr PullRequest
+---@param opts { method: "merge"|"squash", delete_branch: boolean }
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.merge(pr, opts, on_done)
+	local args = { "pr", "merge", tostring(pr.id), "--repo", pr.repo_full_name, "--" .. opts.method }
+	if opts.delete_branch then
+		table.insert(args, "--delete-branch")
+	end
+	return cli.gh(args, function(_, err)
+		on_done(not err, err)
+	end, {
+		action = "Merge PR",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		method = opts.method,
+	})
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.reopen(pr, on_done)
+	return cli.gh({ "pr", "reopen", tostring(pr.id), "--repo", pr.repo_full_name }, function(_, err)
+		on_done(not err, err)
+	end, {
+		action = "Reopen PR",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param adds string[]
+---@param removes string[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_assignees(pr, adds, removes, on_done)
+	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
+	for _, login in ipairs(adds) do
+		table.insert(args, "--add-assignee")
+		table.insert(args, login)
+	end
+	for _, login in ipairs(removes) do
+		table.insert(args, "--remove-assignee")
+		table.insert(args, login)
+	end
+	return cli.gh(args, function(_, err)
+		if not err then
+			invalidate_details(pr.repo_full_name, pr.id)
+		end
+		on_done(not err, err)
+	end, {
+		action = "Update PR assignees",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		added = #adds,
+		removed = #removes,
+	})
+end
+
 ---@param pr PullRequest
 ---@param title string
 ---@param on_done fun(ok: boolean, err: string|nil)
@@ -344,7 +437,7 @@ function M.update_title(pr, title, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = "Update PR title",
@@ -382,7 +475,7 @@ function M.set_draft(pr, draft, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = draft and "Convert PR to draft" or "Mark PR ready for review",
@@ -417,7 +510,7 @@ function M.update_description(pr, description, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		cli.delete_mem(string.format("github:desc:%s:%s", repo_slug, tostring(pr.id)))
 		on_done(true, nil)
 	end, {
@@ -447,7 +540,7 @@ function M.decline(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = "Decline PR",
@@ -589,7 +682,7 @@ function M.update_reviewers(pr, selected, original, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		cli.delete_mem(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
 		cli.delete_mem(string.format("github:review-details:%s:%s", repo_slug, tostring(pr.id)))
 		cli.delete_mem(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
@@ -734,7 +827,7 @@ function M.update_labels(slug, number, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", slug, tostring(number)))
+		invalidate_details(slug, number)
 		on_done(true, nil)
 	end, {
 		action = "Update PR labels",

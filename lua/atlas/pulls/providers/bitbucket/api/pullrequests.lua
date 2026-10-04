@@ -231,16 +231,14 @@ function M.fetch_by_refs(refs, _opts, on_done)
 
 	requests.all(starts, function(values, errors)
 		local pulls = {}
+		local err
 		for index = 1, #parsed do
-			if errors[index] then
-				on_done({}, errors[index])
-				return
-			end
+			err = err or errors[index]
 			if values[index] then
 				table.insert(pulls, values[index])
 			end
 		end
-		on_done(pulls, nil)
+		on_done(pulls, err)
 	end)
 	return requests
 end

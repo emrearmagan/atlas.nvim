@@ -18,6 +18,7 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local requests = require("atlas.core.requests")
 
 local DEFAULT_PR_TEMPLATE = ".github/pull_request_template.md"
 
@@ -129,10 +130,9 @@ local function jira_url()
 	return base_url .. URL_PATHS.jira.issue:gsub("/+$", "")
 end
 
----@param root string
+---@param remote AtlasTarget|nil
 ---@return PullsCreateDescriptionLinks
-local function links(root)
-	local remote = git.local_repository(root)
+local function links(remote)
 	return {
 		provider = remote and remote.provider or nil,
 		repo_url = remote and remote.url or nil,
@@ -312,29 +312,49 @@ end
 ---@param repo_slug string
 ---@param base string
 ---@param head string
----@return PullsCreateDescription|nil
----@return string|nil err
-function M.build(root, repo_slug, base, head)
-	local range, range_err = git.commit_range(root, base, head)
-	if not range then
-		return nil, range_err
-	end
-	local commits = git.commits_for_range(root, range)
-	local diffstat = git.diff_stat(root, base, head) or {}
-	local latest_commit = commits[#commits]
-	local body = read_template(root, repo_slug)
-
-	if body == nil then
-		local context = links(root)
-		body = generate(context, head, commits, diffstat) or plain_commits(commits, diffstat, context)
-	end
-
-	return {
-		title = latest_commit and latest_commit.subject or "",
-		body = body,
-		commits = commits,
-		diffstat = diffstat,
-	}
+---@param on_done fun(description: PullsCreateDescription|nil, err: string|nil)
+---@param repository? AtlasTarget
+---@return AtlasRequestScope
+function M.build(root, repo_slug, base, head, on_done, repository)
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.diff_revisions(root, base, head, done)
+	end, function(base_revision, head_revision, err)
+		if not base_revision or not head_revision then
+			on_done(nil, err)
+			return
+		end
+		local template = read_template(root, repo_slug)
+		local loaders = {
+			commits = function(done)
+				return git.commits_for_range(root, base_revision .. ".." .. head_revision, done)
+			end,
+			diffstat = function(done)
+				return git.diff_stat(root, base_revision, head_revision, done)
+			end,
+		}
+		if not repository and not template then
+			loaders.repository = function(done)
+				return git.local_repository(root, done)
+			end
+		end
+		scope.all(loaders, function(values)
+			local commits, diffstat = values.commits or {}, values.diffstat or {}
+			local latest_commit = commits[#commits]
+			local body = template
+			if body == nil then
+				local context = links(repository or values.repository)
+				body = generate(context, head, commits, diffstat) or plain_commits(commits, diffstat, context)
+			end
+			on_done({
+				title = latest_commit and latest_commit.subject or "",
+				body = body,
+				commits = commits,
+				diffstat = diffstat,
+			}, nil)
+		end)
+	end)
+	return scope
 end
 
 return M

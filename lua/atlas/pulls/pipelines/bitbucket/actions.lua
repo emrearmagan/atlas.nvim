@@ -26,7 +26,7 @@ return {
 				or (type(target) == "table" and target.source and target.source.branch)
 				or nil
 			api.run_pipeline(ctx.context.repo_full_name, branch, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},
@@ -40,7 +40,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.stop_pipeline(ctx.context, ctx.pipeline, function(_, err)
-				done(err)
+				done(nil, err)
 			end)
 		end,
 	},

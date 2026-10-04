@@ -73,6 +73,9 @@ local function label_hl(hex)
 		return "AtlasChipActive"
 	end
 	local name = "AtlasGLIssueLabel_" .. clean
+	if next(vim.api.nvim_get_hl(0, { name = name, create = false })) ~= nil then
+		return name
+	end
 	local r = tonumber(clean:sub(1, 2), 16) or 0
 	local g = tonumber(clean:sub(3, 4), 16) or 0
 	local b = tonumber(clean:sub(5, 6), 16) or 0

@@ -1,3 +1,10 @@
+---@alias AtlasGitLabActionId
+---| AtlasPullActionId
+---| "reopen"
+---| "edit_assignees"
+---| "toggle_subscription"
+---| "open_project"
+
 local M = {}
 
 local actions = require("atlas.pulls.actions")
@@ -10,6 +17,8 @@ local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests"
 local users_api = require("atlas.providers.gitlab.users")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
+
+local notify = action_utils.notify
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -31,18 +40,6 @@ end
 ---@return boolean
 local function is_open_or_draft(ctx)
 	return has_pr(ctx) and (ctx.pr.state == "open" or ctx.pr.state == "draft")
-end
-
----@param ctx AtlasPullActionContext
----@param level "loading"|"success"|"warn"|"error"|"info"
----@param message string
----@param duration integer|nil
-local function notify(ctx, level, message, duration)
-	if ctx.notify then
-		ctx.notify(level, message, duration)
-		return
-	end
-	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]
@@ -301,6 +298,39 @@ local function select_project(opts)
 	})
 end
 
+---@param pr PullRequest
+---@param details GitLabPullRequestDetails
+---@return string[]
+local function search_preview(pr, details)
+	local reviewers = vim.tbl_map(function(user)
+		return "@" .. user.username
+	end, pr.reviewers or {})
+	local assignees = vim.tbl_map(function(user)
+		return "@" .. user.username
+	end, details.assignees)
+	local labels = vim.tbl_map(function(label)
+		return label.name
+	end, details.labels)
+	local lines = {
+		"**Status:** " .. pr.state,
+		"**Author:** " .. pr.author.name,
+		string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
+	}
+	if #reviewers > 0 then
+		table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
+	end
+	if #assignees > 0 then
+		table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
+	end
+	if #labels > 0 then
+		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+	end
+	vim.list_extend(lines, { "", "## Description", "" })
+	local description = vim.trim(details.description)
+	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
+	return lines
+end
+
 ---@param project string
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
@@ -318,38 +348,11 @@ local function search_merge_requests(project, ctx, done)
 					preview_done({ title = pr_label(pr), lines = { err or "Failed to load merge request" } })
 					return
 				end
-				local reviewers = vim.tbl_map(function(user)
-					return "@" .. user.username
-				end, pr.reviewers or {})
-				local assignees = vim.tbl_map(function(user)
-					return "@" .. user.username
-				end, details.assignees)
-				local labels = vim.tbl_map(function(label)
-					return label.name
-				end, details.labels)
-				local lines = {
-					"**Status:** " .. pr.state,
-					"**Author:** " .. pr.author.name,
-					string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
-				}
-				if #reviewers > 0 then
-					table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
-				end
-				if #assignees > 0 then
-					table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
-				end
-				if #labels > 0 then
-					table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-				end
-				vim.list_extend(lines, { "", "## Description", "" })
-				local description = vim.trim(details.description)
-				vim.list_extend(
-					lines,
-					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
-				)
+				---@cast details GitLabPullRequestDetails
+
 				preview_done({
 					title = string.format("%s - %s", pr_label(pr), pr.title),
-					lines = lines,
+					lines = search_preview(pr, details),
 				})
 			end)
 		end,
@@ -459,30 +462,20 @@ local function toggle_subscription(ctx, done)
 
 	---@param details PullRequestDetails
 	local function toggle(details)
-		local action = details.is_subscribed == true and "unsubscribe" or "subscribe"
-		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
 		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
-		service.request("POST", endpoint, nil, function(result, err)
+		pullrequests_api.set_subscription(path, iid, details.is_subscribed ~= true, function(subscribed, err)
 			if err then
 				notify(ctx, "error", tostring(err))
 				done(nil, tostring(err))
 				return
 			end
-			local subscribed = type(result) == "table" and result.subscribed
-			if type(subscribed) ~= "boolean" then
-				subscribed = action == "subscribe"
-			end
-			details.is_subscribed = subscribed == true
+			details.is_subscribed = subscribed
 			notify(ctx, "success", details.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 			done({
 				changed_pr = true,
 				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
 			}, nil)
-		end, {
-			action = action == "subscribe" and "Subscribe to MR" or "Unsubscribe from MR",
-			project_path = path,
-			iid = iid,
-		})
+		end)
 	end
 
 	if ctx.details then

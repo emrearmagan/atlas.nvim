@@ -314,22 +314,6 @@ function M.custom_items(domain, run)
 end
 
 ---@param section_path string[]
----@return { key?: string, label?: string, items?: table }|nil
-local function get_bookmarks(section_path)
-	local node = require("atlas.config").options ---@type any
-	for _, key in ipairs(section_path) do
-		if type(node) ~= "table" then
-			return nil
-		end
-		node = node[key]
-	end
-	if type(node) ~= "table" then
-		return nil
-	end
-	return node.bookmarks
-end
-
----@param section_path string[]
 ---@param default_bookmarks_key string
 ---@return table<string, string[]>
 local function view_key_conflicts(section_path, default_bookmarks_key)
@@ -354,7 +338,7 @@ local function view_key_conflicts(section_path, default_bookmarks_key)
 		end
 	end
 
-	local bookmarks = get_bookmarks(section_path)
+	local bookmarks = node.bookmarks
 	if default_bookmarks_key ~= "" then
 		local bk = tostring((type(bookmarks) == "table" and bookmarks.key) or default_bookmarks_key)
 		if bk ~= "" then

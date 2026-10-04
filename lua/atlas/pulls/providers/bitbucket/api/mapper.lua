@@ -31,23 +31,20 @@ local function describe_update(update)
 		end
 		if key == "reviewers" then
 			local rev = as_table(changes.reviewers) or {}
-			local added = as_table(rev.added) or {}
-			if #added > 0 then
-				local names = {}
-				for _, r in ipairs(added) do
-					names[#names + 1] = r.display_name or r.nickname or "someone"
-				end
-				return "added reviewer: " .. table.concat(names, ", ")
+			local reviewers = as_table(rev.added) or {}
+			local verb = "added"
+			if #reviewers == 0 then
+				reviewers = as_table(rev.removed) or {}
+				verb = "removed"
 			end
-			local removed = as_table(rev.removed) or {}
-			if #removed > 0 then
-				local names = {}
-				for _, r in ipairs(removed) do
-					names[#names + 1] = r.display_name or r.nickname or "someone"
-				end
-				return "removed reviewer: " .. table.concat(names, ", ")
+			if #reviewers == 0 then
+				return "updated reviewers"
 			end
-			return "updated reviewers"
+			local names = {}
+			for _, reviewer in ipairs(reviewers) do
+				names[#names + 1] = reviewer.display_name or reviewer.nickname or "someone"
+			end
+			return verb .. " reviewer: " .. table.concat(names, ", ")
 		end
 	end
 
@@ -70,16 +67,13 @@ end
 ---@param is_draft boolean
 ---@return "open"|"merged"|"declined"|"draft"
 local function map_state(bb_state, is_draft)
-	if is_draft then
-		return "draft"
-	end
 	local s = tostring(bb_state or ""):upper()
-	if s == "OPEN" then
-		return "open"
-	elseif s == "MERGED" then
+	if s == "MERGED" then
 		return "merged"
 	elseif s == "DECLINED" or s == "SUPERSEDED" then
 		return "declined"
+	elseif is_draft then
+		return "draft"
 	end
 	return "open"
 end

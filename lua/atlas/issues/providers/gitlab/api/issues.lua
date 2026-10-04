@@ -91,22 +91,12 @@ function M.list_issues(view, opts, on_done)
 		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
+		labels = view.labels or nil,
+		milestone = view.milestone or nil,
+		assignee_username = view.assignee_username or nil,
+		author_username = view.author_username or nil,
+		search = view.search or nil,
 	}
-	if view.labels then
-		params.labels = view.labels
-	end
-	if view.milestone then
-		params.milestone = view.milestone
-	end
-	if view.assignee_username then
-		params.assignee_username = view.assignee_username
-	end
-	if view.author_username then
-		params.author_username = view.author_username
-	end
-	if view.search and view.search ~= "" then
-		params.search = view.search
-	end
 	for k, v in pairs(view.extra_params or {}) do
 		if k ~= "page" and k ~= "per_page" then
 			params[k] = v
@@ -186,14 +176,12 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local requests = request_scope.new()
 	requests.all(starts, function(values, errors)
 		local issues = {}
+		local err
 		for path in pairs(iids_by_project) do
-			if errors[path] then
-				on_done({}, errors[path])
-				return
-			end
+			err = err or errors[path]
 			vim.list_extend(issues, values[path] or {})
 		end
-		on_done(issues, nil)
+		on_done(issues, err)
 	end)
 	return requests
 end
@@ -303,6 +291,31 @@ function M.update_description(issue, description, on_done)
 		action = "Update issue description",
 		path = path,
 		iid = iid,
+	})
+end
+
+---@param issue GitLabIssue
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(issue, subscribed, on_done)
+	local action = subscribed and "subscribe" or "unsubscribe"
+	local endpoint =
+		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
+	return service.request("POST", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local value = type(result) == "table" and result.subscribed
+		if type(value) ~= "boolean" then
+			value = subscribed
+		end
+		on_done(value, nil)
+	end, {
+		action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
+		project_path = issue.project_path,
+		iid = issue.iid,
 	})
 end
 

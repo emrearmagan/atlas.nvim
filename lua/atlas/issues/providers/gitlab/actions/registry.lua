@@ -1,3 +1,10 @@
+---@alias AtlasGitLabIssueActionId
+---| AtlasIssueActionId
+---| "close"
+---| "reopen"
+---| "labels"
+---| "open_project"
+
 local M = {}
 
 local actions = require("atlas.issues.actions")
@@ -7,7 +14,7 @@ local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.providers.gitlab.users")
-local labels_api = require("atlas.issues.providers.gitlab.api.labels")
+local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
@@ -83,20 +90,8 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
-	local target = issue.status_id == "closed" and "reopen" or "close"
-	local label = target == "close" and "Closing" or "Reopening"
-	notify.loading(string.format("%s %s...", label, key))
-	issues_api.set_state(key, target, function(ok, err)
-		if not ok then
-			notify.error(err or (label .. " failed"))
-			done(nil, err or (label .. " failed"))
-			return
-		end
-		local msg = target == "close" and "Closed" or "Reopened"
-		notify.success(string.format("%s %s", msg, key), { timeout = 1200 })
-		done({ issue_key = key }, nil)
-	end)
+	local action = issue.status_id == "closed" and reopen or close
+	action(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -299,7 +294,7 @@ local function labels(ctx, done)
 			return
 		end
 
-		labels_api.list(path, function(all_labels, labels_err)
+		metadata_api.list_labels(path, function(all_labels, labels_err)
 			if labels_err or all_labels == nil then
 				local message = labels_err or "Failed to load labels"
 				notify.error(message)
@@ -523,18 +518,6 @@ local function create_issue(ctx, done)
 		---@cast issue GitLabIssue
 		resolved = issue.project_path
 	end
-	if resolved == "" then
-		local git = require("atlas.core.git")
-		local root = git.repo_root(nil)
-		if root then
-			local remote = git.remote_url(root, "origin")
-			local info = remote and git.parse_remote_url(remote) or nil
-			if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
-				resolved = info.repo_full_name
-			end
-		end
-	end
-
 	local function open_editor(path)
 		local create_issue_ui = require("atlas.issues.create.gitlab.issue")
 		create_issue_ui.open({
@@ -558,17 +541,23 @@ local function create_issue(ctx, done)
 		return
 	end
 
-	vim.ui.input({ prompt = "Project (group/project): " }, function(input)
-		if input == nil then
-			done(nil, nil)
+	return require("atlas.core.git").local_repository(nil, function(info)
+		if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
+			open_editor(info.repo_full_name)
 			return
 		end
-		local path = vim.trim(tostring(input))
-		if path == "" then
-			done(nil, nil)
-			return
-		end
-		open_editor(path)
+		vim.ui.input({ prompt = "Project (group/project): " }, function(input)
+			if input == nil then
+				done(nil, nil)
+				return
+			end
+			local path = vim.trim(tostring(input))
+			if path == "" then
+				done(nil, nil)
+				return
+			end
+			open_editor(path)
+		end)
 	end)
 end
 
@@ -591,28 +580,17 @@ end
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
-	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
-	local endpoint =
-		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	service.request("POST", endpoint, nil, function(result, err)
+	issues_api.set_subscription(issue, issue.is_subscribed ~= true, function(subscribed, err)
 		if err then
 			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
-		local subscribed = type(result) == "table" and result.subscribed
-		if type(subscribed) ~= "boolean" then
-			subscribed = action == "subscribe"
-		end
-		issue.is_subscribed = subscribed == true
+		issue.is_subscribed = subscribed
 		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
-	end, {
-		action = action == "subscribe" and "Subscribe to issue" or "Unsubscribe from issue",
-		project_path = issue.project_path,
-		iid = issue.iid,
-	})
+	end)
 end
 
 register({

@@ -65,10 +65,7 @@ end
 ---@param path string
 ---@param iid integer
 local function invalidate_review_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
+	comments_api.invalidate_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
 	service.delete_memory_cache(metadata_cache_key(path, iid))
 end
@@ -162,18 +159,25 @@ local function fetch_metadata(pr, opts, on_done)
 
 	local reviewers, history = {}, {}
 	local after
-	local current
-	local cancelled = false
+	local requests = request_scope.new()
 
 	local function fetch_page()
-		current = service.graphql(REVIEW_METADATA_QUERY, {
-			path = path,
-			iid = tostring(iid),
-			after = after,
-		}, function(result, err)
-			if cancelled then
-				return
-			end
+		requests.run(function(done)
+			return service.graphql(
+				REVIEW_METADATA_QUERY,
+				{
+					path = path,
+					iid = tostring(iid),
+					after = after,
+				},
+				done,
+				{
+					action = "Fetch MR review metadata",
+					project_path = path,
+					iid = iid,
+				}
+			)
+		end, function(result, err)
 			if err then
 				on_done(nil, err)
 				return
@@ -233,22 +237,11 @@ local function fetch_metadata(pr, opts, on_done)
 			}
 			service.set_memory_cache(cache_key, data)
 			on_done(data, nil)
-		end, {
-			action = "Fetch MR review metadata",
-			project_path = path,
-			iid = iid,
-		})
+		end)
 	end
 
 	fetch_page()
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param refs GitLabPullRequestDiffRefs|nil
@@ -355,51 +348,44 @@ function M.discard(pr, _review, on_done)
 	end
 
 	local prefix = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
-	local current
-	local cancelled = false
+	local requests = request_scope.new()
 	local function delete_next(drafts, index)
-		if cancelled then
-			return
-		end
 		local draft = drafts[index]
 		if not draft then
 			invalidate_review_caches(path, iid)
 			on_done(true, nil)
 			return
 		end
-		current = service.request("DELETE", prefix .. "/" .. tostring(draft.id), nil, function(_, err)
+		requests.run(function(done)
+			return service.request("DELETE", prefix .. "/" .. tostring(draft.id), nil, done, {
+				action = "Delete MR draft comment",
+				project_path = path,
+				iid = iid,
+				draft_note_id = tostring(draft.id),
+			})
+		end, function(_, err)
 			if err then
 				on_done(false, err)
 				return
 			end
 			delete_next(drafts, index + 1)
-		end, {
-			action = "Delete MR draft comment",
-			project_path = path,
-			iid = iid,
-			draft_note_id = tostring(draft.id),
-		})
+		end)
 	end
 
-	current = service.fetch_all_pages(prefix .. "?per_page=100", function(drafts, err)
+	requests.run(function(done)
+		return service.fetch_all_pages(prefix .. "?per_page=100", done, {
+			action = "Fetch MR draft comments",
+			project_path = path,
+			iid = iid,
+		})
+	end, function(drafts, err)
 		if err then
 			on_done(false, err)
 			return
 		end
 		delete_next(drafts or {}, 1)
-	end, {
-		action = "Fetch MR draft comments",
-		project_path = path,
-		iid = iid,
-	})
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -478,26 +464,19 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
 function M.approve(pr, _review, body, on_done)
-	local cancelled = false
-	local current
-	current = publish(pr, "reviewed", body, function(ok, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return publish(pr, "reviewed", body, done)
+	end, function(ok, err)
 		if not ok then
 			on_done(false, err)
 			return
 		end
-		current = approve_pull_request(pr, on_done)
+		requests.run(function(done)
+			return approve_pull_request(pr, done)
+		end, on_done)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest

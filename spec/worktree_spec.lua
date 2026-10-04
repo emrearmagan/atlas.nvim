@@ -190,16 +190,19 @@ describe("worktree", function()
 	end)
 
 	describe("claim", function()
-		before_each(function()
-			for _, dir in ipairs(worktree.claimed_dirs()) do
+		local claimed = {}
+		after_each(function()
+			for _, dir in ipairs(claimed) do
 				worktree.release(dir)
 			end
+			claimed = {}
 		end)
 
 		it("isolates simultaneous sessions and reuses a directory only after release", function()
 			local ctx = context()
 			local first = worktree.claim(ctx, nil)
 			local second = worktree.claim(ctx, nil)
+			claimed = { first, second }
 
 			assert.equals(worktree.default_dir(ctx), first)
 			assert.equals(first .. "-2", second)
@@ -208,12 +211,15 @@ describe("worktree", function()
 
 			worktree.release(first)
 			assert.is_false(worktree.is_claimed(first))
-			assert.equals(first, worktree.claim(ctx, nil))
+			local reused = worktree.claim(ctx, nil)
+			claimed[#claimed + 1] = reused
+			assert.equals(first, reused)
 			assert.is_true(worktree.is_claimed(second))
 		end)
 
 		it("propagates resolution errors", function()
 			local dir, err = worktree.claim(context(), { dir = "relative" })
+			claimed[1] = dir
 
 			assert.is_nil(dir)
 			assert.is_truthy(err)
@@ -430,6 +436,41 @@ describe("worktree", function()
 			assert.same({}, deleted)
 			assert.is_true(ran(calls.calls, "remove"))
 			assert.is_true(ran(calls.calls, "add"))
+		end)
+
+		it("cancels recreation during removal or fallback pruning", function()
+			for _, stage in ipairs({ "remove", "prune" }) do
+				local calls, pending, cancelled = {}, nil, false
+				local completed = false
+				core_git.run = function(args, _, on_done)
+					table.insert(calls, args[4])
+					if args[4] == stage then
+						pending = on_done
+					else
+						on_done({ code = args[4] == "remove" and 128 or 0, stdout = "", stderr = "" })
+					end
+					return {
+						cancel = function()
+							assert.equals(stage, args[4])
+							cancelled = true
+						end,
+					}
+				end
+
+				local handle = worktree.ensure({
+					repo_root = "/home/dev/code/atlas.nvim",
+					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+					dir = worktree.cache_root() .. "/repo/pr-1",
+				}, function()
+					completed = true
+				end)
+
+				handle.cancel()
+				assert.is_true(cancelled)
+				pending({ code = 0, stdout = "", stderr = "" })
+				assert.is_false(completed)
+				assert.same(stage == "remove" and { "list", "remove" } or { "list", "remove", "prune" }, calls)
+			end
 		end)
 	end)
 end)

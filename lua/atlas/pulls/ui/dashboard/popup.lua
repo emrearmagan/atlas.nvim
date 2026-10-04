@@ -70,31 +70,9 @@ end
 local function gitlab_rows(pr)
 	---@cast pr GitLabPullRequest
 	local rows = {}
-	local merge_status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
-	if merge_status ~= "" then
-		local kind = "unknown"
-		if merge_status == "mergeable" or merge_status == "can_be_merged" then
-			kind = "successful"
-		elseif
-			merge_status == "conflict"
-			or merge_status == "cannot_be_merged"
-			or merge_status == "ci_must_pass"
-			or merge_status == "discussions_not_resolved"
-			or merge_status == "blocked_status"
-			or merge_status == "merge_request_blocked"
-			or merge_status == "need_rebase"
-			or merge_status == "requested_changes"
-			or merge_status == "status_checks_must_pass"
-			or merge_status == "security_policy_violations"
-			or merge_status == "policies_denied"
-		then
-			kind = "failed"
-		elseif merge_status == "draft_status" or merge_status == "not_open" then
-			kind = "stopped"
-		else
-			kind = "inprogress"
-		end
-		local value, hl_group = icons.pulls_status(kind)
+	local merge_status = presentation.gitlab_merge_status(pr)
+	if merge_status then
+		local value, hl_group = icons.pulls_status(merge_status)
 		add(rows, "Merge", value, hl_group)
 	end
 
@@ -112,18 +90,8 @@ end
 local function bitbucket_rows(pr)
 	---@cast pr BitbucketPullRequest
 	local rows = {}
-	local approved, changes_requested, total = 0, 0, 0
-	for _, reviewer in ipairs(pr.reviewers or {}) do
-		total = total + 1
-		if reviewer.decision == "approved" then
-			approved = approved + 1
-		elseif reviewer.decision == "changes_requested" then
-			changes_requested = changes_requested + 1
-		end
-	end
-	if total > 0 then
-		local kind = changes_requested > 0 and "failed" or (approved == total and "successful" or "inprogress")
-		local label = changes_requested > 0 and "Changes requested" or string.format("%d/%d approved", approved, total)
+	local kind, label = presentation.review_progress(pr.reviewers)
+	if kind then
 		local value, hl_group = status_value(kind, label)
 		add(rows, "Review", value, hl_group)
 	end

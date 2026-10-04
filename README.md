@@ -179,12 +179,16 @@ providers = {
           done(job, nil)
         end,
         fetch_job_log = function(context, pipeline, job, done)
+          -- Fetch the job's raw log output.
           done({ raw = "Your log output here" }, nil)
         end,
         parse = function(log)
           -- Return cleaned lines or your own nested groups.
           return log.lines
         end,
+        actions = {
+          -- Add your actions here.
+        },
       },
       highlights = {
         { pattern = "^FAIL%s", level = "error" },
@@ -221,7 +225,6 @@ pulls = {
       id = "show_repo_status",
       label = "Show repository status",
       icon = "",
-      confirmation = true,
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -393,7 +396,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas pulls [provider]` - Open a pull-request provider dashboard
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
-- `:Atlas diff [target]` - Open a Git range or pull request in native AtlasDiff
+- `:Atlas diff <target>` - Open a Git range or pull request in native AtlasDiff; a target is required
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
@@ -402,8 +405,6 @@ At some point there will probably an extension for lualine.
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
-- `:AtlasDiff <base>...<head>` - Open a Git range in native AtlasDiff directly
-- `:AtlasDiff <pull-request-url>` - Open a pull request in native AtlasDiff directly
 
 ## Pulls
 
@@ -465,10 +466,11 @@ pulls = {
     },
   },
   repo_config = {
-    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
+      ["group/subgroup/*"] = "~/code/subgroup/*",
     },
     settings = {
       ["your-workspace/atlas"] = {
@@ -486,6 +488,8 @@ pulls = {
 <details>
 <summary><strong>GitHub</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/github/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasGitHubPullsConfig
@@ -496,6 +500,7 @@ pulls = {
         name = "My PRs",
         key = "1",
         layout = "plain", -- "compact", "grouped", or "plain"
+        -- current_repo = true, -- Limit this view to the local repository.
         search = "author:@me sort:updated-desc",
       },
       {
@@ -534,6 +539,8 @@ pulls = {
 <details>
 <summary><strong>Bitbucket</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/bitbucket/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasBitbucketPullsConfig
@@ -544,6 +551,7 @@ pulls = {
         name = "Me",
         key = "M",
         layout = "compact", -- "compact", "grouped", or "plain"
+        -- current_repo = true, -- Remove repo:/project: targets from search when enabled.
         -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
         search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
       },
@@ -578,6 +586,8 @@ pulls = {
 <details>
 <summary><strong>GitLab</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/gitlab/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasGitLabPullsConfig
@@ -589,6 +599,7 @@ pulls = {
         key = "1",
         layout = "grouped", -- "compact", "grouped", or "plain"
         scope = "assigned_to_me",
+        -- current_repo = true, -- Limit this view to the local repository.
       },
       {
         name = "Reviewing",
@@ -648,6 +659,8 @@ issues = {
 > [!IMPORTANT]
 > The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/jira/config.lua)
+
 ```lua
 issues = {
   ---@type AtlasJiraIssuesConfig
@@ -681,11 +694,21 @@ issues = {
     project_config = {
       -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
       story_points_field = "customfield_10016",
+      -- Override issue type styles by name (case-insensitive).
       issue_types = {
-        ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-        ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        bug = { icon = "" },
+        maintenance = { icon = "", hl_group = "AtlasTextWarning" },
+        infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+      },
+      -- Override icons by status name or category.
+      status_icons = {
+        new = "●",
+        indeterminate = "",
+        done = "",
+        ["In Review"] = "",
       },
 
+      -- Custom fields to display per project; replace KAN with your project key.
       KAN = {
         customfield_10003 = {
           name = "Approvers",
@@ -713,6 +736,8 @@ issues = {
 <details>
 <summary><strong>GitHub Issues</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/github/config.lua)
+
 ```lua
 issues = {
   ---@type AtlasGitHubIssuesConfig
@@ -723,6 +748,7 @@ issues = {
         name = "Assigned",
         key = "1",
         layout = "plain",
+        -- current_repo = true, -- Limit this view to the local repository.
         search = "assignee:@me is:open",
       },
       {
@@ -758,6 +784,8 @@ issues = {
 <details>
 <summary><strong>GitLab Issues</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/gitlab/config.lua)
+
 ```lua
 issues = {
   ---@type AtlasGitLabIssuesConfig
@@ -769,6 +797,7 @@ issues = {
         key = "1",
         scope = "assigned_to_me",
         state = "opened",
+        -- current_repo = true, -- Limit this view to the local repository.
       },
       {
         name = "Created",
@@ -781,7 +810,7 @@ issues = {
         key = "3",
         scope = "all",
         state = "opened",
-        -- Anything not covered by the explicit fields below can be passed via `extra_params`.
+        -- Pass additional API filters via extra_params.
         extra_params = { ["not[labels]"] = "wontfix" },
       },
     },
@@ -885,6 +914,7 @@ keymaps = {
       previous_job = { "[j", "<S-Tab>" },
       show_history = "gH",
       toggle_raw_logs = "gL",
+      toggle_auto_refresh = "gR",
     },
     review = {
       open_item = "<CR>", -- Open the selected file, review item, or inline comment/note.

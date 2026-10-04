@@ -51,11 +51,7 @@ end
 ---@param opts { width: integer, padding_x?: integer, extra_chips?: IssuesDetailChip[] }
 ---@return string[], table[]
 function M.render(opts)
-	local chips = {}
-
-	for _, chip in ipairs(opts.extra_chips or {}) do
-		table.insert(chips, chip)
-	end
+	local chips = opts.extra_chips or {}
 
 	if #chips == 0 then
 		return {}, {}

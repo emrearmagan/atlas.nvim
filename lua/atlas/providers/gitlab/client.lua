@@ -110,6 +110,11 @@ function M.delete_memory_cache(key)
 	memory_cache.delete(key)
 end
 
+---@param prefix string
+function M.clear_memory_cache(prefix)
+	memory_cache.clear_prefix(prefix)
+end
+
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)

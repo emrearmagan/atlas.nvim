@@ -179,6 +179,13 @@ GET {{JIRA_BASE_URL}}/rest/api/3/issue/createmeta?projectKeys={{jira_project_key
 Authorization: Basic {{JIRA_EMAIL}}:{{JIRA_TOKEN}}
 Accept: application/json
 
+> {%
+  const issueType = response.body?.projects?.[0]?.issuetypes?.find((type) => !type.subtask);
+  if (issueType) {
+    client.global.set("jira_issue_type_id", String(issueType.id));
+  }
+%}
+
 ### Create issue
 POST {{JIRA_BASE_URL}}/rest/api/3/issue
 Authorization: Basic {{JIRA_EMAIL}}:{{JIRA_TOKEN}}
@@ -191,5 +198,8 @@ Accept: application/json
       "key": "{{jira_project_key}}"
     },
     "summary": "New issue from atlas.nvim",
+    "issuetype": {
+      "id": "{{jira_issue_type_id}}"
+    }
   }
 }

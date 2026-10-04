@@ -164,6 +164,36 @@ function M.write(name, content, opts)
 end
 
 ---@param name string
+---@param content string
+---@param on_done fun(name: string|nil, err: string|nil, overwritten: boolean|nil)
+local function write_with_confirmation(name, content, on_done)
+	local ok, err, existed, normalized_name = M.write(name, content, { overwrite = false })
+	local display_name = normalized_name or name
+	if ok then
+		on_done(display_name, nil, false)
+		return
+	end
+	if not existed then
+		on_done(nil, err or "Failed to create template")
+		return
+	end
+
+	vim.ui.input({ prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', display_name) }, function(confirm)
+		if vim.trim(confirm or ""):lower() ~= "y" then
+			on_done()
+			return
+		end
+
+		local overwrite_ok, overwrite_err, _, final_name = M.write(name, content, { overwrite = true })
+		if not overwrite_ok then
+			on_done(nil, overwrite_err or "Failed to overwrite template")
+			return
+		end
+		on_done(final_name or display_name, nil, true)
+	end)
+end
+
+---@param name string
 ---@return boolean ok
 ---@return string|nil err
 ---@return string|nil normalized_name
@@ -187,6 +217,89 @@ function M.delete(name)
 	end
 
 	return true, nil, normalized_name
+end
+
+---@param on_done fun(err: string|nil)
+local function create_template(on_done)
+	markdown_editor.open({
+		key = string.format("template_new_%d", vim.loop.hrtime()),
+		title = " New Issue Template ",
+		initial_text = "",
+		on_save = function(text)
+			local markdown = tostring(text or "")
+			vim.ui.input({ prompt = "Template name: " }, function(name_input)
+				if name_input == nil then
+					on_done()
+					return
+				end
+
+				local name = vim.trim(name_input)
+				if name == "" then
+					on_done("Template name is required")
+					return
+				end
+
+				write_with_confirmation(name, markdown, function(_, err)
+					on_done(err)
+				end)
+			end)
+		end,
+		on_cancel = function()
+			on_done()
+		end,
+	})
+end
+
+---@param selected IssueTemplateInfo
+---@param on_done fun(err: string|nil)
+local function edit_template(selected, on_done)
+	local content, read_err = M.read(selected.name)
+	if read_err then
+		on_done(read_err)
+		return
+	end
+
+	local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
+	markdown_editor.open({
+		key = key,
+		title = string.format(" Template: %s ", selected.name),
+		initial_text = content,
+		actions = {
+			{
+				key = "<C-d>",
+				description = "delete",
+				callback = function(editor_context)
+					vim.ui.input({
+						prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
+					}, function(confirm)
+						if vim.trim(confirm or ""):lower() ~= "y" then
+							return
+						end
+
+						local deleted, delete_err = M.delete(selected.name)
+						if not deleted then
+							on_done(delete_err or "Failed to delete template")
+							return
+						end
+
+						editor_context.close()
+						on_done()
+					end)
+				end,
+			},
+		},
+		on_save = function(text)
+			local ok, write_err = M.write(selected.name, text, { overwrite = true })
+			if not ok then
+				on_done(write_err or "Failed to update template")
+				return
+			end
+			on_done()
+		end,
+		on_cancel = function()
+			on_done()
+		end,
+	})
 end
 
 ---@param on_done fun(err: string|nil)
@@ -220,59 +333,7 @@ function M.manage(on_done)
 			end
 
 			if choice.id == "create" then
-				markdown_editor.open({
-					key = string.format("template_new_%d", vim.loop.hrtime()),
-					title = " New Issue Template ",
-					initial_text = "",
-					on_save = function(text)
-						local markdown = tostring(text or "")
-						vim.ui.input({ prompt = "Template name: " }, function(name_input)
-							if name_input == nil then
-								finish()
-								return
-							end
-
-							local name = vim.trim(name_input)
-							if name == "" then
-								finish("Template name is required")
-								return
-							end
-
-							local ok, write_err, existed, normalized_name =
-								M.write(name, markdown, { overwrite = false })
-							if ok then
-								finish()
-								return
-							end
-							if not existed then
-								finish(write_err or "Failed to create template")
-								return
-							end
-
-							vim.ui.input({
-								prompt = string.format(
-									'Template "%s" exists. Overwrite? [y/N]: ',
-									tostring(normalized_name or name)
-								),
-							}, function(confirm)
-								if vim.trim(confirm or ""):lower() ~= "y" then
-									finish()
-									return
-								end
-
-								local overwrite_ok, overwrite_err = M.write(name, markdown, { overwrite = true })
-								if not overwrite_ok then
-									finish(overwrite_err or "Failed to overwrite template")
-									return
-								end
-								finish()
-							end)
-						end)
-					end,
-					on_cancel = function()
-						finish()
-					end,
-				})
+				create_template(finish)
 				return
 			end
 
@@ -292,53 +353,7 @@ function M.manage(on_done)
 					return
 				end
 
-				local content, read_err = M.read(selected.name)
-				if read_err then
-					finish(read_err)
-					return
-				end
-
-				local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
-				markdown_editor.open({
-					key = key,
-					title = string.format(" Template: %s ", selected.name),
-					initial_text = content,
-					actions = {
-						{
-							key = "<C-d>",
-							description = "delete",
-							callback = function(editor_context)
-								vim.ui.input({
-									prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
-								}, function(confirm)
-									if vim.trim(confirm or ""):lower() ~= "y" then
-										return
-									end
-
-									local deleted, delete_err = M.delete(selected.name)
-									if not deleted then
-										finish(delete_err or "Failed to delete template")
-										return
-									end
-
-									editor_context.close()
-									finish()
-								end)
-							end,
-						},
-					},
-					on_save = function(text)
-						local ok, write_err = M.write(selected.name, text, { overwrite = true })
-						if not ok then
-							finish(write_err or "Failed to update template")
-							return
-						end
-						finish()
-					end,
-					on_cancel = function()
-						finish()
-					end,
-				})
+				edit_template(selected, finish)
 			end)
 		end,
 	})
@@ -407,32 +422,14 @@ local function save_template(context)
 			return
 		end
 
-		local ok, write_err, existed, normalized_name = M.write(name, description, { overwrite = false })
-		local display_name = normalized_name or name
-		if ok then
-			notify.info("Created template " .. display_name, { vim_notify = true })
-			return
-		end
-		if not existed then
-			notify.error(write_err or "Failed to create template", { vim_notify = true })
-			return
-		end
-
-		vim.ui.input(
-			{ prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', display_name) },
-			function(confirm)
-				if vim.trim(confirm or ""):lower() ~= "y" then
-					return
-				end
-
-				local overwrite_ok, overwrite_err, _, final_name = M.write(name, description, { overwrite = true })
-				if not overwrite_ok then
-					notify.error(overwrite_err or "Failed to overwrite template", { vim_notify = true })
-					return
-				end
-				notify.info("Updated template " .. (final_name or display_name), { vim_notify = true })
+		write_with_confirmation(name, description, function(saved_name, err, overwritten)
+			if err then
+				notify.error(err, { vim_notify = true })
+			elseif saved_name then
+				local action = overwritten and "Updated" or "Created"
+				notify.info(action .. " template " .. saved_name, { vim_notify = true })
 			end
-		)
+		end)
 	end)
 end
 

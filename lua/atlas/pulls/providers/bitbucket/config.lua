@@ -5,7 +5,8 @@
 --       bitbucket = {
 --         user  = vim.env.BITBUCKET_USER,
 --         token = vim.env.BITBUCKET_TOKEN,
---         cache_ttl = 300,
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
+--         -- CI options: https://github.com/emrearmagan/atlas.nvim#pipeline-configuration
 --       },
 --     },
 --     pulls = {
@@ -15,13 +16,14 @@
 --           {
 --             name = "All",
 --             key  = "1",
+--             -- current_repo = true, -- Omit repo:/project: search targets when enabled.
 --             -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
 --             search = "repo:acme/core project:acme/WEB",
 --           },
 --           {
 --             name = "Authored",
 --             key  = "2",
---             layout = "compact",
+--             layout = "compact", -- "compact" | "grouped" | "plain"
 --             search = 'project:acme/CORE author.nickname = "my-name"',
 --           },
 --         },
@@ -29,6 +31,7 @@
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
+--             ["Authored"] = 'repo:acme/core author.nickname = "my-name"',
 --             ["Core"] = {
 --               layout = "grouped",
 --               search = 'repo:acme/standalone project:acme/CORE title ~ "core"',

@@ -1,17 +1,18 @@
 ---@class GitLabIssue : Issue
 ---@field project_path string
 ---@field iid integer
+---@field confidential boolean|nil
 
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-local actions = require("atlas.issues.providers.gitlab.actions")
 local author_completion = require("atlas.providers.gitlab.completion.author")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
+local git = require("atlas.core.git")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local links_api = require("atlas.providers.gitlab.links")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
-local git = require("atlas.core.git")
+local request_scope = require("atlas.core.requests")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
 ---@param issue Issue
@@ -62,25 +63,47 @@ local function views()
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
 	end
-	local repo
-	for _, view in ipairs(configured) do
-		if view.current_repo then
-			local target = git.local_repository()
-			if target and target.provider == "gitlab" then
-				repo = target.repo_full_name
-			end
-			break
-		end
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
+end
+
+---@param view AtlasGitLabIssuesViewConfig
+---@param on_done fun(view: AtlasGitLabIssuesViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
 	end
-	local resolved = {}
-	for i, view in ipairs(configured) do
-		resolved[i] = vim.tbl_extend("force", {}, view)
-		if view.current_repo and repo then
-			resolved[i].project = repo
-			resolved[i].scope = view.scope or "all"
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		local repo = target and target.provider == "gitlab" and target.repo_full_name or nil
+		if repo then
+			resolved.project = repo
+			resolved.scope = view.scope or "all"
 		end
-	end
-	return resolved
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasGitLabIssuesViewConfig
+---@param opts IssuesFetchOpts
+---@param on_done fun(page: IssuesPage, err: string|nil)
+---@return { cancel: fun() }
+local function fetch_issues(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		requests.run(function(done)
+			return issues_api.list_issues(resolved, opts, done)
+		end, function(page, err)
+			page.query = gitlab_query.issue_query(resolved)
+			on_done(page, err)
+		end)
+	end)
+	return requests
 end
 
 ---@param target AtlasTarget
@@ -106,11 +129,10 @@ end
 return {
 	views = views,
 	view_for_target = view_for_target,
-	resolve_search = gitlab_query.issue_query,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
-			fetch_issues = issues_api.list_issues,
+			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			fetch_links = links_api.fetch_issue,
@@ -126,7 +148,6 @@ return {
 			delete_comment = notes_api.delete_comment,
 			add_reaction = notes_api.add_reaction,
 		},
-		actions = actions,
 		ui = {
 			detail = detail_ui,
 			repository = repository_ui,

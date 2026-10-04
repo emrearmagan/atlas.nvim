@@ -100,6 +100,38 @@ local function to_thread_item(commit, width)
 end
 
 ---@param pr PullRequest
+---@param pipelines PullsPipelineBackend|nil
+---@param opts { force_refresh: boolean|nil }
+---@param refresh fun()
+local function load_statuses(pr, pipelines, opts, refresh)
+	if not pipelines or not pipelines.fetch_commit_status then
+		return
+	end
+	local count = math.min(MAX_STATUS_COMMITS, #state.commits)
+	for i = 1, count do
+		local commit = state.commits[i]
+		local hash = tostring(commit.hash or "")
+		if hash ~= "" then
+			state.status_by_hash[hash] = "loading"
+			state.requests.run(function(done)
+				return pipelines.fetch_commit_status(commit, opts, done)
+			end, function(status, url, status_err)
+				if not is_current(pr) then
+					return
+				end
+				if status_err then
+					state.status_by_hash[hash] = "unknown"
+				else
+					state.status_by_hash[hash] = status or "unknown"
+					state.url_by_hash[hash] = url
+				end
+				refresh()
+			end)
+		end
+	end
+end
+
+---@param pr PullRequest
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, refresh, opts)
@@ -145,30 +177,7 @@ function M.on_select(pr, refresh, opts)
 		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
 		-- Fetch statuses for the first N commits.
-		if pipelines and pipelines.fetch_commit_status then
-			local count = math.min(MAX_STATUS_COMMITS, #state.commits)
-			for i = 1, count do
-				local commit = state.commits[i]
-				local hash = tostring(commit.hash or "")
-				if hash ~= "" then
-					state.status_by_hash[hash] = "loading"
-					state.requests.run(function(done)
-						return pipelines.fetch_commit_status(commit, opts, done)
-					end, function(status, url, status_err)
-						if not is_current(pr) then
-							return
-						end
-						if status_err then
-							state.status_by_hash[hash] = "unknown"
-						else
-							state.status_by_hash[hash] = status or "unknown"
-							state.url_by_hash[hash] = url
-						end
-						refresh()
-					end)
-				end
-			end
-		end
+		load_statuses(pr, pipelines, opts, refresh)
 
 		refresh()
 	end)

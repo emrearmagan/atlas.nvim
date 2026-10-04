@@ -24,9 +24,8 @@ end
 ---@param entries (PullsLogLine|PullsLogGroup)[]
 ---@param format fun(value: string, is_group: boolean, level?: PullsLogLevel): string, table[]
 ---@param prepared table<PullsLogLine|PullsLogGroup, { text: string, spans: table[] }>
----@param prefix string
-local function prepare_entries(entries, format, prepared, prefix)
-	for index, entry in ipairs(entries) do
+local function prepare_entries(entries, format, prepared)
+	for _, entry in ipairs(entries) do
 		local body = entry.name or entry.text
 		if entry.text and entry.timestamp and body:sub(1, #entry.timestamp) == entry.timestamp then
 			body = body:sub(#entry.timestamp + 2)
@@ -34,8 +33,7 @@ local function prepare_entries(entries, format, prepared, prefix)
 		local formatted, spans = format(body, entry.entries ~= nil, entry.level)
 		prepared[entry] = { text = formatted, spans = spans }
 		if entry.entries then
-			entry.fold_key = prefix .. index
-			prepare_entries(entry.entries, format, prepared, entry.fold_key .. ".")
+			prepare_entries(entry.entries, format, prepared)
 		end
 	end
 end
@@ -158,7 +156,7 @@ local function build_content(pane)
 	local prepared = {}
 	local log = pane.log
 	if type(log) == "table" then
-		prepare_entries(log, format, prepared, "")
+		prepare_entries(log, format, prepared)
 		pane.counts = counts
 	end
 
@@ -194,11 +192,7 @@ end
 
 ---@param pane PullsPipelinesLogs
 function M.render(pane)
-	if
-		not utils.buffer.valid(pane.buf)
-		or not utils.window.valid(pane.win)
-		or vim.api.nvim_win_get_buf(pane.win) ~= pane.buf
-	then
+	if not utils.window.has_buffer(pane.win, pane.buf) then
 		return
 	end
 

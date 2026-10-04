@@ -5,8 +5,11 @@ local providers = require("atlas.providers")
 local picker = require("atlas.ui.picker")
 local repository = require("atlas.ui.repository")
 local pages = require("atlas.ui.repository.pages")
+local request_scope = require("atlas.core.requests")
 
 local M = {}
+local requests = request_scope.new()
+local completion = {}
 
 ---@param provider PullsProvider|IssuesProvider
 ---@return string[]
@@ -63,7 +66,21 @@ function M.complete(arglead, args)
 	elseif #args == 2 then
 		local target
 		if args[1] == "." then
-			target = git.local_repository()
+			local cwd = git.default_cwd()
+			if completion.cwd ~= cwd then
+				if completion.request then
+					completion.request.cancel()
+				end
+				completion = { cwd = cwd }
+			end
+			local cache = completion
+			if not cache.request then
+				cache.request = git.local_repository(cwd, function(resolved)
+					cache.repository = resolved
+					cache.request = nil
+				end)
+			end
+			target = cache.repository
 		else
 			target = providers.resolve(args[1])
 		end
@@ -79,21 +96,10 @@ function M.complete(arglead, args)
 	end, options)
 end
 
----@param value string|nil
+---@param target AtlasTarget|nil
 ---@param page string|nil
-function M.open(value, page)
-	if not value then
-		search_repository()
-		return
-	end
-	value = vim.trim(value)
-	local target, err
-	if value == "." then
-		target = git.local_repository()
-		err = "No supported Git repository found"
-	else
-		target, err = providers.resolve(value)
-	end
+---@param err string|nil
+local function open_repository(target, page, err)
 	if not target or target.entity ~= "repo" or not target.repo_full_name then
 		notify.error(err or "Expected a repository URL", { vim_notify = true })
 		return
@@ -113,6 +119,29 @@ function M.open(value, page)
 		return
 	end
 	repository.open(target.repo_full_name, provider, { page = page })
+end
+
+---@param value string|nil
+---@param page string|nil
+function M.open(value, page)
+	requests.cancel()
+	requests = request_scope.new()
+	if not value then
+		search_repository()
+		return
+	end
+
+	value = vim.trim(value)
+	if value == "." then
+		requests.run(function(done)
+			return git.local_repository(nil, done)
+		end, function(target)
+			open_repository(target, page, "No supported Git repository found")
+		end)
+	else
+		local target, err = providers.resolve(value)
+		open_repository(target, page, err)
+	end
 end
 
 return M

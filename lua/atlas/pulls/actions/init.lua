@@ -1,5 +1,6 @@
 local M = {}
 
+local action_runner = require("atlas.core.actions")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
@@ -45,7 +46,7 @@ local notify = utils.notify
 ---@field details PullRequestDetails|nil
 ---@field current_user AtlasUser|nil
 ---@field buf integer|nil
----@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
+---@field notify fun(level: AtlasNotifyLevel, message: string, duration: integer|nil)|nil
 
 ---@class AtlasPullAction
 ---@field id string
@@ -53,7 +54,7 @@ local notify = utils.notify
 ---@field icon string|nil
 ---@field hidden boolean|nil
 ---@field is_available (fun(context: AtlasPullActionContext): boolean, string|nil)|nil
----@field run fun(context: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil))
+---@field run fun(context: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean|nil
 
 ---@param draft boolean
 ---@return AtlasPullAction
@@ -96,14 +97,23 @@ end
 
 ---@param id string
 ---@param context AtlasPullActionContext
----@return boolean
-function M.is_available(id, context)
+---@return AtlasPullAction|nil
+function M.find(id, context)
 	local action = utils.find_custom_action(id)
 	if action then
-		return action.is_available == nil or action.is_available(context) == true
+		return action
 	end
 	local actions = context.provider.capabilities.actions
-	return actions ~= nil and actions.is_available(id, context)
+	local provider_action = actions and actions.find(id) or nil
+	---@cast provider_action AtlasPullAction|nil
+	return provider_action
+end
+
+---@param id string
+---@param context AtlasPullActionContext
+---@return boolean
+function M.is_available(id, context)
+	return action_runner.is_available(M.find(id, context), context)
 end
 
 ---@param id string
@@ -111,26 +121,14 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
 ---@return boolean handled
 function M.run(id, context, on_done)
-	on_done = on_done or function() end
-	local action = utils.find_custom_action(id)
+	local action = M.find(id, context)
 	if action then
-		if action.is_available then
-			local available, err = action.is_available(context)
-			if not available then
-				err = err or "Action is not available"
-				notify(context, "warn", err)
-				on_done(nil, err)
-				return false
-			end
-		end
-		action.run(context, on_done)
-		return true
+		return action_runner.run(action, context, on_done)
 	end
-	local actions = context.provider.capabilities.actions
-	if not actions then
+	if not context.provider.capabilities.actions then
 		return false
 	end
-	return actions.run(id, context, on_done)
+	return action_runner.reject(context, on_done, string.format("Unknown action: %s", tostring(id)))
 end
 
 ---@param context AtlasPullActionContext
@@ -145,7 +143,7 @@ function M.open(context, on_done, extra_items)
 		end
 	end
 	for _, action in ipairs(utils.custom_actions()) do
-		if action.is_available == nil or action.is_available(context) == true then
+		if action_runner.is_available(action, context) then
 			table.insert(items, action)
 		end
 	end

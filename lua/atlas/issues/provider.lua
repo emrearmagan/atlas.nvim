@@ -13,6 +13,7 @@
 
 ---@class IssuesPage
 ---@field items Issue[]
+---@field query string|nil
 ---@field next_cursor string|nil
 ---@field total_pages integer|nil
 
@@ -28,14 +29,12 @@
 ---@field hl_group string
 ---@field views fun(): IssuesViewConfig[]
 ---@field view_for_target fun(target: AtlasTarget): IssuesViewConfig
----@field resolve_search fun(view: IssuesViewConfig): string
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 
 ---@class IssuesProviderCapabilities : AtlasProviderCapabilities
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
----@field actions IssuesActionsCapability|nil
 ---@field ui IssuesUICapability|nil
 
 ---@class IssuesCoreCapability
@@ -57,14 +56,10 @@
 ---@field reaction_options IssueReactionOption[]|nil
 ---@field comment_completion (fun(context: AtlasIssuesCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
 
----@class IssuesActionsCapability
----@field items AtlasIssueAction[]
----@field is_available fun(action_id: string, context: AtlasIssueActionContext): boolean
----@field run fun(action_id: string, context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean
-
 ---@class IssuesActionResult
 ---@field issue_key string|nil
 ---@field removed boolean|nil
+---@field message string|nil
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil

@@ -80,9 +80,9 @@ describe("commands.open", function()
 		}
 
 		package.loaded["atlas.core.git"] = {
-			local_repository = function()
+			local_repository = function(_, on_done)
 				calls.local_repository = calls.local_repository + 1
-				return repository
+				on_done(repository, nil)
 			end,
 		}
 		package.loaded["atlas.core.notify"] = {

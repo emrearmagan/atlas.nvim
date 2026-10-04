@@ -84,26 +84,16 @@ function M.fetch_pullrequests(view, opts, on_done)
 		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
+		labels = view.labels or nil,
+		milestone = view.milestone or nil,
+		assignee_username = view.assignee_username or nil,
+		author_username = view.author_username or nil,
+		search = view.search or nil,
 	}
 	if project == nil and group == nil then
 		params.scope = view.scope or "assigned_to_me"
 	elseif view.scope then
 		params.scope = view.scope
-	end
-	if view.labels then
-		params.labels = view.labels
-	end
-	if view.milestone then
-		params.milestone = view.milestone
-	end
-	if view.assignee_username then
-		params.assignee_username = view.assignee_username
-	end
-	if view.author_username then
-		params.author_username = view.author_username
-	end
-	if view.search and view.search ~= "" then
-		params.search = view.search
 	end
 	for k, v in pairs(view.extra_params or {}) do
 		if k ~= "state" and k ~= "page" and k ~= "per_page" then
@@ -267,14 +257,12 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local requests = request_scope.new()
 	requests.all(starts, function(values, errors)
 		local pulls = {}
+		local err
 		for path in pairs(iids_by_project) do
-			if errors[path] then
-				on_done({}, errors[path])
-				return
-			end
+			err = err or errors[path]
 			vim.list_extend(pulls, values[path] or {})
 		end
-		on_done(pulls, nil)
+		on_done(pulls, err)
 	end)
 	return requests
 end
@@ -382,6 +370,31 @@ local function update(pr, payload, on_done)
 		on_done(true, nil)
 	end, {
 		action = "Update MR",
+		project_path = path,
+		iid = iid,
+	})
+end
+
+---@param path string
+---@param iid integer
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(path, iid, subscribed, on_done)
+	local action = subscribed and "subscribe" or "unsubscribe"
+	local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
+	return service.request("POST", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local value = type(result) == "table" and result.subscribed
+		if type(value) ~= "boolean" then
+			value = subscribed
+		end
+		on_done(value, nil)
+	end, {
+		action = subscribed and "Subscribe to MR" or "Unsubscribe from MR",
 		project_path = path,
 		iid = iid,
 	})

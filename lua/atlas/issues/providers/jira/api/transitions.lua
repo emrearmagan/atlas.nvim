@@ -6,7 +6,11 @@ local service = require("atlas.providers.jira.client")
 ---@param callback fun(transitions: IssueTransition[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_transitions(issue_key, callback)
-	return service.request("GET", string.format("/issue/%s/transitions", issue_key), nil, function(result, err)
+	local endpoint = string.format("/issue/%s/transitions", issue_key)
+	if not service.is_server() then
+		endpoint = endpoint .. "?sortByOpsBarAndStatus=true"
+	end
+	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
 			return

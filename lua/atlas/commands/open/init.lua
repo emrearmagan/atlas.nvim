@@ -8,6 +8,14 @@ local request_scope = require("atlas.core.requests")
 
 local requests = request_scope.new()
 
+vim.api.nvim_create_autocmd("User", {
+	group = vim.api.nvim_create_augroup("AtlasCommandOpen", { clear = true }),
+	pattern = "AtlasUIClosed",
+	callback = function()
+		requests.cancel()
+	end,
+})
+
 ---@param target AtlasTarget
 ---@param provider IssuesProvider|PullsProvider|nil
 ---@param entity Issue|PullRequest|nil
@@ -116,28 +124,29 @@ function M.open(value)
 	requests = request_scope.new()
 	value = vim.trim(value)
 
-	if value == "." then
-		local repository = git.local_repository()
-		if repository == nil then
-			notify.error("No supported Git repository found", { vim_notify = true })
-			return
-		end
-		open_target(repository)
-		return
-	end
-
-	if value:match("^[#!]?%d+$") then
-		local repository = git.local_repository()
-		if repository == nil then
-			notify.error("A numeric reference requires a supported local Git repository", { vim_notify = true })
-			return
-		end
-		fetch_reference(value, repository, function(target, provider, entity, resolve_err)
-			if target then
-				open_target(target, provider, entity)
-			elseif resolve_err then
-				notify.error(resolve_err, { vim_notify = true })
+	if value == "." or value:match("^[#!]?%d+$") then
+		requests.run(function(done)
+			return git.local_repository(nil, done)
+		end, function(repository)
+			if not repository then
+				notify.error(
+					value == "." and "No supported Git repository found"
+						or "A numeric reference requires a supported local Git repository",
+					{ vim_notify = true }
+				)
+				return
 			end
+			if value == "." then
+				open_target(repository)
+				return
+			end
+			fetch_reference(value, repository, function(target, provider, entity, resolve_err)
+				if target then
+					open_target(target, provider, entity)
+				elseif resolve_err then
+					notify.error(resolve_err, { vim_notify = true })
+				end
+			end)
 		end)
 		return
 	end

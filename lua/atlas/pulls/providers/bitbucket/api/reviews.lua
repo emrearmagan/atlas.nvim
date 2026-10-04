@@ -230,21 +230,21 @@ function M.fetch_threads(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _review PullsReview|nil
+---@param action "approve"|"request_changes"
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve(pr, _review, body, on_done)
+local function set_review_state(pr, action, body, on_done)
 	---@cast pr BitbucketPullRequest
-	local url = tostring(pr.links.approve or "")
+	local url = tostring(pr.links[action] or "")
 	if url == "" then
-		on_done(false, "No approve URL available")
+		on_done(false, "No " .. action:gsub("_", " ") .. " URL available")
 		return nil
 	end
 	local requests = request_scope.new()
 	requests.run(function(done)
 		return service.request("POST", url, nil, nil, done, {
-			action = "Approve pull request",
+			action = action == "approve" and "Approve pull request" or "Request PR changes",
 			repo = pr.repo_full_name,
 			id = pr.id,
 		})
@@ -272,37 +272,17 @@ end
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
+function M.approve(pr, _review, body, on_done)
+	return set_review_state(pr, "approve", body, on_done)
+end
+
+---@param pr PullRequest
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.request_changes(pr, _review, body, on_done)
-	---@cast pr BitbucketPullRequest
-	local url = tostring(pr.links.request_changes or "")
-	if url == "" then
-		on_done(false, "No request changes URL available")
-		return nil
-	end
-	local requests = request_scope.new()
-	requests.run(function(done)
-		return service.request("POST", url, nil, nil, done, {
-			action = "Request PR changes",
-			repo = pr.repo_full_name,
-			id = pr.id,
-		})
-	end, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		service.clear_cache()
-		if vim.trim(body) == "" then
-			on_done(true, nil)
-			return
-		end
-		requests.run(function(done)
-			return comments.add_comment(pr, body, nil, done)
-		end, function(comment, comment_err)
-			on_done(comment ~= nil, comment_err)
-		end)
-	end)
-	return requests
+	return set_review_state(pr, "request_changes", body, on_done)
 end
 
 ---@param pr PullRequest

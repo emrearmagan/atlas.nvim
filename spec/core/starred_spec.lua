@@ -11,17 +11,6 @@ local original = {
 	decode = vim.json.decode,
 }
 
-local function copy(value)
-	if type(value) ~= "table" then
-		return value
-	end
-	local result = {}
-	for key, item in pairs(value) do
-		result[key] = copy(item)
-	end
-	return result
-end
-
 local function refs(items)
 	local result = {}
 	for _, item in ipairs(items) do
@@ -75,11 +64,11 @@ describe("core.starred", function()
 			return 1
 		end
 		vim.json.encode = function(value)
-			pending = copy(value)
+			pending = vim.deepcopy(value)
 			return "json"
 		end
 		vim.json.decode = function()
-			return copy(stored)
+			return vim.deepcopy(stored)
 		end
 
 		package.loaded["atlas.core.starred"] = nil

@@ -9,19 +9,6 @@ local function words(completion, query)
 end
 
 describe("GitHub author completion", function()
-	local original_trim
-
-	before_each(function()
-		original_trim = vim.trim
-		vim.trim = function(value)
-			return tostring(value):match("^%s*(.-)%s*$")
-		end
-	end)
-
-	after_each(function()
-		vim.trim = original_trim
-	end)
-
 	it("completes issue reporters, assignees, and comment authors by login", function()
 		local completion = author_completion.for_issues({
 			issue = {

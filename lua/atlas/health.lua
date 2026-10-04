@@ -104,10 +104,10 @@ local function check_pulls()
 	local diff_cmd = tostring((pulls.diff or {}).open_cmd or "")
 	if diff_cmd == "" then
 		vim.health.warn("pulls.diff.open_cmd is empty")
-	elseif vim.fn.exists(":" .. diff_cmd) == 2 then
-		vim.health.ok(string.format("pulls.diff.open_cmd available: %s", diff_cmd))
+	elseif diff_cmd == "AtlasDiff" then
+		vim.health.ok("Using default diff viewer: AtlasDiff")
 	else
-		vim.health.error(string.format("pulls.diff.open_cmd not found: %s", diff_cmd))
+		vim.health.ok(string.format("Configured diff viewer: %s", diff_cmd))
 	end
 
 	local lsp = (pulls.diff or {}).lsp or {}
@@ -149,11 +149,20 @@ local function check_github()
 
 	local hostname = providers.github.hostname()
 	vim.health.info("GitHub host: " .. hostname)
-	if vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }):wait().code ~= 0 then
-		vim.health.error("gh not authenticated for " .. hostname, { "Run: gh auth login --hostname " .. hostname })
-		return
-	end
-	vim.health.ok("gh authenticated for " .. hostname)
+	vim.health.info("Checking GitHub authentication; the result will appear in a notification")
+	vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }, function(result)
+		vim.schedule(function()
+			if result.code == 0 then
+				vim.notify("gh authenticated for " .. hostname, vim.log.levels.INFO, { title = "Atlas health" })
+			else
+				vim.notify(
+					"gh not authenticated for " .. hostname .. "\nRun: gh auth login --hostname " .. hostname,
+					vim.log.levels.ERROR,
+					{ title = "Atlas health" }
+				)
+			end
+		end)
+	end)
 end
 
 local function check_gitlab()
@@ -175,7 +184,11 @@ local function check_jira()
 		return
 	end
 
-	check_credentials(provider, { "email", "token" }, "Jira")
+	local credentials = { "base_url", "token" }
+	if provider.auth_method ~= "bearer" then
+		table.insert(credentials, "email")
+	end
+	check_credentials(provider, credentials, "Jira")
 	check_https_url(provider.base_url, "providers.jira.base_url")
 	check_provider_views("jira")
 end

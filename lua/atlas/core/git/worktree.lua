@@ -2,6 +2,7 @@ local M = {}
 
 local core_git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
+local requests = require("atlas.core.requests")
 
 local CACHE_SEGMENTS = "atlas/worktrees"
 local STALE_SECONDS = 7 * 24 * 60 * 60 -- one week
@@ -201,16 +202,6 @@ function M.is_claimed(dir)
 	return claims[dir] ~= nil
 end
 
----@return string[]
-function M.claimed_dirs()
-	local dirs = {}
-	for dir in pairs(claims) do
-		table.insert(dirs, dir)
-	end
-	table.sort(dirs)
-	return dirs
-end
-
 ---@param dir string
 function M.release(dir)
 	claims[dir] = nil
@@ -272,55 +263,6 @@ function M.parse_worktree_list(stdout)
 	return paths
 end
 
----@param on_done fun(dir: string|nil, err: string|nil)
-local function new_operation(on_done)
-	local op = { cancelled = false, finished = false, handle = nil }
-
-	op.cancel = function()
-		if op.cancelled or op.finished then
-			return
-		end
-		op.cancelled = true
-		if op.handle then
-			pcall(op.handle.cancel)
-			op.handle = nil
-		end
-	end
-
-	---@param dir string|nil
-	---@param err string|nil
-	op.finish = function(dir, err)
-		if op.cancelled or op.finished then
-			return
-		end
-		op.finished = true
-		op.handle = nil
-		on_done(dir, err)
-	end
-
-	---@param args string[]
-	---@param on_exit fun(res: vim.SystemCompleted)
-	op.git = function(args, on_exit)
-		if op.cancelled or op.finished then
-			return
-		end
-		local ok, handle = pcall(core_git.run, args, { text = true }, function(res)
-			if not op.cancelled and not op.finished then
-				on_exit(res)
-			end
-		end)
-		if ok and handle then
-			op.handle = handle
-			return
-		end
-		vim.schedule(function()
-			op.finish(nil, ok and "Failed to start git" or tostring(handle))
-		end)
-	end
-
-	return op
-end
-
 ---@param dir string
 ---@return boolean
 local function directory_exists(dir)
@@ -379,7 +321,10 @@ function M.remove(repo_root, dir, on_done)
 	if M.is_cache_path(dir) then
 		table.insert(args, #args, "--force")
 	end
-	return core_git.run(args, { text = true }, function(res)
+	local scope = requests.new()
+	scope.run(function(done)
+		return core_git.run(args, { text = true }, done)
+	end, function(res)
 		if res.code == 0 then
 			on_done(nil)
 			return
@@ -388,55 +333,55 @@ function M.remove(repo_root, dir, on_done)
 		-- the cache root.
 		local error_message = command_error(res, "Failed to remove worktree")
 		local deleted = delete_owned(dir, error_message)
-		core_git.run({ "-C", repo_root, "worktree", "prune" }, { text = true }, function()
+		scope.run(function(done)
+			return core_git.run({ "-C", repo_root, "worktree", "prune" }, { text = true }, done)
+		end, function()
 			if deleted then
 				logger.logwarn("worktree.remove fell back to manual delete", { dir = dir, error = error_message })
 			end
 			on_done(nil)
 		end)
 	end)
+	return scope
 end
 
 -- Give up a worktree. The claim is held until the directory is actually gone, so a session that
 -- reopens the same commit meanwhile gets its own directory instead of racing the removal.
 ---@param repo_root string
 ---@param dir string
+---@return { cancel: fun() }|nil
 function M.discard(repo_root, dir)
 	if not M.is_claimed(dir) then
-		M.remove(repo_root, dir)
-		return
+		return M.remove(repo_root, dir)
 	end
-	M.remove(repo_root, dir, function()
+	return M.remove(repo_root, dir, function()
 		M.release(dir)
 	end)
 end
 
--- Remove every claimed worktree synchronously. Called on exit, where an async removal would never
--- get the chance to run; anything that still slips through is caught by prune on the next open.
----@param timeout_ms integer|nil
-function M.shutdown(timeout_ms)
-	local timeout = timeout_ms or 2000
+-- Best-effort cleanup: detached Git processes can finish after Neovim exits.
+function M.shutdown()
 	for dir, info in pairs(claims) do
 		pcall(function()
 			local args = { "git", "-C", info.repo_root, "worktree", "remove", "--force", dir }
 			if M.is_cache_path(dir) then
 				table.insert(args, #args, "--force")
 			end
-			vim.system(args, { text = true }):wait(timeout)
+			vim.system(args, { text = true, detach = true })
 		end)
-		delete_owned(dir, "shutdown")
 	end
 	claims = {}
 end
 
 -- Best effort cleanup of directories left behind by a crash. Never touches claimed worktrees.
 ---@param repo_root string
+---@return { cancel: fun() }
 function M.prune(repo_root)
-	core_git.run({ "-C", repo_root, "worktree", "prune" }, { text = true }, function() end)
+	local handle = core_git.run({ "-C", repo_root, "worktree", "prune" }, { text = true }, function() end)
 
 	local root = M.cache_root()
 	if not directory_exists(root) then
-		return
+		return handle
 	end
 	local now = os.time()
 
@@ -466,6 +411,7 @@ function M.prune(repo_root)
 			vim.fn.delete(repo_dir, "d")
 		end
 	end
+	return handle
 end
 
 ---@class AtlasWorktreeEnsureOptions
@@ -479,28 +425,32 @@ end
 ---@param on_done fun(dir: string|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.ensure(opts, on_done)
-	local op = new_operation(on_done)
+	local scope = requests.new()
 	local repo_root = trim(opts.repo_root)
 	local head_sha = trim(opts.head_sha)
 	local dir = trim(opts.dir)
 
 	if repo_root == "" or head_sha == "" or dir == "" then
-		vim.schedule(function()
-			op.finish(nil, "Repository path, head revision, and worktree path are required")
-		end)
-		return op
+		on_done(nil, "Repository path, head revision, and worktree path are required")
+		return scope
 	end
 
 	local function succeed()
 		apply_links(repo_root, dir, opts.link)
-		op.finish(dir, nil)
+		on_done(dir, nil)
 	end
 
 	local function create()
 		vim.fn.mkdir(vim.fs.dirname(dir), "p")
-		op.git({ "-C", repo_root, "worktree", "add", "--detach", dir, head_sha }, function(res)
+		scope.run(function(done)
+			return core_git.run(
+				{ "-C", repo_root, "worktree", "add", "--detach", dir, head_sha },
+				{ text = true },
+				done
+			)
+		end, function(res)
 			if res.code ~= 0 then
-				op.finish(nil, command_error(res, "Failed to create worktree"))
+				on_done(nil, command_error(res, "Failed to create worktree"))
 				return
 			end
 			logger.loginfo("worktree.ensure created", { dir = dir, head = head_sha })
@@ -509,17 +459,16 @@ function M.ensure(opts, on_done)
 	end
 
 	local function recreate()
-		M.remove(repo_root, dir, function()
-			if op.cancelled or op.finished then
-				return
-			end
-			create()
-		end)
+		scope.run(function(done)
+			return M.remove(repo_root, dir, done)
+		end, create)
 	end
 
 	-- Reuse an existing worktree only when it already points at the same commit.
 	local function reuse_or_recreate()
-		op.git({ "-C", dir, "rev-parse", "HEAD" }, function(res)
+		scope.run(function(done)
+			return core_git.run({ "-C", dir, "rev-parse", "HEAD" }, { text = true }, done)
+		end, function(res)
 			local actual = trim(res.stdout)
 			if res.code == 0 and actual ~= "" and actual:sub(1, #head_sha) == head_sha then
 				logger.loginfo("worktree.ensure reused", { dir = dir, head = head_sha })
@@ -532,15 +481,17 @@ function M.ensure(opts, on_done)
 
 	if not directory_exists(dir) then
 		create()
-		return op
+		return scope
 	end
 
 	-- The directory exists. Only a worktree registered to this repository may be reused or rebuilt
 	-- in place. Anything else under the cache root is leftover junk we own; anything else elsewhere
 	-- belongs to the user and is refused rather than deleted.
-	op.git({ "-C", repo_root, "worktree", "list", "--porcelain" }, function(res)
+	scope.run(function(done)
+		return core_git.run({ "-C", repo_root, "worktree", "list", "--porcelain" }, { text = true }, done)
+	end, function(res)
 		if res.code ~= 0 then
-			op.finish(nil, command_error(res, "Failed to list worktrees"))
+			on_done(nil, command_error(res, "Failed to list worktrees"))
 			return
 		end
 		local wanted = canonical(dir)
@@ -554,10 +505,10 @@ function M.ensure(opts, on_done)
 			recreate()
 			return
 		end
-		op.finish(nil, string.format("worktree path exists and is not a worktree of %s: %s", repo_root, dir))
+		on_done(nil, string.format("worktree path exists and is not a worktree of %s: %s", repo_root, dir))
 	end)
 
-	return op
+	return scope
 end
 
 return M

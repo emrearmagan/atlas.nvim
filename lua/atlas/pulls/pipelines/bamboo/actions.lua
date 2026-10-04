@@ -17,7 +17,7 @@ function M.new(web_base, request)
 	local function send(method, key, label, done)
 		local url = queue_url .. key .. "?os_authType=basic"
 		return request(method, url, label, function(_, err)
-			done(err)
+			done(nil, err)
 		end)
 	end
 
