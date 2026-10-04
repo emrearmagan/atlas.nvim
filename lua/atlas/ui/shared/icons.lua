@@ -32,6 +32,7 @@ local ICONS = {
 		warning = { icon = "", hl_group = "AtlasTextMuted" },
 		error = { icon = "", hl_group = "AtlasLogError" },
 		info = { icon = "", hl_group = "AtlasTextMuted" },
+		lsp = { icon = "", hl_group = "AtlasTextMuted" },
 		bell = { icon = "󰂚", hl_group = "AtlasTextMuted" },
 		bell_no = { icon = "󰂛", hl_group = "AtlasTextMuted" },
 		bell_unread = { icon = "󱅫", hl_group = "AtlasLogInfo" },

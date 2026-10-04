@@ -15,23 +15,25 @@ function M.setup(buf, sidebar_buf, callbacks)
 	local refresh = {
 		key = resolver.resolve("ui.refresh") or {},
 		desc = "Refresh branches",
+		index = 25,
 		callback = callbacks.refresh,
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
-		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page },
-		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page },
-		{ resolver.resolve("ui.search"), "Search branches", callbacks.search },
+		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page, index = 11 },
+		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page, index = 10 },
+		{ resolver.resolve("ui.search"), "Search branches", callbacks.search, index = 20 },
 		{
 			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
 			"Toggle branch history",
 			callbacks.select,
+			index = 30,
 		},
-		{ resolver.resolve("pulls.open_diff"), "Open branch or commit diff", callbacks.diff },
-		{ resolver.resolve("pulls.checkout"), "Checkout branch", callbacks.checkout },
-		{ resolver.resolve("ui.show_details"), "Show branch or commit details", callbacks.details },
-		{ resolver.resolve("ui.open_actions"), "Open branch actions", callbacks.actions },
-		{ resolver.resolve("ui.delete"), "Delete branch", callbacks.delete },
+		{ resolver.resolve("pulls.open_diff"), "Open branch or commit diff", callbacks.diff, index = 31 },
+		{ resolver.resolve("pulls.checkout"), "Checkout branch", callbacks.checkout, index = 60 },
+		{ resolver.resolve("ui.show_details"), "Show branch or commit details", callbacks.details, index = 32 },
+		{ resolver.resolve("ui.open_actions"), "Open branch actions", callbacks.actions, index = 50 },
+		{ resolver.resolve("ui.delete"), "Delete branch", callbacks.delete, index = 61 },
 	}
 	local items = { refresh }
 	for _, action in ipairs(actions) do
@@ -40,6 +42,7 @@ function M.setup(buf, sidebar_buf, callbacks)
 			table.insert(items, {
 				key = keys,
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { nowait = true, silent = true },
 			})

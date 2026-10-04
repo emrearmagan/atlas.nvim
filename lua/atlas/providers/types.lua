@@ -9,8 +9,8 @@
 ---@field users AtlasUsersCapability|nil
 ---@field actions AtlasActionsCapability|nil
 
----@alias AtlasAction AtlasIssueAction|AtlasPullAction|PullsPipelineAction
----@alias AtlasActionContext AtlasIssueActionContext|AtlasPullActionContext|PullsPipelineActionContext
+---@alias AtlasAction AtlasIssueAction|AtlasPullAction|PullsPipelineAction|AtlasDiffAction
+---@alias AtlasActionContext AtlasIssueActionContext|AtlasPullActionContext|PullsPipelineActionContext|AtlasDiffActionContext
 ---@alias AtlasActionResult IssuesActionResult|PullsActionResult
 
 ---@class AtlasActionsCapability

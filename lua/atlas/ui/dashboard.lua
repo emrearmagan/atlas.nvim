@@ -95,6 +95,7 @@ local function restore_options()
 	if win == nil or state.options == nil then
 		return
 	end
+	statusline.detach(win)
 	for name, value in pairs(state.options) do
 		if name ~= "statusline" or statusline.enabled() then
 			set_option(win, name, value)
@@ -169,6 +170,7 @@ local function close_session(session_id, reason, close_tab)
 	require("atlas.ui.detail").close(state.tab)
 	dispose_domain()
 	reset_ui_state()
+	statusline.detach(state.win)
 	if state.buf then
 		require("atlas.ui.keymaps").remove(state.buf)
 	end
@@ -237,7 +239,7 @@ end
 
 local function create()
 	state.previous_win = vim.api.nvim_get_current_win()
-	state.buf = utils.buffer.create("Atlas", "atlas")
+	state.buf = utils.buffer.create("Atlas", "atlas-ui.dashboard")
 	state.listed = config.options.ui.listed_buffer == true
 	vim.api.nvim_set_option_value("buflisted", state.listed, { buf = state.buf })
 	vim.cmd("tabnew")

@@ -1,30 +1,12 @@
 local M = {}
 
+local action_runner = require("atlas.core.actions")
 local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
-
----@param pr PullRequest
----@return AtlasMarkdownCompletionProvider|nil
-local function author_completion(pr)
-	local provider = detail.provider
-	local comments_capability = provider and provider.capabilities.comments
-	if not comments_capability or not comments_capability.comment_completion then
-		return nil
-	end
-	local reviewers = require("atlas.pulls.ui.detail.tabs.overview.state").reviewers
-	local conversation = state.comments(false)
-	return comments_capability.comment_completion({
-		pr = pr,
-		details = detail.current_details,
-		comments = conversation,
-		tasks = state.comments(true),
-		reviewers = type(reviewers) == "table" and reviewers or nil,
-		conversation = conversation,
-	})
-end
+local overview = require("atlas.pulls.ui.detail.tabs.overview.state")
 
 ---@param pr PullRequest
 ---@param comment PullsComment|nil
@@ -35,11 +17,15 @@ local function action_context(pr, comment)
 		return nil
 	end
 	local items = state.comments(comment and comment.is_task == true or false)
+	local reviewers = type(overview.reviewers) == "table" and overview.reviewers or nil
 	return {
 		provider = provider,
 		pr = pr,
+		comment = comment,
 		items = items,
-		completion = author_completion(pr),
+		details = detail.current_details,
+		conversation = state.comments(),
+		reviewers = reviewers,
 		upsert_comment = function(created)
 			if state.is_current(pr) then
 				state.upsert_comment(created)
@@ -91,7 +77,7 @@ end
 function M.add(pr, refresh)
 	local context = action_context(pr, nil)
 	if context then
-		review.add_comment(context, nil, on_done(pr, refresh))
+		action_runner.run(review.add_comment, context, on_done(pr, refresh))
 	end
 end
 
@@ -110,7 +96,7 @@ function M.reply(pr, entry, refresh)
 	end
 	local context = action_context(pr, comment)
 	if context then
-		review.add_comment(context, { parent = comment }, on_done(pr, refresh))
+		action_runner.run(review.add_comment, context, on_done(pr, refresh))
 	end
 end
 
@@ -127,7 +113,8 @@ function M.edit(pr, entry, refresh)
 		local review_entry = item.entity
 		local context = action_context(pr, nil)
 		if context then
-			review.edit_review(context, review_entry, on_done(pr, refresh))
+			context.review_entry = review_entry
+			action_runner.run(review.edit_review, context, on_done(pr, refresh))
 		end
 		return
 	end
@@ -138,7 +125,7 @@ function M.edit(pr, entry, refresh)
 	local comment = item.entity
 	local context = action_context(pr, comment)
 	if context then
-		review.edit_comment(context, comment, on_done(pr, refresh))
+		action_runner.run(review.edit_comment, context, on_done(pr, refresh))
 	end
 end
 
@@ -154,7 +141,7 @@ function M.delete(pr, entry, refresh)
 	local comment = item.entity
 	local context = action_context(pr, comment)
 	if context then
-		review.delete_comment(context, comment, on_done(pr, refresh))
+		action_runner.run(review.delete_comment, context, on_done(pr, refresh))
 	end
 end
 
@@ -223,7 +210,7 @@ function M.toggle_task(pr, entry, refresh)
 	end
 	local context = action_context(pr, task)
 	if context then
-		review.toggle_task(context, task, on_done(pr, refresh))
+		action_runner.run(review.toggle_task, context, on_done(pr, refresh))
 	end
 end
 

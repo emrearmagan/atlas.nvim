@@ -158,7 +158,7 @@ local function publish_comment(pr, review, commit_oid, add_comment, on_done)
 					return
 				end
 				reviews.update(pending_review, nil)
-				created.state = created.outdated and "OUTDATED" or nil
+				created.pending = false
 				on_done(created, nil)
 			end)
 		end)
@@ -316,7 +316,7 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
-	if comment.inline or comment.file or comment.state == "PENDING" then
+	if comment.inline or comment.file or comment.pending == true then
 		local node_id = tostring((comment._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(nil, "Missing review comment id")
@@ -356,7 +356,7 @@ function M.delete_comment(pr, target, on_done)
 		return nil
 	end
 
-	if target.inline or target.file or target.state == "PENDING" then
+	if target.inline or target.file or target.pending == true then
 		local node_id = tostring((target._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(false, "Missing review comment id")
@@ -506,12 +506,7 @@ reply_comment = function(pr, parent, content, opts, on_done)
 		if pending then
 			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
 		end
-		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, function(created, err)
-			if created and parent.state == "RESOLVED" then
-				created.state = "RESOLVED"
-			end
-			on_done(created, err)
-		end)
+		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
 	end
 
 	return M.add_comment(pr, content, nil, on_done)

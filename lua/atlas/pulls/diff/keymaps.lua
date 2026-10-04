@@ -1,25 +1,85 @@
+local resolver = require("atlas.core.keymaps")
+local commits = require("atlas.pulls.diff.ui.commits")
+local help = require("atlas.ui.popups.help")
+
 local M = {}
 
-local actions = require("atlas.pulls.diff.actions")
-local comments = require("atlas.pulls.diff.comments")
-local help = require("atlas.ui.popups.help")
-local notes = require("atlas.pulls.diff.notes")
-local picker = require("atlas.ui.picker")
-local resolver = require("atlas.core.keymaps")
-local review = require("atlas.pulls.diff.review")
-local session_api = require("atlas.pulls.diff.session")
+local shared_actions = {
+	"ui.open_actions",
+	"ui.open_in_browser",
+	"ui.refresh",
+	"pulls.review.toggle_file_reviewed",
+	"pulls.review.next_comment",
+	"pulls.review.prev_comment",
+	"pulls.review.next_note",
+	"pulls.review.prev_note",
+	"pulls.review.add_comment",
+	"pulls.review.submit_comment",
+	"pulls.review.approve",
+	"pulls.review.request_changes",
+	"pulls.review.submit_review",
+	"pulls.review.view.external_help",
+	"pulls.review.view.toggle_review_panel",
+	"pulls.review.view.toggle_detail_panel",
+	"pulls.review.view.toggle_comments",
+	"pulls.review.explorer.toggle_commits",
+	"pulls.review.explorer.next_unreviewed_file",
+	"pulls.review.explorer.prev_unreviewed_file",
+	"pulls.review.explorer.find_file",
+}
+
+M.action_ids = {
+	view = vim.list_extend({
+		"ui.delete",
+		"pulls.review.show_details",
+		"pulls.review.add_suggestion",
+		"pulls.review.submit_suggestion",
+		"pulls.review.add_note",
+		"pulls.review.toggle_resolved",
+	}, shared_actions),
+	explorer = shared_actions,
+}
+
+---@class AtlasDiffKeymapGroup
+---@field name string
+---@field items AtlasHelpKeyItem[]
+---@field index integer
+
+---@class AtlasDiffKeymapActions
+---@field close fun()
+---@field reload fun()
+---@field toggle_explorer fun()
+---@field toggle_commits fun()
+---@field toggle_review_panel fun()
+---@field toggle_file_reviewed fun()
+---@field toggle_resolved fun()
+---@field delete_annotation fun()
+---@field toggle_comments fun()
+---@field toggle_threads fun(all?: boolean): boolean
+---@field focus_explorer fun()
+---@field navigate_file fun(direction: 1|-1, unreviewed_only?: boolean)
+---@field find_file fun()
+---@field open_file fun()
+---@field open_commit fun()
+---@field add_comment fun(pending: boolean, suggestion?: boolean)
+---@field add_note fun()
+---@field navigate_annotation fun(direction: 1|-1, kind: "comment"|"note")
+---@field dispatch fun(id: AtlasReviewActionId)
+---@field run_custom fun(callback: fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any): any
 
 ---@param items AtlasHelpKeyItem[]
 ---@param action AtlasKeymapActionId
 ---@param desc string
+---@param index integer
 ---@param callback fun()
 ---@param mode string|string[]|nil
-local function add(items, action, desc, callback, mode)
+local function add(items, action, desc, index, callback, mode)
 	local keys = resolver.resolve(action)
 	if keys then
 		items[#items + 1] = {
 			key = keys,
 			desc = desc,
+			index = index,
 			callback = callback,
 			mode = mode,
 			opts = { nowait = true, silent = true },
@@ -27,270 +87,154 @@ local function add(items, action, desc, callback, mode)
 	end
 end
 
----@param session AtlasDiffSession
 ---@param buf integer
----@return boolean
-local function content_buffer(session, buf)
-	local current = session.current
-	return current ~= nil and (buf == current.left.buf or buf == current.right.buf)
+---@param groups AtlasDiffKeymapGroup[]
+local function register(buf, groups)
+	for _, group in ipairs(groups) do
+		help.register(group.name, group.items, { buffer = buf, index = group.index })
+	end
+end
+
+---@param explorer_items AtlasHelpKeyItem[]
+---@param view_items AtlasHelpKeyItem[]
+---@param review_items AtlasHelpKeyItem[]
+---@return AtlasDiffKeymapGroup[]
+local function groups(explorer_items, view_items, review_items)
+	return {
+		{ name = "Explorer", items = explorer_items, index = 1 },
+		{ name = "View", items = view_items, index = 2 },
+		{ name = "Review", items = review_items, index = 3 },
+	}
 end
 
 ---@param session AtlasDiffSession
----@param buf integer
----@param on_comment fun()
----@param on_note fun()
-local function with_item(session, buf, on_comment, on_note)
-	local has_comment = comments.has_at_cursor(session, buf)
-	local has_note = notes.has_at_cursor(session, buf)
-	if has_comment and has_note then
-		picker.select({
-			title = "Select review item",
-			items = { "Comment thread", "Local notes" },
-			size = { width = 0.35, height = 0.15 },
-			on_select = function(choice)
-				if choice == "Comment thread" then
-					on_comment()
-				elseif choice == "Local notes" then
-					on_note()
-				end
-			end,
-		})
-	elseif has_comment then
-		on_comment()
-	elseif has_note then
-		on_note()
-	end
-end
+---@param actions AtlasDiffKeymapActions
+function M.setup(session, actions)
+	local result = session.data
 
----@param items AtlasHelpKeyItem[]
----@param action AtlasKeymapActionId
----@param desc string
----@param callback fun(start_line?: integer, end_line?: integer)
-local function add_range(items, action, desc, callback)
-	add(items, action, desc, function()
-		if vim.fn.mode() == "n" then
-			callback()
-			return
+	local explorer_items = {}
+	add(explorer_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
+		actions.navigate_file(-1, true)
+	end)
+	add(explorer_items, "pulls.review.explorer.next_unreviewed_file", "Next unreviewed file", 21, function()
+		actions.navigate_file(1, true)
+	end)
+	add(explorer_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
+	add(explorer_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
+
+	local view_items = {}
+	add(view_items, "pulls.review.view.toggle_review_panel", "Toggle review panel", 41, actions.toggle_review_panel)
+	add(view_items, "pulls.review.view.toggle_detail_panel", "Toggle PR details", 42, function()
+		actions.dispatch("toggle_detail_panel")
+	end)
+	add(view_items, "pulls.review.view.toggle_comments", "Toggle comment display", 43, actions.toggle_comments)
+
+	local review_items = {}
+	if result.pr then
+		add(review_items, "ui.open_actions", "Review actions", 1, function()
+			actions.dispatch("open_actions")
+		end)
+		add(review_items, "pulls.review.toggle_file_reviewed", "Toggle file reviewed", 2, actions.toggle_file_reviewed)
+		add(review_items, "pulls.review.approve", "Approve", 60, function()
+			actions.dispatch("approve")
+		end)
+		add(review_items, "pulls.review.request_changes", "Request changes", 61, function()
+			actions.dispatch("request_changes")
+		end)
+		add(review_items, "pulls.review.submit_review", "Submit review", 62, function()
+			actions.dispatch("submit_review")
+		end)
+		add(review_items, "pulls.review.prev_comment", "Previous comment", 90, function()
+			actions.navigate_annotation(-1, "comment")
+		end)
+		add(review_items, "pulls.review.next_comment", "Next comment", 91, function()
+			actions.navigate_annotation(1, "comment")
+		end)
+		vim.list_extend(review_items, resolver.custom_items("pulls", actions.run_custom))
+	end
+	if result.notes then
+		add(review_items, "pulls.review.prev_note", "Previous note", 92, function()
+			actions.navigate_annotation(-1, "note")
+		end)
+		add(review_items, "pulls.review.next_note", "Next note", 93, function()
+			actions.navigate_annotation(1, "note")
+		end)
+	end
+	if result.pr or result.notes then
+		add(review_items, "ui.refresh", "Refresh review", 80, function()
+			actions.dispatch("refresh_review")
+		end)
+	end
+
+	local commits_view_items = vim.list_extend({}, view_items)
+	add(commits_view_items, "ui.help", "Toggle help", 100, help.toggle)
+
+	if result.pr then
+		add(view_items, "ui.open_in_browser", "Open in browser", 51, function()
+			actions.dispatch("open_in_browser")
+		end)
+	end
+	local help_key = result.options.open_cmd == "AtlasDiff" and "ui.help" or "pulls.review.view.external_help"
+	add(view_items, help_key, "Toggle Atlas help", 100, help.toggle)
+
+	-- File comments use the explorer selection; diff comments use the selected lines.
+	local explorer_review_items = vim.list_extend({}, review_items)
+	if result.pr then
+		add(explorer_review_items, "pulls.review.add_comment", "Add pending file comment", 30, function()
+			actions.add_comment(true)
+		end)
+		add(explorer_review_items, "pulls.review.submit_comment", "Post file comment", 31, function()
+			actions.add_comment(false)
+		end)
+	end
+
+	local diff_review_items = vim.list_extend({}, review_items)
+	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, session.view.callbacks.show_details)
+	if result.pr then
+		add(diff_review_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
+			actions.add_comment(true)
+		end, { "n", "x" })
+		add(diff_review_items, "pulls.review.submit_comment", "Post line/selection comment", 31, function()
+			actions.add_comment(false)
+		end, { "n", "x" })
+		add(diff_review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
+			actions.add_comment(true, true)
+		end, { "n", "x" })
+		add(diff_review_items, "pulls.review.submit_suggestion", "Post suggestion", 33, function()
+			actions.add_comment(false, true)
+		end, { "n", "x" })
+	end
+	if result.notes then
+		add(diff_review_items, "pulls.review.add_note", "Add note", 34, actions.add_note, { "n", "x" })
+	end
+	if result.pr or result.notes then
+		add(diff_review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, actions.toggle_resolved)
+		add(diff_review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
+	end
+
+	local commits_items = {}
+	add(commits_items, "pulls.open_diff", "Open commit diff", 1, actions.open_commit)
+	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
+		commits.show_details(session.commits)
+	end)
+	add(commits_items, "ui.copy_id", "Copy commit hash", 3, function()
+		commits.copy_hash(session.commits)
+	end)
+	add(commits_items, "ui.open_in_browser", "Open commit in browser", 4, function()
+		commits.open_in_browser(session.commits)
+	end)
+	add(commits_items, "ui.close", "Close commits", 101, function()
+		if not help.is_open() then
+			actions.toggle_commits()
 		end
-		local start_line = vim.fn.line("v")
-		local end_line = vim.api.nvim_win_get_cursor(0)[1]
-		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
-		callback(start_line, end_line)
-	end, { "n", "x" })
-end
+	end)
 
----@param session AtlasDiffSession
----@param opts {
---- buffers: integer[],
---- reopen: fun(),
---- help_key: string|string[]|nil,
---- file_buffers: integer[]|nil,
---- add_file_comment: (fun(pending: boolean))|nil,
---- toggle_file_reviewed: (fun())|nil,
----}
-function M.register(session, opts)
-	local action_context = session.review and review.action_context(session) or nil
-	local reviews = session.review and session.review.provider.capabilities.reviews or {}
-	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
-	local pending = session.review and session.review.data.review.pending == true
-	local can_complete = reviewable and (not pending or reviews.submit_review ~= nil)
-	local has_review_items = session.review ~= nil or session.note_target ~= nil
-	local file_buffers = {}
-	for _, buf in ipairs(opts.file_buffers or {}) do
-		file_buffers[buf] = true
-	end
-	for _, buf in ipairs(opts.buffers) do
-		if vim.api.nvim_buf_is_valid(buf) then
-			local items = {}
-			if has_review_items then
-				add(items, "ui.refresh", "Refresh review", function()
-					if session.review then
-						review.reload(session)
-					end
-					if session.note_target then
-						notes.reload(session)
-					end
-				end)
-			end
-			add(items, "ui.refresh_view", "Reload diff", opts.reopen)
-			if has_review_items then
-				add(items, "pulls.review.diff.toggle_review_panel", "Toggle review panel", function()
-					if session.toggle_review_panel then
-						session.toggle_review_panel(true)
-					end
-				end)
-			end
+	local commits_groups = groups(explorer_items, commits_view_items, review_items)
+	commits_groups[#commits_groups + 1] = { name = "Commits", items = commits_items, index = 0 }
 
-			if session.review then
-				add(items, "pulls.review.diff.toggle_detail_panel", "Show details", function()
-					actions.toggle_detail_panel(session)
-				end)
-				add(items, "ui.open_actions", "Review actions", function()
-					actions.open(session)
-				end)
-				if can_complete and action_context and actions.is_available("approve", action_context) then
-					add(items, "pulls.review.approve", "Approve", function()
-						actions.approve(session)
-					end)
-				end
-				if can_complete and action_context and actions.is_available("request_changes", action_context) then
-					add(items, "pulls.review.request_changes", "Request changes", function()
-						actions.request_changes(session)
-					end)
-				end
-				if reviewable and (session.review.data.review.pending or reviews.start_review) then
-					add(items, "pulls.review.submit_review", "Start / submit review", function()
-						actions.start_or_submit(session)
-					end)
-				end
-				add(items, "pulls.review.diff.toggle_comments", "Toggle comment display", function()
-					session.expanded_overlays = not session.expanded_overlays
-					session:render()
-					session_api.notify(
-						session,
-						"info",
-						session.expanded_overlays and "Review overlays expanded" or "Review overlays compact",
-						1200
-					)
-				end)
-				add(items, "ui.open_in_browser", "Open comment in browser", function()
-					comments.open_in_browser(session, buf)
-				end)
-				if file_buffers[buf] and opts.add_file_comment then
-					add(items, "pulls.review.diff.add_comment", "Add pending file comment", function()
-						opts.add_file_comment(true)
-					end)
-					add(items, "pulls.review.diff.submit_comment", "Submit file comment", function()
-						opts.add_file_comment(false)
-					end)
-				end
-			end
-
-			if has_review_items and content_buffer(session, buf) then
-				add(items, "pulls.review.open_item", "Open comment or note", function()
-					with_item(session, buf, function()
-						comments.open_at_cursor(session, buf)
-					end, function()
-						notes.open_at_cursor(session, buf)
-					end)
-				end)
-				add(items, "pulls.review.show_details", "Show comment, note or LSP hover", function()
-					if comments.has_at_cursor(session, buf) then
-						comments.open_at_cursor(session, buf)
-					elseif notes.has_at_cursor(session, buf) then
-						notes.open_at_cursor(session, buf)
-					else
-						vim.lsp.buf.hover()
-					end
-				end)
-				if session.review then
-					add_range(
-						items,
-						"pulls.review.diff.add_comment",
-						"Add pending inline comment",
-						function(start, finish)
-							comments.add_comment(session, buf, true, start, finish)
-						end
-					)
-					add_range(
-						items,
-						"pulls.review.diff.submit_comment",
-						"Submit inline comment",
-						function(start, finish)
-							comments.add_comment(session, buf, false, start, finish)
-						end
-					)
-					if session.current and buf == session.current.right.buf then
-						add_range(
-							items,
-							"pulls.review.diff.add_suggestion",
-							"Add pending suggestion",
-							function(start, finish)
-								comments.add_suggestion(session, buf, true, start, finish)
-							end
-						)
-						add_range(
-							items,
-							"pulls.review.diff.submit_suggestion",
-							"Submit suggestion",
-							function(start, finish)
-								comments.add_suggestion(session, buf, false, start, finish)
-							end
-						)
-					end
-					add(items, "pulls.review.diff.toggle_resolved", "Toggle resolved", function()
-						comments.toggle_resolved_at_cursor(session, buf)
-					end)
-					add(items, "pulls.review.diff.previous_comment", "Previous comment", function()
-						comments.jump(session, buf, -1)
-					end)
-					add(items, "pulls.review.diff.next_comment", "Next comment", function()
-						comments.jump(session, buf, 1)
-					end)
-				end
-				add(items, "ui.delete", "Delete comment or note", function()
-					with_item(session, buf, function()
-						comments.delete_at_cursor(session, buf)
-					end, function()
-						notes.delete_at_cursor(session, buf)
-					end)
-				end)
-				if session.note_target and session.current and buf == session.current.right.buf then
-					add(items, "pulls.review.diff.add_note", "Add local note", function()
-						notes.add_at_cursor(session, buf)
-					end)
-				end
-				if session.review then
-					add(items, "ui.toggle_fold", "Toggle review thread", function()
-						if not comments.toggle_at_cursor(session, buf) and vim.fn.foldlevel(".") > 0 then
-							vim.cmd.normal({ args = { "za" }, bang = true })
-						end
-					end)
-					add(items, "ui.toggle_all_folds", "Toggle all review threads", function()
-						if not comments.toggle_all(session) and vim.fn.foldlevel(".") > 0 then
-							vim.cmd.normal({ args = { "zA" }, bang = true })
-						end
-					end)
-				end
-				if session.note_target then
-					add(items, "pulls.review.diff.previous_note", "Previous note", function()
-						notes.jump(session, -1)
-					end)
-					add(items, "pulls.review.diff.next_note", "Next note", function()
-						notes.jump(session, 1)
-					end)
-				end
-			end
-
-			if opts.help_key then
-				items[#items + 1] = {
-					key = opts.help_key,
-					desc = "Toggle Atlas help",
-					callback = function()
-						help.toggle({ buffer = buf })
-					end,
-					opts = { nowait = true, silent = true },
-				}
-			end
-			if session.review and opts.toggle_file_reviewed then
-				add(
-					items,
-					"pulls.review.explorer.toggle_file_reviewed",
-					"Toggle file reviewed",
-					opts.toggle_file_reviewed
-				)
-			end
-			if session.review then
-				vim.list_extend(
-					items,
-					resolver.custom_items("pulls", function(callback)
-						return actions.run(session, callback)
-					end)
-				)
-			end
-			help.register("Review", items, { buffer = buf, index = 110 })
-		end
-	end
+	session.renderer.setup_keymaps(session, actions, groups(explorer_items, view_items, diff_review_items))
+	register(session.explorer.buf, groups(explorer_items, view_items, explorer_review_items))
+	register(session.commits.buf, commits_groups)
 end
 
 return M

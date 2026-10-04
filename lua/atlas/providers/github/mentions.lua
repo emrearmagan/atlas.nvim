@@ -48,7 +48,7 @@ local function login_collector()
 	return logins, add
 end
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return string[]
 local function collect_issue_logins(context)
 	local logins, add = login_collector()
@@ -64,10 +64,11 @@ local function collect_issue_logins(context)
 	return logins
 end
 
----@param context AtlasPullsCommentCompletionContext
+---@param context AtlasPullsCommentContext
 ---@return string[]
 local function collect_pull_logins(context)
 	local logins, add = login_collector()
+	local data = context.data or {}
 	local pr = context.pr
 	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add(author.nickname or author.username or author.name)
@@ -76,9 +77,10 @@ local function collect_pull_logins(context)
 		add(pr.author.nickname or pr.author.name)
 	end
 
-	local reviewers = context.reviewers or {}
-	for _, reviewer in ipairs(reviewers) do
-		add(reviewer.nickname or reviewer.name)
+	for _, reviewers in ipairs({ data.reviewers or {}, context.reviewers or {} }) do
+		for _, reviewer in ipairs(reviewers) do
+			add(reviewer.nickname or reviewer.name)
+		end
 	end
 
 	if context.details then
@@ -88,14 +90,16 @@ local function collect_pull_logins(context)
 		end
 	end
 
-	for _, comment in ipairs(context.comments) do
-		add(comment.author and (comment.author.nickname or comment.author.name))
+	for _, items in ipairs({ data.comments or {}, data.tasks or {}, context.conversation or {} }) do
+		for _, comment in ipairs(items) do
+			add(comment.author and (comment.author.nickname or comment.author.name))
+		end
 	end
 
 	return logins
 end
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return AtlasMarkdownCompletionProvider
 function M.for_issues(context)
 	return build_completion(function()
@@ -107,7 +111,7 @@ function M.for_issues(context)
 	end)
 end
 
----@param context AtlasPullsCommentCompletionContext
+---@param context AtlasPullsCommentContext
 ---@return AtlasMarkdownCompletionProvider
 function M.for_pulls(context)
 	return build_completion(function()

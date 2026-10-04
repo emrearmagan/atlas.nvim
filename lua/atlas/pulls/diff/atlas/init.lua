@@ -1,671 +1,565 @@
-local M = {}
-
-local commits = require("atlas.pulls.diff.atlas.commits")
-local comments = require("atlas.pulls.diff.comments")
-local config = require("atlas.config")
-local events = require("atlas.core.events")
-local explorer = require("atlas.pulls.diff.atlas.explorer")
-local git = require("atlas.pulls.diff.atlas.git")
+local annotation_ui = require("atlas.pulls.diff.ui.annotations")
+local annotations = require("atlas.pulls.diff.atlas.annotations")
+local diff = require("atlas.pulls.diff.diff")
+local git = require("atlas.pulls.diff.git")
+local help = require("atlas.ui.popups.help")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
-local notes = require("atlas.pulls.diff.notes")
-local position = require("atlas.pulls.diff.position")
-local review = require("atlas.pulls.diff.review")
-local session_api = require("atlas.pulls.diff.session")
-local view = require("atlas.pulls.diff.atlas.view")
+local notify = require("atlas.core.notify")
+local render = require("atlas.pulls.diff.atlas.render")
+local requests = require("atlas.core.requests")
+local statusline = require("atlas.ui.statusline")
+local worktree = require("atlas.pulls.diff.worktree")
+local winbar = require("atlas.pulls.diff.ui.winbar")
 
----@param session AtlasDiffSession
----@param reason string|nil
----@return table
-local function event_data(session, reason)
-	local data = {
-		session_id = session.id,
-		viewer = "atlas",
-		tabpage = session.tabpage,
-		root = session.source.root,
-		base_revision = session.source.base_revision,
-		head_revision = session.source.head_revision,
-	}
-	if reason then
-		data.reason = reason
-	end
-	return data
-end
+---@class AtlasDiffNativeView: AtlasDiffView
+---@field requests AtlasRequestScope
+---@field preferred_layout "inline"|"side-by-side"
+---@field inline_hunk_lines integer[] Buffer lines to jump to in inline mode.
+---@field document AtlasDiffDocument|nil
+---@field revision_buf integer
+---@field group integer
 
----@param session AtlasDiffSession
-local function cancel_job(session)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if state.job then
-		state.job.cancel()
-		state.job = nil
-	end
-end
+---@class AtlasDiffDocument
+---@field file AtlasDiffFile
+---@field contents { old: { lines: string[], endofline: boolean }, new: { lines: string[], endofline: boolean } }
+---@field binary boolean
+---@field hunks integer[][] Old/new change ranges for inline rendering and review positions.
+---@field split_hunks integer[][] Change ranges matching Neovim's split view and diffopt.
 
----@param session AtlasDiffSession
----@param index integer
----@param on_loaded (fun(document: AtlasDiffDocument))|nil
-local function select_file(session, index, on_loaded)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if state.closing or not state.files[index] then
-		return
-	end
-	cancel_job(session)
-	explorer.reveal_file(session, index)
-	state.pending_index = index
-	explorer.render(session, state.annotated_paths)
-	state.job = git.document(state.range, state.files[index], function(document, err)
-		if state.closing then
-			return
-		end
-		state.job = nil
-		if not document then
-			state.pending_index = nil
-			explorer.render(session, state.annotated_paths)
-			local message = tostring(err or "Unable to load file diff")
-			logger.logerror("diff.file failed", {
-				root = session.source.root,
-				path = state.files[index].path,
-				error = message,
-			})
-			session_api.notify(session, "error", message)
-			return
-		end
-		state.selected_index = index
-		state.pending_index = nil
-		view.set_document(session, document)
-		session_api.set_current(session, view.current(session))
-		if on_loaded then
-			on_loaded(document)
-		end
-	end)
-end
+---@param file AtlasDiffFile
+---@param contents { old: string, new: string }
+---@return AtlasDiffDocument
+local function prepare_document(file, contents)
+	local old = contents.old:gsub("\r\n", "\n")
+	local new = contents.new:gsub("\r\n", "\n")
+	local binary = file.binary or old:find("\0", 1, true) ~= nil or new:find("\0", 1, true) ~= nil
+	local hunks = {}
+	local split_hunks = {}
 
----@param session AtlasDiffSession
----@param index integer
-local function preview_file(session, index)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if index == state.pending_index then
-		return
+	if binary then
+		old = file.status == "added" and "" or "Binary file (base revision)\n"
+		new = file.status == "deleted" and "Binary file deleted\n" or "Binary file (head revision)\n"
+	elseif file.status ~= "added" and file.status ~= "deleted" then
+		hunks, split_hunks = diff.compute(old, new)
 	end
-	if index == state.selected_index then
-		if state.pending_index then
-			cancel_job(session)
-			state.pending_index = nil
-			explorer.render(session, state.annotated_paths)
-		end
-		return
-	end
-	select_file(session, index)
-end
 
----@param session AtlasDiffSession
----@param path string
----@return integer|nil
-local function file_index(session, path)
-	---@type DiffFile[]
-	local files = session.viewer_state.files
-	for index, file in ipairs(files) do
-		if file.path == path or file.old_path == path then
-			return index
-		end
-	end
-	return nil
-end
-
----@param session AtlasDiffSession
----@param index integer
----@param callback fun(document: AtlasDiffDocument)
-local function with_file(session, index, callback)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if index == state.selected_index and not state.pending_index then
-		callback(state.document)
-	else
-		select_file(session, index, callback)
-	end
-end
-
----@param win integer
----@param line integer
----@param focus_diff boolean
-local function reveal_line(win, line, focus_diff)
-	vim.api.nvim_win_set_cursor(win, { line, 0 })
-	vim.api.nvim_win_call(win, function()
-		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
-	end)
-	if focus_diff then
-		vim.api.nvim_set_current_win(win)
-	end
-end
-
----@param session AtlasDiffSession
----@param item AtlasDiffReviewPanelSelection
----@param focus_diff boolean
-local function focus_item(session, item, focus_diff)
-	local comment = item.comment
-	local note = item.note
-	local comment_target = comment and (comment.file or comment.inline) or nil
-	local path = note and note.file_path or (comment_target and (comment_target.path or comment_target.old_path))
-	local index = path and file_index(session, path) or nil
-	if not index then
-		session_api.notify(session, "info", "This review item's file is no longer in the diff")
-		return
-	end
-	with_file(session, index, function(document)
-		---@type AtlasDiffSide|nil
-		local side = note and "RIGHT" or nil
-		local line = note and note.line or nil
-		if note then
-			if document.binary or document.status == "deleted" then
-				session_api.notify(session, "info", "This note's file is no longer in the diff")
-				return
-			end
-		else
-			side, line = position.comment(document, comment)
-		end
-		if not side or not line then
-			session_api.notify(session, "info", "This review item no longer has a diff position")
-			return
+	local function prepare_content(content)
+		local lines = vim.split(content, "\n", { plain = true })
+		if lines[#lines] == "" then
+			table.remove(lines)
 		end
 
-		local current = view.current(session)
-		local target = side == "LEFT" and current.left or current.right
-		if side == "LEFT" and current.layout == "inline" then
-			target = current.right
-			line = position.opposite_line(document, "LEFT", line, vim.api.nvim_buf_line_count(current.right.buf))
-		end
-		if not target.win or not vim.api.nvim_win_is_valid(target.win) or line < 1 then
-			session_api.notify(session, "info", "This review item's diff position is outdated")
-			return
-		end
-		line = math.min(line, vim.api.nvim_buf_line_count(target.buf))
-		session:render()
-		reveal_line(target.win, line, focus_diff)
-	end)
-end
+		return { lines = lines, endofline = content:sub(-1) == "\n" }
+	end
 
----@param session AtlasDiffSession
----@param index integer
----@return integer|nil
-local function next_file_in_tree(session, index)
-	local order = explorer.ordered_indices(session)
-	if #order < 2 then
-		return nil
-	end
-	for order_index, candidate in ipairs(order) do
-		if candidate == index then
-			return order[(order_index % #order) + 1]
-		end
-	end
-	return nil
-end
-
----@param session AtlasDiffSession
----@param index integer
----@param direction 1|-1
----@return integer|nil
-local function unreviewed_file(session, index, direction)
-	local order = explorer.ordered_indices(session)
-	local position_in_order = 1
-	for current, ordered_index in ipairs(order) do
-		if ordered_index == index then
-			position_in_order = current
-			break
-		end
-	end
-	for offset = 1, #order - 1 do
-		local candidate = order[((position_in_order - 1 + direction * offset) % #order) + 1]
-		if not session.reviewed_files[session.viewer_state.files[candidate].path] then
-			return candidate
-		end
-	end
-	return nil
-end
-
----@param session AtlasDiffSession
-local function toggle_file_reviewed(session)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	local index = explorer.file_at_cursor(session) or state.selected_index
-	local file = state.files[index]
-	if not file then
-		return
-	end
-	local reviewed = not session.reviewed_files[file.path]
-	local next_index = next_file_in_tree(session, index)
-	review.set_file_reviewed(session, file.path, reviewed)
-	if next_index then
-		select_file(session, next_index)
-		index = next_index
-	else
-		explorer.render(session, state.annotated_paths)
-	end
-	session:render()
-	local line = explorer.line_for_file(session, index)
-	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
-		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
-	end
-end
-
----@param session AtlasDiffSession
----@param direction 1|-1
-local function navigate_unreviewed_file(session, direction)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	local current = explorer.file_at_cursor(session) or state.pending_index or state.selected_index
-	local target = unreviewed_file(session, current, direction)
-	if not target then
-		session_api.notify(session, "info", "No other unreviewed files")
-		return
-	end
-	select_file(session, target)
-	local line = explorer.line_for_file(session, target)
-	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
-		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
-	end
-end
-
----@param session AtlasDiffSession
----@param direction 1|-1
-local function navigate_file(session, direction)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	local order = explorer.ordered_indices(session)
-	if #order == 0 then
-		return
-	end
-	local current = state.pending_index or state.selected_index
-	local current_position = 1
-	for index, ordered_index in ipairs(order) do
-		if ordered_index == current then
-			current_position = index
-			break
-		end
-	end
-	local target = order[((current_position - 1 + direction) % #order) + 1]
-	select_file(session, target)
-	local line = explorer.line_for_file(session, target)
-	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
-		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
-	end
-end
-
----@param session AtlasDiffSession
----@param direction 1|-1
-local function navigate_hunk(session, direction)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if #state.document.changes == 0 then
-		session_api.notify(session, "info", "No diff hunks in this file")
-		return
-	end
-	local use_left = vim.api.nvim_get_current_buf() == state.left.buf
-	local target = use_left and state.left or state.right
-	if not target.win or not vim.api.nvim_win_is_valid(target.win) then
-		return
-	end
-	local line_count = vim.api.nvim_buf_line_count(target.buf)
-	local lines = {}
-	for _, hunk in ipairs(state.document.changes) do
-		local start = use_left and hunk.old_start or hunk.new_start
-		lines[#lines + 1] = math.max(1, math.min(line_count, start))
-	end
-	table.sort(lines)
-	vim.api.nvim_set_current_win(target.win)
-	local cursor = vim.api.nvim_win_get_cursor(target.win)[1]
-	local destination = direction > 0 and lines[1] or lines[#lines]
-	for _, line in ipairs(lines) do
-		if direction > 0 and line > cursor then
-			destination = line
-			break
-		elseif direction < 0 and line < cursor then
-			destination = line
-		end
-	end
-	vim.api.nvim_win_set_cursor(target.win, { destination, 0 })
-	vim.cmd.normal({ args = { "zv" }, bang = true })
-end
-
----@param session AtlasDiffSession
-local function release_worktree(session)
-	local worktree = session.worktree
-	session.worktree = nil
-	if worktree then
-		pcall(worktree.release)
-	end
-end
-
----@param session AtlasDiffSession
-local function register_keymaps(session)
-	---@type AtlasNativeDiffKeymapActions
-	local actions = {
-		close = function()
-			session.close("user_close")
-		end,
-		reopen = session.reopen,
-		refresh_review = function()
-			review.reload(session)
-			notes.reload(session)
-		end,
-		toggle_layout = function()
-			local current, err = view.toggle_layout(session)
-			if current then
-				session_api.set_current(session, current)
-			else
-				session_api.notify(session, "error", err or "Unable to change diff layout")
-			end
-		end,
-		toggle_compact = function()
-			local err = view.toggle_compact(session)
-			if err then
-				session_api.notify(session, "info", err)
-			else
-				session:render()
-			end
-		end,
-		navigate_hunk = function(direction)
-			navigate_hunk(session, direction)
-		end,
-		navigate_file = function(direction)
-			navigate_file(session, direction)
-		end,
-		navigate_unreviewed_file = function(direction)
-			navigate_unreviewed_file(session, direction)
-		end,
-		toggle_file_reviewed = function()
-			toggle_file_reviewed(session)
-		end,
-		toggle_explorer = function()
-			view.toggle_explorer(session)
-		end,
-		toggle_commits = function()
-			view.toggle_commits(session)
-		end,
-		select_file = function(index, focus_diff)
-			select_file(session, index)
-			local state = session.viewer_state
-			local line = explorer.line_for_file(session, index)
-			if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
-				vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
-			end
-			local win = state.right.win or state.left.win
-			if focus_diff and win then
-				vim.api.nvim_set_current_win(win)
-			end
-		end,
-		show_commit = function()
-			commits.show_details(session)
-		end,
-		add_file_comment = function(pending)
-			local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-			local index = explorer.file_at_cursor(session)
-			local file = index and state.files[index] or nil
-			if file then
-				comments.add_to_file(session, { path = file.path, old_path = file.old_path }, pending)
-			end
-		end,
-	}
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	state.keymap_actions = actions
-	keymaps.register(session, actions)
-end
-
----@param session AtlasDiffSession
-local function register_events(session)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	state.group = vim.api.nvim_create_augroup("AtlasDiffNative" .. tostring(session.tabpage), { clear = true })
-	vim.api.nvim_create_autocmd("TabClosed", {
-		group = state.group,
-		callback = function()
-			vim.schedule(function()
-				if not state.closing and session.tabpage and not vim.api.nvim_tabpage_is_valid(session.tabpage) then
-					M.detach(session, "tab_closed")
-				end
-			end)
-		end,
-	})
-	vim.api.nvim_create_autocmd("WinClosed", {
-		group = state.group,
-		callback = function(args)
-			local closed = tonumber(args.match)
-			vim.schedule(function()
-				if state.closing then
-					return
-				end
-				if closed == state.commits_panel.win then
-					state.commits_panel.win = nil
-					state.commits_visible = false
-				elseif closed == state.panel.win then
-					state.panel.win = nil
-					view.close_commits(session)
-				elseif session.review_panel and closed == session.review_panel.win then
-					session.review_panel.win = nil
-				elseif closed == state.left.win or closed == state.right.win then
-					M.detach(session, "window_closed")
-				end
-			end)
-		end,
-	})
-	explorer.attach(session, state.group, function(index)
-		preview_file(session, index)
-	end)
-	vim.api.nvim_create_autocmd({ "WinResized", "TabEnter" }, {
-		group = state.group,
-		callback = function()
-			vim.schedule(function()
-				if state.closing or vim.api.nvim_get_current_tabpage() ~= session.tabpage then
-					return
-				end
-				explorer.configure(session)
-				if state.left.win then
-					view.configure_content_window(session, state.left.win)
-				end
-				if state.right.win then
-					view.configure_content_window(session, state.right.win)
-				end
-				session:render()
-			end)
-		end,
-	})
-end
-
----@param explorer_options AtlasNativeDiffExplorerOptions
----@return AtlasNativeDiffOptions
-local function options(explorer_options)
-	local diff_config = (config.options.pulls or {}).diff or {}
 	return {
-		layout = diff_config.layout == "inline" and "inline" or "side-by-side",
-		compact = diff_config.compact ~= false,
-		compact_context_lines = diff_config.compact_context_lines or 3,
-		show_review_panel = (diff_config.review_panel or {}).hidden == false,
-		explorer = explorer_options,
+		file = file,
+		contents = { old = prepare_content(old), new = prepare_content(new) },
+		binary = binary,
+		hunks = hunks,
+		split_hunks = split_hunks,
 	}
 end
 
----@param session AtlasDiffSession
----@param on_done fun(err: string|nil)
----@return { cancel: fun() }
-function M.open(session, on_done)
-	local explorer_options = explorer.options()
-	local cancelled = false
-	local request = git.load({
-		git_root = session.source.root,
-		base_revision = session.source.base_revision,
-		head_revision = session.source.head_revision,
-		filter = function(files)
-			return explorer.filter(files, explorer_options, session.reviewed_files)
-		end,
-	}, function(data, err)
-		vim.schedule(function()
-			if cancelled then
-				return
-			end
-			if not data then
-				on_done(tostring(err or "Unable to prepare diff"))
-				return
-			end
-			session.source = data.range
-			local viewer_options = options(explorer_options)
-			local previous_tab = vim.api.nvim_get_current_tabpage()
-			local ok, create_err = pcall(view.create, session, data, viewer_options)
-			if not ok then
-				local tabpage = vim.api.nvim_get_current_tabpage()
-				if tabpage ~= previous_tab then
-					pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
-				end
-				on_done("Unable to create diff view: " .. tostring(create_err))
-				return
-			end
+local function setup_buffer(buf)
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].buflisted = false
+	vim.bo[buf].bufhidden = "hide"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].modifiable = false
+end
 
-			local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-			session_api.attach(session, {
-				tabpage = state.tabpage,
-				close = function(reason)
-					M.detach(session, reason)
-					return true
-				end,
-				focus_item = function(item, focus_diff)
-					focus_item(session, item, focus_diff)
-				end,
-				render_view = function(output)
-					view.render(session, output)
-				end,
-				toggle_review_panel = function(focus)
-					view.toggle_review_panel(session, focus)
-				end,
-			})
-			local panel
-			if session.review or session.note_target then
-				panel =
-					session_api.create_review_panel(session, string.format("atlas-diff://%d/review", session.tabpage))
+local function setup_window(win)
+	local options = vim.wo[win][0]
+	options.statuscolumn = vim.go.statuscolumn
+	options.signcolumn = vim.go.signcolumn
+	options.winbar = vim.go.winbar
+	options.fillchars = "eob: "
+	options.number = vim.go.number
+	options.relativenumber = vim.go.relativenumber
+	options.winhighlight = vim.go.winhighlight
+	options.foldenable = false
+	options.wrap = false
+	options.diff = false
+	options.scrollbind = false
+	options.cursorbind = false
+end
+
+---@param view AtlasDiffNativeView
+local function resize(view)
+	if not view.left.win then
+		return
+	end
+
+	local width = vim.api.nvim_win_get_width(view.left.win) + vim.api.nvim_win_get_width(view.right.win)
+	vim.api.nvim_win_set_width(view.left.win, math.floor(width / 2))
+end
+
+---@param view AtlasDiffNativeView
+---@param layout "inline"|"side-by-side"
+local function set_layout(view, layout)
+	if layout == "side-by-side" and not view.left.win then
+		local win = vim.api.nvim_open_win(view.left.buf, false, { split = "left", win = view.right.win })
+		view.left.win = win
+		setup_window(win)
+		statusline.inherit(win, view.right.win)
+		resize(view)
+	elseif layout == "inline" and view.left.win then
+		for _, win in ipairs({ view.left.win, view.right.win }) do
+			vim.api.nvim_win_call(win, function()
+				vim.cmd.diffoff()
+			end)
+		end
+
+		local win = view.left.win
+		---@cast win integer
+		if vim.api.nvim_get_current_win() == win then
+			vim.api.nvim_set_current_win(view.right.win)
+		end
+		view.left.win = nil
+		vim.api.nvim_win_close(win, true)
+		setup_window(view.right.win)
+	end
+end
+
+---@param view AtlasDiffView
+---@param content { lines: string[], endofline: boolean }
+local function set_content(view, buf, content, path, revision, binary)
+	vim.bo[buf].readonly = false
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_name(buf, string.format("atlas-diff://%d/%d/%s/%s", view.tabpage, buf, revision, path))
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
+	vim.bo[buf].endofline = content.endofline
+	vim.bo[buf].fixendofline = false
+
+	local filetype = not binary and vim.filetype.match({ filename = path, buf = buf }) or ""
+	if vim.bo[buf].filetype ~= filetype then
+		vim.treesitter.stop(buf)
+		vim.bo[buf].filetype = filetype
+	end
+
+	vim.bo[buf].modified = false
+	vim.bo[buf].modifiable = false
+	vim.bo[buf].readonly = true
+end
+
+local function owns_buffer(view, buf)
+	return buf == view.left.buf
+		or buf == view.revision_buf
+		or worktree.relative_path(view.result.worktree_root, vim.api.nvim_buf_get_name(buf)) ~= nil
+end
+
+local function set_right_buffer(view, buf)
+	if buf == view.right.buf and vim.api.nvim_win_get_buf(view.right.win) == buf then
+		return
+	end
+
+	local previous = view.right.buf
+	if vim.api.nvim_buf_is_valid(previous) and owns_buffer(view, previous) then
+		render.clear(previous)
+		annotations.clear(previous)
+		help.remove_buffer(previous)
+	end
+
+	-- Our own buffer switches should not trigger another file load.
+	view.right.buf = buf
+	vim.api.nvim_win_set_buf(view.right.win, buf)
+	setup_window(view.right.win)
+end
+
+---@param view AtlasDiffNativeView
+---@param document AtlasDiffDocument
+local function display(view, document)
+	local file = document.file
+	local layout = view.preferred_layout
+	if file.status == "added" or file.status == "deleted" then
+		layout = "inline"
+	end
+	set_layout(view, layout)
+
+	local old, new = document.contents.old, document.contents.new
+	local binary = document.binary
+	local right_content = new
+	local right_revision = view.result.head_revision
+	if file.status == "deleted" and not binary then
+		right_content = old
+		right_revision = view.result.base_revision
+	end
+
+	local right_buf = view.revision_buf
+	local root = view.result.worktree_root
+	if root and not binary and file.status ~= "deleted" then
+		right_buf = worktree.load(root, file.path) or right_buf
+	end
+	set_right_buffer(view, right_buf)
+	if view.right.buf == view.revision_buf then
+		set_content(view, view.right.buf, right_content, file.path, right_revision, binary)
+	end
+
+	if view.left.win then
+		local old_path = file.old_path or file.path
+		set_content(view, view.left.buf, old, old_path, view.result.base_revision, binary)
+	end
+
+	render.render(view, document)
+	view.annotations = annotations.render(view, document)
+end
+
+---@param view AtlasDiffNativeView
+---@param file AtlasDiffFile
+---@param on_done fun(err?: string)
+local function show_file(view, file, on_done)
+	local result = view.result
+	annotation_ui.close(view.tabpage)
+	view.requests.cancel()
+	view.requests = requests.new()
+
+	local function read(revision, path, missing)
+		return function(done)
+			if missing or file.binary then
+				done("", nil)
+				return
 			end
-			session_api.set_current(session, view.current(session))
-			local selected_line = explorer.line_for_file(session, state.selected_index)
-			if selected_line and state.panel.win then
-				vim.api.nvim_win_set_cursor(state.panel.win, { selected_line, 0 })
-			end
-			session_api.review_attached(session)
-			register_keymaps(session)
-			register_events(session)
-			if panel and viewer_options.show_review_panel then
-				view.toggle_review_panel(session, false)
-			end
-			events.emit("AtlasDiffOpened", event_data(session))
-			on_done(nil)
+			return git.read(result.root, revision, path, done)
+		end
+	end
+
+	view.requests.all({
+		old = read(result.base_revision, file.old_path or file.path, file.status == "added"),
+		new = read(result.head_revision, file.path, file.status == "deleted"),
+	}, function(contents, errors)
+		local err = errors.old or errors.new
+		if err then
+			on_done(err)
+			return
+		end
+
+		local rendered, document = pcall(function()
+			local prepared = prepare_document(file, contents)
+			display(view, prepared)
+			return prepared
 		end)
+		if not rendered then
+			on_done(tostring(document))
+			return
+		end
+
+		view.document = document
+		view.callbacks.on_file(file)
+		on_done(nil)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			request.cancel()
-		end,
-	}
 end
 
----@param session AtlasDiffSession
----@param reason string|nil
-function M.detach(session, reason)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	if state.closing then
+---@param view AtlasDiffNativeView
+local function redraw(view)
+	if view.document then
+		view.annotations = annotations.render(view, view.document)
+	end
+end
+
+---@param view AtlasDiffNativeView
+---@param direction 1|-1
+local function navigate_hunk(view, direction)
+	if view.left.win then
+		local motion = direction == 1 and "]c" or "[c"
+		vim.cmd("silent! normal! " .. vim.v.count1 .. motion)
 		return
 	end
-	state.closing = true
-	commits.close_pin(session)
-	cancel_job(session)
-	if state.group then
-		pcall(vim.api.nvim_del_augroup_by_id, state.group)
+
+	local cursor = vim.api.nvim_win_get_cursor(0)[1]
+	local remaining = vim.v.count1
+	local first = direction == 1 and 1 or #view.inline_hunk_lines
+	local last = direction == 1 and #view.inline_hunk_lines or 1
+	local target
+
+	for index = first, last, direction do
+		local line = view.inline_hunk_lines[index]
+		if (direction == 1 and line > cursor) or (direction == -1 and line < cursor) then
+			target = line
+			remaining = remaining - 1
+			if remaining == 0 then
+				break
+			end
+		end
 	end
-	session_api.detach(session, reason)
-	if session.tabpage and vim.api.nvim_tabpage_is_valid(session.tabpage) then
-		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(session.tabpage) .. "tabclose")
+
+	if target then
+		vim.api.nvim_win_set_cursor(0, { target, 0 })
+		vim.cmd("normal! zv")
 	end
-	view.delete_buffers(session)
-	-- Buffers first: they point into the worktree we are about to remove. A reload resolves the head
-	-- again and claims its own worktree, so it releases here too.
-	release_worktree(session)
-	events.emit("AtlasDiffClosed", event_data(session, reason or "viewer_closed"))
 end
 
-local worktree_group = vim.api.nvim_create_augroup("AtlasDiffWorktree", { clear = true })
-
----@param session AtlasDiffSession
----@param buf integer
----@return string|nil path Path relative to the worktree root.
-local function worktree_path(session, buf)
-	local root = session.worktree and session.worktree.root or nil
-	if not root or not vim.api.nvim_buf_is_valid(buf) then
-		return nil
+---@param view AtlasDiffNativeView
+local function dispose(view)
+	view.requests.cancel()
+	vim.api.nvim_del_augroup_by_id(view.group)
+	for _, buf in ipairs({ view.left.buf, view.revision_buf }) do
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.api.nvim_buf_delete(buf, { force = true })
+		end
 	end
-	local name = vim.api.nvim_buf_get_name(buf)
-	if name == "" then
-		return nil
-	end
-	local prefix = tostring(root):gsub("/+$", "") .. "/"
-	if name:sub(1, #prefix) ~= prefix then
-		return nil
-	end
-	return name:sub(#prefix + 1)
 end
 
--- Jumping with gd or references lands on a worktree file. When that file belongs to the pull
--- request, sync the session to it rather than leaving a plain file sitting in the diff window: the
--- buffer the jump opened is the same buffer the head side would have loaded anyway. Hooking the
--- buffer display instead of the LSP handlers keeps every picker and the quickfix list working.
-vim.api.nvim_create_autocmd("BufWinEnter", {
-	group = worktree_group,
-	callback = function(args)
-		local buf = args.buf
-		local session, path
-		for _, candidate in pairs(session_api.all()) do
-			local state = candidate.viewer_state
-			if state and not state.closing then
-				local relative = worktree_path(candidate, buf)
-				if relative then
-					session, path = candidate, relative
-					break
+---@param view AtlasDiffNativeView
+local function toggle_layout(view)
+	local document = view.document
+	if not document or document.file.status == "added" or document.file.status == "deleted" then
+		return
+	end
+
+	view.preferred_layout = view.preferred_layout == "inline" and "side-by-side" or "inline"
+	set_layout(view, view.preferred_layout)
+	local positions = {}
+	for _, pane in ipairs({ view.left, view.right }) do
+		if pane.win then
+			positions[pane.win] = vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
+		end
+	end
+
+	display(view, document)
+	winbar.update(view)
+	for win, position in pairs(positions) do
+		vim.api.nvim_win_call(win, function()
+			if position.topline == 1 then
+				position.topfill = vim.fn.winsaveview().topfill
+			end
+			vim.fn.winrestview(position)
+		end)
+	end
+	if view.left.win then
+		vim.api.nvim_win_call(view.right.win, function()
+			vim.cmd.syncbind()
+		end)
+	end
+end
+
+---@param view AtlasDiffNativeView
+local function toggle_compact(view)
+	view.result.options.compact = not view.result.options.compact
+	if view.document then
+		render.compact(view, view.document)
+	end
+end
+
+---@param view AtlasDiffNativeView
+---@return AtlasDiffSelection|nil, string|nil
+local function get_selection(view)
+	local document = view.document
+	local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+	local left = win == view.left.win and buf == view.left.buf
+	local right = win == view.right.win and buf == view.right.buf
+
+	if not document or not (left or right) then
+		return nil, "Select a line in the diff"
+	end
+	if document.binary then
+		return nil, "Binary files do not have review lines"
+	end
+
+	local file = document.file
+	local side = (left or file.status == "deleted") and "LEFT" or "RIGHT"
+	local lines = side == "LEFT" and document.contents.old.lines or document.contents.new.lines
+	local first = vim.api.nvim_win_get_cursor(win)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		first, last = math.min(first, last), math.max(first, last)
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	if last > #lines then
+		return nil, "The selected lines are outside the file"
+	end
+
+	local function position(line)
+		local from = side == "LEFT" and line or nil
+		local to = side == "RIGHT" and line or nil
+		if file.status ~= "added" and file.status ~= "deleted" then
+			local opposite, hunk = diff.map_line(document.hunks, side, line)
+			-- GitLab needs both positions for unchanged lines.
+			if not hunk then
+				if side == "LEFT" then
+					to = opposite
+				else
+					from = opposite
 				end
 			end
 		end
-		if not session then
-			return
-		end
-		view.mark_worktree_buffer(buf)
+		return { from = from, to = to }
+	end
 
-		local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-		local win = vim.api.nvim_get_current_win()
-		if win ~= state.right.win or buf == state.right.buf then
-			return
+	local inline = position(last)
+	if first ~= last then
+		local start = position(first)
+		if (start.to ~= nil) ~= (inline.to ~= nil) then
+			return nil, "The selected lines cannot be represented as one review range"
 		end
-		local index = file_index(session, path)
-		if not index or index == state.selected_index then
-			return
+		inline.start_from = start.from
+		inline.start_to = start.to
+	end
+	inline.path = file.path
+	inline.old_path = file.old_path
+	inline.commit_hash = view.result.head_revision
+
+	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
+end
+
+local function setup_autocmds(view)
+	vim.api.nvim_create_autocmd("WinResized", {
+		group = view.group,
+		callback = function()
+			local windows = vim.v.event.windows
+			---@cast windows integer[]
+			if vim.tbl_contains(windows, view.right.win) or vim.tbl_contains(windows, view.left.win) then
+				redraw(view)
+			end
+		end,
+	})
+
+	local function show_plain_file(buf, path)
+		view.document = nil
+		view.inline_hunk_lines = {}
+		view.annotations = {}
+		set_right_buffer(view, buf)
+		set_layout(view, "inline")
+		setup_window(view.right.win)
+		if path then
+			winbar.set(view.right.win, path)
 		end
-		-- Deferred so the jump has positioned the cursor; that position is kept through the reload.
-		vim.schedule(function()
-			if state.closing or not vim.api.nvim_win_is_valid(win) then
+		view.callbacks.on_file(nil)
+	end
+
+	vim.api.nvim_create_autocmd("BufEnter", {
+		group = view.group,
+		callback = function(event)
+			local buf = event.buf
+			local path = worktree.relative_path(view.result.worktree_root, vim.api.nvim_buf_get_name(buf))
+			if path and not vim.bo[buf].modified then
+				worktree.protect(buf)
+			end
+			if vim.api.nvim_get_current_win() ~= view.right.win or buf == view.right.buf then
 				return
 			end
-			local cursor = vim.api.nvim_win_get_cursor(win)
-			select_file(session, index, function()
-				local target = state.right.win
-				if not target or not vim.api.nvim_win_is_valid(target) then
+			-- Stop an earlier read from replacing the file we just jumped to.
+			view.requests.cancel()
+			annotation_ui.close(view.tabpage)
+
+			-- LSP positions the cursor after entering the buffer.
+			vim.schedule(function()
+				if not vim.api.nvim_win_is_valid(view.right.win) or vim.api.nvim_win_get_buf(view.right.win) ~= buf then
 					return
 				end
-				local count = vim.api.nvim_buf_line_count(state.right.buf)
-				vim.api.nvim_win_set_cursor(target, { math.max(1, math.min(cursor[1], count)), cursor[2] })
-				pcall(vim.api.nvim_win_call, target, function()
-					vim.cmd("normal! zvzz")
+
+				local file
+				for _, item in ipairs(view.result.files) do
+					if item.path == path then
+						file = item
+						break
+					end
+				end
+				if not file then
+					show_plain_file(buf, path)
+					return
+				end
+
+				local position = vim.api.nvim_win_call(view.right.win, vim.fn.winsaveview)
+				view.document = nil
+				view.annotations = {}
+				view.inline_hunk_lines = {}
+				set_right_buffer(view, buf)
+				show_file(view, file, function(err)
+					if err then
+						show_plain_file(buf, path)
+						logger.logerror("diff.show_file failed", {
+							root = view.result.root,
+							path = file.path,
+							error = err,
+						})
+						notify.error("Unable to open " .. file.path .. "\n\n" .. err, { vim_notify = true })
+						return
+					end
+
+					vim.api.nvim_win_call(view.right.win, function()
+						vim.fn.winrestview(position)
+						vim.cmd("normal! zv")
+					end)
 				end)
 			end)
-		end)
-	end,
-})
+		end,
+	})
+end
 
--- Worktrees are cheap to recreate but should not pile up in the cache directory. Anything that
--- still slips through (a crash, a kill) is cleaned up by worktree.prune on the next open.
-vim.api.nvim_create_autocmd("VimLeavePre", {
-	group = worktree_group,
-	callback = function()
-		for _, session in pairs(session_api.all()) do
-			session.worktree = nil
-		end
-		pcall(require("atlas.core.git.worktree").shutdown)
+---@param result AtlasDiffResult
+---@param callbacks AtlasDiffCallbacks
+---@return AtlasDiffNativeView
+local function open(result, callbacks)
+	vim.cmd.tabnew()
+	local tabpage = vim.api.nvim_get_current_tabpage()
+	local buf = vim.api.nvim_get_current_buf()
+	local left_buf = vim.api.nvim_create_buf(false, true)
+
+	---@type AtlasDiffNativeView
+	local view = {
+		tabpage = tabpage,
+		result = result,
+		requests = requests.new(),
+		preferred_layout = result.options.layout == "side-by-side" and "side-by-side" or "inline",
+		inline_hunk_lines = {},
+		annotations = {},
+		expanded_threads = {},
+		revision_buf = buf,
+		group = vim.api.nvim_create_augroup("AtlasDiffNative" .. tabpage, { clear = true }),
+		callbacks = callbacks,
+		left = { buf = left_buf },
+		right = { buf = buf, win = vim.api.nvim_get_current_win() },
+	}
+
+	local opened, err = pcall(function()
+		setup_buffer(view.left.buf)
+		setup_buffer(view.right.buf)
+		setup_window(view.right.win)
+		setup_autocmds(view)
+	end)
+
+	if not opened then
+		vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(view.tabpage) } })
+		dispose(view)
+		error(err, 0)
+	end
+
+	return view
+end
+
+---@type AtlasDiffRenderer
+local M = {
+	open = open,
+	show_file = show_file,
+	get_selection = get_selection,
+	navigate_annotation = annotations.navigate,
+	redraw = redraw,
+	resize = function(view)
+		---@cast view AtlasDiffNativeView
+		resize(view)
+		redraw(view)
 	end,
-})
+	setup_keymaps = function(session, actions, groups)
+		local view = session.view
+		---@cast view AtlasDiffNativeView
+		keymaps.setup(session, actions, groups, {
+			navigate_hunk = function(direction)
+				navigate_hunk(view, direction)
+			end,
+			toggle_layout = function()
+				toggle_layout(view)
+			end,
+			toggle_compact = function()
+				toggle_compact(view)
+			end,
+		})
+	end,
+	dispose = dispose,
+}
 
 return M

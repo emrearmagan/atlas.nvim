@@ -12,7 +12,7 @@ local function add_username(value, seen, usernames)
 	table.insert(usernames, username)
 end
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return string[]
 local function collect_issue_usernames(context)
 	local seen, usernames = {}, {}
@@ -38,10 +38,11 @@ local function collect_issue_usernames(context)
 	return usernames
 end
 
----@param context AtlasPullsCommentCompletionContext
+---@param context AtlasPullsCommentContext
 ---@return string[]
 local function collect_pull_usernames(context)
 	local seen, usernames = {}, {}
+	local data = context.data or {}
 
 	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add_username(author.nickname or author.username or author.name, seen, usernames)
@@ -55,17 +56,17 @@ local function collect_pull_usernames(context)
 	for _, assignee in ipairs((context.details or {}).assignees or {}) do
 		add_username(assignee.username or assignee.nickname or assignee.name, seen, usernames)
 	end
-	for _, reviewer in ipairs(context.reviewers or {}) do
-		add_username(reviewer.nickname or reviewer.username or reviewer.name, seen, usernames)
+	for _, reviewers in ipairs({ data.reviewers or {}, context.reviewers or {} }) do
+		for _, reviewer in ipairs(reviewers) do
+			add_username(reviewer.nickname or reviewer.username or reviewer.name, seen, usernames)
+		end
 	end
 
-	for _, comment in ipairs(context.comments) do
-		local author = comment.author
-		add_username(author and (author.nickname or author.name), seen, usernames)
-	end
-	for _, comment in ipairs(context.conversation or {}) do
-		local author = comment.author
-		add_username(author and (author.nickname or author.name), seen, usernames)
+	for _, items in ipairs({ data.comments or {}, data.tasks or {}, context.conversation or {} }) do
+		for _, comment in ipairs(items) do
+			local author = comment.author
+			add_username(author and (author.nickname or author.name), seen, usernames)
+		end
 	end
 
 	return usernames
@@ -105,7 +106,7 @@ local function build_completion(collect_usernames, format_mention)
 	}
 end
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return AtlasMarkdownCompletionProvider
 function M.for_issues(context)
 	return build_completion(function()
@@ -117,7 +118,7 @@ function M.for_issues(context)
 	end)
 end
 
----@param context AtlasPullsCommentCompletionContext
+---@param context AtlasPullsCommentContext
 ---@return AtlasMarkdownCompletionProvider
 function M.for_pulls(context)
 	return build_completion(function()

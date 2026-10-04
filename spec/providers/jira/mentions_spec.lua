@@ -1,4 +1,4 @@
-local author_completion = require("atlas.providers.jira.completion.author")
+local mentions = require("atlas.providers.jira.mentions")
 
 local function by_word(items)
 	local result = {}
@@ -8,9 +8,9 @@ local function by_word(items)
 	return result
 end
 
-describe("Jira author completion", function()
+describe("Jira mentions", function()
 	it("completes issue participants and comment authors", function()
-		local completion = author_completion.for_issues({
+		local completion = mentions.for_issues({
 			issue = {
 				assignee = { id = "assignee", name = "Assigned User" },
 				reporter = { id = "reporter", name = "Reporter User" },
@@ -32,7 +32,7 @@ describe("Jira author completion", function()
 	end)
 
 	it("formats mentions with no issue participants", function()
-		local completion = author_completion.for_issues({ issue = {}, comments = {} })
+		local completion = mentions.for_issues({ issue = {}, comments = {} })
 
 		assert.same({}, completion.complete(""))
 		assert.equal(

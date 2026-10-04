@@ -9,6 +9,8 @@ local BACKGROUND_HL = "AtlasFooterBackground"
 
 ---@type table<integer, AtlasStatusline>
 local instances = {}
+---@type table<integer, AtlasStatusline>
+local windows = {}
 local next_id = 0
 local cached_version = nil
 
@@ -27,7 +29,7 @@ local cached_version = nil
 ---@field token integer
 
 ---@class AtlasStatuslineOptions
----@field help_key string|fun(): string|nil
+---@field help_key? string|fun(): string|nil
 ---@field show_version boolean|nil
 ---@field left_padding integer|nil
 
@@ -303,6 +305,7 @@ function Statusline:attach(win)
 		return
 	end
 	instances[self.id] = self
+	windows[win] = self
 	vim.api.nvim_set_option_value("statusline", self.expression, { win = win, scope = "local" })
 end
 
@@ -400,6 +403,11 @@ function Statusline:dispose()
 	self:stop_loading()
 	self.disposed = true
 	instances[self.id] = nil
+	for win, instance in pairs(windows) do
+		if instance == self then
+			windows[win] = nil
+		end
+	end
 	redraw()
 end
 
@@ -424,6 +432,13 @@ function M.attach(win)
 end
 
 ---@param win integer|nil
+function M.detach(win)
+	if win then
+		windows[win] = nil
+	end
+end
+
+---@param win integer|nil
 ---@return boolean
 function M.is_attached(win)
 	for _, instance in pairs(instances) do
@@ -437,20 +452,9 @@ end
 ---@param target_win integer
 ---@param source_win integer
 function M.inherit(target_win, source_win)
-	if
-		not M.enabled()
-		or vim.o.laststatus ~= 3
-		or not vim.api.nvim_win_is_valid(source_win)
-		or not vim.api.nvim_win_is_valid(target_win)
-	then
-		return
-	end
-	local expression = vim.wo[source_win].statusline
-	for _, instance in pairs(instances) do
-		if expression == instance.expression then
-			vim.api.nvim_set_option_value("statusline", expression, { win = target_win, scope = "local" })
-			return
-		end
+	local instance = windows[source_win]
+	if instance then
+		instance:attach(target_win)
 	end
 end
 
@@ -487,5 +491,33 @@ end
 function M.reset()
 	M.default:reset()
 end
+
+local group = vim.api.nvim_create_augroup("AtlasStatusline", { clear = true })
+
+vim.api.nvim_create_autocmd("OptionSet", {
+	group = group,
+	pattern = "statusline",
+	callback = function()
+		local win = vim.api.nvim_get_current_win()
+		local instance = windows[win]
+		if not instance or instance:is_attached(win) then
+			return
+		end
+
+		-- Other statusline plugins can overwrite ours during a refresh.
+		vim.schedule(function()
+			if windows[win] == instance and not instance:is_attached(win) then
+				instance:attach(win)
+			end
+		end)
+	end,
+})
+
+vim.api.nvim_create_autocmd("WinClosed", {
+	group = group,
+	callback = function(event)
+		M.detach(tonumber(event.match))
+	end,
+})
 
 return M

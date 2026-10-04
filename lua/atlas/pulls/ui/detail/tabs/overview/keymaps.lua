@@ -38,6 +38,7 @@ function M.setup(buf, refresh)
 		items,
 		item("ui.toggle_description_mode", {
 			desc = "Toggle description mode",
+			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				state.view_mode = state.view_mode == "raw" and "markdown" or "raw"
@@ -49,6 +50,7 @@ function M.setup(buf, refresh)
 		items,
 		item("ui.toggle_fold", {
 			desc = "Toggle description",
+			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				state.description_expanded = not state.description_expanded
@@ -62,6 +64,7 @@ function M.setup(buf, refresh)
 		table.insert(items, {
 			key = open_keys,
 			desc = "Show pipeline details",
+			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]

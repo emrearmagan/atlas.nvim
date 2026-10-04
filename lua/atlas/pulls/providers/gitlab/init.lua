@@ -19,7 +19,7 @@
 ---@field inline_thread boolean|nil
 
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
-local author_completion = require("atlas.providers.gitlab.completion.author")
+local mentions = require("atlas.providers.gitlab.mentions")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
@@ -124,7 +124,7 @@ return {
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
-			comment_completion = author_completion.for_pulls,
+			comment_completion = mentions.for_pulls,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

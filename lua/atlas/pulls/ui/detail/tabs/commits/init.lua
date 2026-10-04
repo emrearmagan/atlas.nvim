@@ -87,7 +87,8 @@ local function to_thread_item(commit, width)
 		icon = commit_icon,
 		icon_hl = commit_icon_hl,
 		author = message,
-		right_text = hash,
+		author_hl = "Normal",
+		right_text = { { hash, "AtlasTextMuted" } },
 		content = content,
 		meta = {
 			pipeline_state = pipeline_state,
@@ -176,7 +177,7 @@ function M.on_select(pr, refresh, opts)
 		state.commits = commits or {}
 		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
-		-- Fetch statuses for the first N commits.
+		-- Fetch statuses for the latest five commits.
 		load_statuses(pr, pipelines, opts, refresh)
 
 		refresh()
@@ -224,9 +225,6 @@ function M.render(_pr, _details, width)
 	local thread_lines, thread_spans, thread_map = threads.render(items, width, {
 		padding_x = PADDING_X,
 		mode = "linked",
-		author_hl = function()
-			return "Normal"
-		end,
 		content_hl = function(item, row, _)
 			local out = { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
 			local pipeline_state = item.meta and tostring(item.meta.pipeline_state or "") or ""

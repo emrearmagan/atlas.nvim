@@ -1,4 +1,3 @@
-local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local diff = require("atlas.pulls.diff")
@@ -215,27 +214,10 @@ local function open_diff(state)
 		notify.warn("This tag has no target commit")
 		return
 	end
-	local parent = tag.hash .. "^"
-	state.requests.run(function(done)
-		return git.check_commits(state.root, { tag.hash, parent }, done)
-	end, function(exists, err)
-		if not exists then
-			notify.error(err or "Failed to check commits")
-			return
+	diff.open_commit({ root = state.root, commit = tag.hash }, function(err)
+		if err then
+			notify.error(err)
 		end
-		if not exists[1] then
-			notify.warn("This tag's commit is not available in the local repository")
-			return
-		end
-		if not exists[2] then
-			notify.warn("This commit has no local first parent to compare")
-			return
-		end
-		diff.open_range({ root = state.root, base = parent, head = tag.hash }, function(diff_err)
-			if diff_err then
-				notify.error(diff_err)
-			end
-		end)
 	end)
 end
 

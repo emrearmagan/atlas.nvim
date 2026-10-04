@@ -555,7 +555,7 @@ function M.add_comment(pr, content, opts, on_done)
 		return nil
 	end
 	local parent = opts.parent
-	if parent and parent.state == "PENDING" and tostring(parent.thread_id or "") == "" then
+	if parent and parent.pending and tostring(parent.thread_id or "") == "" then
 		on_done(nil, "GitLab cannot reply to this draft until it is published")
 		return nil
 	end

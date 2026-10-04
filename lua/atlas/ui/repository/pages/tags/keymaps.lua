@@ -15,23 +15,25 @@ function M.setup(buf, sidebar_buf, callbacks)
 	local refresh = {
 		key = resolver.resolve("ui.refresh") or {},
 		desc = "Refresh tags",
+		index = 25,
 		callback = callbacks.refresh,
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
-		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page },
-		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page },
-		{ resolver.resolve("ui.search"), "Search tags", callbacks.search },
+		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page, index = 11 },
+		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page, index = 10 },
+		{ resolver.resolve("ui.search"), "Search tags", callbacks.search, index = 20 },
 		{
 			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
 			"Toggle tag details",
 			callbacks.select,
+			index = 30,
 		},
-		{ resolver.resolve("pulls.open_diff"), "Open diff", callbacks.diff },
-		{ resolver.resolve("ui.show_details"), "Show tag details", callbacks.details },
-		{ resolver.resolve("ui.open_in_browser"), "Open tag in browser", callbacks.browser },
-		{ resolver.resolve("ui.copy_id"), "Copy commit SHA", callbacks.copy },
-		{ resolver.resolve("ui.copy_url"), "Copy tag URL", callbacks.copy_url },
+		{ resolver.resolve("pulls.open_diff"), "Open diff", callbacks.diff, index = 31 },
+		{ resolver.resolve("ui.show_details"), "Show tag details", callbacks.details, index = 32 },
+		{ resolver.resolve("ui.open_in_browser"), "Open tag in browser", callbacks.browser, index = 33 },
+		{ resolver.resolve("ui.copy_id"), "Copy commit SHA", callbacks.copy, index = 40 },
+		{ resolver.resolve("ui.copy_url"), "Copy tag URL", callbacks.copy_url, index = 41 },
 	}
 	local items = { refresh }
 	for _, action in ipairs(actions) do
@@ -40,6 +42,7 @@ function M.setup(buf, sidebar_buf, callbacks)
 			table.insert(items, {
 				key = keys,
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { nowait = true, silent = true },
 			})

@@ -14,6 +14,11 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
+<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
+
+> [!CAUTION]
+> **Still in early development, will have breaking changes!**
+
 **Quick links**
 
 - [Configuration](#configuration)
@@ -23,19 +28,12 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
 - [Bitbucket](#bitbucket)
 - [Jira](#jira)
 
-<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
-
-> [!CAUTION]
-> **Still in early development, will have breaking changes!**
-
 ## Installation
 
 <details>
 <summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>
 
 ```lua
----@module "atlas"
-
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
@@ -89,17 +87,17 @@ require("atlas").setup({})
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
 
 - Browse files, commits, hunks, and review history.
-- Comment, suggest changes, manage threads, or leave local notes.
+- Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
-> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim), [Diffview](https://github.com/sindrets/diffview.nvim), and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
+> **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v3.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) are also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 <details>
 <summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
 
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
+Notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
 
 #### Script and integration
 
@@ -120,7 +118,7 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 <details>
 <summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
 
-Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff.
+Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff or CodeDiff.
 
 ```lua
 pulls = {
@@ -317,7 +315,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    -- Global statusline for Atlas. See the Statusline section below.
+    -- Global statusline for Atlas.
     statusline = true,
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
@@ -368,42 +366,20 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 }
 ```
 
-<details>
-<summary><strong>Statusline</strong></summary>
-
-Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
-
-If you use lualine, disable its statusline for Atlas buffers so it does not replace the Atlas statusline:
-
-```lua
-require("lualine").setup({
-  options = {
-    disabled_filetypes = {
-      statusline = { "atlas" },
-      winbar = {},
-    },
-  },
-})
-```
-
-At some point there will probably an extension for lualine.
-
-</details>
-
 ## Commands
 
 - `:Atlas` - Pick a command
 - `:Atlas pulls [provider]` - Open a pull-request provider dashboard
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
-- `:Atlas diff <target>` - Open a Git range or pull request in native AtlasDiff; a target is required
+- `:Atlas diff <target>` - Open a Git range or pull request with the configured diff viewer; a target is required
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
 - `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
-- `:Atlas notes [target]` - Inspect local review notes
-- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
+- `:Atlas notes [target]` - Inspect notes
+- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
 
 ## Pulls
@@ -415,7 +391,7 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 
 ```lua
 pulls = {
-  delete_notes = false, -- Delete local PR notes after approval or merge.
+  delete_notes = false, -- Delete notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -431,8 +407,8 @@ pulls = {
   },
 
   diff = {
-    -- Any command that accepts explicit <base>...<head> Git revisions.
-    open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
+    -- "auto", or a command that accepts explicit <base>...<head> Git revisions.
+    open_cmd = "auto", -- CodeDiff, DiffviewOpen or AtlasDiff
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
     review_panel = {
       hidden = true, -- Set false to show the review panel when a diff opens.
@@ -442,10 +418,9 @@ pulls = {
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
-    compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
     lsp = {
       -- Back the new side of the diff with a detached worktree at the PR head so it is made of
-      -- real files and your language servers attach to it (AtlasDiff only). Off by default.
+      -- real files and your language servers attach to it (AtlasDiff and CodeDiff). Off by default.
       enabled = false,
       -- Defaults to `stdpath("cache")/atlas/worktrees/<repo>/pr-<id>` (or `<repo>/<sha>` without a PR).
       -- May be an absolute path, or a function receiving
@@ -462,6 +437,7 @@ pulls = {
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       preview = false, -- Show a file as soon as the explorer cursor moves onto it.
+      focus_on_select = false, -- Move into the diff after selecting a file.
       ignore = { ".git/**", ".jj/**" },
     },
   },
@@ -835,8 +811,8 @@ issues = {
 Atlas emits these `User` events after the corresponding cleanup or setup has completed:
 
 - `AtlasUIClosed` for the main pulls/issues dashboard.
-- `AtlasDiffOpened` and `AtlasDiffClosed` for the native AtlasDiff view.
-- `AtlasReviewAttached` and `AtlasReviewDetached` for Atlas review overlays in AtlasDiff, CodeDiff, and Diffview.
+- `AtlasDiffOpened` and `AtlasDiffClosed` for diff sessions in AtlasDiff, CodeDiff, and Diffview.
+- `AtlasDiffFileChanged` when the current diff file changes in any of these viewers.
 
 ## Keymaps
 
@@ -884,6 +860,7 @@ keymaps = {
     copy_url = "Y",
     show_details = "K",
     search = "?",
+    edit_search = "i",
   },
   picker = {
     next_item = { "<Down>", "<C-n>", "<C-j>" },
@@ -897,64 +874,64 @@ keymaps = {
     change_assignee = "ga",
     change_reporter = "gr",
     edit_issue = "ge",
-    edit_search = "i",
     create_issue = "c",
   },
   pulls = {
     open_diff = "gd",
     checkout = "gc",
-    external_help = "gA", -- Atlas help in external diff viewers
     open_repository = "o",
-    toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",
-    edit_search = "i",
+    review = {
+      show_details = "K", -- File/commit details.
+      toggle_file_reviewed = "-",
+      approve = "<leader>ga",
+      request_changes = "<leader>gr",
+      submit_review = "<leader>gs",
+      add_task = "<leader>t",
+      comment_templates = "gT",
+      toggle_resolved = "x",
+      next_comment = "]c",
+      prev_comment = "[c",
+      next_note = "]n",
+      prev_note = "[n",
+      add_comment = "c",
+      submit_comment = "C",
+      add_suggestion = "s",
+      submit_suggestion = "S",
+      add_note = "<leader>n",
+      view = {
+        external_help = "gA", -- Atlas help in external diff viewers.
+        toggle_review_panel = "gR",
+        toggle_detail_panel = "gD",
+        toggle_comments = "gH",
+      },
+      explorer = {
+        toggle_commits = "gC",
+        next_unreviewed_file = "]u",
+        prev_unreviewed_file = "[u",
+        find_file = "<leader>f",
+      },
+      -- Built-in navigation; external viewers use their own keys.
+      atlas = {
+        next_file = { "]f", "<Tab>" },
+        prev_file = { "[f", "<S-Tab>" },
+        toggle_explorer = "<leader>b",
+        focus_explorer = "<leader>e",
+        open_file = "gf",
+        toggle_view_mode = "i",
+        next_hunk = "]h",
+        prev_hunk = "[h",
+        toggle_layout = "t",
+        toggle_compact = "gc",
+      },
+    },
     pipelines = {
       next_job = { "]j", "<Tab>" },
       previous_job = { "[j", "<S-Tab>" },
       show_history = "gH",
       toggle_raw_logs = "gL",
       toggle_auto_refresh = "gR",
-    },
-    review = {
-      open_item = "<CR>", -- Open the selected file, review item, or inline comment/note.
-      show_details = "K",
-      approve = "<leader>ga",
-      request_changes = "<leader>gr",
-      submit_review = "<leader>gs",
-      add_task = "<leader>t",
-      find_file = "<leader>ff",
-      comment_templates = "gT",
-      explorer = {
-        toggle_explorer = "<leader>b",
-        find_file = { "f", "<leader>ff" },
-        next_file = { "]f", "<Tab>" },
-        previous_file = { "[f", "<S-Tab>" },
-        next_unreviewed_file = "]u",
-        previous_unreviewed_file = "[u",
-        toggle_grouping = "T",
-        toggle_file_reviewed = "-",
-        toggle_commits = "gC",
-      },
-      diff = {
-        toggle_layout = "t",
-        toggle_compact = "gc",
-        next_hunk = "]h",
-        previous_hunk = "[h",
-        toggle_review_panel = "gR",
-        toggle_detail_panel = "gD",
-        toggle_comments = "gH",
-        next_comment = "]c",
-        previous_comment = "[c",
-        next_note = "]n",
-        previous_note = "[n",
-        add_comment = "c",
-        submit_comment = "C",
-        add_suggestion = "s",
-        submit_suggestion = "S",
-        add_note = "<leader>n",
-        toggle_resolved = "x",
-      },
     },
     filters = {
       open = "gpo",

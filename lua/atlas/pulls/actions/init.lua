@@ -1,6 +1,5 @@
-local M = {}
-
 local action_runner = require("atlas.core.actions")
+local diff = require("atlas.pulls.diff")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
@@ -10,6 +9,8 @@ local repository = require("atlas.ui.repository")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 local ui_utils = require("atlas.ui.shared.utils")
+
+local M = {}
 
 local has_pr = utils.has_pr
 local notify = utils.notify
@@ -440,11 +441,7 @@ M.open_diff = {
 	icon = icons.action("changes"),
 	is_available = has_pr,
 	run = function(context, done)
-		require("atlas.pulls.diff").open_pr({
-			ref = assert(context.pr),
-			provider = context.provider,
-			current_user = context.current_user,
-		}, function(err)
+		diff.open_pr(context.pr, function(err)
 			if err then
 				notify(context, "error", "Unable to open diff: " .. tostring(err))
 				done(nil, err)

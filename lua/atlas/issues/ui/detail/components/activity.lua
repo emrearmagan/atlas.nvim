@@ -44,7 +44,7 @@ local EVENT_ICON = {
 }
 
 ---@param entry IssueActivityEntry
----@return { icon: string, icon_hl: string, additional: string|nil, content: string|nil }
+---@return { icon: string, icon_hl: string, additional: string, content: string|nil }
 function M.classify(entry)
 	local raw = tostring(entry.label or "")
 	local style = EVENT_ICON[entry.kind] or { icons.pulls("activity") }
@@ -63,12 +63,14 @@ local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
 		local classified = M.classify(e)
+		local author = actor_name(e.actor)
 		items[#items + 1] = {
 			icon = classified.icon,
 			icon_hl = classified.icon_hl,
-			author = actor_name(e.actor),
-			right_text = utils.relative_time(e.date),
-			additional = classified.additional,
+			author = author,
+			author_hl = helper.person_hl(author),
+			right_text = { { utils.relative_time(e.date), "AtlasTextMuted" } },
+			additional = { { classified.additional, "AtlasTextMuted" } },
 			content = classified.content,
 			line_map = {
 				kind = "activity",
@@ -79,19 +81,6 @@ local function to_thread_items(entries, run_id)
 		}
 	end
 	return items
-end
-
----@param _item AtlasThreadItem
----@param _text string
----@return string|nil
-local function additional_hl(_item, _text)
-	return "AtlasTextMuted"
-end
-
----@param item AtlasThreadItem
----@param _author string
-local function author_hl(item, _author)
-	return helper.person_hl(item.author)
 end
 
 ---@param item AtlasThreadItem
@@ -116,8 +105,6 @@ function M.render(entries, width, opts)
 		to_thread_items(entries, opts.run_id),
 		width,
 		vim.tbl_extend("force", opts, {
-			additional_hl = additional_hl,
-			author_hl = author_hl,
 			content_hl = content_hl,
 		})
 	)

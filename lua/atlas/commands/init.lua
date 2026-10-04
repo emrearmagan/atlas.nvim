@@ -1,10 +1,12 @@
-local M = {}
-
+local diff = require("atlas.pulls.diff")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local pipelines = require("atlas.commands.pipelines")
 local providers = require("atlas.providers")
+local review = require("atlas.commands.review")
 local ui_utils = require("atlas.ui.utils")
+
+local M = {}
 
 ---@class AtlasCommand
 ---@field name string
@@ -71,6 +73,27 @@ local function with_argument(args, prompt, callback)
 	vim.ui.input({ prompt = prompt }, function(input)
 		if input and vim.trim(input) ~= "" then
 			callback(vim.trim(input))
+		end
+	end)
+end
+
+---@param value string
+local function open_diff(value)
+	local separator = value:find("...", 1, true)
+	if not separator then
+		review.open(value)
+		return
+	end
+
+	local base = vim.trim(value:sub(1, separator - 1))
+	local head = vim.trim(value:sub(separator + 3))
+	if base == "" or head == "" then
+		notify.error("Expected an explicit base...head range", { vim_notify = true })
+		return
+	end
+	diff.open_range({ base = base, head = head }, function(open_err)
+		if open_err then
+			notify.error(open_err, { vim_notify = true })
 		end
 	end)
 end
@@ -168,17 +191,14 @@ M.register({
 
 M.register({
 	name = "diff",
-	description = "Open native AtlasDiff",
-	complete = function(arglead, args)
-		return require("atlas.pulls.diff").complete(arglead, args)
-	end,
+	description = "Open a Git range or pull request diff",
 	run = function(args)
 		local value = vim.trim(table.concat(args, " "))
 		if value == "" then
 			notify.error("Usage: :Atlas diff <base...head|pull-request-url>", { vim_notify = true })
 			return
 		end
-		require("atlas.pulls.diff").open_argument(value)
+		open_diff(value)
 	end,
 })
 
@@ -196,13 +216,13 @@ M.register({
 	name = "review",
 	description = "Open or pick a pull request review",
 	run = function(args)
-		require("atlas.commands.review").open(args[1])
+		review.open(args[1])
 	end,
 })
 
 M.register({
 	name = "notes",
-	description = "Open local review notes",
+	description = "Open review notes",
 	complete = function(arglead, args)
 		return require("atlas.pulls.notes").complete(arglead, args)
 	end,
@@ -230,7 +250,7 @@ end
 M.register({
 	name = "clear",
 	usage = "clear [cache|notes|stars]",
-	description = "Clear Atlas data, caches, local notes, or starred items",
+	description = "Clear Atlas data, caches, notes, or starred items",
 	complete = function(arglead)
 		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
@@ -263,10 +283,10 @@ M.register({
 			return
 		end
 
-		confirm("Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: ", function()
+		confirm("Delete Atlas caches, cloned repositories, notes, starred items, and logs? [y/N]: ", function()
 			local cleared, err = require("atlas.pulls.notes").clear_all()
 			if not cleared then
-				notify.error(err or "Unable to delete local notes", { vim_notify = true })
+				notify.error(err or "Unable to delete notes", { vim_notify = true })
 				return
 			end
 			local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
@@ -328,7 +348,7 @@ local function pick_command()
 		elseif command.name == "clear" then
 			add(command, {}, "Clear caches, clones, notes, stars, and logs")
 			add(command, { "cache" }, "Clear caches and cloned repositories")
-			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "notes" }, "Clear review notes")
 			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)

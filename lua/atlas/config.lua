@@ -37,13 +37,14 @@
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
+---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
 
 ---@class AtlasPullsDiffReviewPanelConfig
 ---@field hidden boolean|nil
 ---@field height integer|nil
 
----@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+---@alias AtlasPullsDiffOpenCommand "auto"|"AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 -- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
 -- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
@@ -58,7 +59,6 @@
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
 ---@field compact boolean|nil
----@field compact_context_lines integer|nil
 ---@field comment_display "virtual_lines"|"virtual_text"|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
@@ -170,10 +170,9 @@ local defaults = {
 			},
 		},
 		diff = {
-			open_cmd = "AtlasDiff",
+			open_cmd = "auto",
 			layout = "inline",
 			compact = true,
-			compact_context_lines = 3,
 			comment_display = "virtual_lines",
 			review_panel = {
 				hidden = true,
@@ -192,6 +191,7 @@ local defaults = {
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
+				focus_on_select = false,
 				ignore = { ".git/**", ".jj/**" },
 			},
 		},
@@ -257,6 +257,7 @@ local defaults = {
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
+			edit_search = "i",
 		},
 		picker = {
 			next_item = { "<Down>", "<C-n>", "<C-j>" },
@@ -268,12 +269,9 @@ local defaults = {
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
-			external_help = "gA", -- Atlas help in external diff viewers.
 			open_repository = "o",
-			toggle_repo_issue_state = "t",
 			edit_title = "T",
 			edit_description = "D",
-			edit_search = "i",
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },
@@ -282,43 +280,47 @@ local defaults = {
 				toggle_auto_refresh = "gR",
 			},
 			review = {
-				open_item = "<CR>",
-				show_details = "K",
+				show_details = "K", -- File/commit details.
+				toggle_file_reviewed = "-",
+				next_comment = "]c",
+				prev_comment = "[c",
+				next_note = "]n",
+				prev_note = "[n",
+				add_comment = "c",
+				submit_comment = "C",
+				add_suggestion = "s",
+				submit_suggestion = "S",
+				add_note = "<leader>n",
+				toggle_resolved = "x",
 				approve = "<leader>ga",
 				request_changes = "<leader>gr",
 				submit_review = "<leader>gs",
 				add_task = "<leader>t",
 				comment_templates = "gT",
-				find_file = "<leader>ff",
-				explorer = {
-					toggle_explorer = "<leader>b",
-					find_file = { "f", "<leader>ff" },
-					next_file = { "]f", "<Tab>" },
-					previous_file = { "[f", "<S-Tab>" },
-					next_unreviewed_file = "]u",
-					previous_unreviewed_file = "[u",
-					toggle_grouping = "T",
-					toggle_file_reviewed = "-",
-					toggle_commits = "gC",
-				},
-				diff = {
-					toggle_layout = "t",
-					toggle_compact = "gc",
-					next_hunk = "]h",
-					previous_hunk = "[h",
+				view = {
+					external_help = "gA", -- Atlas help in external diff viewers.
 					toggle_review_panel = "gR",
 					toggle_detail_panel = "gD",
 					toggle_comments = "gH",
-					next_comment = "]c",
-					previous_comment = "[c",
-					next_note = "]n",
-					previous_note = "[n",
-					add_comment = "c",
-					submit_comment = "C",
-					add_suggestion = "s",
-					submit_suggestion = "S",
-					add_note = "<leader>n",
-					toggle_resolved = "x",
+				},
+				explorer = {
+					toggle_commits = "gC",
+					next_unreviewed_file = "]u",
+					prev_unreviewed_file = "[u",
+					find_file = "<leader>f",
+				},
+				-- Built-in navigation; external viewers use their own keys.
+				atlas = {
+					next_file = { "]f", "<Tab>" },
+					prev_file = { "[f", "<S-Tab>" },
+					toggle_explorer = "<leader>b",
+					focus_explorer = "<leader>e",
+					open_file = "gf",
+					toggle_view_mode = "i",
+					next_hunk = "]h",
+					prev_hunk = "[h",
+					toggle_layout = "t",
+					toggle_compact = "gc",
 				},
 			},
 			filters = {
@@ -332,7 +334,6 @@ local defaults = {
 			change_assignee = "ga",
 			change_reporter = "gr",
 			edit_issue = "ge",
-			edit_search = "i",
 			create_issue = "c",
 		},
 	},
@@ -340,6 +341,21 @@ local defaults = {
 
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
+
+---@return string
+function M.diff_command()
+	local command = vim.trim(M.options.pulls.diff.open_cmd or "auto")
+	if command ~= "auto" and command ~= "" then
+		return command
+	end
+
+	for _, candidate in ipairs({ "CodeDiff", "DiffviewOpen" }) do
+		if vim.fn.exists(":" .. candidate) == 2 then
+			return candidate
+		end
+	end
+	return "AtlasDiff"
+end
 
 ---@param id AtlasProviderId
 ---@return table|nil

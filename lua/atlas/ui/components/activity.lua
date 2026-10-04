@@ -9,7 +9,7 @@ local COLLAPSE_THRESHOLD = 5
 
 ---@param items AtlasThreadItem[]
 ---@param width integer
----@param opts? { padding_x?: integer, content_max_lines?: integer, squash?: boolean, run_id?: string, has_next?: boolean, author_hl?: fun(item: AtlasThreadItem, author: string): string|nil, additional_hl?: fun(item: AtlasThreadItem, text: string): string|nil, content_hl?: fun(item: AtlasThreadItem, row: string, row_index: integer): table[]|nil }
+---@param opts? { padding_x?: integer, content_max_lines?: integer, squash?: boolean, run_id?: string, has_next?: boolean, content_hl?: fun(item: AtlasThreadItem, row: string, row_index: integer): table[]|nil }
 ---@return string[], table[], table<integer, table>
 function M.render(items, width, opts)
 	opts = opts or {}
@@ -38,8 +38,6 @@ function M.render(items, width, opts)
 			padding_x = padding_x,
 			content_max_lines = opts.content_max_lines or 3,
 			content_prefix = has_next and "│  " or "   ",
-			author_hl = opts.author_hl,
-			additional_hl = opts.additional_hl,
 			content_hl = opts.content_hl,
 		}))
 	end

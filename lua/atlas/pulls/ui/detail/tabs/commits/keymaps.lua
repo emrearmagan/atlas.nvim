@@ -54,6 +54,7 @@ function M.setup(buf, _refresh)
 		items,
 		item("ui.show_details", {
 			desc = "Show full commit message (stays open while navigating)",
+			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if not detail.win then

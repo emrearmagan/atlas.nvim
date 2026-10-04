@@ -4,7 +4,7 @@ local M = {}
 ---@field id string
 ---@field label string
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return JiraMentionUser[]
 ---@return table<string, integer> label_counts
 local function collect_users(context)
@@ -64,7 +64,7 @@ local function resolve_mention(author)
 	return string.format("[@%s](atlas-mention:%s)", mention_label, mention_id)
 end
 
----@param context AtlasIssuesCommentCompletionContext
+---@param context AtlasIssuesCommentContext
 ---@return AtlasMarkdownCompletionProvider
 function M.for_issues(context)
 	return {

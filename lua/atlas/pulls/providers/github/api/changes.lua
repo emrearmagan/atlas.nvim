@@ -30,7 +30,10 @@ function M.fetch_commits(pr, _opts, on_done)
 		end
 
 		local commits = {}
-		for _, raw in ipairs(result.commits or {}) do
+		local entries = result.commits or {}
+		-- GitHub returns the oldest commit first; our commit lists start with the newest.
+		for index = #entries, 1, -1 do
+			local raw = entries[index]
 			local hash = tostring(raw.oid or "")
 			local authors = raw.authors or {}
 			local author_name = ""

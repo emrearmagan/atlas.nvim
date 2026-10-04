@@ -10,7 +10,7 @@
 ---@field labels PullsLabel[]
 
 local activity_api = require("atlas.pulls.providers.github.api.activity")
-local author_completion = require("atlas.providers.github.completion.author")
+local mentions = require("atlas.providers.github.mentions")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
@@ -131,7 +131,7 @@ return {
 		},
 		comments = {
 			reaction_options = emojis.github(),
-			comment_completion = author_completion.for_pulls,
+			comment_completion = mentions.for_pulls,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

@@ -157,8 +157,8 @@ end
 ---@param session PullsPipelinesSession
 local function setup_buffers(session)
 	local prefix = string.format("atlas://pipelines/%d", session.tab)
-	session.explorer.buf = utils.buffer.create(prefix .. "/pipelines", "atlas.pipelines")
-	session.logs.buf = utils.buffer.create(prefix .. "/logs", "atlas.pipeline-log")
+	session.explorer.buf = utils.buffer.create(prefix .. "/pipelines", "atlas-ui.pipelines")
+	session.logs.buf = utils.buffer.create(prefix .. "/logs", "atlas-ui.pipeline-log")
 	session.config.buf = utils.buffer.create(prefix .. "/config", "")
 	vim.bo[session.config.buf].readonly = true
 	vim.bo[session.explorer.buf].bufhidden = "wipe"

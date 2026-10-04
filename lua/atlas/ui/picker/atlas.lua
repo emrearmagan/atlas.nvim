@@ -79,8 +79,7 @@ function M.open(request)
 	local picker_layout = layout()
 	local main_buf = vim.api.nvim_create_buf(false, true)
 	local preview_buf = has_preview and vim.api.nvim_create_buf(false, true) or nil
-	vim.bo[main_buf].filetype = "atlas.picker"
-	vim.bo[main_buf].syntax = "OFF"
+	vim.bo[main_buf].filetype = "atlas-ui.picker"
 	pcall(vim.treesitter.stop, main_buf)
 	vim.b[main_buf].completion = false
 	for _, buf in ipairs({ main_buf, preview_buf }) do

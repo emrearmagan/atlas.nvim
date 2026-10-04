@@ -50,6 +50,7 @@ function M.activate(buf, refresh)
 			{
 				key = #keys == 1 and keys[1] or keys,
 				desc = "Toggle description mode",
+				index = 10,
 				opts = { silent = true, nowait = true },
 				callback = function()
 					view_mode = view_mode == "raw" and "markdown" or "raw"

@@ -130,6 +130,7 @@ function M.register(buf)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open in browser",
+			index = 2,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if open_current_line() then
@@ -149,6 +150,7 @@ function M.register(buf)
 
 	local refresh_item = {
 		desc = "Refresh tab",
+		index = 60,
 		opts = { nowait = true, silent = true },
 		callback = function()
 			require("atlas.pulls.ui.detail").refresh()
@@ -162,6 +164,7 @@ function M.register(buf)
 			items,
 			item("ui.open_actions", {
 				desc = "Open PR actions",
+				index = 50,
 				callback = function()
 					local pr = state.current_pr
 					if pr == nil then
@@ -183,6 +186,7 @@ function M.register(buf)
 		items,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
+			index = 1,
 			opts = { nowait = true },
 			callback = function()
 				local pr = state.current_pr
@@ -201,6 +205,7 @@ function M.register(buf)
 		items,
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
+			index = 30,
 			opts = { nowait = true },
 			callback = function()
 				local pr = state.current_pr
@@ -220,6 +225,7 @@ function M.register(buf)
 			items,
 			item("pulls.edit_title", {
 				desc = "Edit PR title",
+				index = 40,
 				opts = { nowait = true, silent = true },
 				callback = function()
 					local pr = state.current_pr
@@ -243,6 +249,7 @@ function M.register(buf)
 			items,
 			item("pulls.edit_description", {
 				desc = "Edit PR description",
+				index = 41,
 				opts = { nowait = true, silent = true },
 				callback = function()
 					local pr = state.current_pr
@@ -266,6 +273,7 @@ function M.register(buf)
 			items,
 			item("ui.toggle_subscription", {
 				desc = "Toggle subscription",
+				index = 42,
 				opts = { nowait = true, silent = true },
 				callback = function()
 					local pr = state.current_pr
@@ -292,6 +300,7 @@ function M.register(buf)
 		general,
 		item("ui.next_panel_tab", {
 			desc = "Next detail tab",
+			index = 11,
 			opts = { nowait = true },
 			callback = function()
 				if require("atlas.pulls.ui.detail").is_open() then
@@ -305,6 +314,7 @@ function M.register(buf)
 		general,
 		item("ui.previous_panel_tab", {
 			desc = "Previous detail tab",
+			index = 10,
 			opts = { nowait = true },
 			callback = function()
 				if require("atlas.pulls.ui.detail").is_open() then
@@ -318,6 +328,7 @@ function M.register(buf)
 		general,
 		item("ui.help", {
 			desc = "Toggle help",
+			index = 100,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				help.toggle({ buffer = buf })
@@ -329,6 +340,7 @@ function M.register(buf)
 		general,
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
+			index = 12,
 			callback = function()
 				require("atlas.pulls.ui.detail").close()
 			end,
@@ -339,6 +351,7 @@ function M.register(buf)
 		general,
 		item("ui.close", {
 			desc = "Close detail panel",
+			index = 101,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if help.is_open() then

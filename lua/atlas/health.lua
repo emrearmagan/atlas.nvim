@@ -3,6 +3,8 @@ local M = {}
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
 local providers = require("atlas.providers")
+local diff_keymaps = require("atlas.pulls.diff.keymaps")
+local has_codediff, codediff = pcall(require, "codediff.config")
 
 ---@param bin string
 ---@param label string
@@ -84,6 +86,11 @@ local function check_pulls()
 		return
 	end
 
+	local diff_cmd = config.diff_command()
+	local configured = vim.trim((pulls.diff or {}).open_cmd or "auto")
+	local automatic = configured == "auto" or configured == ""
+	vim.health.ok(string.format("Diff viewer: %s%s", diff_cmd, automatic and " (auto)" or ""))
+
 	local repo_paths = (pulls.repo_config or {}).paths or {}
 	if vim.tbl_isempty(repo_paths) and #providers.configured("pulls") == 0 then
 		vim.health.info("Pulls not configured")
@@ -101,23 +108,16 @@ local function check_pulls()
 		)
 	end
 
-	local diff_cmd = tostring((pulls.diff or {}).open_cmd or "")
-	if diff_cmd == "" then
-		vim.health.warn("pulls.diff.open_cmd is empty")
-	elseif diff_cmd == "AtlasDiff" then
-		vim.health.ok("Using default diff viewer: AtlasDiff")
-	else
-		vim.health.ok(string.format("Configured diff viewer: %s", diff_cmd))
-	end
-
 	local lsp = (pulls.diff or {}).lsp or {}
 	local lsp_ok, lsp_err = require("atlas.core.git.worktree").validate(lsp)
 	if not lsp_ok then
 		vim.health.error(string.format("pulls.diff.lsp is invalid: %s", tostring(lsp_err)))
 	elseif not lsp.enabled then
 		vim.health.info("pulls.diff.lsp.enabled is off (diff buffers have no language server)")
-	elseif diff_cmd ~= "AtlasDiff" then
-		vim.health.warn(string.format("pulls.diff.lsp.enabled requires open_cmd AtlasDiff (got %s)", diff_cmd))
+	elseif diff_cmd ~= "AtlasDiff" and diff_cmd ~= "CodeDiff" then
+		vim.health.warn(
+			string.format("pulls.diff.lsp.enabled requires open_cmd AtlasDiff or CodeDiff (got %s)", diff_cmd)
+		)
 	else
 		vim.health.ok("pulls.diff.lsp enabled")
 	end
@@ -148,21 +148,15 @@ local function check_github()
 	vim.health.ok("gh CLI found")
 
 	local hostname = providers.github.hostname()
-	vim.health.info("GitHub host: " .. hostname)
-	vim.health.info("Checking GitHub authentication; the result will appear in a notification")
-	vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }, function(result)
-		vim.schedule(function()
-			if result.code == 0 then
-				vim.notify("gh authenticated for " .. hostname, vim.log.levels.INFO, { title = "Atlas health" })
-			else
-				vim.notify(
-					"gh not authenticated for " .. hostname .. "\nRun: gh auth login --hostname " .. hostname,
-					vim.log.levels.ERROR,
-					{ title = "Atlas health" }
-				)
-			end
-		end)
-	end)
+	local result = vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }):wait(5000)
+	if result.code == 0 then
+		vim.health.ok("gh authenticated for " .. hostname)
+		return
+	end
+	vim.health.error(
+		"GitHub authentication check failed for " .. hostname,
+		{ "Run: gh auth login --hostname " .. hostname }
+	)
 end
 
 local function check_gitlab()
@@ -191,6 +185,61 @@ local function check_jira()
 	check_credentials(provider, credentials, "Jira")
 	check_https_url(provider.base_url, "providers.jira.base_url")
 	check_provider_views("jira")
+end
+
+local function check_codediff_keymaps()
+	if not has_codediff then
+		vim.health.info("CodeDiff keymap check skipped: CodeDiff config is unavailable")
+		return
+	end
+
+	local overlaps = {}
+	for group, actions in pairs(diff_keymaps.action_ids) do
+		local atlas_keys = {}
+		local function add(action, keys)
+			if type(keys) == "string" then
+				keys = { keys }
+			end
+			for _, key in ipairs(keys or {}) do
+				local normalized = vim.api.nvim_replace_termcodes(key, true, true, true)
+				atlas_keys[normalized] = atlas_keys[normalized] or {}
+				table.insert(atlas_keys[normalized], action .. " (" .. key .. ")")
+			end
+		end
+
+		for _, action in ipairs(actions) do
+			add(action, keymaps.resolve(action))
+		end
+		for index, mapping in ipairs(config.options.keymaps.pulls.custom or {}) do
+			add(string.format("pulls.custom[%d]", index), mapping.key)
+		end
+
+		for action, keys in pairs(codediff.options.keymaps[group]) do
+			if type(keys) == "string" then
+				keys = { keys }
+			end
+			if type(keys) == "table" then
+				for _, key in ipairs(keys) do
+					local normalized = vim.api.nvim_replace_termcodes(key, true, true, true)
+					for _, atlas_action in ipairs(atlas_keys[normalized] or {}) do
+						table.insert(
+							overlaps,
+							string.format("CodeDiff: Atlas %s overlaps %s.%s (%s)", atlas_action, group, action, key)
+						)
+					end
+				end
+			end
+		end
+	end
+
+	table.sort(overlaps)
+	if #overlaps == 0 then
+		vim.health.ok("No configured key overlaps with CodeDiff")
+		return
+	end
+	for _, overlap in ipairs(overlaps) do
+		vim.health.warn(overlap)
+	end
 end
 
 local function validate_keymaps()
@@ -246,6 +295,7 @@ function M.check()
 
 	vim.health.start("Keymaps")
 	validate_keymaps()
+	check_codediff_keymaps()
 end
 
 return M

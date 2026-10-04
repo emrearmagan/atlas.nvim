@@ -44,6 +44,7 @@ describe("core.keymaps", function()
 		end)
 
 		it("reports unexpected conflicts inside nested groups", function()
+			config.options.keymaps.pulls.review.request_changes = "<leader>gr"
 			local key = config.options.keymaps.pulls.review.request_changes
 			config.options.keymaps.pulls.checkout = key
 

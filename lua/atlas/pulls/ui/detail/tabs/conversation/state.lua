@@ -64,7 +64,7 @@ function M.is_run_expanded(run_id)
 	return M.expanded_runs[tostring(run_id)] == true
 end
 
----@param is_task boolean
+---@param is_task boolean|nil
 ---@return PullsComment[]
 function M.comments(is_task)
 	local result = {}
@@ -75,7 +75,7 @@ function M.comments(is_task)
 		if item.kind == "comment" then
 			---@type PullsComment
 			local comment = item.entity
-			if (comment.is_task == true) == is_task then
+			if is_task == nil or (comment.is_task == true) == is_task then
 				table.insert(result, comment)
 			end
 		end
@@ -125,7 +125,7 @@ local function is_comment_long(comment)
 	if comment.is_task or comment.state == "DELETED" then
 		return false
 	end
-	local content = utils.strip_markup(comment.content_display or comment.content_raw or "")
+	local content = utils.strip_markup(comment.content_raw or "")
 	local lines = utils.sanitize_lines(content)
 	while #lines > 0 and vim.trim(lines[#lines]) == "" do
 		table.remove(lines)

@@ -77,6 +77,7 @@ function M.register(buf)
 		items,
 		item("ui.help", {
 			desc = "Toggle this help popup",
+			index = 100,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				help.toggle({ buffer = buf })
@@ -88,6 +89,7 @@ function M.register(buf)
 		items,
 		item("ui.close", {
 			desc = "Close Atlas window",
+			index = 101,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if help.is_open() then
@@ -102,6 +104,7 @@ function M.register(buf)
 		items,
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
+			index = 12,
 			callback = function()
 				local dashboard = domain_dashboard()
 				if dashboard then
@@ -115,6 +118,7 @@ function M.register(buf)
 		items,
 		item("ui.next_panel_tab", {
 			desc = "Next panel tab",
+			index = 11,
 			opts = { nowait = true },
 			callback = function()
 				local dashboard = domain_dashboard()
@@ -129,6 +133,7 @@ function M.register(buf)
 		items,
 		item("ui.previous_panel_tab", {
 			desc = "Previous panel tab",
+			index = 10,
 			opts = { nowait = true },
 			callback = function()
 				local dashboard = domain_dashboard()
@@ -143,6 +148,7 @@ function M.register(buf)
 		items,
 		item("ui.notifications.open", {
 			desc = "Open notifications",
+			index = 20,
 			callback = function()
 				require("atlas.ui.notifications").open()
 			end,

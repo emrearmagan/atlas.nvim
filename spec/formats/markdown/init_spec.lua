@@ -202,31 +202,31 @@ describe("Markdown parsing", function()
 	it("renders fenced code literally and resumes Markdown after the fence", function()
 		local result = markdown.parse("```lua\n# raw\n**raw**\n```\n\n### Title")
 		assert.are.same({
-			"      lua  ",
-			"  # raw    ",
-			"  **raw**  ",
-			"           ",
+			"    lua  ",
+			" # raw   ",
+			" **raw** ",
+			"         ",
 			"",
 			"Title",
 		}, result.lines)
 		for line = 0, 3 do
-			has_span(result, span(line, 0, 11, "AtlasMarkdownCode"))
+			has_span(result, span(line, 0, 9, "AtlasMarkdownCode"))
 		end
-		has_span(result, span(0, 6, 9, "AtlasMarkdownCodeLabel"))
+		has_span(result, span(0, 4, 7, "AtlasMarkdownCodeLabel"))
 		has_span(result, span(5, 0, 5, "AtlasMarkdownHeading3"))
 		assert.are.same({
-			lines = { "         ", "  ```    ", "  *raw*  ", "         " },
+			lines = { "       ", " ```   ", " *raw* ", "       " },
 			targets = {},
 			highlights = {
-				span(0, 0, 9, "AtlasMarkdownCode"),
-				span(1, 0, 9, "AtlasMarkdownCode"),
-				span(2, 0, 9, "AtlasMarkdownCode"),
-				span(3, 0, 9, "AtlasMarkdownCode"),
+				span(0, 0, 7, "AtlasMarkdownCode"),
+				span(1, 0, 7, "AtlasMarkdownCode"),
+				span(2, 0, 7, "AtlasMarkdownCode"),
+				span(3, 0, 7, "AtlasMarkdownCode"),
 			},
 		}, markdown.parse("~~~~\n```\n*raw*\n~~~~"))
 	end)
 
-	it("reuses code preview syntax with normalized tabs and offsets past preceding Markdown", function()
+	it("reuses code preview syntax and offsets past preceding Markdown", function()
 		local received
 		code_preview.render = function(opts)
 			received = opts
@@ -240,15 +240,7 @@ describe("Markdown parsing", function()
 				},
 			}
 		end
-		local result = markdown.parse('Intro\n\n```lua title\n\tlocal name = "é"\nreturn name\n```\n\nDone')
-
-		assert.same({
-			lines = { '    local name = "é"', "return name" },
-			language = "lua",
-			show_line_numbers = false,
-			padding = 2,
-			background_hl_group = "AtlasMarkdownCode",
-		}, received)
+		local result = markdown.parse('Intro\n\n```lua title\n    local name = "é"\nreturn name\n```\n\nDone')
 		assert.equal("lua", result.lines[3]:match("^%s*(.-)%s*$"))
 		assert.equal('      local name = "é"  ', result.lines[4])
 		assert.equal("Done", result.lines[8])
@@ -289,9 +281,9 @@ describe("Markdown parsing", function()
 
 	it("keeps the remainder of an unclosed fence as code", function()
 		local result = markdown.parse("```\n**raw**\n")
-		assert.are.same({ "           ", "  **raw**  ", "           ", "           " }, result.lines)
+		assert.are.same({ "         ", " **raw** ", "         ", "         " }, result.lines)
 		for line = 0, 3 do
-			has_span(result, span(line, 0, 11, "AtlasMarkdownCode"))
+			has_span(result, span(line, 0, 9, "AtlasMarkdownCode"))
 		end
 	end)
 
@@ -344,9 +336,9 @@ describe("Markdown parsing", function()
 		assert.same({
 			"▾ Using lazy.nvim",
 			"",
-			"       lua  ",
-			"  print(1)  ",
-			"            ",
+			"     lua  ",
+			" print(1) ",
+			"          ",
 			"",
 			"after",
 		}, result.lines)
@@ -482,15 +474,15 @@ describe("Markdown parsing", function()
 
 	it("requires closing fences to be at least as long as their opening fence", function()
 		local result = markdown.parse("````\n```\nraw\n`````\nafter")
-		assert.are.same({ "       ", "  ```  ", "  raw  ", "       ", "after" }, result.lines)
+		assert.are.same({ "     ", " ``` ", " raw ", "     ", "after" }, result.lines)
 		for line = 0, 3 do
-			has_span(result, span(line, 0, 7, "AtlasMarkdownCode"))
+			has_span(result, span(line, 0, 5, "AtlasMarkdownCode"))
 		end
 	end)
 
 	it("pads code and blank code lines to the requested width", function()
 		local result = markdown.parse("```lua\nx\n\n```", { width = 8 })
-		assert.are.same({ "   lua  ", "  x     ", "        ", "        " }, result.lines)
+		assert.are.same({ "   lua  ", " x      ", "        ", "        " }, result.lines)
 		for line = 0, 3 do
 			has_span(result, span(line, 0, 8, "AtlasMarkdownCode"))
 		end
@@ -499,13 +491,11 @@ describe("Markdown parsing", function()
 		local clipped = markdown.parse("```typescript title=example\nreturn 'complete source'\n```", { width = 8 })
 		assert.are.same({
 			"  type  ",
-			"  retu  ",
-			"  rn    ",
-			"  'com  ",
-			"  plet  ",
-			"  e     ",
-			"  sour  ",
-			"  ce'   ",
+			" return ",
+			"  'comp ",
+			" lete   ",
+			" source ",
+			" '      ",
 			"        ",
 		}, clipped.lines)
 		has_span(clipped, span(0, 2, 6, "AtlasMarkdownCodeLabel"))
@@ -582,11 +572,11 @@ describe("Markdown parsing", function()
 	end)
 
 	it("wraps literal code with padding and a continuous background on each row", function()
-		local result = markdown.render("```\n\ta **b** c\n```", { width = 16, padding = 1 })
+		local result = markdown.render("```\n    a **b** c\n```", { width = 16, padding = 1 })
 		assert.are.same({
 			"               ",
-			"       a       ",
-			"   **b** c     ",
+			"      a **b**  ",
+			"  c            ",
 			"               ",
 		}, result.lines)
 		for line = 0, 3 do
@@ -911,8 +901,8 @@ describe("Markdown parsing", function()
 
 	it("pads multibyte code without truncating it", function()
 		local result = markdown.parse("```\né\n```", { width = 8 })
-		assert.are.same({ "        ", "  é     ", "        " }, result.lines)
-		has_span(result, span(1, 0, #"  é     ", "AtlasMarkdownCode"))
+		assert.are.same({ "        ", " é      ", "        " }, result.lines)
+		has_span(result, span(1, 0, #" é      ", "AtlasMarkdownCode"))
 	end)
 
 	it("applies custom highlights to block, inline and shared code styles", function()

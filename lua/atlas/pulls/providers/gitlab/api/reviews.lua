@@ -300,7 +300,7 @@ local function fetch_review(pr, opts, on_done, fetch_comments)
 		local comments = {}
 		local has_pending = false
 		for _, comment in ipairs(values.comments) do
-			has_pending = has_pending or comment.state == "PENDING"
+			has_pending = has_pending or comment.pending == true
 			if comment.inline or comment.file then
 				table.insert(comments, comment)
 			end

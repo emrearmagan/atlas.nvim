@@ -41,6 +41,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.reply", {
 			desc = "Reply to comment",
+			index = 21,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = detail.current_pr
@@ -55,6 +56,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.comments.edit", {
 			desc = edit_description,
+			index = 30,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = detail.current_pr
@@ -70,6 +72,7 @@ function M.setup(buf, refresh)
 			items,
 			from_action("pulls.review.add_task", {
 				desc = "Add task",
+				index = 22,
 				opts = { nowait = true, silent = true },
 				callback = function()
 					local pr = detail.current_pr
@@ -84,6 +87,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.delete", {
 			desc = delete_description,
+			index = 41,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = detail.current_pr
@@ -96,8 +100,9 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.toggle_resolved", {
+		from_action("pulls.review.toggle_resolved", {
 			desc = "Toggle resolved",
+			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = detail.current_pr
@@ -110,8 +115,9 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.show_details", {
+		from_action("ui.show_details", {
 			desc = "Show details",
+			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				tab.show_details(cursor_entry(), buf)
@@ -123,6 +129,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.toggle_fold", {
 			desc = "Toggle thread fold",
+			index = 12,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local state = require("atlas.pulls.ui.detail.tabs.review.state")
@@ -146,6 +153,7 @@ function M.setup(buf, refresh)
 		items,
 		from_action("ui.toggle_all_folds", {
 			desc = "Toggle all thread folds",
+			index = 13,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local state = require("atlas.pulls.ui.detail.tabs.review.state")
@@ -161,8 +169,9 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.next_hunk", {
+		from_action("pulls.review.atlas.next_hunk", {
 			desc = "Next hunk",
+			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local win = detail.win
@@ -184,8 +193,9 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.previous_hunk", {
+		from_action("pulls.review.atlas.prev_hunk", {
 			desc = "Previous hunk",
+			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local win = detail.win
@@ -225,12 +235,12 @@ function M.teardown(buf)
 	utils.insert_if(items, remove_item("ui.comments.edit"))
 	utils.insert_if(items, remove_item("pulls.review.add_task"))
 	utils.insert_if(items, remove_item("ui.delete"))
-	utils.insert_if(items, remove_item("pulls.review.diff.toggle_resolved"))
+	utils.insert_if(items, remove_item("pulls.review.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
-	utils.insert_if(items, remove_item("pulls.review.diff.next_hunk"))
-	utils.insert_if(items, remove_item("pulls.review.diff.previous_hunk"))
-	utils.insert_if(items, remove_item("pulls.review.show_details"))
+	utils.insert_if(items, remove_item("pulls.review.atlas.next_hunk"))
+	utils.insert_if(items, remove_item("pulls.review.atlas.prev_hunk"))
+	utils.insert_if(items, remove_item("ui.show_details"))
 	help.remove("Detail", items, { buffer = buf })
 end
 

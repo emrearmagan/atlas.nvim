@@ -1,5 +1,4 @@
 local box = require("atlas.ui.components.box")
-local code_preview = require("atlas.ui.components.code_preview")
 local markdown = require("atlas.formats.markdown")
 local icons = require("atlas.ui.shared.icons")
 local notes = require("atlas.pulls.notes")
@@ -9,6 +8,7 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 local note_icon, note_icon_hl = icons.general("pin")
 local progress_icon, progress_icon_hl = icons.general("progress")
+local resolved_icon, resolved_icon_hl = icons.general("success")
 
 ---@class AtlasNotesUIItem
 ---@field kind "header"|nil
@@ -19,12 +19,15 @@ local progress_icon, progress_icon_hl = icons.general("progress")
 ---@class AtlasNotesUIActionKeys
 ---@field edit? string
 ---@field delete? string
+---@field toggle_resolved? string
 
 ---@class AtlasNotesUIRenderOptions
 ---@field action_keys AtlasNotesUIActionKeys|nil
 ---@field boxed boolean|nil
+---@field expanded boolean|nil
 ---@field padding_x integer|nil
 ---@field outdated table<string, boolean>|nil
+---@field location (fun(note: AtlasNote): string)|nil
 
 ---@class AtlasNotesUIListItem
 ---@field target AtlasNoteTarget
@@ -97,16 +100,32 @@ function M.render_details(note, target, width)
 		{ line = 0, start_col = #note_type, end_col = #lines[1], hl_group = "AtlasTextMuted" },
 		{ line = 2, start_col = 0, end_col = 7, hl_group = "AtlasTextMuted" },
 	}
+	if note.resolved then
+		local start_col = #lines[1] + 2
+		lines[1] = lines[1] .. "  " .. resolved_icon .. " resolved"
+		table.insert(spans, {
+			line = 0,
+			start_col = start_col,
+			end_col = #lines[1],
+			hl_group = resolved_icon_hl,
+		})
+	end
 	if note.context then
+		local source = table.concat(note.context.lines, "\n")
+		local fence = "```"
+		for ticks in source:gmatch("`+") do
+			if #ticks >= #fence then
+				fence = ticks .. "`"
+			end
+		end
+
 		table.insert(lines, "")
 		utils.append_block(
 			lines,
 			spans,
-			code_preview.render({
+			markdown.parse(fence .. "\n" .. source .. "\n" .. fence, {
+				width = width,
 				file_path = note.file_path,
-				lines = note.context.lines,
-				start_line = note.context.start_line,
-				anchor_line = note.line,
 			})
 		)
 	end
@@ -122,9 +141,10 @@ function M.render_details(note, target, width)
 	return lines, spans
 end
 
+---@param note AtlasNote
 ---@param action_keys AtlasNotesUIActionKeys|nil
 ---@return AtlasThreadFooterItem[]
-local function note_footer(action_keys)
+local function note_footer(note, action_keys)
 	local footer_items = {}
 	for _, action in ipairs({ "edit", "delete" }) do
 		local key = action_keys and action_keys[action]
@@ -135,7 +155,31 @@ local function note_footer(action_keys)
 			})
 		end
 	end
+	local toggle_key = action_keys and action_keys.toggle_resolved
+	if toggle_key then
+		table.insert(footer_items, {
+			text = string.format("%s %s", toggle_key, note.resolved and "reopen" or "resolve"),
+			hl_group = "AtlasTextMuted",
+		})
+	end
 	return footer_items
+end
+
+---@param note AtlasNote
+---@param outdated boolean|nil
+---@return [string, string][]
+function M.status_marker(note, outdated)
+	local chunks = {}
+	if note.resolved then
+		chunks[#chunks + 1] = { resolved_icon, resolved_icon_hl }
+	end
+	if outdated then
+		if #chunks > 0 then
+			chunks[#chunks + 1] = { " ", "AtlasTextMuted" }
+		end
+		chunks[#chunks + 1] = { progress_icon, "AtlasTextWarning" }
+	end
+	return chunks
 end
 
 ---@param note AtlasNote
@@ -143,19 +187,24 @@ end
 ---@return AtlasThreadItem
 local function card_item(note, opts)
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
+	if opts.location then
+		timestamp = vim.trim(timestamp .. "  " .. opts.location(note))
+	end
 	local outdated = opts.outdated and opts.outdated[note.id]
+	local collapsed = opts.expanded == false and (note.resolved or outdated)
+
 	return {
 		icon = note_icon,
 		icon_hl = note_icon_hl,
 		author = string.format("Note [%s]", type_label(note.type)),
-		additional = timestamp,
-		right_text = outdated and progress_icon or "",
-		content = note.body,
+		author_hl = type_highlight(note.type),
+		additional = { { timestamp, "AtlasTextMuted" } },
+		right_text = M.status_marker(note, outdated),
+		content = not collapsed and note.body or nil,
 		markdown = true,
 		children = {},
-		footer_items = note_footer(opts.action_keys),
+		footer_items = collapsed and {} or note_footer(note, opts.action_keys),
 		line_map = { note = note },
-		meta = { type_hl = type_highlight(note.type) },
 	}
 end
 
@@ -176,15 +225,6 @@ function M.render_cards(items, width, opts)
 	local lines, spans, line_map = threads.render(rendered_items, content_width, {
 		padding_x = padding_x,
 		separator = "─",
-		author_hl = function(item)
-			return item.meta.type_hl
-		end,
-		additional_hl = function()
-			return "AtlasTextMuted"
-		end,
-		right_text_hl = function()
-			return progress_icon_hl
-		end,
 	})
 	if not boxed then
 		return lines, spans, line_map
@@ -206,27 +246,18 @@ local function list_item(item, opts)
 		content = "(empty note)"
 	end
 	local path = note.file_path:match("([^/\\]+)$") or note.file_path
-	local metadata = ""
-	local metadata_hl = {}
-	local function add_metadata(text, hl_group)
-		if metadata ~= "" then
-			metadata = metadata .. "  "
-		end
-		local start_col = #metadata
-		metadata = metadata .. text
-		table.insert(metadata_hl, {
-			start_col = start_col,
-			end_col = #metadata,
-			hl_group = hl_group,
-		})
-	end
-	add_metadata(string.format("%s:%d", path, note.line), "Normal")
+	local metadata = { { string.format("%s:%d", path, note.line), "Normal" } }
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
 	if timestamp ~= "" then
-		add_metadata(timestamp, "AtlasTextMuted")
+		metadata[#metadata + 1] = { "  " .. timestamp, "AtlasTextMuted" }
+	end
+	if note.resolved then
+		metadata[#metadata + 1] = { "  ", "AtlasTextMuted" }
+		metadata[#metadata + 1] = { resolved_icon .. " resolved", resolved_icon_hl }
 	end
 	if item.status == "outdated" or item.status == "orphaned" then
-		add_metadata(progress_icon, progress_icon_hl)
+		metadata[#metadata + 1] = { "  ", "AtlasTextMuted" }
+		metadata[#metadata + 1] = { progress_icon, progress_icon_hl }
 	end
 
 	local expander, expander_hl = icons.general(item.expanded and "fold_open" or "fold_closed")
@@ -234,20 +265,16 @@ local function list_item(item, opts)
 		icon = expander,
 		icon_hl = expander_hl,
 		author = type_label(note.type),
+		author_hl = type_highlight(note.type),
 		additional = metadata,
-		right_text = "",
 		content = item.expanded and content or nil,
 		markdown = true,
 		children = {},
-		footer_items = item.expanded and note_footer(opts.action_keys) or {},
+		footer_items = item.expanded and note_footer(note, opts.action_keys) or {},
 		line_map = {
 			target = item.target,
 			note = note,
 			tree_key = M.note_key(item.target, note),
-		},
-		meta = {
-			type_hl = type_highlight(note.type),
-			metadata_hl = metadata_hl,
 		},
 	}
 end
@@ -265,12 +292,6 @@ function M.render_list(items, width, opts)
 		local offset = #lines
 		local item_lines, item_spans, item_map = threads.render({ list_item(item, opts) }, width, {
 			padding_x = padding_x,
-			author_hl = function(rendered)
-				return rendered.meta.type_hl
-			end,
-			additional_hl = function(rendered)
-				return rendered.meta.metadata_hl
-			end,
 		})
 		utils.append_block(lines, spans, { lines = item_lines, highlights = item_spans })
 		for line, entry in pairs(item_map) do

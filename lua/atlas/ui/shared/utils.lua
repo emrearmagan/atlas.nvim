@@ -60,7 +60,6 @@ function M.buffer.create(name, filetype)
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("bufhidden", "hide", { buf = buf })
 	vim.api.nvim_set_option_value("filetype", filetype, { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	return buf

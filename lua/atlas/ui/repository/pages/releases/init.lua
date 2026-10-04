@@ -201,6 +201,7 @@ local function register(state, buf, actions)
 			table.insert(items, {
 				key = keys,
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { silent = true, nowait = true },
 			})
@@ -233,7 +234,7 @@ function M.open(opts)
 			render(state)
 		end
 	end
-	vim.bo[state.buf].filetype = "atlas.repository"
+	vim.bo[state.buf].filetype = "atlas-ui.repository"
 	vim.wo[state.win].wrap = true
 	vim.wo[state.win].linebreak = true
 
@@ -245,6 +246,7 @@ function M.open(opts)
 				state.releases = nil
 				load(state, state.selected_id)
 			end,
+			index = 25,
 		},
 		{
 			resolver.resolve("ui.search"),
@@ -252,6 +254,7 @@ function M.open(opts)
 			function()
 				search(state)
 			end,
+			index = 20,
 		},
 		{
 			resolver.resolve("ui.next_page"),
@@ -259,6 +262,7 @@ function M.open(opts)
 			function()
 				change_release(state, 1)
 			end,
+			index = 11,
 		},
 		{
 			resolver.resolve("ui.previous_page"),
@@ -266,6 +270,7 @@ function M.open(opts)
 			function()
 				change_release(state, -1)
 			end,
+			index = 10,
 		},
 	}
 	register(state, state.sidebar_buf, actions)
@@ -282,6 +287,7 @@ function M.open(opts)
 					vim.ui.open(entry.asset and entry.asset.url or entry.release.url)
 				end
 			end,
+			index = 33,
 		},
 		{
 			resolver.resolve("ui.copy_id"),
@@ -293,6 +299,7 @@ function M.open(opts)
 					notify.success("Copied " .. entry.release.tag)
 				end
 			end,
+			index = 40,
 		},
 		{
 			resolver.resolve("ui.copy_url"),
@@ -304,6 +311,7 @@ function M.open(opts)
 					notify.success("Copied URL")
 				end
 			end,
+			index = 41,
 		},
 	})
 	register(state, state.buf, actions)

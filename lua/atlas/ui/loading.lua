@@ -1,19 +1,22 @@
-local M = {}
-
 local keymaps = require("atlas.core.keymaps")
 local spinner = require("atlas.ui.components.spinner")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
+
+local M = {}
 
 local namespace = vim.api.nvim_create_namespace("atlas_loading")
 
 ---@class AtlasLoadingView
 ---@field update fun(self: AtlasLoadingView, message: string)
+---@field error fun(self: AtlasLoadingView, message: string)
 ---@field finish fun(self: AtlasLoadingView)
 ---@field cancel fun(self: AtlasLoadingView)
 
 ---@param view table
 ---@param text string
-local function render(view, text)
+---@param highlight string
+local function render(view, text, highlight)
 	if not vim.api.nvim_win_is_valid(view.win) or not vim.api.nvim_buf_is_valid(view.buf) then
 		return
 	end
@@ -30,15 +33,16 @@ local function render(view, text)
 	end
 
 	local width = vim.api.nvim_win_get_width(view.win)
-	local row = math.floor((height - 1) / 2)
+	local lines = vim.split(text:gsub("\r", ""), "\n", { plain = true })
+	local row = math.max(0, math.floor((height - #lines) / 2))
 	vim.api.nvim_buf_clear_namespace(view.buf, namespace, 0, -1)
-	for index, line in ipairs(vim.split(text:gsub("\r", ""), "\n", { plain = true })) do
+	for index, line in ipairs(lines) do
 		if row + index > height then
 			break
 		end
 		line = utils.truncate(line, math.max(1, width - 4))
 		vim.api.nvim_buf_set_extmark(view.buf, namespace, row + index - 1, 0, {
-			virt_text = { { line, "Normal" } },
+			virt_text = { { line, highlight } },
 			virt_text_win_col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(line)) / 2)),
 		})
 	end
@@ -57,8 +61,7 @@ function M.open(message, on_cancel)
 	vim.bo[view.buf].bufhidden = "wipe"
 	vim.bo[view.buf].buflisted = false
 	vim.bo[view.buf].buftype = "nofile"
-	vim.bo[view.buf].filetype = "atlas.loading"
-	vim.bo[view.buf].syntax = "OFF"
+	vim.bo[view.buf].filetype = "atlas-ui.loading"
 	vim.bo[view.buf].swapfile = false
 	vim.bo[view.buf].undolevels = -1
 	pcall(vim.treesitter.stop, view.buf)
@@ -77,13 +80,17 @@ function M.open(message, on_cancel)
 	end
 
 	local active = true
+	local footer = statusline.new({ show_version = true })
+	footer:set_items({ { text = message, hl_group = "AtlasFooterText" } })
+	footer:attach(view.win)
 	local text = message
+	local highlight = "AtlasTextMuted"
 	local group = vim.api.nvim_create_augroup("AtlasLoading" .. view.tabpage, { clear = true })
 	local indicator
 
 	local function draw()
 		if active then
-			render(view, indicator:text(text))
+			render(view, indicator:is_running() and indicator:text(text) or text, highlight)
 		end
 	end
 
@@ -102,8 +109,9 @@ function M.open(message, on_cancel)
 			return
 		end
 		if vim.api.nvim_tabpage_is_valid(view.tabpage) then
-			pcall(vim.cmd, vim.api.nvim_tabpage_get_number(view.tabpage) .. "tabclose")
+			pcall(vim.cmd.tabclose, { range = { vim.api.nvim_tabpage_get_number(view.tabpage) } })
 		end
+		footer:dispose()
 		if cancelled and on_cancel then
 			on_cancel()
 		end
@@ -113,14 +121,18 @@ function M.open(message, on_cancel)
 		text = next_message
 		draw()
 	end
+	view.error = function(_, next_message)
+		text = next_message
+		highlight = "AtlasLogError"
+		indicator:stop()
+		draw()
+	end
 	view.finish = function()
 		close(false)
 	end
 	view.cancel = function()
 		close(true)
 	end
-	---@cast view AtlasLoadingView
-
 	indicator = spinner.create({ on_tick = draw })
 	for _, key in ipairs(keymaps.resolve("ui.close") or {}) do
 		vim.keymap.set("n", key, view.cancel, { buffer = view.buf, silent = true, nowait = true, desc = "Cancel" })

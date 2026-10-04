@@ -1,6 +1,5 @@
-local M = {}
-
 local config = require("atlas.config")
+local diff = require("atlas.pulls.diff")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
@@ -12,6 +11,8 @@ local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 
 local start_request
+
+local M = {}
 
 ---@class PullsCreatePRReviewer
 ---@field label string
@@ -216,7 +217,7 @@ local function preview_diff(pr_state)
 			form.notify("error", err or "Unable to resolve diff revisions")
 			return
 		end
-		require("atlas.pulls.diff").open_range({
+		diff.open_range({
 			root = pr_state.fields.repo_root,
 			base = base,
 			head = head,

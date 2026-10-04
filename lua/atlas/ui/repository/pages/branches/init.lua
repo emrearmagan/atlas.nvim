@@ -280,11 +280,7 @@ local function open_diff(state)
 	end
 	local commit = selection.commit
 	if commit then
-		if not commit.parent then
-			notify.warn("This commit has no local parent to compare")
-			return
-		end
-		diff.open_range({ root = root, base = commit.parent, head = commit.hash }, function(err)
+		diff.open_commit({ root = root, commit = commit.hash }, function(err)
 			if err then
 				notify.error(err)
 			end

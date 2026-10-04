@@ -181,6 +181,7 @@ local function setup_keymaps(state, opts, name, buf)
 			key = #submit_keys == 1 and submit_keys[1] or submit_keys,
 			mode = { "n", "i" },
 			desc = "Submit",
+			index = 10,
 			callback = function()
 				vim.cmd("stopinsert")
 				opts.submit()
@@ -193,6 +194,7 @@ local function setup_keymaps(state, opts, name, buf)
 		items[#items + 1] = {
 			key = #close_keys == 1 and close_keys[1] or close_keys,
 			desc = "Close",
+			index = 101,
 			callback = opts.close,
 			opts = { silent = true, nowait = true },
 		}
@@ -202,6 +204,7 @@ local function setup_keymaps(state, opts, name, buf)
 		items[#items + 1] = {
 			key = "gg",
 			desc = "Go to first line",
+			index = 20,
 			callback = function()
 				vim.cmd("normal! gg")
 				renderer.reveal_meta(state.layout)
@@ -210,12 +213,13 @@ local function setup_keymaps(state, opts, name, buf)
 		}
 	end
 
-	for _, keymap in ipairs(opts.keymaps or {}) do
+	for index, keymap in ipairs(opts.keymaps or {}) do
 		if applies_to(keymap, name) then
 			items[#items + 1] = {
 				key = keymap.key,
 				mode = keymap.mode,
 				desc = keymap.desc,
+				index = 30 + index,
 				callback = keymap.action,
 				opts = { silent = true, nowait = true },
 			}
@@ -227,6 +231,7 @@ local function setup_keymaps(state, opts, name, buf)
 		items[#items + 1] = {
 			key = #help_keys == 1 and help_keys[1] or help_keys,
 			desc = "Toggle help",
+			index = 100,
 			callback = function()
 				help.toggle({ buffer = buf })
 			end,

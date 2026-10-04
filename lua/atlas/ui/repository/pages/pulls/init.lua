@@ -1,5 +1,5 @@
 local opener = require("atlas.commands.open")
-local review = require("atlas.commands.review")
+local diff = require("atlas.pulls.diff")
 local resolver = require("atlas.core.keymaps")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
@@ -191,6 +191,7 @@ local function register(state, buf, actions)
 			items[#items + 1] = {
 				key = keys,
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { silent = true, nowait = true },
 			}
@@ -239,6 +240,7 @@ function M.open(opts)
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state, true)
 			end,
+			index = 25,
 		},
 		{
 			resolver.resolve("ui.search"),
@@ -246,6 +248,7 @@ function M.open(opts)
 			function()
 				search(state)
 			end,
+			index = 20,
 		},
 		{
 			resolver.resolve("ui.next_page"),
@@ -258,6 +261,7 @@ function M.open(opts)
 				state.cursors[state.page] = state.next_cursor
 				load(state)
 			end,
+			index = 11,
 		},
 		{
 			resolver.resolve("ui.previous_page"),
@@ -268,9 +272,10 @@ function M.open(opts)
 					load(state)
 				end
 			end,
+			index = 10,
 		},
 	}
-	for _, filter in ipairs(filters) do
+	for index, filter in ipairs(filters) do
 		actions[#actions + 1] = {
 			resolver.resolve("pulls.filters." .. filter),
 			"Show " .. filter .. " pull requests",
@@ -279,6 +284,7 @@ function M.open(opts)
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state)
 			end,
+			index = 20 + index,
 		}
 	end
 	register(state, state.sidebar_buf, actions)
@@ -293,9 +299,14 @@ function M.open(opts)
 			function()
 				local pr = current(state)
 				if pr then
-					review.open(pr.link.html)
+					diff.open_pr(pr, function(err)
+						if err then
+							state.statusline:notify("error", err)
+						end
+					end)
 				end
 			end,
+			index = 31,
 		},
 		{
 			panel_keys,
@@ -306,6 +317,7 @@ function M.open(opts)
 					opener.open(pr.link.html)
 				end
 			end,
+			index = 30,
 		},
 		{
 			resolver.resolve("ui.open_in_browser"),
@@ -316,6 +328,7 @@ function M.open(opts)
 					vim.ui.open(pr.link.html)
 				end
 			end,
+			index = 33,
 		},
 	})
 	register(state, state.buf, actions)

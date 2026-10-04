@@ -157,8 +157,7 @@ local function ensure_buffer()
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "atlas.notes", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-ui.notes", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
 	keymaps.register(buf, actions.new(state, refresh, render))
 	vim.api.nvim_create_autocmd("BufWipeout", {
@@ -213,20 +212,20 @@ function M.open(opts)
 end
 
 function M.clear_all()
-	vim.ui.input({ prompt = "Delete all local review notes? [y/N]: " }, function(answer)
+	vim.ui.input({ prompt = "Delete all review notes? [y/N]: " }, function(answer)
 		answer = vim.trim(tostring(answer or "")):lower()
 		if answer ~= "y" and answer ~= "yes" then
 			return
 		end
 		local cleared, err = notes.clear_all()
 		if not cleared then
-			notify.error(err or "Unable to delete local notes", { vim_notify = true })
+			notify.error(err or "Unable to delete notes", { vim_notify = true })
 			return
 		end
 		state.documents = {}
 		state.expanded = {}
 		render()
-		notify.info("Local review notes deleted", { vim_notify = true })
+		notify.info("Review notes deleted", { vim_notify = true })
 	end)
 end
 

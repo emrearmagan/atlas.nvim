@@ -5,10 +5,12 @@ local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local icons = require("atlas.ui.shared.icons")
 local threads = require("atlas.ui.components.threads")
+local review_actions = require("atlas.pulls.actions.review")
 local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local activity_component = require("atlas.pulls.ui.detail.components.activity")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
+local overview = require("atlas.pulls.ui.detail.tabs.overview.state")
 
 local PADDING_X = 1
 
@@ -29,13 +31,15 @@ end
 ---@param thread AtlasCommentThreadNode
 ---@param collapsed boolean
 ---@param width integer
-local function render_thread(thread, collapsed, width)
+---@param format_text (fun(text: string): string)|nil
+local function render_thread(thread, collapsed, width, format_text)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
 	local fold_key = fold_keys and fold_keys[1]
 	local opts = {
 		boxed = true,
+		format_text = format_text,
 		expanded = function()
 			return not collapsed
 		end,
@@ -95,7 +99,7 @@ local function build_timeline(items)
 			})
 		end
 	end
-	for _, thread in ipairs(comment_threads.group_comments(comments)) do
+	for _, thread in ipairs(review_actions.group_comments(comments)) do
 		table.insert(mixed, {
 			kind = "comment",
 			timestamp = thread.comment.created_on or "",
@@ -171,13 +175,21 @@ end
 ---@param item PullsConversationItem
 ---@param width integer
 ---@param has_next boolean
-local function render_review(item, width, has_next)
+---@param format_text (fun(text: string): string)|nil
+local function render_review(item, width, has_next, format_text)
 	---@type PullsReviewHistoryEntry
 	local review = item.entity
 	local icon, icon_hl, label = review_status(review)
 	local timestamp = utils.relative_time(review.submitted_on)
-	local additional = timestamp ~= "" and (label .. "  " .. timestamp) or label
+	local additional = { { label, icon_hl } }
+	if timestamp ~= "" then
+		additional[#additional + 1] = { "  " .. timestamp, "AtlasTextMuted" }
+	end
+
 	local body = review.body or ""
+	if format_text then
+		body = format_text(body)
+	end
 	local lines, spans, line_map = threads.render(
 		{
 			{
@@ -193,20 +205,6 @@ local function render_review(item, width, has_next)
 		{
 			padding_x = PADDING_X,
 			content_prefix = has_next and "│ " or "  ",
-			additional_hl = function(_, text)
-				local highlights = {
-					{ start_col = 0, end_col = math.min(#label, #text), hl_group = icon_hl },
-				}
-				local time_start = #label + 2
-				if time_start < #text then
-					table.insert(highlights, {
-						start_col = time_start,
-						end_col = #text,
-						hl_group = "AtlasTextMuted",
-					})
-				end
-				return highlights
-			end,
 		}
 	)
 	attach_item(line_map, item)
@@ -217,23 +215,26 @@ end
 ---@param width integer
 ---@param has_next boolean
 ---@param by_entity table<table, PullsConversationItem>
-local function render_entry(entry, width, has_next, by_entity)
+---@param format_text (fun(text: string): string)|nil
+local function render_entry(entry, width, has_next, by_entity, format_text)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
 		if root.is_task then
 			local lines, spans, line_map = comment_threads.render_task_compact(thread, width, {
 				padding_x = PADDING_X,
+				format_text = format_text,
 				content_prefix = has_next and "│ " or "  ",
 			})
 			attach_entities(line_map, by_entity)
 			return lines, spans, line_map
 		end
-		local lines, spans, line_map = render_thread(thread, state.is_collapsed(root.id, #thread.children > 0), width)
+		local lines, spans, line_map =
+			render_thread(thread, state.is_collapsed(root.id, #thread.children > 0), width, format_text)
 		attach_entities(line_map, by_entity)
 		return lines, spans, line_map
 	elseif entry.type == "review" and entry.item then
-		return render_review(entry.item, width, has_next)
+		return render_review(entry.item, width, has_next, format_text)
 	elseif entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
 		local activities = {}
@@ -260,10 +261,10 @@ local function is_activity(entry)
 	return entry ~= nil and (entry.type ~= "comment" or entry.thread.comment.is_task == true)
 end
 
----@param _pr PullRequest
----@param _details PullRequestDetails|nil
+---@param pr PullRequest
+---@param details PullRequestDetails|nil
 ---@param width integer
-function M.render(_pr, _details, width)
+function M.render(pr, details, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -288,6 +289,18 @@ function M.render(_pr, _details, width)
 		return lines, spans, line_map
 	end
 
+	local reviewers = type(overview.reviewers) == "table" and overview.reviewers or nil
+	local provider = detail.provider
+	local comments = provider and provider.capabilities.comments
+	local formatter = comments and comments.comment_formatter
+	local format_text = formatter
+		and formatter({
+			pr = pr,
+			details = details,
+			conversation = state.comments(),
+			reviewers = reviewers,
+		})
+
 	for index, entry in ipairs(entries) do
 		if #lines > 0 then
 			if is_activity(entry) and is_activity(entries[index - 1]) then
@@ -297,7 +310,7 @@ function M.render(_pr, _details, width)
 			end
 		end
 		local has_next = is_activity(entry) and is_activity(entries[index + 1])
-		local e_lines, e_spans, e_map = render_entry(entry, width, has_next, by_entity)
+		local e_lines, e_spans, e_map = render_entry(entry, width, has_next, by_entity, format_text)
 		splice(lines, spans, line_map, e_lines, e_spans, e_map)
 	end
 

@@ -32,7 +32,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				explorer.reload_pipeline(explorer_pane, current_selection(pane, explorer_pane))
 			end,
-			index = 0,
+			index = 50,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -41,7 +41,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				explorer.navigate_job(explorer_pane, 1, current_selection(pane, explorer_pane))
 			end,
-			index = 7,
+			index = 11,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -50,7 +50,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				explorer.navigate_job(explorer_pane, -1, current_selection(pane, explorer_pane))
 			end,
-			index = 8,
+			index = 10,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -59,7 +59,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				explorer.show_history(explorer_pane)
 			end,
-			index = 6,
+			index = 20,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -73,7 +73,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 					vim.ui.open(url)
 				end
 			end,
-			index = 2,
+			index = 21,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -82,14 +82,14 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				open_actions(current_selection(pane, explorer_pane))
 			end,
-			index = 3,
+			index = 30,
 			opts = { nowait = true, silent = true },
 		},
 		{
 			key = close_keys,
 			desc = "Close pipelines",
 			callback = close,
-			index = 5,
+			index = 101,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -98,7 +98,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				help.toggle({ buffer = pane.buf })
 			end,
-			index = 4,
+			index = 100,
 			opts = { nowait = true, silent = true },
 		},
 	}
@@ -109,7 +109,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				logs.toggle_auto_refresh(logs_pane)
 			end,
-			index = 9,
+			index = 51,
 			opts = { nowait = true, silent = true },
 		}
 		items[#items + 1] = {
@@ -118,7 +118,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			callback = function()
 				logs.toggle_raw(logs_pane)
 			end,
-			index = 1,
+			index = 52,
 			opts = { nowait = true, silent = true },
 		}
 	end

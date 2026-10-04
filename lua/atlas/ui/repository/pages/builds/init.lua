@@ -182,6 +182,7 @@ local function register(state, buf, actions)
 			items[#items + 1] = {
 				key = action[1],
 				desc = action[2],
+				index = action.index,
 				callback = action[3],
 				opts = { silent = true, nowait = true },
 			}
@@ -226,6 +227,7 @@ function M.open(opts)
 			function()
 				load(state)
 			end,
+			index = 25,
 		},
 		{
 			"b",
@@ -233,6 +235,7 @@ function M.open(opts)
 			function()
 				change_branch(state)
 			end,
+			index = 20,
 		},
 	}
 	register(state, state.sidebar_buf, actions)
@@ -250,6 +253,7 @@ function M.open(opts)
 					}, state.provider)
 				end
 			end,
+			index = 30,
 		},
 		{
 			resolver.resolve("ui.open_in_browser"),
@@ -262,6 +266,7 @@ function M.open(opts)
 					notify.info("This build has no browser URL")
 				end
 			end,
+			index = 33,
 		},
 	})
 	register(state, state.buf, actions)

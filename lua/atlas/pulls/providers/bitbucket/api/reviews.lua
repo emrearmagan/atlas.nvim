@@ -196,7 +196,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 		for _, items in ipairs({ values.comments, values.tasks }) do
 			for _, item in ipairs(items) do
 				-- Bitbucket only exposes pending items to their author.
-				if item.state == "PENDING" then
+				if item.pending then
 					has_pending = true
 					break
 				end
@@ -346,12 +346,12 @@ function M.discard_review(pr, _review, on_done)
 
 		local items = {}
 		for _, task in ipairs(values.tasks) do
-			if task.state == "PENDING" then
+			if task.pending then
 				table.insert(items, task)
 			end
 		end
 		for index = #values.comments, 1, -1 do
-			if values.comments[index].state == "PENDING" then
+			if values.comments[index].pending then
 				table.insert(items, values.comments[index])
 			end
 		end

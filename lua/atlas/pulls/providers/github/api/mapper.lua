@@ -462,10 +462,9 @@ function M.to_comment(raw, thread_state)
 	result.inline = inline
 	result.is_task = nil
 	if thread_state then
+		result.pending = thread_state.pending == true
 		result.outdated = thread_state.outdated == true
-		if thread_state.pending then
-			result.state = "PENDING"
-		elseif thread_state.resolved then
+		if thread_state.resolved then
 			result.state = "RESOLVED"
 		elseif thread_state.outdated then
 			result.state = "OUTDATED"

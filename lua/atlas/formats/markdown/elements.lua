@@ -241,7 +241,7 @@ function M.block.code(lines, index, opts)
 			break
 		end
 
-		body[#body + 1] = lines[index]:gsub("\t", "    ")
+		body[#body + 1] = lines[index]
 		index = index + 1
 	end
 
@@ -257,7 +257,7 @@ function M.block.code(lines, index, opts)
 		file_path = opts.file_path,
 		show_line_numbers = false,
 		width = opts.width,
-		padding = 2,
+		padding = 1,
 		background_hl_group = opts.hl and opts.hl.code or highlight_groups.code,
 	})
 

@@ -104,6 +104,7 @@ function M.register(buf)
 	)
 	local refresh_item = {
 		desc = "Refresh issue",
+		index = 60,
 		opts = { nowait = true, silent = true },
 		callback = function()
 			require("atlas.issues.ui.detail").refresh()
@@ -117,6 +118,7 @@ function M.register(buf)
 			items,
 			item("ui.open_actions", {
 				desc = "Open issue actions",
+				index = 50,
 				callback = function()
 					local issue = state.current_issue
 					if issue == nil then
@@ -135,6 +137,7 @@ function M.register(buf)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
+			index = 2,
 			opts = { nowait = true },
 			callback = function()
 				if open_current_line() then
@@ -152,6 +155,7 @@ function M.register(buf)
 		items,
 		item("ui.toggle_subscription", {
 			desc = "Toggle subscription",
+			index = 51,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local issue = state.current_issue
@@ -173,6 +177,7 @@ function M.register(buf)
 		general,
 		item("ui.next_panel_tab", {
 			desc = "Next detail tab",
+			index = 11,
 			opts = { nowait = true },
 			callback = function()
 				require("atlas.issues.ui.detail").next_tab()
@@ -184,6 +189,7 @@ function M.register(buf)
 		general,
 		item("ui.previous_panel_tab", {
 			desc = "Previous detail tab",
+			index = 10,
 			opts = { nowait = true },
 			callback = function()
 				require("atlas.issues.ui.detail").prev_tab()
@@ -195,6 +201,7 @@ function M.register(buf)
 		general,
 		item("ui.help", {
 			desc = "Toggle help",
+			index = 100,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				help.toggle({ buffer = buf })
@@ -206,6 +213,7 @@ function M.register(buf)
 		general,
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
+			index = 12,
 			callback = function()
 				require("atlas.issues.ui.detail").close()
 			end,
@@ -216,6 +224,7 @@ function M.register(buf)
 		general,
 		item("ui.close", {
 			desc = "Close detail panel",
+			index = 101,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if not help.is_open() then
