@@ -14,7 +14,7 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
-<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
+<img alt="github" src="https://github.com/user-attachments/assets/08281971-0c9f-404f-a106-4aede061b770" />
 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
@@ -78,11 +78,9 @@ require("atlas").setup({})
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
 
-## Features
+## Review Pull Requests
 
-### Review Pull Requests
-
-<img alt="AtlasDiff" src="https://github.com/user-attachments/assets/38d40d4d-5d1d-4cb5-a597-2d94faabf1a3">
+<img alt="AtlasDiff" src="https://github.com/user-attachments/assets/4f9f9628-fdad-492f-abe4-2b59a0f0f2e3">
 
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
 
@@ -95,11 +93,16 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 > **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v3.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) are also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 <details>
-<summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
+<summary><strong>More Features</strong></summary>
+
+### Notes
 
 Notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
 
-#### Script and integration
+<img alt="notes" src="https://github.com/user-attachments/assets/ab7b054f-5c41-4b37-bb9b-a6a36ca8a86e" />
+
+<details>
+<summary><strong>Script and integration</strong></summary>
 
 For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 
@@ -115,51 +118,30 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 </details>
 
-<details>
-<summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
+### LSP for Reviews
 
 Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff or CodeDiff.
 
-```lua
-pulls = {
-  diff = {
-    lsp = {
-      enabled = true,
-      -- link = { "node_modules", ".venv" }, -- optional dependencies
-    },
-  },
-}
-```
-
 Atlas uses a temporary worktree and removes it when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
 
-<img alt="lsp-support" src="https://github.com/user-attachments/assets/9d67cd02-f1fa-4ee3-94ad-d11fa1388dbd" />
+<img alt="lsp-support" src="https://github.com/user-attachments/assets/a5a51c9d-0fd7-4141-828f-fd433435dbaf" />
 
-</details>
-
-### Also included
-
-<details>
-<summary><strong>Repository browser</strong> - Browse repositories from Neovim</summary>
+### Repository browser
 
 <img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
 
 Browse a repository's README, pull requests, issues, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
 
-</details>
+### Pipelines
 
-<details>
-<summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
-
-<p align="center">
-  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/34b76468-6f91-46ee-a86d-608187060a13">
-</p>
+<img alt="View pipelines" src="https://github.com/user-attachments/assets/34b76468-6f91-46ee-a86d-608187060a13">
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
 
 Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
 
-#### Pipeline Configuration
+<details>
+<summary><strong>Configuration</strong></summary>
 
 Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
 
@@ -201,14 +183,14 @@ providers = {
 
 </details>
 
-<details>
-<summary><strong>Custom actions</strong> - Run project-specific actions for pull requests and issues</summary>
+### Custom actions
 
-<p align="center">
-  <img width="85%" alt="Atlas custom action" src="https://github.com/user-attachments/assets/6d1ebd15-0c48-47d2-b108-b281d492827c">
-</p>
+<img alt="Atlas custom action" src="https://github.com/user-attachments/assets/6d1ebd15-0c48-47d2-b108-b281d492827c">
 
 Add project-specific actions to pull requests and issues. Custom actions receive the current item and provider context, making it possible to call local scripts, open repositories in tmux, copy branch names, or connect Atlas to your own tooling.
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 ```lua
 pulls = {
@@ -275,8 +257,7 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 </details>
 
-<details>
-<summary><strong>Create</strong> - Create pull requests and issues from Neovim</summary>
+### Create PRs and Issues
 
 <p align="center">
   <img width="49%" alt="Create pull request" src="https://github.com/user-attachments/assets/dbaa5fcb-a701-419c-8ad6-a8803a0ffc7d">
@@ -285,18 +266,11 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 Use `:Atlas create [pr|issue]` to create a pull request from the current branch or a new issue. For pull requests, Atlas can fill the description from your template or commits.
 
-</details>
+### Bookmarks
 
-<details>
-<summary><strong>Bookmarks</strong> - Save searches and star items locally</summary>
-
-<p align="center">
-  <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/24e8463a-61c2-4fa7-8240-1425d31c0d61">
-</p>
+<img alt="bookmarks" src="https://github.com/user-attachments/assets/c51d1fbd-29b3-41de-a398-122caf867447" />
 
 Save searches as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
-
-</details>
 
 ### Other features
 
@@ -309,6 +283,8 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - Read GitHub and GitLab notifications, open the related item, and mark them as read or done.
 - Remap shortcuts or assign multiple keys to the same action.
 - Set local repository paths and PR templates per project.
+
+</details>
 
 ## Configuration
 
@@ -506,7 +482,7 @@ pulls = {
 },
 ```
 
-<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/e18fbbb4-1b93-4059-8b80-0b6ebb7a55c6">
+<img alt="github" src="https://github.com/user-attachments/assets/08281971-0c9f-404f-a106-4aede061b770" />
 
 </details>
 
@@ -553,7 +529,7 @@ pulls = {
 },
 ```
 
-<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/d2a9c7cd-6aa5-46dc-bd04-5fd760a9269d">
+<img alt="bitbucket" src="https://github.com/user-attachments/assets/5803fb26-960c-40e3-b2f4-9845b2aa6643" />
 
 </details>
 
@@ -609,7 +585,7 @@ pulls = {
 },
 ```
 
-<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/6b3ea556-68b8-411e-ae2b-464a28071f61">
+<img alt="gitlab" src="https://github.com/user-attachments/assets/7b5b840d-c67f-489f-9756-e84b0091c823" />
 
 </details>
 
@@ -703,7 +679,7 @@ issues = {
 },
 ```
 
-<img alt="Jira issues" src="https://github.com/user-attachments/assets/9cbf7ce9-b16f-409d-a8c0-b499af99c127">
+<img alt="jira" src="https://github.com/user-attachments/assets/5268d7d7-b16d-4f1d-9650-87db31bf5a2d" />
 
 </details>
 
@@ -752,6 +728,7 @@ issues = {
   },
 },
 ```
+<img alt="github-issue" src="https://github.com/user-attachments/assets/109b9a2a-86f2-4867-86e2-ff6a0645ca29" />
 
 </details>
 
@@ -803,6 +780,8 @@ issues = {
   },
 },
 ```
+
+<img alt="gitlab-issue" src="https://github.com/user-attachments/assets/65fedb30-dee0-442d-afa5-46a42aeae425" />
 
 </details>
 

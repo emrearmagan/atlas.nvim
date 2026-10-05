@@ -11,8 +11,8 @@ local groups = {
 
 	AtlasJiraKey = { fg = "#89b4fa", bold = true },
 	AtlasJiraEpic = { link = "AtlasLogWarn" },
-	AtlasJiraChipStoryPoints = { bg = "#f38ba8", bold = true },
-	AtlasJiraChipDueDate = { bg = "#f9e2af", bold = true },
+	AtlasJiraChipStoryPoints = { fg = "#1e1e2e", bg = "#f38ba8", bold = true },
+	AtlasJiraChipDueDate = { fg = "#cdd6f4", bg = "#313244", bold = true },
 	AtlasJiraChipParent = { link = "AtlasJiraTheme" },
 }
 
