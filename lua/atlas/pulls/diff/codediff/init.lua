@@ -272,7 +272,6 @@ local function open(result, callbacks)
 		modified = path.empty(),
 		original_revision = result.base_revision,
 		modified_revision = result.head_revision,
-		layout = result.options.layout,
 	}
 
 	local previous_tab = vim.api.nvim_get_current_tabpage()

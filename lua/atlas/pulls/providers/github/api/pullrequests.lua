@@ -351,7 +351,7 @@ function M.set_subscription(pr, subscribed, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { method: "merge"|"squash", delete_branch: boolean }
+---@param opts PullsMergeOpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)

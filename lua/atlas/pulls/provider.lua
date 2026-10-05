@@ -41,6 +41,10 @@
 ---@field pipelines PullsPipelineBackend|nil
 ---@field ui PullsUICapability|nil
 
+---@class PullsMergeOpts
+---@field method "merge"|"squash"
+---@field delete_branch boolean
+
 ---@class PullsCoreCapability
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(page: PullsPage, err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
@@ -51,6 +55,7 @@
 ---@field update_description (fun(pr: PullRequest, description: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field set_draft fun(pr: PullRequest, draft: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field merge fun(pr: PullRequest, opts: PullsMergeOpts, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_default_reviewers fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_reviewers (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil

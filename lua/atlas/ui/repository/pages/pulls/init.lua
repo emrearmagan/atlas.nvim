@@ -186,13 +186,13 @@ end
 local function register(state, buf, actions)
 	local items = {}
 	for _, action in ipairs(actions) do
-		local keys = action[1]
+		local keys = action.key
 		if keys and #keys > 0 then
 			items[#items + 1] = {
 				key = keys,
-				desc = action[2],
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { silent = true, nowait = true },
 			}
 		end
@@ -234,26 +234,26 @@ function M.open(opts)
 	vim.wo[state.win].wrap = false
 	local actions = {
 		{
-			resolver.resolve("ui.refresh"),
-			"Refresh pull requests",
-			function()
+			key = resolver.resolve("ui.refresh"),
+			desc = "Refresh pull requests",
+			callback = function()
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state, true)
 			end,
 			index = 25,
 		},
 		{
-			resolver.resolve("ui.search"),
-			"Search this page",
-			function()
+			key = resolver.resolve("ui.search"),
+			desc = "Search this page",
+			callback = function()
 				search(state)
 			end,
 			index = 20,
 		},
 		{
-			resolver.resolve("ui.next_page"),
-			"Next pull requests",
-			function()
+			key = resolver.resolve("ui.next_page"),
+			desc = "Next pull requests",
+			callback = function()
 				if state.pulls == "loading" or not state.next_cursor then
 					return
 				end
@@ -264,9 +264,9 @@ function M.open(opts)
 			index = 11,
 		},
 		{
-			resolver.resolve("ui.previous_page"),
-			"Previous pull requests",
-			function()
+			key = resolver.resolve("ui.previous_page"),
+			desc = "Previous pull requests",
+			callback = function()
 				if state.pulls ~= "loading" and state.page > 1 then
 					state.page = state.page - 1
 					load(state)
@@ -277,9 +277,9 @@ function M.open(opts)
 	}
 	for index, filter in ipairs(filters) do
 		actions[#actions + 1] = {
-			resolver.resolve("pulls.filters." .. filter),
-			"Show " .. filter .. " pull requests",
-			function()
+			key = resolver.resolve("pulls.filters." .. filter),
+			desc = "Show " .. filter .. " pull requests",
+			callback = function()
 				state.filter = filter
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state)
@@ -294,9 +294,9 @@ function M.open(opts)
 	end
 	vim.list_extend(actions, {
 		{
-			resolver.resolve("pulls.open_diff"),
-			"Open pull request diff",
-			function()
+			key = resolver.resolve("pulls.open_diff"),
+			desc = "Open pull request diff",
+			callback = function()
 				local pr = current(state)
 				if pr then
 					diff.open_pr(pr, function(err)
@@ -309,9 +309,9 @@ function M.open(opts)
 			index = 31,
 		},
 		{
-			panel_keys,
-			"Open pull request panel",
-			function()
+			key = panel_keys,
+			desc = "Open pull request panel",
+			callback = function()
 				local pr = current(state)
 				if pr then
 					opener.open(pr.link.html)
@@ -320,9 +320,9 @@ function M.open(opts)
 			index = 30,
 		},
 		{
-			resolver.resolve("ui.open_in_browser"),
-			"Open pull request in browser",
-			function()
+			key = resolver.resolve("ui.open_in_browser"),
+			desc = "Open pull request in browser",
+			callback = function()
 				local pr = current(state)
 				if pr then
 					vim.ui.open(pr.link.html)

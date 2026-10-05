@@ -63,8 +63,10 @@ end
 ---@return boolean
 function M.toggle_all_folds(comments)
 	local roots = {}
-	for _, node in ipairs(review_actions.group_comments(comments)) do
-		table.insert(roots, node.comment)
+	for _, node in ipairs(review_actions.group_comments(comments, M.data and M.data.tasks)) do
+		if not node.comment.is_task then
+			table.insert(roots, node.comment)
+		end
 	end
 	return M.toggle_threads(roots)
 end

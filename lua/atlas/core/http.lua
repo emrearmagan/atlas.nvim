@@ -7,6 +7,19 @@ local function one_line(value)
 	return s
 end
 
+---@param value string
+---@return string
+local function curl_config_value(value)
+	local escaped = value
+		:gsub("\\", "\\\\")
+		:gsub('"', '\\"')
+		:gsub("\t", "\\t")
+		:gsub("\n", "\\n")
+		:gsub("\r", "\\r")
+		:gsub("\v", "\\v")
+	return '"' .. escaped .. '"'
+end
+
 ---@param method string
 ---@param url string
 ---@param headers table<string, string>
@@ -15,29 +28,28 @@ end
 ---@param follow_redirects? boolean
 ---@return { job_id: integer, cancel: fun() }
 local function curl_fetch(method, url, headers, data, callback, follow_redirects)
-	local args = { "curl", "-sS", "-g" }
+	local config = { "silent", "show-error", "globoff", "request = " .. curl_config_value(method) }
 	if follow_redirects then
-		table.insert(args, "-L")
+		table.insert(config, "location")
 	end
-	vim.list_extend(args, { "-X", method })
 
 	for key, value in pairs(headers or {}) do
-		table.insert(args, "-H")
-		table.insert(args, string.format("%s: %s", key, value))
+		table.insert(config, "header = " .. curl_config_value(string.format("%s: %s", key, value)))
 	end
 
 	if data then
-		table.insert(args, "--data-raw")
-		table.insert(args, data)
+		table.insert(config, "data-raw = " .. curl_config_value(data))
 	end
 
-	table.insert(args, "-w")
-	table.insert(args, "__ATLAS_HTTP_CODE:%{http_code}")
-	table.insert(args, url)
+	table.insert(config, "write-out = " .. curl_config_value("__ATLAS_HTTP_CODE:%{http_code}"))
+	table.insert(config, "url = " .. curl_config_value(url))
+	local config_input = table.concat(config, "\n") .. "\n"
+	local args = { "curl", "--config", "-" }
 
 	local out = {}
 	local err_out = {}
 	local cancelled = false
+	local input_error
 
 	local job_opts = {
 		stdout_buffered = true,
@@ -54,7 +66,7 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 		end,
 		on_exit = function(_, code)
 			vim.schedule(function()
-				if cancelled then
+				if cancelled or input_error then
 					return
 				end
 
@@ -97,6 +109,20 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 			end
 			callback(nil, nil, err)
 		end)
+	else
+		local sent, err = pcall(function()
+			assert(vim.fn.chansend(job_id, config_input) > 0, "Failed to send curl configuration")
+			vim.fn.chanclose(job_id, "stdin")
+		end)
+		if not sent then
+			input_error = one_line(err)
+			pcall(vim.fn.jobstop, job_id)
+			vim.schedule(function()
+				if not cancelled then
+					callback(nil, nil, input_error)
+				end
+			end)
+		end
 	end
 
 	return {

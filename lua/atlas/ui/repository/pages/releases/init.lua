@@ -196,13 +196,13 @@ end
 local function register(state, buf, actions)
 	local items = {}
 	for _, action in ipairs(actions) do
-		local keys = action[1]
+		local keys = action.key
 		if keys and #keys > 0 then
 			table.insert(items, {
 				key = keys,
-				desc = action[2],
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { silent = true, nowait = true },
 			})
 		end
@@ -240,34 +240,34 @@ function M.open(opts)
 
 	local actions = {
 		{
-			resolver.resolve("ui.refresh"),
-			"Refresh release",
-			function()
+			key = resolver.resolve("ui.refresh"),
+			desc = "Refresh release",
+			callback = function()
 				state.releases = nil
 				load(state, state.selected_id)
 			end,
 			index = 25,
 		},
 		{
-			resolver.resolve("ui.search"),
-			"Search releases",
-			function()
+			key = resolver.resolve("ui.search"),
+			desc = "Search releases",
+			callback = function()
 				search(state)
 			end,
 			index = 20,
 		},
 		{
-			resolver.resolve("ui.next_page"),
-			"Next release",
-			function()
+			key = resolver.resolve("ui.next_page"),
+			desc = "Next release",
+			callback = function()
 				change_release(state, 1)
 			end,
 			index = 11,
 		},
 		{
-			resolver.resolve("ui.previous_page"),
-			"Previous release",
-			function()
+			key = resolver.resolve("ui.previous_page"),
+			desc = "Previous release",
+			callback = function()
 				change_release(state, -1)
 			end,
 			index = 10,
@@ -279,9 +279,9 @@ function M.open(opts)
 	end
 	vim.list_extend(actions, {
 		{
-			resolver.resolve("ui.open_in_browser"),
-			"Open in browser",
-			function()
+			key = resolver.resolve("ui.open_in_browser"),
+			desc = "Open in browser",
+			callback = function()
 				local entry = current()
 				if entry then
 					vim.ui.open(entry.asset and entry.asset.url or entry.release.url)
@@ -290,9 +290,9 @@ function M.open(opts)
 			index = 33,
 		},
 		{
-			resolver.resolve("ui.copy_id"),
-			"Copy release tag",
-			function()
+			key = resolver.resolve("ui.copy_id"),
+			desc = "Copy release tag",
+			callback = function()
 				local entry = current()
 				if entry then
 					vim.fn.setreg("+", entry.release.tag)
@@ -302,9 +302,9 @@ function M.open(opts)
 			index = 40,
 		},
 		{
-			resolver.resolve("ui.copy_url"),
-			"Copy URL",
-			function()
+			key = resolver.resolve("ui.copy_url"),
+			desc = "Copy URL",
+			callback = function()
 				local entry = current()
 				if entry then
 					vim.fn.setreg("+", entry.asset and entry.asset.url or entry.release.url)

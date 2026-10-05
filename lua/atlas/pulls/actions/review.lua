@@ -61,6 +61,17 @@ function M.group_comments(comments, tasks)
 		end
 	end
 
+	local function prune_deleted(list)
+		for index = #list, 1, -1 do
+			local node = list[index]
+			prune_deleted(node.children)
+			if node.comment.state == "DELETED" and #node.children == 0 then
+				table.remove(list, index)
+			end
+		end
+	end
+	prune_deleted(roots)
+
 	return roots
 end
 
@@ -332,8 +343,12 @@ M.add_task = {
 ---@param comment PullsComment
 local function remove_comment(context, comment)
 	local items = comment_items(context, comment)
+	local children = context.conversation or items
+	if context.data and not comment.is_task then
+		children = vim.list_extend(vim.list_extend({}, items), context.data.tasks)
+	end
 	local id = tostring(comment.id)
-	for _, existing in ipairs(items) do
+	for _, existing in ipairs(children) do
 		if not comment.is_task and tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
 			comment.state = "DELETED"
@@ -363,7 +378,7 @@ M.edit_comment = {
 	---@return boolean handled
 	run = function(context, on_done)
 		local comment = context.comment
-		if not comment then
+		if not comment or comment.state == "DELETED" then
 			return false
 		end
 
@@ -485,7 +500,7 @@ M.delete_comment = {
 	---@return boolean handled
 	run = function(context, on_done)
 		local comment = context.comment
-		if not comment then
+		if not comment or comment.state == "DELETED" then
 			return false
 		end
 
@@ -617,7 +632,7 @@ M.toggle_resolved = {
 	---@return boolean handled
 	run = function(context, on_done)
 		local comment = context.comment
-		if not comment then
+		if not comment or comment.state == "DELETED" then
 			return false
 		end
 

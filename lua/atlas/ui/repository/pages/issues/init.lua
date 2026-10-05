@@ -262,13 +262,13 @@ end
 local function register(state, buf, actions)
 	local items = {}
 	for _, action in ipairs(actions) do
-		local keys = action[1]
+		local keys = action.key
 		if keys and #keys > 0 then
 			items[#items + 1] = {
 				key = keys,
-				desc = action[2],
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { silent = true, nowait = true },
 			}
 		end
@@ -311,26 +311,26 @@ function M.open(opts)
 	vim.wo[state.win].wrap = false
 	local actions = {
 		{
-			resolver.resolve("ui.refresh"),
-			"Refresh issues",
-			function()
+			key = resolver.resolve("ui.refresh"),
+			desc = "Refresh issues",
+			callback = function()
 				state.page, state.cursors = 1, {}
 				load(state, true)
 			end,
 			index = 25,
 		},
 		{
-			resolver.resolve("ui.search"),
-			"Search this page",
-			function()
+			key = resolver.resolve("ui.search"),
+			desc = "Search this page",
+			callback = function()
 				search(state)
 			end,
 			index = 20,
 		},
 		{
-			{ "t" },
-			"Toggle open/closed issues",
-			function()
+			key = { "t" },
+			desc = "Toggle open/closed issues",
+			callback = function()
 				state.filter = state.filter == "open" and "closed" or "open"
 				state.page, state.cursors = 1, {}
 				load(state)
@@ -338,9 +338,9 @@ function M.open(opts)
 			index = 21,
 		},
 		{
-			resolver.resolve("ui.next_page"),
-			"Next issues",
-			function()
+			key = resolver.resolve("ui.next_page"),
+			desc = "Next issues",
+			callback = function()
 				if state.issues == "loading" or not state.next_cursor then
 					return
 				end
@@ -351,9 +351,9 @@ function M.open(opts)
 			index = 11,
 		},
 		{
-			resolver.resolve("ui.previous_page"),
-			"Previous issues",
-			function()
+			key = resolver.resolve("ui.previous_page"),
+			desc = "Previous issues",
+			callback = function()
 				if state.issues ~= "loading" and state.page > 1 then
 					state.page = state.page - 1
 					load(state)
@@ -369,17 +369,17 @@ function M.open(opts)
 	end
 	vim.list_extend(actions, {
 		{
-			panel_keys,
-			"Open issue panel",
-			function()
+			key = panel_keys,
+			desc = "Open issue panel",
+			callback = function()
 				open_panel(state)
 			end,
 			index = 30,
 		},
 		{
-			resolver.resolve("ui.open_in_browser"),
-			"Open issue in browser",
-			function()
+			key = resolver.resolve("ui.open_in_browser"),
+			desc = "Open issue in browser",
+			callback = function()
 				local issue = current(state)
 				if issue and issue.url and issue.url ~= "" then
 					vim.ui.open(issue.url)

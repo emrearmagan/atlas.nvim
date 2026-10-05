@@ -112,6 +112,7 @@ return {
 			create_pr = pullrequests_api.create_pr,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
+			merge = pullrequests_api.merge,
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
@@ -125,6 +126,7 @@ return {
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
 			comment_completion = mentions.for_pulls,
+			-- comment_formatter = nil,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
@@ -134,13 +136,21 @@ return {
 		},
 		reviews = {
 			fetch = reviews_api.fetch,
-			-- INFO: Requires GitLab 19.1+ for comment diff snippets.
 			fetch_threads = reviews_api.fetch_threads,
+			-- fetch_review_context = nil,
+			-- edit_review = nil,
+			-- start_review = nil,
 			submit_review = reviews_api.submit,
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
+			-- set_file_reviewed = nil,
 		},
+		-- tasks = {
+		-- 	add_task = nil,
+		-- 	edit_task = nil,
+		-- 	delete_task = nil,
+		-- },
 		pipelines = require("atlas.pulls.pipelines.gitlab"),
 		ui = {
 			detail = detail_ui,

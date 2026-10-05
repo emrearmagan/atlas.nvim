@@ -203,7 +203,7 @@ local function check_codediff_keymaps()
 			for _, key in ipairs(keys or {}) do
 				local normalized = vim.api.nvim_replace_termcodes(key, true, true, true)
 				atlas_keys[normalized] = atlas_keys[normalized] or {}
-				table.insert(atlas_keys[normalized], action .. " (" .. key .. ")")
+				table.insert(atlas_keys[normalized], { action = action, label = action .. " (" .. key .. ")" })
 			end
 		end
 
@@ -222,10 +222,19 @@ local function check_codediff_keymaps()
 				for _, key in ipairs(keys) do
 					local normalized = vim.api.nvim_replace_termcodes(key, true, true, true)
 					for _, atlas_action in ipairs(atlas_keys[normalized] or {}) do
-						table.insert(
-							overlaps,
-							string.format("CodeDiff: Atlas %s overlaps %s.%s (%s)", atlas_action, group, action, key)
-						)
+						local help_override = atlas_action.action == "ui.help"
+							and group == "view"
+							and action == "show_help"
+						if not help_override then
+							local message = string.format(
+								"CodeDiff: Atlas %s overlaps %s.%s (%s)",
+								atlas_action.label,
+								group,
+								action,
+								key
+							)
+							table.insert(overlaps, message)
+						end
 					end
 				end
 			end

@@ -29,7 +29,6 @@ local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local links_api = require("atlas.issues.providers.jira.api.links")
-local service = require("atlas.providers.jira.client")
 
 ---@param view IssuesViewConfig
 ---@return string
@@ -106,21 +105,13 @@ end
 
 ---@param issue Issue
 ---@param content string
+---@param opts { parent?: IssueComment }|nil
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function add_comment(issue, content, on_done)
+local function add_comment(issue, content, opts, on_done)
 	local issue_key = tostring(issue.key or "")
-	return comments_api.add_comment(issue_key, content, nil, on_done)
-end
-
----@param issue Issue
----@param parent IssueComment
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function reply_comment(issue, parent, content, on_done)
-	local issue_key = tostring(issue.key or "")
-	return comments_api.add_comment(issue_key, content, { parent_id = tostring(parent.id) }, on_done)
+	local parent = opts and opts.parent
+	return comments_api.add_comment(issue_key, content, { parent_id = parent and tostring(parent.id) or nil }, on_done)
 end
 
 ---@param issue Issue
@@ -196,7 +187,7 @@ return {
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			fetch_links = links_api.fetch,
-			refresh = service.clear_memory_cache,
+			-- update_description = nil,
 		},
 		comments = {
 			fetch_activity = function(issue, opts, on_done)
@@ -204,13 +195,15 @@ return {
 			end,
 			fetch_conversation = fetch_conversation,
 			add_comment = add_comment,
-			reply_comment = reply_comment,
 			edit_comment = edit_comment,
 			delete_comment = delete_comment,
+			-- add_reaction = nil,
+			-- reaction_options = nil,
 			comment_completion = mentions.for_issues,
 		},
 		ui = {
 			detail = detail_ui,
+			-- repository = nil,
 		},
 	},
 }

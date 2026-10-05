@@ -53,7 +53,9 @@ end
 function M.search_issues(jql, on_done, opts)
 	local cache_key = string.format("jira:search:v6:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
-	if not opts.force_refresh then
+	if opts.force_refresh then
+		service.clear_memory_cache()
+	else
 		local cached = service.get_cache(cache_key)
 		if cached then
 			on_done(cached, nil)

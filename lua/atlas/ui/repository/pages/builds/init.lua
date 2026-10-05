@@ -178,12 +178,12 @@ end
 local function register(state, buf, actions)
 	local items = {}
 	for _, action in ipairs(actions) do
-		if action[1] and #action[1] > 0 then
+		if action.key and #action.key > 0 then
 			items[#items + 1] = {
-				key = action[1],
-				desc = action[2],
+				key = action.key,
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { silent = true, nowait = true },
 			}
 		end
@@ -222,17 +222,17 @@ function M.open(opts)
 	end
 	local actions = {
 		{
-			resolver.resolve("ui.refresh"),
-			"Refresh builds",
-			function()
+			key = resolver.resolve("ui.refresh"),
+			desc = "Refresh builds",
+			callback = function()
 				load(state)
 			end,
 			index = 25,
 		},
 		{
-			"b",
-			"Change build branch",
-			function()
+			key = "b",
+			desc = "Change build branch",
+			callback = function()
 				change_branch(state)
 			end,
 			index = 20,
@@ -241,9 +241,9 @@ function M.open(opts)
 	register(state, state.sidebar_buf, actions)
 	vim.list_extend(actions, {
 		{
-			resolver.resolve("ui.select"),
-			"Open build and logs",
-			function()
+			key = resolver.resolve("ui.select"),
+			desc = "Open build and logs",
+			callback = function()
 				local run = current(state)
 				if run then
 					pipelines.open({
@@ -256,9 +256,9 @@ function M.open(opts)
 			index = 30,
 		},
 		{
-			resolver.resolve("ui.open_in_browser"),
-			"Open build in browser",
-			function()
+			key = resolver.resolve("ui.open_in_browser"),
+			desc = "Open build in browser",
+			callback = function()
 				local run = current(state)
 				if run and run.url then
 					vim.ui.open(run.url)

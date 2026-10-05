@@ -4,6 +4,7 @@ local codediff_keys = require("codediff.keymap.resolve")
 local codediff_help = require("codediff.ui.keymap_help")
 local compact = require("codediff.ui.view.compact")
 local navigation = require("codediff.ui.view.navigation")
+local resolver = require("atlas.core.keymaps")
 local explorer = require("atlas.pulls.diff.ui.explorer")
 local help = require("atlas.ui.popups.help")
 
@@ -71,6 +72,10 @@ function M.setup(session, commands, groups, renderer_actions)
 	local state = session.explorer
 	local view_keys = codediff_keys.keymaps_for("view")
 	local explorer_keys = codediff_keys.keymaps_for("explorer")
+	local help_items = {}
+	add(help_items, resolver.resolve("pulls.review.view.external_help"), "Show CodeDiff help", function()
+		codediff_help.toggle(view.tabpage)
+	end)
 
 	local function navigate_file(direction)
 		if not config.options.diff.cycle_next_file then
@@ -120,9 +125,6 @@ function M.setup(session, commands, groups, renderer_actions)
 	add(explorer_items, explorer_keys.fold_toggle, "Toggle folder", function()
 		explorer.toggle_folder(state)
 	end)
-	add(explorer_items, view_keys.show_help, "Show CodeDiff help", function()
-		codediff_help.toggle(view.tabpage)
-	end)
 	add(explorer_items, view_keys.quit, "Close review", function()
 		if not help.is_open() then
 			commands.close()
@@ -149,6 +151,7 @@ function M.setup(session, commands, groups, renderer_actions)
 		bind_panel(buf, panels)
 	end
 	bind_panel(state.buf, explorer_items)
+	help.register("View", help_items, { buffer = state.buf, index = 2 })
 
 	-- The registry preserves both owners through CodeDiff's asynchronous keymap setup.
 	lifecycle.begin_keymap_scope(view.tabpage, "atlas_navigation")
@@ -170,6 +173,7 @@ function M.setup(session, commands, groups, renderer_actions)
 	lifecycle.begin_keymap_scope(view.tabpage, "atlas_review")
 	for _, pane in pairs({ view.left, view.right }) do
 		if pane.win then
+			register(view.tabpage, pane.buf, { { name = "View", items = help_items, index = 2 } })
 			register(view.tabpage, pane.buf, groups)
 		end
 	end

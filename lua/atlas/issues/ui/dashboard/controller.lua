@@ -427,11 +427,6 @@ function M.previous_page()
 end
 
 function M.refresh_view()
-	local provider = state.provider
-	local refresh = provider and provider.capabilities.core.refresh
-	if refresh then
-		refresh()
-	end
 	local selected = navigation.current_item()
 	local selected_bookmark = selected and (selected.kind == "bookmark" or selected.kind == "starred")
 	local selected_key = selected and selected.kind == "issue" and selected._issue and selected._issue.key or nil

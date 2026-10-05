@@ -114,7 +114,7 @@ function M.find_custom_action(id)
 	end
 end
 
----@return { method: "merge"|"squash", delete_branch: boolean }
+---@return PullsMergeOpts
 function M.merge_options()
 	local options = config.options.pulls or {}
 	return {

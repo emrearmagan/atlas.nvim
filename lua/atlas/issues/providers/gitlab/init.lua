@@ -141,9 +141,9 @@ return {
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
 			comment_completion = mentions.for_issues,
+			-- fetch_activity = nil,
 			fetch_conversation = fetch_conversation,
 			add_comment = notes_api.add_comment,
-			reply_comment = notes_api.reply_comment,
 			edit_comment = notes_api.edit_comment,
 			delete_comment = notes_api.delete_comment,
 			add_reaction = notes_api.add_reaction,

@@ -5,6 +5,7 @@ local help = require("atlas.ui.popups.help")
 local M = {}
 
 local shared_actions = {
+	"ui.help",
 	"ui.open_actions",
 	"ui.open_in_browser",
 	"ui.refresh",
@@ -174,8 +175,7 @@ function M.setup(session, actions)
 			actions.dispatch("open_in_browser")
 		end)
 	end
-	local help_key = result.options.open_cmd == "AtlasDiff" and "ui.help" or "pulls.review.view.external_help"
-	add(view_items, help_key, "Toggle Atlas help", 100, help.toggle)
+	add(view_items, "ui.help", "Toggle Atlas help", 100, help.toggle)
 
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)

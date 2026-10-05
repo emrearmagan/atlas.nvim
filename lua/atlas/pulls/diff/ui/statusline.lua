@@ -41,7 +41,9 @@ function M.update(session)
 		}
 	end
 
-	local comments = review_data and review_data.comments or {}
+	local comments = vim.tbl_filter(function(comment)
+		return comment.state ~= "DELETED"
+	end, review_data and review_data.comments or {})
 	if #comments > 0 then
 		items[#items + 1] = {
 			text = string.format("%s %d", icons.general("comment"), #comments),
@@ -79,8 +81,7 @@ function M.update(session)
 		}
 	end
 
-	local help_action = result.options.open_cmd == "AtlasDiff" and "ui.help" or "pulls.review.view.external_help"
-	local help_keys = keymaps.resolve(help_action)
+	local help_keys = keymaps.resolve("ui.help")
 	session.statusline.options.help_key = help_keys and help_keys[1] or nil
 	session.statusline:set_items(items)
 end

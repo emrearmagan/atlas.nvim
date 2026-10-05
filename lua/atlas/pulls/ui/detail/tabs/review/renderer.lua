@@ -205,11 +205,6 @@ function M.render(width, comments, tasks, format_text)
 	end
 
 	---@cast comments PullsComment[]
-	if #comments == 0 then
-		utils.push(lines, spans, "No comments yet.", "AtlasTextMuted", PADDING_X)
-		return lines, spans, line_map
-	end
-
 	local roots = review_actions.group_comments(comments, type(tasks) == "table" and tasks or nil)
 	local groups, by_path = {}, {}
 	for _, thread in ipairs(roots) do
@@ -223,6 +218,10 @@ function M.render(width, comments, tasks, format_text)
 			local group = by_path[path]
 			table.insert(thread.comment.file and group.file_comments or group.other_comments, thread)
 		end
+	end
+	if #groups == 0 then
+		utils.push(lines, spans, "No comments yet.", "AtlasTextMuted", PADDING_X)
+		return lines, spans, line_map
 	end
 	for _, group in ipairs(groups) do
 		for index, thread in ipairs(vim.list_extend(group.file_comments, group.other_comments)) do

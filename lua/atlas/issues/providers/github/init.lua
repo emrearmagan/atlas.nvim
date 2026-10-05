@@ -235,6 +235,7 @@ return {
 		comments = {
 			reaction_options = emojis.github(),
 			comment_completion = mentions.for_issues,
+			-- fetch_activity = nil,
 			fetch_conversation = fetch_conversation,
 			add_comment = comments_api.add,
 			edit_comment = comments_api.edit,

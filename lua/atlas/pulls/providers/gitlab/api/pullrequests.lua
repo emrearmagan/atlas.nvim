@@ -562,7 +562,7 @@ function M.update_assignees(pr, ids, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { squash: boolean|nil, should_remove_source_branch: boolean|nil, merge_commit_message: string|nil, squash_commit_message: string|nil }|nil
+---@param opts PullsMergeOpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
@@ -571,20 +571,10 @@ function M.merge(pr, opts, on_done)
 		on_done(false, "Invalid MR identifier")
 		return nil
 	end
-	opts = opts or {}
-	local body = {}
-	if opts.squash ~= nil then
-		body.squash = opts.squash == true
-	end
-	if opts.should_remove_source_branch ~= nil then
-		body.should_remove_source_branch = opts.should_remove_source_branch == true
-	end
-	if opts.merge_commit_message and opts.merge_commit_message ~= "" then
-		body.merge_commit_message = opts.merge_commit_message
-	end
-	if opts.squash_commit_message and opts.squash_commit_message ~= "" then
-		body.squash_commit_message = opts.squash_commit_message
-	end
+	local body = {
+		squash = opts.method == "squash",
+		should_remove_source_branch = opts.delete_branch == true,
+	}
 
 	local endpoint = string.format("/projects/%s/merge_requests/%d/merge", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, body, function(_, err)

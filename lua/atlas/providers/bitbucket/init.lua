@@ -20,6 +20,7 @@ return {
 	},
 	capabilities = {
 		repository = repositories,
+		-- notifications = nil,
 		users = users,
 	},
 }

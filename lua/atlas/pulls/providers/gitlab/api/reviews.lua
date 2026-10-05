@@ -333,6 +333,7 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch_threads(pr, opts, on_done)
+	-- Requires GitLab 19.1+ for comment diff snippets.
 	return fetch_review(pr, opts, on_done, comments_api.fetch_review_threads)
 end
 

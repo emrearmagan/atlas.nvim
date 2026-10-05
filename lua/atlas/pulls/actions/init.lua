@@ -3,6 +3,7 @@ local diff = require("atlas.pulls.diff")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
+local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local pipeline_api = require("atlas.pulls.pipelines")
 local repository = require("atlas.ui.repository")
@@ -286,6 +287,41 @@ M.edit_description = {
 
 M.ready_for_review = draft_action(false)
 M.convert_to_draft = draft_action(true)
+
+M.merge = {
+	id = "merge",
+	label = "Merge",
+	icon = icons.action("merge"),
+	is_available = function(context)
+		return context.pr ~= nil and context.pr.state == "open" and context.provider.capabilities.core.merge ~= nil
+	end,
+	run = function(context, done)
+		local pr = assert(context.pr)
+		local options = utils.merge_options()
+		local label = options.method == "squash" and "squash merge" or "merge"
+		vim.ui.input({
+			prompt = string.format("Confirm %s of #%s? [y/N]: ", label, tostring(pr.id)),
+		}, function(input)
+			local answer = input and vim.trim(input):lower() or ""
+			if answer ~= "y" and answer ~= "yes" then
+				done({ changed_pr = false, message = "Merge cancelled" }, nil)
+				return
+			end
+			notify(context, "loading", "Merging...")
+			context.provider.capabilities.core.merge(pr, options, function(ok, err)
+				if not ok or err then
+					local message = tostring(err or "Merge failed")
+					notify(context, "error", "Merge failed: " .. message)
+					done(nil, message)
+					return
+				end
+				notes.clear_for_pull_request(pr)
+				notify(context, "success", "Merge succeeded", 1200)
+				done({ changed_pr = true, message = "Merged" }, nil)
+			end)
+		end)
+	end,
+}
 
 M.decline = {
 	id = "decline",

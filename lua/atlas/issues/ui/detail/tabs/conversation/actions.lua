@@ -58,7 +58,7 @@ function M.add(issue, refresh)
 				return
 			end
 			notify.loading("Adding comment...")
-			comments.add_comment(issue, text, function(created, err)
+			comments.add_comment(issue, text, nil, function(created, err)
 				if not state.is_current(issue) then
 					return
 				end
@@ -112,7 +112,7 @@ function M.reply(issue, entry, refresh)
 				return
 			end
 			notify.loading("Sending reply...")
-			local function done(created, err)
+			comments.add_comment(issue, text, { parent = parent }, function(created, err)
 				if not state.is_current(issue) then
 					return
 				end
@@ -126,12 +126,7 @@ function M.reply(issue, entry, refresh)
 				end
 				notify.success("Reply added", { timeout = 1200 })
 				refresh()
-			end
-			if comments.reply_comment then
-				comments.reply_comment(issue, parent, text, done)
-			else
-				comments.add_comment(issue, text, done)
-			end
+			end)
 		end,
 	})
 end

@@ -125,9 +125,10 @@ end
 
 ---@param issue Issue
 ---@param body string
+---@param opts { parent?: IssueComment }|nil
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(issue, body, on_done)
+function M.add_comment(issue, body, opts, on_done)
 	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
@@ -138,16 +139,25 @@ function M.add_comment(issue, body, on_done)
 		return nil
 	end
 
+	local parent = opts and opts.parent
+	local discussion_id = parent and parent._raw and tostring(parent._raw.discussion_id or "") or ""
+	local is_reply = discussion_id ~= ""
 	local endpoint = string.format("/projects/%s/issues/%d/discussions", service.url_encode(path), iid)
+	if is_reply then
+		endpoint = endpoint .. "/" .. discussion_id .. "/notes"
+	end
 	return service.request("POST", endpoint, { body = body }, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		result = json.safe_table(result)
-		local discussion_id = tostring(result.id or "")
-		local notes = json.safe_table(result.notes)
-		local comment = normalizer.to_comment_from_note(notes[1], nil, discussion_id)
+		local note = result
+		if not is_reply then
+			result = json.safe_table(result)
+			discussion_id = tostring(result.id or "")
+			note = json.safe_table(result.notes)[1]
+		end
+		local comment = normalizer.to_comment_from_note(note, is_reply and parent.id or nil, discussion_id)
 		if comment == nil then
 			on_done(nil, "GitLab did not return the created comment")
 			return
@@ -155,46 +165,10 @@ function M.add_comment(issue, body, on_done)
 		service.delete_memory_cache(discussions_cache_key(path, iid))
 		on_done(comment, nil)
 	end, {
-		action = "Add discussion",
+		action = is_reply and "Reply in discussion" or "Add discussion",
 		path = path,
 		iid = iid,
-	})
-end
-
----@param issue Issue
----@param parent IssueComment
----@param body string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent, body, on_done)
-	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid issue key")
-		return nil
-	end
-	if vim.trim(body) == "" then
-		on_done(nil, "Comment cannot be empty")
-		return nil
-	end
-	local discussion_id = parent._raw and tostring(parent._raw.discussion_id or "") or ""
-	if discussion_id == "" then
-		return M.add_comment(issue, body, on_done)
-	end
-
-	local endpoint =
-		string.format("/projects/%s/issues/%d/discussions/%s/notes", service.url_encode(path), iid, discussion_id)
-	return service.request("POST", endpoint, { body = body }, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		service.delete_memory_cache(discussions_cache_key(path, iid))
-		on_done(normalizer.to_comment_from_note(result, parent.id, discussion_id), nil)
-	end, {
-		action = "Reply in discussion",
-		path = path,
-		iid = iid,
-		discussion_id = discussion_id,
+		discussion_id = is_reply and discussion_id or nil,
 	})
 end
 

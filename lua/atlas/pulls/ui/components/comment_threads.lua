@@ -169,9 +169,11 @@ local function comment_item(comment, opts, is_root)
 			and { suggestion = vim.filetype.match({ filename = comment.inline.path }) }
 		item.meta.is_deleted = is_deleted
 
-		local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
-		if reactions ~= "" then
-			table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
+		if not is_deleted then
+			local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
+			if reactions ~= "" then
+				table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
+			end
 		end
 	end
 
@@ -179,7 +181,7 @@ local function comment_item(comment, opts, is_root)
 		local actions = comment.is_task and { "edit", "delete" } or { "reply", "edit", "delete" }
 		for _, action in ipairs(actions) do
 			local key = opts.action_keys[action]
-			if key then
+			if key and (not is_deleted or action == "reply") then
 				table.insert(footer_items, {
 					text = key .. " " .. action,
 					hl_group = "AtlasTextMuted",
@@ -193,7 +195,7 @@ local function comment_item(comment, opts, is_root)
 			})
 		end
 		local toggle_key = opts.action_keys.toggle_resolved
-		if toggle_key then
+		if toggle_key and not is_deleted then
 			local label = is_resolved and "reopen" or (comment.is_task and "complete" or "resolve")
 			table.insert(footer_items, {
 				text = toggle_key .. " " .. label,

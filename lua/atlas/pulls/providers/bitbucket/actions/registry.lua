@@ -5,7 +5,6 @@ local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local bitbucket_query = require("atlas.providers.bitbucket.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
-local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local state = require("atlas.pulls.state")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
@@ -70,50 +69,6 @@ local function request_changes_available(ctx)
 		return false, "No request changes URL available"
 	end
 	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function merge(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
-
-	local options = action_utils.merge_options()
-	local label = options.method == "squash" and "squash merge" or "merge"
-	vim.ui.input({
-		prompt = string.format("Confirm %s of PR #%s? [y/N]: ", label, tostring(pr.id or "")),
-	}, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-
-		local normalized = vim.trim(tostring(input)):lower()
-		if normalized ~= "y" and normalized ~= "yes" then
-			notify(ctx, "info", "Merge cancelled")
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-
-		notify(ctx, "loading", "Starting Merge...")
-		pullrequests.merge(pr, {
-			merge_strategy = options.method == "merge" and "merge_commit" or options.method,
-			close_source_branch = options.delete_branch,
-		}, function(_, err)
-			if err ~= nil then
-				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
-				done(nil, tostring(err))
-				return
-			end
-
-			notify(ctx, "success", "Merge succeeded", 1200)
-			notes.clear_for_pull_request(pr)
-			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
-	end)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -203,7 +158,7 @@ register({
 	label = "Merge",
 	icon = icons.action("merge"),
 	is_available = merge_available,
-	run = merge,
+	run = actions.merge.run,
 })
 
 register({

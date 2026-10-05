@@ -6,9 +6,10 @@ local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param issue Issue
 ---@param body string
+---@param _opts { parent?: IssueComment }|nil
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add(issue, body, on_done)
+function M.add(issue, body, _opts, on_done)
 	---@cast issue GitHubIssue
 	local slug = issue.repo_full_name
 	local number = issue.number

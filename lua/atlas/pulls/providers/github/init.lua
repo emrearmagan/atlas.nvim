@@ -120,6 +120,7 @@ return {
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
+			merge = pullrequests_api.merge,
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
@@ -132,6 +133,7 @@ return {
 		comments = {
 			reaction_options = emojis.github(),
 			comment_completion = mentions.for_pulls,
+			-- comment_formatter = nil,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
@@ -151,6 +153,11 @@ return {
 			discard_review = reviews_api.discard,
 			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
+		-- tasks = {
+		-- 	add_task = nil,
+		-- 	edit_task = nil,
+		-- 	delete_task = nil,
+		-- },
 		pipelines = require("atlas.pulls.pipelines.github"),
 		ui = {
 			detail = ui_detail,

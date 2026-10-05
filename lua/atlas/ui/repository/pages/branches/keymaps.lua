@@ -20,30 +20,55 @@ function M.setup(buf, sidebar_buf, callbacks)
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
-		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page, index = 11 },
-		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page, index = 10 },
-		{ resolver.resolve("ui.search"), "Search branches", callbacks.search, index = 20 },
+		{ key = resolver.resolve("ui.next_page"), desc = "Next page", callback = callbacks.next_page, index = 11 },
 		{
-			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
-			"Toggle branch history",
-			callbacks.select,
+			key = resolver.resolve("ui.previous_page"),
+			desc = "Previous page",
+			callback = callbacks.previous_page,
+			index = 10,
+		},
+		{ key = resolver.resolve("ui.search"), desc = "Search branches", callback = callbacks.search, index = 20 },
+		{
+			key = vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
+			desc = "Toggle branch history",
+			callback = callbacks.select,
 			index = 30,
 		},
-		{ resolver.resolve("pulls.open_diff"), "Open branch or commit diff", callbacks.diff, index = 31 },
-		{ resolver.resolve("pulls.checkout"), "Checkout branch", callbacks.checkout, index = 60 },
-		{ resolver.resolve("ui.show_details"), "Show branch or commit details", callbacks.details, index = 32 },
-		{ resolver.resolve("ui.open_actions"), "Open branch actions", callbacks.actions, index = 50 },
-		{ resolver.resolve("ui.delete"), "Delete branch", callbacks.delete, index = 61 },
+		{
+			key = resolver.resolve("pulls.open_diff"),
+			desc = "Open branch or commit diff",
+			callback = callbacks.diff,
+			index = 31,
+		},
+		{
+			key = resolver.resolve("pulls.checkout"),
+			desc = "Checkout branch",
+			callback = callbacks.checkout,
+			index = 60,
+		},
+		{
+			key = resolver.resolve("ui.show_details"),
+			desc = "Show branch or commit details",
+			callback = callbacks.details,
+			index = 32,
+		},
+		{
+			key = resolver.resolve("ui.open_actions"),
+			desc = "Open branch actions",
+			callback = callbacks.actions,
+			index = 50,
+		},
+		{ key = resolver.resolve("ui.delete"), desc = "Delete branch", callback = callbacks.delete, index = 61 },
 	}
 	local items = { refresh }
 	for _, action in ipairs(actions) do
-		local keys = action[1]
-		if keys and #keys > 0 and action[3] then
+		local keys = action.key
+		if keys and #keys > 0 and action.callback then
 			table.insert(items, {
 				key = keys,
-				desc = action[2],
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { nowait = true, silent = true },
 			})
 		end

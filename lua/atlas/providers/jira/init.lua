@@ -21,6 +21,8 @@ return {
 		},
 	},
 	capabilities = {
+		-- repository = nil,
+		-- notifications = nil,
 		users = users,
 	},
 }

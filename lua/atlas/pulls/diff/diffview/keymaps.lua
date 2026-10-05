@@ -31,6 +31,7 @@ function M.setup(session, commands, groups)
 	---@cast view AtlasDiffDiffviewView
 	local state = session.explorer
 	local native_keys = config.get_config().keymaps
+	local external_help_keys = resolver.resolve("pulls.review.view.external_help")
 
 	-- Adapt this view's internal lookup so native file actions see our explorer selection.
 	view.diffview.infer_cur_file = function(self, allow_dir)
@@ -127,6 +128,17 @@ function M.setup(session, commands, groups)
 		end,
 	})
 	bind_native(state.buf, native_keys.file_panel, explorer_actions)
+	if external_help_keys then
+		help.register("View", {
+			{
+				key = external_help_keys,
+				desc = "Show Diffview help",
+				index = 101,
+				callback = diffview_actions.help("file_panel"),
+				opts = { nowait = true, silent = true },
+			},
+		}, { buffer = state.buf, index = 2 })
+	end
 
 	local details_keys = resolver.resolve("pulls.review.show_details")
 	if details_keys then
@@ -159,6 +171,17 @@ function M.setup(session, commands, groups)
 		if pane.win then
 			bind_native(pane.buf, refresh_keys, navigation)
 			bind_native(pane.buf, native_keys.view, shared)
+			if external_help_keys then
+				help.register("View", {
+					{
+						key = external_help_keys,
+						desc = "Show Diffview help",
+						index = 101,
+						callback = diffview_actions.help({ "view", "diff2" }),
+						opts = { nowait = true, silent = true },
+					},
+				}, { buffer = pane.buf, index = 2 })
+			end
 			for _, group in ipairs(groups) do
 				help.register(group.name, group.items, { buffer = pane.buf, index = group.index })
 			end

@@ -114,6 +114,19 @@ function M.setup(state, callbacks)
 	end)
 
 	if state.data.pr then
+		add(items, "ui.open_actions", "Review actions", 0, function()
+			callbacks.on_action("open_actions", {})
+		end)
+		add(items, "pulls.review.approve", "Approve", 60, function()
+			callbacks.on_action("approve", {})
+		end)
+		add(items, "pulls.review.request_changes", "Request changes", 61, function()
+			callbacks.on_action("request_changes", {})
+		end)
+		add(items, "pulls.review.submit_review", "Submit review", 62, function()
+			callbacks.on_action("submit_review", {})
+		end)
+
 		local function reply(pending)
 			local entry = current(state)
 			if entry and entry.comment and not entry.comment.is_task then

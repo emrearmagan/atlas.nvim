@@ -12,7 +12,6 @@ local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local core_notify = require("atlas.core.notify")
-local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.providers.gitlab.users")
 local service = require("atlas.providers.gitlab.client")
@@ -73,34 +72,6 @@ local function merge_available(ctx)
 		return false, "MR is not open"
 	end
 	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function merge(ctx, done)
-	local pr = ctx.pr
-	local options = action_utils.merge_options()
-	local label = options.method == "squash" and "squash merge" or "merge"
-	vim.ui.input({ prompt = string.format("Confirm %s of %s? [y/N]: ", label, pr_label(pr)) }, function(input)
-		if not input or not vim.trim(input):lower():match("^y") then
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
-		pullrequests_api.merge(pr, {
-			squash = options.method == "squash",
-			should_remove_source_branch = options.delete_branch,
-		}, function(ok, err)
-			if not ok then
-				notify(ctx, "error", err or "Merge failed")
-				done(nil, err or "Merge failed")
-				return
-			end
-			notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
-			notes.clear_for_pull_request(pr)
-			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
-	end)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -514,7 +485,7 @@ register({
 	label = "Merge MR",
 	icon = icons.action("merge"),
 	is_available = merge_available,
-	run = merge,
+	run = actions.merge.run,
 })
 
 register(actions.decline)

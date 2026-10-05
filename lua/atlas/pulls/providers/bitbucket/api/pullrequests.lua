@@ -355,36 +355,28 @@ function M.set_draft(pr, draft, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { message?: string, close_source_branch?: boolean, merge_strategy?: string }|nil
----@param on_done fun(result: table|nil, err: string|nil)
+---@param opts PullsMergeOpts
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
 	---@cast pr BitbucketPullRequest
 	local merge_url = tostring(pr.links.merge or "")
 	if merge_url == "" then
-		on_done(nil, "No merge URL available")
+		on_done(false, "No merge URL available")
 		return nil
 	end
-	opts = opts or {}
-	local payload = {}
-	if opts.close_source_branch ~= nil then
-		payload.close_source_branch = opts.close_source_branch == true
-	end
-	if opts.merge_strategy and opts.merge_strategy ~= "" then
-		payload.merge_strategy = opts.merge_strategy
-	end
-	if opts.message and opts.message ~= "" then
-		payload.message = opts.message
-	end
+	local payload = {
+		close_source_branch = opts.delete_branch == true,
+		merge_strategy = opts.method == "merge" and "merge_commit" or opts.method,
+	}
 
-	local body = next(payload) == nil and nil or vim.json.encode(payload)
-	return service.request("POST", merge_url, nil, body, function(result, err)
+	return service.request("POST", merge_url, nil, vim.json.encode(payload), function(_, err)
 		if err then
-			on_done(nil, err)
+			on_done(false, err)
 			return
 		end
 		service.clear_cache()
-		on_done(result, nil)
+		on_done(true, nil)
 	end, { action = "Merge pull request", repo = pr.repo_full_name, id = pr.id })
 end
 

@@ -43,13 +43,11 @@
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_links (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field refresh fun()|nil
 
 ---@class IssuesCommentsCapability
 ---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_conversation (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: IssueConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field add_comment (fun(issue: Issue, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field reply_comment (fun(issue: Issue, parent: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_comment (fun(issue: Issue, content: string, opts: { parent?: IssueComment }|nil, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue: Issue, comment: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(issue: Issue, item: IssueConversationItem, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

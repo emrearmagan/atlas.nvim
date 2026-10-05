@@ -20,30 +20,45 @@ function M.setup(buf, sidebar_buf, callbacks)
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
-		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page, index = 11 },
-		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page, index = 10 },
-		{ resolver.resolve("ui.search"), "Search tags", callbacks.search, index = 20 },
+		{ key = resolver.resolve("ui.next_page"), desc = "Next page", callback = callbacks.next_page, index = 11 },
 		{
-			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
-			"Toggle tag details",
-			callbacks.select,
+			key = resolver.resolve("ui.previous_page"),
+			desc = "Previous page",
+			callback = callbacks.previous_page,
+			index = 10,
+		},
+		{ key = resolver.resolve("ui.search"), desc = "Search tags", callback = callbacks.search, index = 20 },
+		{
+			key = vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
+			desc = "Toggle tag details",
+			callback = callbacks.select,
 			index = 30,
 		},
-		{ resolver.resolve("pulls.open_diff"), "Open diff", callbacks.diff, index = 31 },
-		{ resolver.resolve("ui.show_details"), "Show tag details", callbacks.details, index = 32 },
-		{ resolver.resolve("ui.open_in_browser"), "Open tag in browser", callbacks.browser, index = 33 },
-		{ resolver.resolve("ui.copy_id"), "Copy commit SHA", callbacks.copy, index = 40 },
-		{ resolver.resolve("ui.copy_url"), "Copy tag URL", callbacks.copy_url, index = 41 },
+		{ key = resolver.resolve("pulls.open_diff"), desc = "Open diff", callback = callbacks.diff, index = 31 },
+		{
+			key = resolver.resolve("ui.show_details"),
+			desc = "Show tag details",
+			callback = callbacks.details,
+			index = 32,
+		},
+		{
+			key = resolver.resolve("ui.open_in_browser"),
+			desc = "Open tag in browser",
+			callback = callbacks.browser,
+			index = 33,
+		},
+		{ key = resolver.resolve("ui.copy_id"), desc = "Copy commit SHA", callback = callbacks.copy, index = 40 },
+		{ key = resolver.resolve("ui.copy_url"), desc = "Copy tag URL", callback = callbacks.copy_url, index = 41 },
 	}
 	local items = { refresh }
 	for _, action in ipairs(actions) do
-		local keys = action[1]
+		local keys = action.key
 		if keys and #keys > 0 then
 			table.insert(items, {
 				key = keys,
-				desc = action[2],
+				desc = action.desc,
 				index = action.index,
-				callback = action[3],
+				callback = action.callback,
 				opts = { nowait = true, silent = true },
 			})
 		end

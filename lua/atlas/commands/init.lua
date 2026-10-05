@@ -1,4 +1,5 @@
 local diff = require("atlas.pulls.diff")
+local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local pipelines = require("atlas.commands.pipelines")
@@ -7,6 +8,7 @@ local review = require("atlas.commands.review")
 local ui_utils = require("atlas.ui.utils")
 
 local M = {}
+local diff_completion = {}
 
 ---@class AtlasCommand
 ---@field name string
@@ -58,6 +60,43 @@ local function complete_providers(domain, arglead)
 		table.insert(ids, provider.id)
 	end
 	return complete_options(arglead, ids)
+end
+
+---@param arglead string
+---@param args string[]|nil
+---@return string[]
+local function complete_diff(arglead, args)
+	if (args and #args > 1) or arglead:find("://", 1, true) then
+		return {}
+	end
+
+	local cwd = git.default_cwd()
+	if diff_completion.cwd ~= cwd then
+		local res = vim.system({
+			"git",
+			"for-each-ref",
+			"--format=%(refname:short)",
+			"refs/heads",
+			"refs/remotes",
+		}, { cwd = cwd, text = true }):wait()
+
+		diff_completion = { cwd = cwd, refs = {} }
+		if res.code == 0 then
+			diff_completion.refs = { "HEAD" }
+			vim.list_extend(diff_completion.refs, vim.split(res.stdout, "\n", { plain = true, trimempty = true }))
+		end
+	end
+
+	local separator = arglead:find("...", 1, true)
+	local range = separator and arglead:sub(1, separator + 2) or ""
+	local prefix = arglead:sub(#range + 1)
+	local matches = {}
+	for _, ref in ipairs(diff_completion.refs) do
+		if ref:find(prefix, 1, true) == 1 then
+			table.insert(matches, range .. ref)
+		end
+	end
+	return matches
 end
 
 ---@param args string[]
@@ -192,6 +231,7 @@ M.register({
 M.register({
 	name = "diff",
 	description = "Open a Git range or pull request diff",
+	complete = complete_diff,
 	run = function(args)
 		local value = vim.trim(table.concat(args, " "))
 		if value == "" then
@@ -416,6 +456,14 @@ end
 
 function M.setup()
 	pcall(vim.api.nvim_del_user_command, "Atlas")
+
+	vim.api.nvim_create_autocmd("CmdlineLeave", {
+		group = vim.api.nvim_create_augroup("AtlasCommandCompletion", { clear = true }),
+		pattern = ":",
+		callback = function()
+			diff_completion = {}
+		end,
+	})
 
 	vim.api.nvim_create_user_command("Atlas", function(opts)
 		M.run(opts.fargs)
