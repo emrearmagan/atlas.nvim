@@ -127,8 +127,12 @@
 
 -- Config
 
+---@class AtlasUIStatuslineConfig
+---@field atlas? boolean Show the statusline in Atlas's main UI (default: true)
+---@field diff? boolean Show the statusline in Atlas-owned diff/review sessions (default: true)
+
 ---@class AtlasUIConfig
----@field statusline boolean|nil Show the Atlas statusline (default: true)
+---@field statusline AtlasUIStatuslineConfig|nil
 ---@field picker AtlasPickerName|nil
 ---@field listed_buffer boolean|nil Make the main Atlas dashboard a listed buffer (default: false)
 
@@ -144,7 +148,7 @@ local M = {}
 ---@type AtlasConfig
 local defaults = {
 	ui = {
-		statusline = true,
+		statusline = { atlas = true, diff = true },
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -340,6 +344,12 @@ local defaults = {
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
 
+---@param context "atlas"|"diff"
+---@return boolean
+function M.statusline_enabled(context)
+	return M.options.ui.statusline[context] ~= false
+end
+
 ---@return string
 function M.diff_command()
 	local command = vim.trim(M.options.pulls.diff.open_cmd or "auto")
@@ -386,7 +396,7 @@ function M.setup(opts)
 		project.issue_types = issue_types
 	end
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
-	if M.options.ui.statusline ~= false then
+	if M.statusline_enabled("atlas") or M.statusline_enabled("diff") then
 		vim.opt.laststatus = 3
 	end
 end

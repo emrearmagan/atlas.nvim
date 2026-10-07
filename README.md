@@ -291,8 +291,11 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    -- Global statusline for Atlas.
-    statusline = true,
+    -- Set either to false to keep your existing statusline.
+    statusline = {
+      atlas = true, -- Dashboards, details, and other non-diff Atlas views.
+      diff = true, -- Diff and review views.
+    },
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
     -- Make the main Atlas dashboard a listed buffer.

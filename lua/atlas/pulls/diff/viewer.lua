@@ -92,7 +92,9 @@ end
 local function close_tab(tabpage)
 	if #vim.api.nvim_list_tabpages() == 1 then
 		vim.cmd.tabnew()
-		vim.wo.statusline = vim.go.statusline
+		if statusline.enabled("diff") then
+			vim.wo.statusline = vim.go.statusline
+		end
 	end
 
 	vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(tabpage) } })
@@ -107,7 +109,9 @@ local function open_command(result)
 	local opened, err = pcall(function()
 		vim.bo.bufhidden = "wipe"
 		vim.bo.buflisted = false
-		vim.wo.statusline = vim.go.statusline
+		if statusline.enabled("diff") then
+			vim.wo.statusline = vim.go.statusline
+		end
 		vim.wo.statuscolumn = vim.go.statuscolumn
 		vim.wo.winbar = vim.go.winbar
 
@@ -709,7 +713,9 @@ local function setup_keymaps(session)
 
 			vim.cmd.tabedit({ args = { path } })
 			local options = vim.wo[0][0]
-			options.statusline = vim.go.statusline
+			if statusline.enabled("diff") then
+				options.statusline = vim.go.statusline
+			end
 			options.winbar = vim.go.winbar
 			options.winhighlight = vim.go.winhighlight
 		end,
@@ -877,7 +883,7 @@ function M.open(result)
 	local review_context = result.review and result.review.context
 	local session = {
 		data = result,
-		statusline = statusline.new(),
+		statusline = statusline.new({ context = "diff" }),
 		reviewed_files = vim.deepcopy(review_context and review_context.reviewed_files or {}),
 		requests = {},
 		closed = false,

@@ -605,6 +605,7 @@ function M.create(opts)
 	local annotations = collect_annotations(opts.review_data, opts.notes)
 
 	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf, string.format("Explorer [%d]", vim.api.nvim_get_current_tabpage()))
 	local state = {
 		buf = buf,
 		source = source,

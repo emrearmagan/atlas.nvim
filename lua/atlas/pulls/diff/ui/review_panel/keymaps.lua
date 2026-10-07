@@ -84,15 +84,13 @@ function M.setup(state, callbacks)
 		end
 	end
 
-	local view_items = {}
-	add(view_items, "ui.close", "Close review panel", 101, close)
-	add(view_items, "pulls.review.view.toggle_review_panel", "Close review panel", 41, close)
-	add(view_items, "ui.help", "Toggle help", 100, function()
+	local items = {}
+	add(items, "ui.close", "Close review panel", 101, close)
+	add(items, "pulls.review.view.toggle_review_panel", "Close review panel", 41, close)
+	add(items, "ui.help", "Toggle help", 100, function()
 		help.toggle({ buffer = state.buf })
 	end)
-	help.register("View", view_items, { buffer = state.buf, index = 1 })
 
-	local items = {}
 	add(items, "ui.refresh", "Refresh review", 80, function()
 		callbacks.on_action("refresh_review", {})
 	end)
@@ -193,7 +191,7 @@ function M.setup(state, callbacks)
 		callbacks.on_action("toggle_resolved", { comment = entry.thread_root or comment })
 	end)
 
-	help.register("Review", items, { buffer = state.buf, index = 2 })
+	help.register("Review", items, { buffer = state.buf, index = 1 })
 end
 
 return M

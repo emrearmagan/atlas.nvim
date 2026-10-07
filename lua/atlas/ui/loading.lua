@@ -50,8 +50,9 @@ end
 
 ---@param message string
 ---@param on_cancel fun()|nil
+---@param context "atlas"|"diff"|nil
 ---@return AtlasLoadingView
-function M.open(message, on_cancel)
+function M.open(message, on_cancel, context)
 	vim.cmd("tabnew")
 	local view = {
 		tabpage = vim.api.nvim_get_current_tabpage(),
@@ -80,7 +81,7 @@ function M.open(message, on_cancel)
 	end
 
 	local active = true
-	local footer = statusline.new({ show_version = true })
+	local footer = statusline.new({ show_version = true, context = context })
 	footer:set_items({ { text = message, hl_group = "AtlasFooterText" } })
 	footer:attach(view.win)
 	local text = message

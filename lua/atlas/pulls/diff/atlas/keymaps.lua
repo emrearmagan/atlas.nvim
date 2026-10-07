@@ -40,9 +40,9 @@ function M.setup(session, commands, groups, actions)
 	add(navigation_items, "pulls.review.atlas.focus_explorer", "Focus explorer", 41, commands.focus_explorer)
 
 	local layout_items = {}
-	add(layout_items, "pulls.review.atlas.toggle_layout", "Toggle diff layout", 20, actions.toggle_layout)
-	add(layout_items, "pulls.review.atlas.toggle_compact", "Toggle compact mode", 21, actions.toggle_compact)
-	add(layout_items, "ui.refresh_view", "Reload the diff", 50, commands.reload)
+	add(layout_items, "pulls.review.atlas.toggle_layout", "Toggle diff layout", 60, actions.toggle_layout)
+	add(layout_items, "pulls.review.atlas.toggle_compact", "Toggle compact mode", 61, actions.toggle_compact)
+	add(layout_items, "ui.refresh_view", "Reload the diff", 80, commands.reload)
 
 	local file_items = {}
 	add(file_items, "pulls.review.atlas.open_file", "Open local file", 31, commands.open_file)
@@ -69,10 +69,10 @@ function M.setup(session, commands, groups, actions)
 		explorer.toggle_all_folders(session.explorer)
 	end)
 	local hunk_items = {}
-	add(hunk_items, "pulls.review.atlas.prev_hunk", "Previous hunk", 10, function()
+	add(hunk_items, "pulls.review.atlas.prev_hunk", "Previous hunk", 12, function()
 		actions.navigate_hunk(-1)
 	end)
-	add(hunk_items, "pulls.review.atlas.next_hunk", "Next hunk", 11, function()
+	add(hunk_items, "pulls.review.atlas.next_hunk", "Next hunk", 13, function()
 		actions.navigate_hunk(1)
 	end)
 
@@ -90,19 +90,24 @@ function M.setup(session, commands, groups, actions)
 		end)
 	end
 
-	for _, buf in ipairs({ session.explorer.buf, session.commits.buf, view.left.buf, view.right.buf }) do
-		help.register("Explorer", navigation_items, { buffer = buf, index = 1 })
-		help.register("View", layout_items, { buffer = buf, index = 2 })
-	end
-	for _, buf in ipairs({ session.explorer.buf, view.left.buf, view.right.buf }) do
-		help.register("Explorer", file_items, { buffer = buf })
-		help.register("View", close_items, { buffer = buf })
+	for buf, name in pairs({
+		[session.explorer.buf] = "Explorer",
+		[session.commits.buf] = "Commits",
+		[view.left.buf] = "View",
+		[view.right.buf] = "View",
+	}) do
+		help.register(name, navigation_items, { buffer = buf, index = 1 })
+		help.register(name, layout_items, { buffer = buf })
+		if buf ~= session.commits.buf then
+			help.register(name, file_items, { buffer = buf })
+			help.register(name, close_items, { buffer = buf })
+		end
 	end
 
 	help.register("Explorer", explorer_items, { buffer = session.explorer.buf })
 	for _, pane in pairs({ view.left, view.right }) do
 		help.register("View", hunk_items, { buffer = pane.buf })
-		help.register("Review", thread_items, { buffer = pane.buf, index = 3 })
+		help.register("Review", thread_items, { buffer = pane.buf, index = 2 })
 		if pane.win then
 			for _, group in ipairs(groups) do
 				help.register(group.name, group.items, { buffer = pane.buf, index = group.index })

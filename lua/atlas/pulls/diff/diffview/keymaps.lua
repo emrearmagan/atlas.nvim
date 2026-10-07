@@ -129,7 +129,7 @@ function M.setup(session, commands, groups)
 	})
 	bind_native(state.buf, native_keys.file_panel, explorer_actions)
 	if external_help_keys then
-		help.register("View", {
+		help.register("Explorer", {
 			{
 				key = external_help_keys,
 				desc = "Show Diffview help",
@@ -137,7 +137,7 @@ function M.setup(session, commands, groups)
 				callback = diffview_actions.help("file_panel"),
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = state.buf, index = 2 })
+		}, { buffer = state.buf, index = 1 })
 	end
 
 	local details_keys = resolver.resolve("pulls.review.show_details")
@@ -180,7 +180,7 @@ function M.setup(session, commands, groups)
 						callback = diffview_actions.help({ "view", "diff2" }),
 						opts = { nowait = true, silent = true },
 					},
-				}, { buffer = pane.buf, index = 2 })
+				}, { buffer = pane.buf, index = 1 })
 			end
 			for _, group in ipairs(groups) do
 				help.register(group.name, group.items, { buffer = pane.buf, index = group.index })

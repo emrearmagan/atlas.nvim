@@ -44,6 +44,7 @@ end
 ---@return { buf: integer, win?: integer, shown: boolean, items: PullsCommit[], cursor_row: integer, group: integer }
 function M.create(items, shown)
 	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf, string.format("Commits [%d]", vim.api.nvim_get_current_tabpage()))
 	local state = {
 		buf = buf,
 		shown = shown,

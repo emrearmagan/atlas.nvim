@@ -411,6 +411,7 @@ end
 ---@return AtlasDiffReviewPanel
 function M.create(result, callbacks)
 	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf, string.format("Review [%d]", vim.api.nvim_get_current_tabpage()))
 	---@type AtlasDiffReviewPanel
 	local state = {
 		data = result,

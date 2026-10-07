@@ -1,3 +1,4 @@
+local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
@@ -29,6 +30,7 @@ local cached_version = nil
 ---@field token integer
 
 ---@class AtlasStatuslineOptions
+---@field context? "atlas"|"diff" Defaults to "atlas"
 ---@field help_key? string|fun(): string|nil
 ---@field show_version boolean|nil
 ---@field left_padding integer|nil
@@ -44,8 +46,9 @@ local cached_version = nil
 local Statusline = {}
 Statusline.__index = Statusline
 
-local function redraw()
-	if M.enabled() then
+---@param context "atlas"|"diff"|nil
+local function redraw(context)
+	if M.enabled(context) then
 		vim.cmd("redrawstatus")
 	end
 end
@@ -246,7 +249,7 @@ function Statusline:start_loading(token, message)
 			end
 
 			self.notice.text = string.format("%s %s", frame, message)
-			redraw()
+			redraw(self.options.context)
 		end,
 	})
 	self.loading_spinner:start()
@@ -277,10 +280,10 @@ local function notice_style(level)
 	return icons.general(icon_name), highlights[level] or "AtlasFooterText"
 end
 
+---@param context "atlas"|"diff"|nil
 ---@return boolean
-function M.enabled()
-	local ui = require("atlas.config").options.ui or {}
-	return ui.statusline ~= false
+function M.enabled(context)
+	return config.statusline_enabled(context or "atlas")
 end
 
 ---@param options AtlasStatuslineOptions|nil
@@ -301,7 +304,7 @@ end
 
 ---@param win integer|nil
 function Statusline:attach(win)
-	if not M.enabled() or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
+	if not M.enabled(self.options.context) or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 	instances[self.id] = self
@@ -313,7 +316,7 @@ end
 ---@return boolean
 function Statusline:is_attached(win)
 	win = win or vim.api.nvim_get_current_win()
-	return M.enabled()
+	return M.enabled(self.options.context)
 		and not self.disposed
 		and vim.api.nvim_win_is_valid(win)
 		and vim.api.nvim_get_option_value("statusline", { win = win }) == self.expression
@@ -321,14 +324,14 @@ end
 
 function Statusline:clear_items()
 	self.items = {}
-	redraw()
+	redraw(self.options.context)
 end
 
 ---@param items AtlasStatuslineSegment[]
 function Statusline:set_items(items)
 	if not self.disposed then
 		self.items = items or {}
-		redraw()
+		redraw(self.options.context)
 	end
 end
 
@@ -350,19 +353,19 @@ function Statusline:notify(level, text, duration_ms)
 	if level == "loading" then
 		self:start_loading(token, message)
 		self.notice.text = self.loading_spinner and self.loading_spinner:text(message) or message
-		redraw()
+		redraw(self.options.context)
 		return
 	end
 
 	self.notice.text = icon ~= "" and string.format("%s %s", icon, message) or message
-	redraw()
+	redraw(self.options.context)
 	vim.defer_fn(function()
 		if self.disposed or self.notice.token ~= token then
 			return
 		end
 		self.notice.text = ""
 		self.notice.hl_group = "AtlasFooterText"
-		redraw()
+		redraw(self.options.context)
 	end, duration_ms or 2500)
 end
 
@@ -371,7 +374,7 @@ function Statusline:clear_notice()
 	self:stop_loading()
 	self.notice.text = ""
 	self.notice.hl_group = "AtlasFooterText"
-	redraw()
+	redraw(self.options.context)
 end
 
 function Statusline:reset()
@@ -408,7 +411,7 @@ function Statusline:dispose()
 			windows[win] = nil
 		end
 	end
-	redraw()
+	redraw(self.options.context)
 end
 
 M.default = M.new({
@@ -500,7 +503,7 @@ vim.api.nvim_create_autocmd("OptionSet", {
 	callback = function()
 		local win = vim.api.nvim_get_current_win()
 		local instance = windows[win]
-		if not instance or instance:is_attached(win) then
+		if not instance or not M.enabled(instance.options.context) or instance:is_attached(win) then
 			return
 		end
 

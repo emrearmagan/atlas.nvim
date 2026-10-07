@@ -2,6 +2,7 @@
 -- A public plugin API is planned: https://github.com/esmuellert/codediff.nvim/issues/267
 local config = require("codediff.config")
 local lifecycle = require("codediff.ui.lifecycle")
+local layout = require("codediff.ui.layout")
 local path = require("codediff.core.path")
 local virtual_file = require("codediff.core.virtual_file")
 local codediff = require("codediff.ui.view")
@@ -46,6 +47,14 @@ local function redraw(view)
 		return
 	end
 
+	-- CodeDiff's inline revision buffer has no name for bufferlines or window lists.
+	if vim.bo[buf].buftype == "nofile" and vim.api.nvim_buf_get_name(buf) == "" then
+		vim.api.nvim_buf_set_name(
+			buf,
+			string.format("atlas-diff://%d/%d/%s", view.tabpage, buf, view.current_file.path)
+		)
+	end
+
 	annotations.render(view, view.current_file, session)
 
 	local on_done = view.on_done
@@ -53,6 +62,12 @@ local function redraw(view)
 	if on_done then
 		on_done()
 	end
+end
+
+---@param view AtlasDiffCodeDiffView
+local function resize(view)
+	layout.arrange(view.tabpage)
+	redraw(view)
 end
 
 ---@param view AtlasDiffCodeDiffView
@@ -452,7 +467,7 @@ local M = {
 	get_selection = get_selection,
 	navigate_annotation = annotations.navigate,
 	redraw = redraw,
-	resize = redraw,
+	resize = resize,
 	setup_keymaps = setup_keymaps,
 	dispose = dispose,
 }

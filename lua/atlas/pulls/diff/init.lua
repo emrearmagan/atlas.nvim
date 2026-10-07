@@ -127,7 +127,7 @@ local function start_loading(message, context, on_done)
 		release_worktree()
 	end
 
-	local view = loading.open(message, cancel)
+	local view = loading.open(message, cancel, "diff")
 
 	local function fail(title, description)
 		cancel()

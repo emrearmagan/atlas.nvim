@@ -96,15 +96,14 @@ local function register(buf, groups)
 	end
 end
 
----@param explorer_items AtlasHelpKeyItem[]
----@param view_items AtlasHelpKeyItem[]
+---@param name string
+---@param items AtlasHelpKeyItem[]
 ---@param review_items AtlasHelpKeyItem[]
 ---@return AtlasDiffKeymapGroup[]
-local function groups(explorer_items, view_items, review_items)
+local function groups(name, items, review_items)
 	return {
-		{ name = "Explorer", items = explorer_items, index = 1 },
-		{ name = "View", items = view_items, index = 2 },
-		{ name = "Review", items = review_items, index = 3 },
+		{ name = name, items = items, index = 1 },
+		{ name = "Review", items = review_items, index = 2 },
 	}
 end
 
@@ -113,22 +112,20 @@ end
 function M.setup(session, actions)
 	local result = session.data
 
-	local explorer_items = {}
-	add(explorer_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
+	local shared_items = {}
+	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
 		actions.navigate_file(-1, true)
 	end)
-	add(explorer_items, "pulls.review.explorer.next_unreviewed_file", "Next unreviewed file", 21, function()
+	add(shared_items, "pulls.review.explorer.next_unreviewed_file", "Next unreviewed file", 21, function()
 		actions.navigate_file(1, true)
 	end)
-	add(explorer_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
-	add(explorer_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
-
-	local view_items = {}
-	add(view_items, "pulls.review.view.toggle_review_panel", "Toggle review panel", 41, actions.toggle_review_panel)
-	add(view_items, "pulls.review.view.toggle_detail_panel", "Toggle PR details", 42, function()
+	add(shared_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
+	add(shared_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
+	add(shared_items, "pulls.review.view.toggle_review_panel", "Toggle review panel", 43, actions.toggle_review_panel)
+	add(shared_items, "pulls.review.view.toggle_detail_panel", "Toggle PR details", 44, function()
 		actions.dispatch("toggle_detail_panel")
 	end)
-	add(view_items, "pulls.review.view.toggle_comments", "Toggle comment display", 43, actions.toggle_comments)
+	add(shared_items, "pulls.review.view.toggle_comments", "Toggle comment display", 45, actions.toggle_comments)
 
 	local review_items = {}
 	if result.pr then
@@ -167,15 +164,15 @@ function M.setup(session, actions)
 		end)
 	end
 
-	local commits_view_items = vim.list_extend({}, view_items)
-	add(commits_view_items, "ui.help", "Toggle help", 100, help.toggle)
+	local commits_items = vim.list_extend({}, shared_items)
+	add(commits_items, "ui.help", "Toggle help", 100, help.toggle)
 
 	if result.pr then
-		add(view_items, "ui.open_in_browser", "Open in browser", 51, function()
+		add(shared_items, "ui.open_in_browser", "Open in browser", 90, function()
 			actions.dispatch("open_in_browser")
 		end)
 	end
-	add(view_items, "ui.help", "Toggle Atlas help", 100, help.toggle)
+	add(shared_items, "ui.help", "Toggle Atlas help", 100, help.toggle)
 
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
@@ -212,7 +209,6 @@ function M.setup(session, actions)
 		add(diff_review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
 	end
 
-	local commits_items = {}
 	add(commits_items, "pulls.open_diff", "Open commit diff", 1, actions.open_commit)
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
 		commits.show_details(session.commits)
@@ -229,12 +225,9 @@ function M.setup(session, actions)
 		end
 	end)
 
-	local commits_groups = groups(explorer_items, commits_view_items, review_items)
-	commits_groups[#commits_groups + 1] = { name = "Commits", items = commits_items, index = 0 }
-
-	session.renderer.setup_keymaps(session, actions, groups(explorer_items, view_items, diff_review_items))
-	register(session.explorer.buf, groups(explorer_items, view_items, explorer_review_items))
-	register(session.commits.buf, commits_groups)
+	session.renderer.setup_keymaps(session, actions, groups("View", shared_items, diff_review_items))
+	register(session.explorer.buf, groups("Explorer", shared_items, explorer_review_items))
+	register(session.commits.buf, groups("Commits", commits_items, review_items))
 end
 
 return M
