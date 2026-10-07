@@ -50,8 +50,8 @@ function M.add(issue, refresh)
 	md_editor.open({
 		key = "issue-comment-add",
 		title = " Add Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
+		width_ratio = 0.7,
+		height_ratio = 0.5,
 		completion = get_completion(issue),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
@@ -102,11 +102,11 @@ function M.reply(issue, entry, refresh)
 	md_editor.open({
 		key = "issue-comment-reply-" .. tostring(comment.id),
 		title = " Reply to Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
+		width_ratio = 0.7,
+		height_ratio = 0.5,
 		initial_text = initial_text,
 		completion = completion,
-		preview = comment_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
+		preview = comment_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.7), 80)),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -148,8 +148,8 @@ function M.edit(issue, entry, refresh)
 	md_editor.open({
 		key = "issue-comment-edit-" .. tostring(comment.id),
 		title = " Edit Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
+		width_ratio = 0.7,
+		height_ratio = 0.5,
 		initial_text = tostring(comment.body or ""),
 		completion = get_completion(issue),
 		on_save = function(text)

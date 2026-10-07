@@ -180,6 +180,7 @@ end
 ---@return boolean
 function M.toggle_all_threads(threads)
 	local roots = {}
+	local comment_keys = {}
 	local expand = false
 	for _, thread in ipairs(threads) do
 		if not thread.comment.is_task and #thread.children > 0 then
@@ -189,10 +190,23 @@ function M.toggle_all_threads(threads)
 			end
 		end
 	end
+	for _, comment in ipairs(M.comments()) do
+		if is_comment_long(comment) then
+			local key = comment_key(comment)
+			table.insert(comment_keys, key)
+			if M.expanded_comments[key] ~= true then
+				expand = true
+			end
+		end
+	end
+
 	for _, root in ipairs(roots) do
 		M.collapsed[tostring(root.id)] = not expand
 	end
-	return #roots > 0
+	for _, key in ipairs(comment_keys) do
+		M.expanded_comments[key] = expand
+	end
+	return #roots > 0 or #comment_keys > 0
 end
 
 return M

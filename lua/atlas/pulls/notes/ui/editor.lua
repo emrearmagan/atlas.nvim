@@ -30,8 +30,8 @@ local function open_body_editor(note_type, file_path, line, initial_text, key, c
 		title = window_title(),
 		title_pos = "left",
 		initial_text = initial_text,
-		width_ratio = 0.5,
-		height_ratio = 0.18,
+		width_ratio = 0.7,
+		height_ratio = 0.5,
 		preview = preview,
 		actions = {
 			{

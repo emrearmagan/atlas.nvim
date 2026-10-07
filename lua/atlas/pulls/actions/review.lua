@@ -88,8 +88,8 @@ end
 ---@param context AtlasReviewActionContext
 ---@param opts AtlasEditorOptions
 local function open_editor(context, opts)
-	opts.width_ratio = 0.5
-	opts.height_ratio = 0.18
+	opts.width_ratio = 0.7
+	opts.height_ratio = 0.5
 	opts.completion = opts.completion or mention_completion(context)
 	local on_save, on_submit = opts.on_save, context.on_submit
 	if on_save and on_submit then
@@ -215,7 +215,7 @@ M.add_comment = {
 			local formatter = comments and comments.comment_formatter
 			preview = comment_threads.render_comment(
 				parent,
-				math.max(math.floor(vim.o.columns * 0.5), 80),
+				math.max(math.floor(vim.o.columns * 0.7), 80),
 				formatter and formatter(context)
 			)
 		end
@@ -299,7 +299,7 @@ M.add_task = {
 			local formatter = comments and comments.comment_formatter
 			preview = comment_threads.render_comment(
 				parent,
-				math.max(math.floor(vim.o.columns * 0.5), 80),
+				math.max(math.floor(vim.o.columns * 0.7), 80),
 				formatter and formatter(context)
 			)
 		end

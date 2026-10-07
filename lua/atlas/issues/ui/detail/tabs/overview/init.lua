@@ -94,8 +94,8 @@ function M.activate(buf, refresh)
 				editor.open({
 					key = "issue-description-edit-" .. tostring(issue.key),
 					title = " Edit Description ",
-					width_ratio = 0.5,
-					height_ratio = 0.18,
+					width_ratio = 0.7,
+					height_ratio = 0.5,
 					initial_text = current,
 					completion = completion,
 					on_save = function(text)

@@ -164,7 +164,7 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_all_folds", {
-			desc = "Expand / collapse all threads",
+			desc = "Expand / collapse all comments and threads",
 			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
