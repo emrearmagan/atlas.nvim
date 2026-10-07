@@ -73,7 +73,7 @@ local function append_row(result, row, opts)
 	for _, fragment in ipairs(row) do
 		local next_column = column + #fragment.text
 		highlight(column, next_column, group(fragment.background_style))
-		highlight(column, next_column, group(fragment.style))
+		highlight(column, next_column, fragment.hl_group or group(fragment.style))
 
 		if fragment.url then
 			result.targets[#result.targets + 1] = {

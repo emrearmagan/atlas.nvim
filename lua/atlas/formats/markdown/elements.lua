@@ -1,6 +1,7 @@
 local code_preview = require("atlas.ui.components.code_preview")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
 local html = require("atlas.formats.markdown.html")
+local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -130,6 +131,18 @@ function M.inline.emphasis(text, previous_character)
 	return { text = display_text, style = style }, consumed_bytes
 end
 
+function M.inline.mention(text, previous_character)
+	if previous_character:match("[%w_@./+%-]") then
+		return
+	end
+
+	local mention = text:match("^@[%w_][%w_.-]*")
+	if mention then
+		mention = mention:gsub("%.+$", "")
+		return { text = mention, hl_group = highlights.dynamic_for(mention:sub(2):lower()) }, #mention
+	end
+end
+
 ---@type (fun(text: string, previous_character: string): table?, integer?)[]
 local inline_handlers = {
 	M.inline.escape,
@@ -139,6 +152,7 @@ local inline_handlers = {
 	M.inline.code,
 	html.inline.comment,
 	M.inline.emphasis,
+	M.inline.mention,
 }
 
 -- Hello **world**
@@ -160,7 +174,7 @@ function M.parse_inline(text)
 		end
 
 		if not fragment then
-			local plain_text = remaining_text:match("^[^\\%[!`*_~<]+")
+			local plain_text = remaining_text:match("^[^\\%[!`*_~<@]+")
 			if not plain_text then
 				plain_text = remaining_text:sub(1, 1)
 			end
