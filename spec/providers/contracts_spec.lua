@@ -43,7 +43,7 @@ describe("providers contracts", function()
 				"update_title",
 				"set_draft",
 				"decline",
-				"fetch_default_reviewers",
+				"fetch_reviewer_candidates",
 				"fetch_description",
 				"update_reviewers",
 			}

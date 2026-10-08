@@ -537,7 +537,7 @@ end
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	local workspace, repo = slug:match("^([^/]+)/(.+)$")
 	if workspace == nil or repo == nil then
@@ -551,7 +551,7 @@ function M.fetch_default_reviewers(opts, on_done)
 	local starts = {
 		defaults = function(done)
 			return service.request("GET", endpoint, nil, nil, done, {
-				action = "Fetch default reviewers",
+				action = "Fetch reviewer candidates",
 				repo = slug,
 			})
 		end,
@@ -592,6 +592,7 @@ function M.fetch_default_reviewers(opts, on_done)
 				local is_selected = opts.pr == nil or selected[uuid] == true
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
+					user_id = tostring(user.account_id or uuid),
 					provider_id = uuid,
 					selected = is_selected,
 					default = true,
@@ -606,6 +607,7 @@ function M.fetch_default_reviewers(opts, on_done)
 				local name = tostring(reviewer.name or "")
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
+					user_id = reviewer.id,
 					provider_id = uuid,
 					selected = true,
 				})

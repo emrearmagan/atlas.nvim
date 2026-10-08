@@ -76,10 +76,13 @@ end
 ---@param spans table[]
 local function render_error(title, message, width, lines, spans)
 	utils.push(lines, spans, title, "AtlasColumnHeader", PADDING_X)
-	local content = {
-		lines = { message },
-		spans = { { line = 0, start_col = 0, end_col = #message, hl_group = "AtlasLogError" } },
-	}
+	local content = { lines = {}, spans = {} }
+	local content_width = math.max(1, width - PADDING_X * 2 - 4)
+	for _, line in ipairs(utils.sanitize_lines(message)) do
+		for _, wrapped in ipairs(utils.wrap_line(line, content_width)) do
+			utils.push(content.lines, content.spans, wrapped, "AtlasLogError")
+		end
+	end
 	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
 	table.insert(lines, "")
 end
@@ -494,17 +497,21 @@ end
 ---@param lines string[]
 ---@param spans table[]
 local function render_merge_checks(width, lines, spans)
-	if detail.merge_checks == "loading" then
+	local checks = detail.merge_checks
+	if checks == nil or checks == "loading" then
 		return
 	end
-
-	local checks = detail.get_merge_checks()
+	if type(checks) == "string" then
+		render_error("Merge Checks", checks, width, lines, spans)
+		return
+	end
 	if #checks == 0 then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
 
+	checks = vim.list_slice(checks)
 	table.sort(checks, function(a, b)
 		if a.key == "pipelines" then
 			return false

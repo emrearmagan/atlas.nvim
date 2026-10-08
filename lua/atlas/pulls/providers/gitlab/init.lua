@@ -118,7 +118,7 @@ return {
 			set_draft = pullrequests_api.set_draft,
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.fetch_description,
-			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,

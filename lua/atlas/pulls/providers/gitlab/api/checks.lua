@@ -82,7 +82,7 @@ local function parse_merge_checks(state)
 			key = "draft",
 			state = "warning",
 			label = "This merge request is still a draft",
-			details = { "Draft merge requests cannot be merged." },
+			details = { "Draft merge requests cannot be merged" },
 		})
 	end
 
@@ -91,7 +91,7 @@ local function parse_merge_checks(state)
 			key = "conflicts",
 			state = "failed",
 			label = "This branch has conflicts that must be resolved",
-			details = { "Conflicting files must be resolved before merging." },
+			details = { "Conflicting files must be resolved before merging" },
 		})
 	elseif dms == "mergeable" then
 		table.insert(checks, {
@@ -106,7 +106,7 @@ local function parse_merge_checks(state)
 			key = "discussions",
 			state = "failed",
 			label = "Unresolved discussions",
-			details = { "Resolve all threads before merging." },
+			details = { "Resolve all threads before merging" },
 		})
 	end
 
@@ -132,7 +132,7 @@ local function parse_merge_checks(state)
 			key = "ci",
 			state = dms == "ci_still_running" and "inprogress" or "warning",
 			label = "Pipeline must pass",
-			details = { "CI is required to merge." },
+			details = { "CI is required to merge" },
 		})
 	end
 

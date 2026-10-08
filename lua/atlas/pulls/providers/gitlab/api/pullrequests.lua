@@ -459,7 +459,7 @@ end
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	if slug == "" then
 		vim.schedule(function()
@@ -472,7 +472,7 @@ function M.fetch_default_reviewers(opts, on_done)
 	local starts = {
 		members = function(done)
 			return service.request("GET", endpoint, nil, done, {
-				action = "Fetch default reviewers",
+				action = "Fetch reviewer candidates",
 				project_path = slug,
 			})
 		end,
@@ -510,6 +510,7 @@ function M.fetch_default_reviewers(opts, on_done)
 				candidates[key] = true
 				table.insert(reviewers, {
 					label = "@" .. username,
+					user_id = tostring(id),
 					provider_id = tostring(id),
 					selected = selected[key] ~= nil,
 					default = false,
@@ -523,6 +524,7 @@ function M.fetch_default_reviewers(opts, on_done)
 			if selected[key] and not candidates[key] and tonumber(id) then
 				table.insert(reviewers, {
 					label = "@" .. tostring(reviewer.username),
+					user_id = id,
 					provider_id = id,
 					selected = true,
 					default = false,

@@ -367,7 +367,7 @@ M.edit_reviewers = {
 		local core = context.provider.capabilities.core
 
 		notify(context, "loading", "Loading reviewers...")
-		core.fetch_default_reviewers({
+		core.fetch_reviewer_candidates({
 			repo_slug = pr.repo_full_name,
 			repo_root = nil,
 			head = pr.source.branch,

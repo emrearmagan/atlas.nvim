@@ -31,7 +31,7 @@ local function checks_chip(checks)
 end
 
 ---@param pr PullRequest
----@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], checks?: PullsMergeCheck[]|"loading"|string, loading?: boolean }
+---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], checks?: PullsMergeCheck[]|"loading"|string }
 ---@return string[], table[]
 function M.render(pr, opts)
 	local chips = {
@@ -43,10 +43,15 @@ function M.render(pr, opts)
 	end
 
 	local checks = opts.checks
-	if opts.loading or checks == "loading" then
+	if checks == "loading" then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 	elseif type(checks) == "table" then
 		table.insert(chips, checks_chip(checks))
+	elseif type(checks) == "string" then
+		table.insert(
+			chips,
+			{ label = icons.pulls_status("inprogress") .. " Checks unavailable", hl = "AtlasTextWarning" }
+		)
 	end
 
 	return chips_component.render(chips, opts)

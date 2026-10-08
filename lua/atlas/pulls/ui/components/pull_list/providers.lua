@@ -175,6 +175,25 @@ local function gitlab()
 end
 
 local function bitbucket()
+	local function approvals(reviewers)
+		local approved, changes_requested = 0, 0
+		for _, reviewer in ipairs(reviewers or {}) do
+			if reviewer.decision == "approved" then
+				approved = approved + 1
+			elseif reviewer.decision == "changes_requested" then
+				changes_requested = changes_requested + 1
+			end
+		end
+		if changes_requested > 0 then
+			return icons.pulls_status("failed")
+		-- For now, any approval counts as success. The PR list doesn't give us the minimum;
+		-- we'd need a separate merge-checks request for that, i think. At least could not find anything
+		elseif approved > 0 then
+			return icons.pulls_status("successful")
+		end
+		return icons.pulls_status("inprogress"), "AtlasTextMuted"
+	end
+
 	local task_column = {
 		key = "tasks",
 		name = icons.pulls("tasks"),
@@ -192,22 +211,24 @@ local function bitbucket()
 
 	return {
 		reference = "#",
-		columns = columns(icons.general("conversation"), { task_column, review_column }, {}),
+		columns = columns(icons.general("comment"), { task_column }, { review_column }),
 		values = function(pr)
 			---@cast pr BitbucketPullRequest
-			local status = presentation.review_progress(pr.reviewers)
-			local review, hl = icons.pulls_status(status or "inprogress")
+			local review, review_hl = approvals(pr.reviewers)
 			return {
+				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				review = review,
-				review_hl = (status == nil or status == "inprogress") and "AtlasTextMuted" or hl,
+				review_hl = review_hl,
 			}
 		end,
-		highlight = function(row, col, ctx)
-			if col.key == "review" then
-				local empty = row.kind == "meta" or row.kind == "repo"
-				local hl = empty and "" or (row.review_hl or "AtlasTextMuted")
-				return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+		highlight = function(row, col)
+			if row.kind == "pr" then
+				if col.key == "review" then
+					return row.review_hl
+				elseif (col.key == "conversation" or col.key == "tasks") and row[col.key] == "0" then
+					return "AtlasTextMuted"
+				end
 			end
 		end,
 	}

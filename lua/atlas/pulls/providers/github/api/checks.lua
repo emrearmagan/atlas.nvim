@@ -207,14 +207,14 @@ local function conflicts_check(mergeable)
 			key = "conflicts",
 			state = "successful",
 			label = "No conflicts with base branch",
-			details = { "Changes can be cleanly merged." },
+			details = { "Changes can be cleanly merged" },
 		}
 	elseif m == "CONFLICTING" then
 		return {
 			key = "conflicts",
 			state = "failed",
 			label = "This branch has conflicts that must be resolved",
-			details = { "Conflicting files must be resolved before merging." },
+			details = { "Conflicting files must be resolved before merging" },
 		}
 	end
 	return nil
@@ -245,7 +245,7 @@ function M.fetch(pr, opts, on_done)
 				key = "draft",
 				state = "warning",
 				label = "This pull request is still a work in progress",
-				details = { "Draft pull requests cannot be merged." },
+				details = { "Draft pull requests cannot be merged" },
 			})
 		end
 		table.insert(checks, reviews_check(mc_result))

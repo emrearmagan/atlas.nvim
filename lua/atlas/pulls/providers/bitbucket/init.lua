@@ -118,7 +118,7 @@ return {
 			-- fetch_links = nil,
 			fetch_description = pullrequests_api.fetch_description,
 			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
 			fetch_merge_checks = checks_api.fetch,
 			update_reviewers = pullrequests_api.update_reviewers,

@@ -16,6 +16,7 @@ local M = {}
 
 ---@class PullsCreatePRReviewer
 ---@field label string
+---@field user_id string|nil
 ---@field provider_id string
 ---@field selected boolean|nil
 ---@field default boolean|nil
@@ -363,17 +364,26 @@ local function load_reviewers(pr_state, on_change)
 		)
 	end
 
-	provider.capabilities.core.fetch_default_reviewers({
-		repo_slug = pr_state.fields.repo_slug,
-		repo_root = pr_state.fields.repo_root,
-		head = pr_state.fields.head,
-		base = pr_state.fields.base,
-	}, function(reviewers, err)
+	requests.new().all({
+		user = provider.capabilities.users.fetch_user,
+		reviewers = function(done)
+			return provider.capabilities.core.fetch_reviewer_candidates({
+				repo_slug = pr_state.fields.repo_slug,
+				repo_root = pr_state.fields.repo_root,
+				head = pr_state.fields.head,
+				base = pr_state.fields.base,
+			}, done)
+		end,
+	}, function(values, errors)
 		vim.schedule(function()
+			local err = errors.reviewers or errors.user
 			if err then
 				pr_state.fields.reviewers = tostring(err)
 			else
-				pr_state.fields.reviewers = reviewers or {}
+				local user_id = values.user and values.user.id
+				pr_state.fields.reviewers = vim.tbl_filter(function(reviewer)
+					return not user_id or reviewer.user_id ~= user_id
+				end, values.reviewers or {})
 			end
 			on_change()
 		end)

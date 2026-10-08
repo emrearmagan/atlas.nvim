@@ -117,7 +117,7 @@ return {
 			fetch_pullrequest = fetch_pullrequest,
 			fetch_links = links_api.fetch_pr,
 			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
 			merge = pullrequests_api.merge,

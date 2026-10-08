@@ -559,7 +559,7 @@ end
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	if slug == "" then
 		vim.schedule(function()
@@ -579,7 +579,7 @@ function M.fetch_default_reviewers(opts, on_done)
 					end
 					done(result, nil)
 				end,
-				{ action = "Fetch default reviewers", repo = slug }
+				{ action = "Fetch reviewer candidates", repo = slug }
 			)
 		end,
 	}
@@ -605,6 +605,7 @@ function M.fetch_default_reviewers(opts, on_done)
 				if login ~= "" then
 					local reviewer = {
 						label = "@" .. login,
+						user_id = tostring(raw.id or ""),
 						provider_id = login,
 						selected = false,
 						default = false,
@@ -622,7 +623,12 @@ function M.fetch_default_reviewers(opts, on_done)
 				if reviewer then
 					reviewer.selected = true
 				else
-					table.insert(reviewers, { label = "@" .. login, provider_id = login, selected = true })
+					table.insert(reviewers, {
+						label = "@" .. login,
+						user_id = item.id,
+						provider_id = login,
+						selected = true,
+					})
 				end
 			end
 		end
