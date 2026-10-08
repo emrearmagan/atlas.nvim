@@ -372,7 +372,7 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 pulls = {
   delete_notes = false, -- Delete notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
-  default_delete_branch = false,
+  default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
 
   -- Replaces the built-in Conventional Comments templates.
@@ -431,6 +431,8 @@ pulls = {
       ["your-workspace/atlas"] = {
         readme = "README.md", -- optional, defaults to README.md
         pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
+        merge_method = "squash", -- Overrides default_merge_method.
+        delete_source_branch = true, -- Overrides default_delete_source_branch when merging.
       },
     },
   },

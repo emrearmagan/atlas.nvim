@@ -63,6 +63,36 @@ describe("github pull request updates", function()
 		assert.equal(3, #calls)
 	end)
 
+	it("passes merge messages to gh", function()
+		stub_client(function(args, callback)
+			table.insert(calls, args)
+			callback(nil, nil)
+		end)
+		local api = fresh_module()
+		local pr = { id = 42, repo_full_name = "octo/repo" }
+		for index, case in ipairs({ { method = "merge", body = "Body" }, { method = "squash", body = "" } }) do
+			api.merge(pr, {
+				method = case.method,
+				delete_source_branch = true,
+				subject = "Subject",
+				body = case.body,
+			}, function() end)
+			assert.same({
+				"pr",
+				"merge",
+				"42",
+				"--repo",
+				"octo/repo",
+				"--" .. case.method,
+				"--delete-branch",
+				"--subject",
+				"Subject",
+				"--body",
+				case.body,
+			}, calls[index])
+		end
+	end)
+
 	it("propagates errors from the gh CLI", function()
 		stub_client(function(_, callback)
 			callback(nil, "boom")

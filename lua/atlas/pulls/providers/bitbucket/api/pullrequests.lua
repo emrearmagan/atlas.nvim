@@ -76,6 +76,7 @@ local function fetch_page(repo_full_name, url, opts, on_done)
 			return
 		end
 
+		---@cast result table
 		local next_url = result.next
 		if type(next_url) ~= "string" or next_url == "" then
 			next_url = nil
@@ -188,10 +189,10 @@ function M.fetch_for_targets(targets, opts, on_done)
 end
 
 ---@param refs PullRequestRef[]
----@param _opts PullsFetchOpts
+---@param _ PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, _opts, on_done)
+function M.fetch_by_refs(refs, _, on_done)
 	if #refs == 0 then
 		on_done({}, nil)
 		return nil
@@ -223,6 +224,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 					done(nil, err)
 					return
 				end
+				---@cast result table
 				local pull = mapper.to_pull_request(result, item.workspace, item.repo)
 				done(pull, nil)
 			end, { action = "Fetch pull request", repo = item.ref.repo_full_name, id = item.ref.id })
@@ -276,6 +278,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 			return
 		end
 
+		---@cast result table
 		---@type BitbucketPullRequestDetails
 		local details = {
 			description = json.safe_str(result.description) or "",
@@ -287,10 +290,10 @@ function M.fetch_pullrequest(ref, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh?: boolean }|nil
+---@param _ { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_description(pr, _opts, on_done)
+function M.fetch_description(pr, _, on_done)
 	local workspace, repo = pr.repo.owner, pr.repo.repo_name
 	if workspace == "" or repo == "" then
 		on_done(nil, "PR missing workspace/repo info")
@@ -304,6 +307,7 @@ function M.fetch_description(pr, _opts, on_done)
 			on_done(nil, err)
 			return
 		end
+		---@cast result table
 		on_done(json.safe_str(result.description) or "", nil)
 	end, { action = "Fetch PR description", repo = pr.repo_full_name, id = pr.id })
 end
@@ -366,9 +370,16 @@ function M.merge(pr, opts, on_done)
 		return nil
 	end
 	local payload = {
-		close_source_branch = opts.delete_branch == true,
+		close_source_branch = opts.delete_source_branch == true,
 		merge_strategy = opts.method == "merge" and "merge_commit" or opts.method,
 	}
+	if opts.subject ~= nil or opts.body ~= nil then
+		local message = opts.subject or ""
+		if opts.body and opts.body ~= "" then
+			message = message .. (message ~= "" and "\n\n" or "") .. opts.body
+		end
+		payload.message = message
+	end
 
 	return service.request("POST", merge_url, nil, vim.json.encode(payload), function(_, err)
 		if err then
@@ -455,10 +466,10 @@ end
 
 ---@param pr PullRequest
 ---@param selected PullsCreatePRReviewer[]
----@param _original PullsCreatePRReviewer[]
+---@param _ PullsCreatePRReviewer[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.update_reviewers(pr, selected, _original, on_done)
+function M.update_reviewers(pr, selected, _, on_done)
 	local reviewers = {}
 	for _, reviewer in ipairs(selected) do
 		table.insert(reviewers, { uuid = reviewer.provider_id })
@@ -491,7 +502,7 @@ function M.create_pr(opts, on_done)
 		description = opts.body or "",
 		source = { branch = { name = opts.head } },
 		destination = { branch = { name = opts.base } },
-		close_source_branch = config.options.pulls.default_delete_branch == true,
+		close_source_branch = config.options.pulls.default_delete_source_branch == true,
 		draft = opts.draft == true,
 	}
 
@@ -511,6 +522,7 @@ function M.create_pr(opts, on_done)
 		end
 
 		service.clear_cache()
+		---@cast result table
 		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",

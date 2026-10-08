@@ -92,6 +92,7 @@ function M.fetch_search(queries, opts, on_done)
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
+			---@cast cached PullsPage
 			on_done(cached, nil)
 			return nil
 		end
@@ -156,10 +157,10 @@ function M.fetch_search(queries, opts, on_done)
 end
 
 ---@param refs PullRequestRef[]
----@param _opts PullsFetchOpts
+---@param _ PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, _opts, on_done)
+function M.fetch_by_refs(refs, _, on_done)
 	if #refs == 0 then
 		on_done({}, nil)
 		return nil
@@ -356,8 +357,14 @@ end
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
 	local args = { "pr", "merge", tostring(pr.id), "--repo", pr.repo_full_name, "--" .. opts.method }
-	if opts.delete_branch then
+	if opts.delete_source_branch then
 		table.insert(args, "--delete-branch")
+	end
+	if opts.subject ~= nil then
+		vim.list_extend(args, { "--subject", opts.subject })
+	end
+	if opts.body ~= nil then
+		vim.list_extend(args, { "--body", opts.body })
 	end
 	return cli.gh(args, function(_, err)
 		on_done(not err, err)

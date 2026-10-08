@@ -33,8 +33,8 @@ function M.fetch_commits(pr, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/projects/%s/merge_requests/%d/commits?per_page=100", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
+	local endpoint = string.format("/projects/%s/merge_requests/%d/commits", service.url_encode(path), iid)
+	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

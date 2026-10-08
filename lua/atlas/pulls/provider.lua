@@ -43,7 +43,9 @@
 
 ---@class PullsMergeOpts
 ---@field method "merge"|"squash"
----@field delete_branch boolean
+---@field delete_source_branch boolean
+---@field subject string|nil
+---@field body string|nil
 
 ---@class PullsCoreCapability
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(page: PullsPage, err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.

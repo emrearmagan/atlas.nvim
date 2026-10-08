@@ -7,7 +7,7 @@ end
 
 ---@param request fun(method: string, endpoint: string, payload: table|nil, callback: function, ctx: table|nil)
 local function stub_service(request)
-	package.preload["atlas.providers.gitlab.client"] = function()
+	rawset(package.preload, "atlas.providers.gitlab.client", function()
 		return {
 			request = request,
 			url_encode = function(value)
@@ -15,10 +15,10 @@ local function stub_service(request)
 			end,
 			delete_memory_cache = function() end,
 		}
-	end
+	end)
 end
 
-describe("gitlab pullrequests.update_description", function()
+describe("gitlab pull request updates", function()
 	local calls
 
 	before_each(function()
@@ -78,6 +78,28 @@ describe("gitlab pullrequests.update_description", function()
 			}, calls[index])
 		end
 		assert.equal(3, #calls)
+	end)
+
+	it("uses the merge or squash message field", function()
+		stub_service(function(_, _, payload, callback)
+			table.insert(calls, payload)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = { id = 12, repo_full_name = "group/project" }
+		for _, case in ipairs({ { method = "merge", body = "Body" }, { method = "squash", body = "" } }) do
+			api.merge(pr, {
+				method = case.method,
+				delete_source_branch = true,
+				subject = "Subject",
+				body = case.body,
+			}, function() end)
+		end
+		assert.same(
+			{ squash = false, should_remove_source_branch = true, merge_commit_message = "Subject\n\nBody" },
+			calls[1]
+		)
+		assert.same({ squash = true, should_remove_source_branch = true, squash_commit_message = "Subject" }, calls[2])
 	end)
 
 	it("propagates errors from the request", function()

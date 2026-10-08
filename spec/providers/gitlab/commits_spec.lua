@@ -5,11 +5,11 @@ local function fresh_module()
 	return require(module_name)
 end
 
----@param request fun(method: string, endpoint: string, payload: table|nil, callback: function, ctx: table|nil)
-local function stub_service(request)
-	package.preload["atlas.providers.gitlab.client"] = function()
+---@param fetch_all_pages fun(endpoint: string, callback: function, ctx: table|nil)
+local function stub_service(fetch_all_pages)
+	rawset(package.preload, "atlas.providers.gitlab.client", function()
 		return {
-			request = request,
+			fetch_all_pages = fetch_all_pages,
 			url_encode = function(value)
 				return (tostring(value):gsub("/", "%%2F"))
 			end,
@@ -18,7 +18,7 @@ local function stub_service(request)
 			end,
 			set_memory_cache = function() end,
 		}
-	end
+	end)
 end
 
 describe("gitlab pulls.fetch_commits", function()
@@ -51,7 +51,8 @@ describe("gitlab pulls.fetch_commits", function()
 	end)
 
 	it("keeps full commit messages and falls back to the title when absent", function()
-		stub_service(function(_, _, _, callback)
+		stub_service(function(endpoint, callback)
+			assert.equal("/projects/group%2Fproject/merge_requests/12/commits", endpoint)
 			callback({
 				{
 					id = "abc123def456",
@@ -79,7 +80,7 @@ describe("gitlab pulls.fetch_commits", function()
 	end)
 
 	it("propagates errors from the request", function()
-		stub_service(function(_, _, _, callback)
+		stub_service(function(_, callback)
 			callback(nil, "boom")
 		end)
 		local api = fresh_module()

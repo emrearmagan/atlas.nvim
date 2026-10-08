@@ -114,15 +114,6 @@ function M.find_custom_action(id)
 	end
 end
 
----@return PullsMergeOpts
-function M.merge_options()
-	local options = config.options.pulls or {}
-	return {
-		method = options.default_merge_method or "merge",
-		delete_branch = options.default_delete_branch == true,
-	}
-end
-
 M.copy_id = {
 	id = "copy_id",
 	label = "Copy ID",

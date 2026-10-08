@@ -35,8 +35,9 @@ describe("bitbucket pull request updates", function()
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 5, links = {} }
 		local ok, err
-		api.update_description({ id = 5, links = {} }, "New body", function(success, e)
+		api.update_description(pr, "New body", function(success, e)
 			ok, err = success, e
 		end)
 
@@ -75,14 +76,46 @@ describe("bitbucket pull request updates", function()
 		assert.equal(2, cache_cleared)
 	end)
 
+	it("combines the merge title and body", function()
+		stub_service(function(_, _, _, body, callback)
+			table.insert(calls, body)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = {
+			id = 5,
+			links = { merge = "https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5/merge" },
+		}
+		for index, case in ipairs({
+			{ method = "merge", body = "Body", message = "Subject\n\nBody" },
+			{ method = "squash", body = "", message = "Subject" },
+		}) do
+			api.merge(pr, {
+				method = case.method,
+				delete_source_branch = true,
+				subject = "Subject",
+				body = case.body,
+			}, function() end)
+			assert.equal(
+				vim.json.encode({
+					close_source_branch = true,
+					merge_strategy = case.method == "merge" and "merge_commit" or "squash",
+					message = case.message,
+				}),
+				calls[index]
+			)
+		end
+	end)
+
 	it("propagates errors from the request", function()
 		stub_service(function(_, _, _, _, callback)
 			callback(nil, "boom")
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 5, links = { self = "url" } }
 		local ok, err
-		api.update_description({ id = 5, links = { self = "url" } }, "New body", function(success, e)
+		api.update_description(pr, "New body", function(success, e)
 			ok, err = success, e
 		end)
 

@@ -316,10 +316,10 @@ local function project_iid(pr)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh?: boolean }|nil
+---@param _ { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_description(pr, _opts, on_done)
+function M.fetch_description(pr, _, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
@@ -536,10 +536,10 @@ end
 
 ---@param pr PullRequest
 ---@param reviewers PullsCreatePRReviewer[]
----@param _original_reviewers PullsCreatePRReviewer[]
+---@param _ PullsCreatePRReviewer[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_reviewers(pr, reviewers, _original_reviewers, on_done)
+function M.update_reviewers(pr, reviewers, _, on_done)
 	local ids = {}
 	for _, reviewer in ipairs(reviewers) do
 		local id = tonumber(reviewer.provider_id)
@@ -571,10 +571,18 @@ function M.merge(pr, opts, on_done)
 		on_done(false, "Invalid MR identifier")
 		return nil
 	end
+	---@type table<string, boolean|string>
 	local body = {
 		squash = opts.method == "squash",
-		should_remove_source_branch = opts.delete_branch == true,
+		should_remove_source_branch = opts.delete_source_branch == true,
 	}
+	if opts.subject ~= nil or opts.body ~= nil then
+		local message = opts.subject or ""
+		if opts.body and opts.body ~= "" then
+			message = message .. (message ~= "" and "\n\n" or "") .. opts.body
+		end
+		body[opts.method == "squash" and "squash_commit_message" or "merge_commit_message"] = message
+	end
 
 	local endpoint = string.format("/projects/%s/merge_requests/%d/merge", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, body, function(_, err)

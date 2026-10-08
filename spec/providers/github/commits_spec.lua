@@ -9,6 +9,14 @@ local function stub_client(gh)
 	github_client.install({ gh = gh })
 end
 
+local function commit_page(commits)
+	local nodes = {}
+	for _, commit in ipairs(commits) do
+		table.insert(nodes, { commit = commit })
+	end
+	return { data = { repository = { pullRequest = { commits = { nodes = nodes } } } } }
+end
+
 describe("github pulls.fetch_commits", function()
 	after_each(function()
 		github_client.uninstall()
@@ -22,8 +30,9 @@ describe("github pulls.fetch_commits", function()
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 1, repo_full_name = "" }
 		local commits, err
-		api.fetch_commits({ id = 1, repo_full_name = "" }, nil, function(c, e)
+		api.fetch_commits(pr, nil, function(c, e)
 			commits, err = c, e
 		end)
 
@@ -32,26 +41,29 @@ describe("github pulls.fetch_commits", function()
 		assert.equal(0, calls)
 	end)
 
-	it("maps commit messages and keeps headline-only and body-only commits readable", function()
-		stub_client(function(_, callback)
+	it("keeps full messages and newest-first order across all commit pages", function()
+		stub_client(function(args, callback)
+			assert.is_truthy(table.concat(args, " "):find("--paginate", 1, true))
+			assert.is_truthy(table.concat(args, " "):find("--slurp", 1, true))
 			callback({
-				commits = {
+				commit_page({
 					{
 						oid = "abc123def456",
 						messageHeadline = "Fix bug",
 						messageBody = "This explains why the fix is needed.\nSecond body line.",
-						authors = { { name = "Alice", login = "alice" } },
+						authors = { nodes = { { name = "Alice", user = { login = "alice" } } } },
 						authoredDate = "2024-01-02T03:04:05Z",
 					},
 					{ oid = "def456", messageHeadline = "Headline only", messageBody = "" },
-					{ oid = "ghi789", messageHeadline = "", messageBody = "Body only" },
-				},
+				}),
+				commit_page({ { oid = "ghi789", messageHeadline = "", messageBody = "Body only" } }),
 			}, nil)
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 42, repo_full_name = "octo/repo" }
 		local commits
-		api.fetch_commits({ id = 42, repo_full_name = "octo/repo" }, nil, function(c)
+		api.fetch_commits(pr, nil, function(c)
 			commits = c
 		end)
 
@@ -70,8 +82,9 @@ describe("github pulls.fetch_commits", function()
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 42, repo_full_name = "octo/repo" }
 		local commits, err
-		api.fetch_commits({ id = 42, repo_full_name = "octo/repo" }, nil, function(c, e)
+		api.fetch_commits(pr, nil, function(c, e)
 			commits, err = c, e
 		end)
 

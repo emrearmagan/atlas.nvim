@@ -29,6 +29,8 @@
 ---@class AtlasPullsRepoSettings
 ---@field readme string|nil
 ---@field pr_template string|nil
+---@field merge_method "merge"|"squash"|nil
+---@field delete_source_branch boolean|nil
 
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
@@ -99,7 +101,7 @@
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
----@field default_delete_branch boolean|nil
+---@field default_delete_source_branch boolean|nil
 ---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
@@ -156,7 +158,7 @@ local defaults = {
 		git_transport = "https",
 		delete_notes = false,
 		default_merge_method = "merge",
-		default_delete_branch = false,
+		default_delete_source_branch = false,
 		comment_templates = {
 			insert_mode = true,
 			items = {

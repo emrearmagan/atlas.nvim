@@ -3,6 +3,7 @@ local diff = require("atlas.pulls.diff")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
+local merge_buffer = require("atlas.pulls.ui.merge")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local pipeline_api = require("atlas.pulls.pipelines")
@@ -297,29 +298,26 @@ M.merge = {
 	end,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local options = utils.merge_options()
-		local label = options.method == "squash" and "squash merge" or "merge"
-		vim.ui.input({
-			prompt = string.format("Confirm %s of #%s? [y/N]: ", label, tostring(pr.id)),
-		}, function(input)
-			local answer = input and vim.trim(input):lower() or ""
-			if answer ~= "y" and answer ~= "yes" then
+		local core = context.provider.capabilities.core
+		merge_buffer.open(pr, {
+			on_cancel = function()
 				done({ changed_pr = false, message = "Merge cancelled" }, nil)
-				return
-			end
-			notify(context, "loading", "Merging...")
-			context.provider.capabilities.core.merge(pr, options, function(ok, err)
-				if not ok or err then
-					local message = tostring(err or "Merge failed")
-					notify(context, "error", "Merge failed: " .. message)
-					done(nil, message)
-					return
-				end
-				notes.clear_for_pull_request(pr)
-				notify(context, "success", "Merge succeeded", 1200)
-				done({ changed_pr = true, message = "Merged" }, nil)
-			end)
-		end)
+			end,
+			on_submit = function(options, completed)
+				notify(context, "loading", "Merging...")
+				core.merge(pr, options, function(ok, merge_err)
+					if not ok or merge_err then
+						notify(context, "error", "Merge failed: " .. tostring(merge_err or "Unknown error"))
+						completed(false)
+						return
+					end
+					notes.clear_for_pull_request(pr)
+					completed(true)
+					notify(context, "success", "Merge succeeded", 1200)
+					done({ changed_pr = true, message = "Merged" }, nil)
+				end)
+			end,
+		})
 	end,
 }
 
