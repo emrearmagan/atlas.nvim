@@ -130,7 +130,7 @@ Atlas uses a temporary worktree and removes it when the diff closes. Set `link` 
 
 <img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
 
-Browse a repository's README, pull requests, issues, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
+Browse a repository's README, pull requests, issues, builds, branches, tags, releases and deployments. Use `:Atlas browse .` for the current repository, or pass a repository URL.
 
 ### Pipelines
 
