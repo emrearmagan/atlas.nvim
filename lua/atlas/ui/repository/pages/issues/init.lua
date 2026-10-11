@@ -1,7 +1,7 @@
 local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
-local issue_list = require("atlas.issues.ui.components.issue_list")
+local layouts = require("atlas.issues.ui.layouts")
 local detail = require("atlas.issues.ui.detail")
 local providers = require("atlas.providers")
 local spinner = require("atlas.ui.components.spinner")
@@ -109,9 +109,10 @@ local function render(state)
 	if #issues == 0 then
 		utils.buffer.center_message(state.buf, state.win, "No " .. state.filter .. " issues found.", lines)
 	else
-		local table_lines, table_map, table_spans = issue_list.render_compact({
-			width = width,
+		local table_lines, table_map, table_spans = layouts.render({
+			layout = "compact",
 			provider_id = state.provider.id,
+			width = width,
 		}, issues)
 		local offset = #lines
 		utils.append_block(lines, spans, { lines = table_lines, highlights = table_spans })

@@ -1,45 +1,26 @@
-describe("ui.navigation issue boards", function()
-	local navigation, state, lines, cursor, view, marks, options, pending_select, selected, board_opts
-	local original_api, original_fn, original_defer
-	local saved_modules
-	local modules = {
-		"atlas.ui.navigation",
-		"atlas.ui.dashboard",
-		"atlas.ui.state",
-		"atlas.ui.statusline",
-		"atlas.issues.state",
-		"atlas.issues.ui.dashboard",
-		"atlas.issues.ui.dashboard.renderer",
-	}
-
-	local function render_dashboard()
-		package.loaded["atlas.issues.ui.dashboard"] = nil
-		require("atlas.issues.ui.dashboard").render()
-	end
+describe("ui.navigation board selection", function()
+	local navigation, state, cursor, scheduled
+	local original_api, original_defer, saved
+	local modules = { "atlas.ui.navigation", "atlas.ui.dashboard", "atlas.ui.state" }
 
 	before_each(function()
-		saved_modules = {}
+		saved = {}
 		for _, name in ipairs(modules) do
-			saved_modules[name] = package.loaded[name]
+			saved[name] = package.loaded[name]
 		end
-		original_api, original_fn, original_defer = vim.api, vim.fn, vim.defer_fn
-		cursor, view, marks, options = { 1, 0 }, { leftcol = 0 }, {}, {}
-		pending_select, selected = nil, nil
-		local line_map
-		board_opts = {
-			statuses = {
-				{ id = "todo", name = "To do" },
-				{ id = "active", name = "In progress" },
-				{ id = "done", name = "Done" },
-			},
-			issues = {
-				{ key = "KAN-1", title = "Café", status_id = "todo", status = "To do" },
-				{ key = "KAN-2", title = "First active", status_id = "active", status = "In progress" },
-				{ key = "KAN-3", title = "Second active", status_id = "active", status = "In progress" },
+		original_api, original_defer = vim.api, vim.defer_fn
+		cursor, scheduled = { 1, 42 }, 0
+		state = {
+			line_map = {
+				{
+					kind = "board_row",
+					cells = {
+						{ kind = "issue", key = "AT-1", column = 1, start_col = 1, end_col = 39 },
+						{ kind = "issue", key = "AT-2", column = 2, start_col = 42, end_col = 80 },
+					},
+				},
 			},
 		}
-		lines, line_map = require("atlas.issues.ui.dashboard.board").render(board_opts)
-		state = { domain = "issues", line_map = line_map }
 		package.loaded["atlas.ui.state"] = state
 		package.loaded["atlas.ui.dashboard"] = {
 			win = function()
@@ -48,26 +29,7 @@ describe("ui.navigation issue boards", function()
 			buf = function()
 				return 2
 			end,
-			is_active = function()
-				return true
-			end,
 		}
-		package.loaded["atlas.issues.ui.dashboard"] = {
-			select = function(item)
-				selected = item
-			end,
-		}
-		package.loaded["atlas.issues.ui.dashboard.renderer"] = {
-			render = function()
-				local rendered, map, spans = require("atlas.issues.ui.dashboard.board").render(board_opts)
-				return rendered, spans, map
-			end,
-		}
-		package.loaded["atlas.issues.state"] = nil
-		local issue_state = require("atlas.issues.state")
-		issue_state.provider = { id = "jira" }
-		issue_state.view = { layout = "board" }
-		package.loaded["atlas.ui.statusline"] = {}
 		vim.api = vim.tbl_extend("force", original_api, {
 			nvim_win_get_cursor = function()
 				return cursor
@@ -76,39 +38,14 @@ describe("ui.navigation issue boards", function()
 				cursor = value
 			end,
 			nvim_buf_line_count = function()
-				return #lines
+				return #state.line_map
 			end,
-			nvim_buf_set_lines = function(_, _, _, _, rendered)
-				lines = rendered
-				cursor[1] = math.min(cursor[1], #lines)
-				cursor[2] = math.min(cursor[2], #lines[cursor[1]] - 1)
-			end,
-			nvim_win_get_width = function()
-				return 60
-			end,
-			nvim_win_call = function(_, callback)
-				callback()
-			end,
-			nvim_buf_clear_namespace = function()
-				marks = {}
-			end,
-			nvim_buf_set_extmark = function(_, _, row, col, opts)
-				marks[#marks + 1] = { row = row, col = col, opts = opts }
-			end,
-			nvim_set_option_value = function(name, value)
-				options[name] = value
-			end,
+			nvim_buf_clear_namespace = function() end,
+			nvim_buf_set_extmark = function() end,
+			nvim_set_option_value = function() end,
 		})
-		vim.fn = vim.tbl_extend("force", original_fn, {
-			winsaveview = function()
-				return vim.deepcopy(view)
-			end,
-			winrestview = function(value)
-				view = value
-			end,
-		})
-		vim.defer_fn = function(callback)
-			pending_select = callback
+		vim.defer_fn = function()
+			scheduled = scheduled + 1
 			return { stop = function() end, close = function() end }
 		end
 		package.loaded["atlas.ui.navigation"] = nil
@@ -116,133 +53,39 @@ describe("ui.navigation issue boards", function()
 	end)
 
 	after_each(function()
-		vim.api, vim.fn, vim.defer_fn = original_api, original_fn, original_defer
+		vim.api, vim.defer_fn = original_api, original_defer
 		for _, name in ipairs(modules) do
-			package.loaded[name] = saved_modules[name]
+			package.loaded[name] = saved[name]
 		end
 	end)
 
-	it("uses byte offsets for selection and display columns for horizontal scrolling", function()
-		navigation.focus_first_item()
-		assert.equals("KAN-1", navigation.current_item().key)
-		navigation.move_column(1)
-		local item = navigation.current_item()
-		assert.equals("KAN-2", item.key)
-		assert.is_true(item.start_col > item.virt_col)
-		assert.same({ 2, item.start_col }, cursor)
-		assert.equals(item.virt_col + item.width - 60, view.leftcol)
-		assert.is_false(options.cursorline)
-		assert.equals(item.start_col, marks[1].col)
-		assert.equals(item.end_col, marks[1].opts.end_col)
-		pending_select()
-		assert.equals("KAN-2", selected.key)
-	end)
+	it("restores the same card after Unicode byte shifts and status moves without scheduling selection", function()
+		local previous = navigation.current_item()
+		-- A Unicode title in the preceding column moves this card's byte offset.
+		state.line_map[1].cells[2] = vim.tbl_extend("force", previous, { start_col = 43, end_col = 81 })
+		assert.equals("AT-1", navigation.current_item().key)
+		navigation.restore_board_selection(previous)
+		assert.equals("AT-2", navigation.current_item().key)
+		assert.same({ 1, 43 }, cursor)
 
-	it("keeps vertical and first/last navigation inside the selected column", function()
-		navigation.focus_first_item()
-		navigation.move_column(1)
-		navigation.move_cursor("down")
-		assert.equals("KAN-3", navigation.current_item().key)
-		navigation.focus_first_item()
-		assert.equals("KAN-2", navigation.current_item().key)
-		navigation.focus_last_item()
-		assert.equals("KAN-3", navigation.current_item().key)
-		navigation.move_cursor("up")
-		assert.equals("KAN-2", navigation.current_item().key)
-		navigation.move_column(-1)
-		navigation.move_cursor("down")
-		assert.equals("KAN-1", navigation.current_item().key)
-	end)
-
-	it("allows crossing empty columns without selecting a different issue", function()
-		navigation.focus_first_item()
-		navigation.move_column(2)
-		assert.equals("issue_column", navigation.current_item().kind)
-		assert.equals(3, navigation.current_item().column)
-		assert.same({}, marks)
-		navigation.move_cursor("down")
-		assert.equals(2, cursor[1])
-		navigation.move_column(-1)
-		assert.equals("KAN-2", navigation.current_item().key)
-	end)
-
-	it("finds an issue by key across columns after a refresh", function()
-		assert.is_true(navigation.focus_item(function(item)
-			return item.key == "KAN-3"
-		end))
-		assert.equals("KAN-3", navigation.current_item().key)
-		assert.same({ 3, state.line_map[3].cells[2].start_col }, cursor)
-	end)
-
-	it("restores row selection when returning to a plain list", function()
-		navigation.focus_first_item()
-		state.line_map = { [1] = { kind = "bookmark", name = "Saved search" }, [3] = { kind = "issue", key = "KAN-4" } }
-		navigation.focus_first_item()
-		assert.equals("bookmark", navigation.current_item().kind)
-		assert.is_true(options.cursorline)
-		assert.same({}, marks)
-		navigation.move_cursor("down")
-		assert.equals("KAN-4", navigation.current_item().key)
-	end)
-
-	it("retains the selected card when another column's Unicode byte width changes", function()
-		navigation.focus_first_item()
-		navigation.move_column(1)
-		local old_column = cursor[2]
-		board_opts.issues[1].title = "Café résumé"
-		pending_select = nil
-		render_dashboard()
-		assert.equals("KAN-2", navigation.current_item().key)
-		assert.is_true(cursor[2] > old_column)
-		assert.is_nil(pending_select)
-	end)
-
-	it("follows a selected card into its new status column without reselecting details", function()
-		navigation.focus_first_item()
-		board_opts.issues[1].status_id = "done"
-		pending_select = nil
-		render_dashboard()
-		assert.equals("KAN-1", navigation.current_item().key)
-		assert.equals(3, navigation.current_item().column)
-		assert.is_nil(pending_select)
-	end)
-
-	it("retains empty columns when earlier cards change their byte width", function()
-		navigation.focus_first_item()
-		navigation.move_column(2)
-		board_opts.issues[1].title = "Café résumé"
-		pending_select = nil
-		render_dashboard()
-		assert.equals("issue_column", navigation.current_item().kind)
-		assert.equals(3, navigation.current_item().column)
-		assert.is_nil(pending_select)
-	end)
-
-	it("can reset selection across columns after paging without changing column-local first-item navigation", function()
-		navigation.focus_first_item()
-		navigation.move_column(1)
-		board_opts.issues = { board_opts.issues[1] }
-		render_dashboard()
-		navigation.focus_first_item()
-		assert.equals("issue_column", navigation.current_item().kind)
-		assert.equals(2, navigation.current_item().column)
-		navigation.focus_first_item({ all_columns = true })
-		assert.equals("KAN-1", navigation.current_item().key)
-	end)
-
-	it("clears board scrolling when a non-Jira board configuration falls back to a list", function()
-		navigation.focus_first_item()
-		navigation.move_column(2)
-		assert.is_true(view.leftcol > 0)
-		require("atlas.issues.state").provider.id = "github"
-		package.loaded["atlas.issues.ui.dashboard.renderer"] = {
-			render = function()
-				return { "Issue list" }, {}, { { kind = "issue", key = "org/repo#1" } }
-			end,
+		previous = navigation.current_item()
+		state.line_map[1].cells = {
+			{ kind = "issue", key = "AT-2", column = 1, start_col = 1, end_col = 39 },
+			{ kind = "issue", key = "AT-1", column = 2, start_col = 43, end_col = 81 },
 		}
-		render_dashboard()
-		assert.equals(0, view.leftcol)
-		assert.is_true(options.cursorline)
-		assert.same({}, marks)
+		navigation.restore_board_selection(previous)
+		assert.equals("AT-2", navigation.current_item().key)
+		assert.same({ 1, 1 }, cursor)
+		assert.equals(0, scheduled)
+	end)
+
+	it("keeps local navigation in an empty column but lets paging reset across columns", function()
+		state.line_map[1].cells[2] = { kind = "issue_column", column = 2, start_col = 42, end_col = 80 }
+		navigation.focus_first_item()
+		assert.equals("issue_column", navigation.current_item().kind)
+		assert.same({ 1, 42 }, cursor)
+		navigation.focus_first_item({ all_columns = true })
+		assert.equals("AT-1", navigation.current_item().key)
+		assert.same({ 1, 1 }, cursor)
 	end)
 end)

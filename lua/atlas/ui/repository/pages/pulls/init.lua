@@ -3,7 +3,7 @@ local diff = require("atlas.pulls.diff")
 local resolver = require("atlas.core.keymaps")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
-local pull_list = require("atlas.pulls.ui.components.pull_list")
+local layouts = require("atlas.pulls.ui.layouts")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
 local help = require("atlas.ui.popups.help")
@@ -80,7 +80,7 @@ local function render(state)
 	if #pulls == 0 then
 		utils.buffer.center_message(state.buf, state.win, "No " .. state.filter .. " pull requests found.", lines)
 	else
-		local table_lines, line_map, table_spans = pull_list.render({
+		local table_lines, line_map, table_spans = layouts.render({
 			width = vim.api.nvim_win_get_width(state.win),
 			provider_id = state.provider and state.provider.id,
 		}, pulls)

@@ -13,10 +13,14 @@
 
 ---@class IssuesPage
 ---@field items Issue[]
----@field statuses JiraIssueStatus[]|nil
+---@field statuses IssueStatus[]|nil
 ---@field query string|nil
 ---@field next_cursor string|nil
 ---@field total_pages integer|nil
+
+---@class IssueStatus
+---@field id string
+---@field name string
 
 ---@class IssuesProvider
 ---@field id string

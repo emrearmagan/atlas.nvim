@@ -2,7 +2,7 @@ local header = require("atlas.ui.components.header")
 local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
 local notif_state = require("atlas.ui.notifications.state")
-local pull_list = require("atlas.pulls.ui.components.pull_list")
+local layouts = require("atlas.pulls.ui.layouts")
 local state = require("atlas.pulls.state")
 local statusline = require("atlas.ui.statusline")
 local bookmarks = require("atlas.ui.shared.bookmarks")
@@ -189,7 +189,7 @@ function M.render(opts)
 	else
 		local search_view = state.search_view()
 		local layout = search_view and search_view.layout or "compact"
-		local body_lines, body_map, body_spans = pull_list.render({
+		local body_lines, body_map, body_spans = layouts.render({
 			width = opts.width,
 			provider_id = state.provider and state.provider.id,
 			layout = layout,

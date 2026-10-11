@@ -64,7 +64,7 @@ function M.register(buf, views)
 
 	local items = {}
 	local filters = {}
-	if provider.id == "jira" then
+	if require("atlas.issues.ui.layouts").resolve("board", provider.id) == "board" then
 		utils.insert_if(
 			items,
 			item("ui.previous_column", {

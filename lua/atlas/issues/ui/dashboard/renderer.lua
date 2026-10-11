@@ -6,7 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local bookmarks = require("atlas.ui.shared.bookmarks")
-local issue_list = require("atlas.issues.ui.components.issue_list")
+local layouts = require("atlas.issues.ui.layouts")
 local notif_state = require("atlas.ui.notifications.state")
 
 local M = {}
@@ -187,34 +187,20 @@ function M.render(opts)
 		if layout == "compact" or layout == "board" then
 			has_rows = #issues > 0
 		end
-		if layout == "board" and state.is_loading and not has_rows then
-			table.insert(lines, " " .. state.reload_spinner_frame .. " Loading...")
-		elseif state.is_loading ~= true and not has_rows and layout ~= "board" then
+		if state.is_loading ~= true and not has_rows and layout ~= "board" then
 			table.insert(lines, "No issues found.")
 		else
-			local list_opts = {
-				width = opts.width,
+			local tbl_lines, tbl_map, tbl_spans = layouts.render({
+				layout = layout,
 				provider_id = provider and provider.id,
+				groups = issue_groups,
+				width = opts.width,
 				loading = state.is_loading,
 				reloading = state.reloading_issue_keys,
 				spinner = state.reload_spinner_frame,
 				collapsed = state.collapsed_issue_keys,
-			}
-			local tbl_lines, tbl_spans, tbl_map
-			if layout == "board" then
-				tbl_lines, tbl_map, tbl_spans = require("atlas.issues.ui.dashboard.board").render({
-					issues = issues,
-					statuses = page and page.statuses,
-				})
-				if state.is_loading then
-					table.insert(tbl_lines, "")
-					table.insert(tbl_lines, " " .. state.reload_spinner_frame .. " Loading...")
-				end
-			elseif layout == "compact" then
-				tbl_lines, tbl_map, tbl_spans = issue_list.render_compact(list_opts, issues)
-			else
-				tbl_lines, tbl_map, tbl_spans = issue_list.render_plain(list_opts, issue_groups)
-			end
+				statuses = page and page.statuses,
+			}, issues)
 
 			local table_base = #lines
 			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })

@@ -6,7 +6,6 @@
 
 ---@alias AtlasGitTransport "https"|"ssh"
 ---@alias AtlasPullsViewLayout "compact"|"grouped"|"plain"
----The board layout is available only for Jira issues.
 ---@alias AtlasIssuesViewLayout "compact"|"plain"|"board"
 
 ---@class AtlasPullsViewConfig

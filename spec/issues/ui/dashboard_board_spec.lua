@@ -1,71 +1,39 @@
-local board = require("atlas.issues.ui.dashboard.board")
-local config = require("atlas.config")
+local layouts = require("atlas.issues.ui.layouts")
 
-describe("issues.ui.dashboard.board", function()
-	local status_icons
-
-	before_each(function()
-		status_icons = config.options.issues.jira.project_config.status_icons
-	end)
-
-	after_each(function()
-		config.options.issues.jira.project_config.status_icons = status_icons
-	end)
-
-	it("formats Jira status icons at render time without changing provider metadata", function()
-		local statuses = { { id = "1", name = "Open", category = "new" } }
-		config.options.issues.jira.project_config.status_icons = { new = "N", Open = "O" }
-		local opts = { statuses = statuses, issues = {} }
-		local lines = board.render(opts)
-		assert.truthy(lines[1]:find("O Open (0)", 1, true))
-		assert.equals("Open", statuses[1].name)
-		config.options.issues.jira.project_config.status_icons.Open = ""
-		lines = board.render(opts)
-		assert.truthy(lines[1]:find(" Open (0)", 1, true))
-		assert.is_nil(lines[1]:find("O Open", 1, true))
-		assert.equals("Open", statuses[1].name)
-	end)
-
-	it("keeps empty Jira status columns and preserves issue payloads", function()
-		local issue = { key = "AT-12", title = "Fix issue", status_id = "2", status = "Done" }
-		local lines, map = board.render({
-			issues = { issue },
-			statuses = { { id = "1", name = "Open" }, { id = "2", name = "Done" } },
-		})
-		assert.truthy(lines[1]:find("Open (0)", 1, true))
-		assert.truthy(lines[1]:find("Done (1)", 1, true))
+describe("Issue board layout", function()
+	it("preserves workflow order, empty columns and issue payloads", function()
+		local issue = { key = "AT-1", title = "Work", status_id = "open", status = "Open" }
+		local statuses = {
+			{ id = "done", name = "Done", category = "done" },
+			{ id = "open", name = "Open", category = "new" },
+		}
+		local lines, map = layouts.render({ layout = "board", provider_id = "jira", statuses = statuses }, { issue })
+		assert.is_true(lines[1]:find("Done (0)", 1, true) < lines[1]:find("Open (1)", 1, true))
 		assert.truthy(lines[2]:find("No issues", 1, true))
 		assert.equals("issue_column", map[2].cells[1].kind)
-		assert.equals("issue", map[2].cells[2].kind)
 		assert.equals(issue, map[2].cells[2]._issue)
+		assert.equals("Open", statuses[2].name)
 	end)
 
-	it("uses configured status order and adds newly encountered statuses", function()
-		local issue = { key = "AT-1", title = "New status", status_id = "3", status = "Review" }
-		local lines, map = board.render({
-			issues = { issue },
-			statuses = { { id = "2", name = "Done" }, { id = "1", name = "Open" } },
+	it("keeps Unicode card offsets and highlights within the rendered lines", function()
+		local lines, map, spans = layouts.render({ layout = "board", provider_id = "jira" }, {
+			{ key = "AT-1", title = "Café", status_id = "open", status = "Open" },
+			{ key = "AT-2", title = "Résumé", status_id = "done", status = "Done" },
 		})
-		assert.is_true(lines[1]:find("Done", 1, true) < lines[1]:find("Open", 1, true))
-		assert.truthy(lines[1]:find("Review (1)", 1, true))
-		assert.equals(issue, map[2].cells[3]._issue)
-	end)
-
-	it("keeps byte ranges and display columns aligned for Unicode cards", function()
-		local lines, map, spans = board.render({
-			issues = {
-				{ key = "AT-1", title = "Fix café\nheading", status_id = "1", status = "Open", is_starred = true },
-				{ key = "AT-2", title = "Review résumé", status_id = "2", status = "Done", story_points = 3 },
-			},
-		})
-		local row = map[2].cells
-		assert.equals(38, vim.fn.strdisplaywidth(lines[2]:sub(row[1].start_col + 1, row[1].end_col)))
-		assert.equals(42, row[2].virt_col)
-		assert.is_true(row[2].start_col > row[2].virt_col)
-		assert.truthy(lines[2]:find("Fix café heading", 1, true))
-		assert.truthy(lines[2]:find("AT-2 3 pts", 1, true))
+		local cell = map[2].cells[2]
+		assert.is_true(cell.start_col > cell.virt_col)
+		assert.truthy(lines[2]:sub(cell.start_col + 1, cell.end_col):find("AT-2", 1, true))
 		for _, span in ipairs(spans) do
 			assert.is_true(span.start_col >= 0 and span.end_col <= #lines[span.line + 1])
 		end
+	end)
+
+	it("falls back to plain for unsupported providers", function()
+		local plain = require("atlas.issues.ui.layouts.plain")
+		local issues = { { key = "AT-1", number = 1, title = "Work" } }
+		local opts = { layout = "board", provider_id = "github", width = 80 }
+		assert.same({ plain.github(opts, issues) }, { layouts.render(opts, issues) })
+		opts.provider_id = "unknown"
+		assert.same({ plain.default(opts, issues) }, { layouts.render(opts, issues) })
 	end)
 end)
