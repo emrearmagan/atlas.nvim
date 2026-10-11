@@ -96,7 +96,6 @@ local function select_user(state, editor, field)
 	local unassigned = { id = "__unassigned__", name = "Unassigned" }
 	picker.search({
 		title = field == "assignee" and "Assignee" or "Reporter",
-		size = { width = 0.3, height = 0.3 },
 		format_item = function(user)
 			return user.name
 		end,

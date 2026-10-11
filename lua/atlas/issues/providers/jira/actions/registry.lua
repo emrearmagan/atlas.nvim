@@ -170,7 +170,6 @@ local function assign(ctx, done)
 
 	picker.search({
 		title = string.format("Assign %s", issue_key),
-		size = { width = 0.3, height = 0.3 },
 		initial_items = to_picker_items({}),
 		fetch_on_open = false,
 		format_item = function(item)
@@ -238,7 +237,6 @@ local function reporter(ctx, done)
 
 	picker.search({
 		title = string.format("Reporter for %s", issue_key),
-		size = { width = 0.3, height = 0.3 },
 		fetch_on_open = false,
 		format_item = function(item)
 			return string.format("%s %s", icons.get("user"), item.label)
