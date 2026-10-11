@@ -78,7 +78,7 @@ local function update_statusline(session)
 		if job.duration then
 			local duration = pipeline_utils.format_duration(job.duration)
 			items[#items + 1] = {
-				text = icons.general("updated") .. " " .. duration,
+				text = icons.get("updated") .. " " .. duration,
 				hl_group = "AtlasFooterText",
 				align = "right",
 				priority = 0,
@@ -87,7 +87,7 @@ local function update_statusline(session)
 		local started = utils.relative_time(job.started_at)
 		if started ~= "-" then
 			items[#items + 1] = {
-				text = icons.general("created") .. " " .. (started == "now" and "just now" or started .. " ago"),
+				text = icons.get("created") .. " " .. (started == "now" and "just now" or started .. " ago"),
 				hl_group = "AtlasFooterText",
 				align = "right",
 				priority = 0,

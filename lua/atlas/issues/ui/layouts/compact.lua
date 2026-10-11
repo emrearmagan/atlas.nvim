@@ -5,11 +5,11 @@ local presentation = require("atlas.issues.ui.presentation")
 
 local M = {}
 
-local STAR_ICON, STAR_ICON_HL = icons.general("star")
+local STAR_ICON, STAR_ICON_HL = icons.get("star")
 
 local function person_value(user, fallback)
 	local name = user and user.name or fallback
-	return string.format("%s %s", icons.general("user"), utils.shorten_name(name, 20))
+	return string.format("%s %s", icons.get("user"), utils.shorten_name(name, 20))
 end
 
 local function person_highlight(issue, column, context)
@@ -34,17 +34,17 @@ end
 
 local function state_icon(status_id)
 	if status_id == "closed" then
-		return icons.pulls_status("successful"), "AtlasIssueClosed"
+		return icons.get("successful", "status"), "AtlasIssueClosed"
 	end
 
-	return icons.issues("issue"), "AtlasIssueOpen"
+	return icons.get("issue"), "AtlasIssueOpen"
 end
 
 local function meta_text(issue, parts)
 	local due = utils.format_date(issue.duedate)
 
 	if due ~= "" then
-		table.insert(parts, string.format("%s %s", icons.general("created"), due))
+		table.insert(parts, string.format("%s %s", icons.get("created"), due))
 	end
 
 	if issue.story_points ~= nil then
@@ -129,26 +129,26 @@ function M.github(opts, issues)
 		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "comments",
-			name = icons.general("comment"),
+			name = icons.get("comment"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "assignee",
-			name = string.format("%s Assignee", icons.general("user")),
+			name = string.format("%s Assignee", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
 		{
 			key = "reporter",
-			name = string.format("%s Reporter", icons.general("user")),
+			name = string.format("%s Reporter", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
-		{ key = "created", name = icons.general("created"), can_grow = false },
-		{ key = "updated", name = icons.general("updated"), can_grow = false },
+		{ key = "created", name = icons.get("created"), can_grow = false },
+		{ key = "updated", name = icons.get("updated"), can_grow = false },
 		{ key = "status", name = " Status", can_grow = false },
 	}
 
@@ -162,7 +162,7 @@ function M.github(opts, issues)
 		end
 
 		return {
-			icon = issue.is_pinned == true and icons.general("pin") or state_icon(issue.status_id),
+			icon = issue.is_pinned == true and icons.get("pin") or state_icon(issue.status_id),
 			name = label .. " " .. issue.title,
 			_key_label = label,
 			comments = tostring(tonumber(issue.comment_count) or 0),
@@ -184,7 +184,7 @@ function M.github(opts, issues)
 		if column.key == "icon" then
 			local icon, hl_group
 			if issue.is_pinned == true then
-				icon, hl_group = icons.general("pin")
+				icon, hl_group = icons.get("pin")
 			else
 				icon, hl_group = state_icon(issue.status_id)
 			end
@@ -234,14 +234,14 @@ function M.gitlab(opts, issues)
 		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "assignee",
-			name = string.format("%s Assignee", icons.general("user")),
+			name = string.format("%s Assignee", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
 		{
 			key = "reporter",
-			name = string.format("%s Reporter", icons.general("user")),
+			name = string.format("%s Reporter", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
@@ -282,7 +282,7 @@ function M.gitlab(opts, issues)
 		if column.key == "icon" then
 			local icon, hl_group
 			if issue.is_pinned == true then
-				icon, hl_group = icons.general("pin")
+				icon, hl_group = icons.get("pin")
 			else
 				icon, hl_group = state_icon(issue.status_id)
 			end
@@ -328,14 +328,14 @@ function M.jira(opts, issues)
 		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "assignee",
-			name = string.format("%s Assignee", icons.general("user")),
+			name = string.format("%s Assignee", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
 		{
 			key = "reporter",
-			name = string.format("%s Reporter", icons.general("user")),
+			name = string.format("%s Reporter", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
@@ -356,16 +356,16 @@ function M.jira(opts, issues)
 		end
 
 		local title = issue.key .. " " .. issue.title
-		local suffix = icons.issues_priority(issue.priority)
+		local suffix = icons.get(issue.priority or "", "priority")
 		local due = utils.format_date(issue.duedate)
 
 		if due ~= "" then
-			local due_text = icons.general("created") .. " " .. due
+			local due_text = icons.get("created") .. " " .. due
 			suffix = suffix ~= "" and (suffix .. "  " .. due_text) or due_text
 		end
 
 		return {
-			icon = icons.issues_type(issue.type and issue.type.name or nil),
+			icon = issue.icon and issue.icon.icon or icons.get("issue"),
 			name = suffix ~= "" and (title .. "  " .. suffix) or title,
 			assignee = person_value(issue.assignee, "Unassigned"),
 			reporter = person_value(issue.reporter, "Unknown"),
@@ -401,7 +401,7 @@ function M.jira(opts, issues)
 			end
 
 			if issue.priority and issue.priority ~= "" then
-				local icon, hl_group = icons.issues_priority(issue.priority)
+				local icon, hl_group = icons.get(issue.priority, "priority")
 				local start_col, end_col = context.text:find(icon, 1, true)
 				if start_col then
 					table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = hl_group })
@@ -418,7 +418,12 @@ function M.jira(opts, issues)
 		end
 
 		if column.key == "icon" then
-			local icon, hl_group = icons.issues_type(issue.type and issue.type.name or nil)
+			local icon, hl_group = icons.get("issue")
+			if issue.icon then
+				icon = issue.icon.icon
+				hl_group = issue.icon.hl_group or hl_group
+			end
+
 			local start_col, end_col = context.text:find(icon, 1, true)
 			if start_col then
 				return { { start_col = start_col - 1, end_col = end_col, hl_group = hl_group } }
@@ -440,14 +445,14 @@ function M.default(opts, issues)
 		{ key = "name", name = "Issue", min_width = 42 },
 		{
 			key = "assignee",
-			name = string.format("%s Assignee", icons.general("user")),
+			name = string.format("%s Assignee", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
 		{
 			key = "reporter",
-			name = string.format("%s Reporter", icons.general("user")),
+			name = string.format("%s Reporter", icons.get("user")),
 			min_width = 10,
 			max_width = 22,
 			can_grow = false,

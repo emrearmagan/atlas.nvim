@@ -40,7 +40,7 @@ local states = {}
 local M = {
 	key = "tags",
 	label = "Tags",
-	icon = icons.pulls("tag"),
+	icon = icons.get("tag"),
 }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.tags")
 

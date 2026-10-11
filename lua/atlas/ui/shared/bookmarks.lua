@@ -127,8 +127,8 @@ function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
 			preview = string.format("%d item%s", #saved_items, #saved_items == 1 and "" or "s"),
 		})
 	end
-	local bookmark = icons.general("star")
-	local arrow = icons.general("arrow_right")
+	local bookmark = icons.get("star")
+	local arrow = icons.get("arrow_right")
 
 	local header = string.format(" %s  Bookmarks", bookmark)
 	table.insert(lines, header)

@@ -5,12 +5,12 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
-local STAR_ICON, STAR_HIGHLIGHT = icons.general("star")
+local STAR_ICON, STAR_HIGHLIGHT = icons.get("star")
 local STATE_ICONS = {
-	open = { icons.pulls("pr") },
-	draft = { icons.pulls("draft_pr") },
-	merged = { icons.pulls("merged_pr") },
-	declined = { icons.pulls("declined_pr") },
+	open = { icons.get("pr") },
+	draft = { icons.get("draft_pr") },
+	merged = { icons.get("merged_pr") },
+	declined = { icons.get("declined_pr") },
 }
 
 local function pull_icon(pr, opts)
@@ -48,7 +48,7 @@ function M.pull_row(pr, repo, opts)
 		_pr_icon_str = icon,
 		_pr_icon_hl = hl_group,
 		conversation = tostring(pr.comments_count),
-		author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
+		author = string.format("%s %s", icons.get("user"), utils.shorten_name(author, 20)),
 		author_hl = author,
 		created = utils.relative_time(pr.created_on),
 		updated = utils.relative_time(pr.updated_on),

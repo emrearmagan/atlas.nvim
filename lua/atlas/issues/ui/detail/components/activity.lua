@@ -6,30 +6,30 @@ local activity = require("atlas.ui.components.activity")
 local helper = require("atlas.issues.ui.presentation")
 
 local EVENT_ICON = {
-	labeled = { icons.pulls("activity") },
-	unlabeled = { icons.pulls("activity") },
-	assigned = { icons.general("user") },
-	unassigned = { icons.general("user") },
-	milestoned = { icons.pulls("activity") },
-	demilestoned = { icons.pulls("activity") },
-	renamed = { icons.general("edit"), "AtlasTextMuted" },
-	closed = { icons.pulls_status("successful") },
-	reopened = { icons.issues("issue") },
-	locked = { icons.pulls_status("stopped") },
-	unlocked = { icons.pulls_status("stopped") },
-	pinned = { icons.pulls("activity") },
-	unpinned = { icons.pulls("activity") },
-	transferred = { icons.pulls("activity") },
-	marked_as_duplicate = { icons.pulls("activity") },
-	["cross-referenced"] = { icons.pulls("activity") },
-	referenced = { icons.pulls("activity") },
+	labeled = { icons.get("activity") },
+	unlabeled = { icons.get("activity") },
+	assigned = { icons.get("user") },
+	unassigned = { icons.get("user") },
+	milestoned = { icons.get("activity") },
+	demilestoned = { icons.get("activity") },
+	renamed = { icons.get("edit"), "AtlasTextMuted" },
+	closed = { icons.get("successful", "status") },
+	reopened = { icons.get("issue") },
+	locked = { icons.get("stopped", "status") },
+	unlocked = { icons.get("stopped", "status") },
+	pinned = { icons.get("activity") },
+	unpinned = { icons.get("activity") },
+	transferred = { icons.get("activity") },
+	marked_as_duplicate = { icons.get("activity") },
+	["cross-referenced"] = { icons.get("activity") },
+	referenced = { icons.get("activity") },
 }
 
 ---@param entry IssueActivityEntry
 ---@return { icon: string, icon_hl: string, additional: string, content: string|nil }
 local function classify(entry)
 	local raw = tostring(entry.label or "")
-	local style = EVENT_ICON[entry.kind] or { icons.pulls("activity") }
+	local style = EVENT_ICON[entry.kind] or { icons.get("activity") }
 	return {
 		icon = style[1],
 		icon_hl = style[2],

@@ -456,9 +456,9 @@ describe("Markdown parsing", function()
 
 	it("renders task states while preserving indentation and Unicode byte spans", function()
 		for _, case in ipairs({
-			{ " ", shared_icons.general("checkbox_unchecked"), "AtlasMarkdownTaskTodo" },
-			{ "x", shared_icons.general("checkbox_checked"), "AtlasMarkdownTaskDone" },
-			{ "X", shared_icons.general("checkbox_checked"), "AtlasMarkdownTaskDone" },
+			{ " ", shared_icons.get("checkbox_unchecked"), "AtlasMarkdownTaskTodo" },
+			{ "x", shared_icons.get("checkbox_checked"), "AtlasMarkdownTaskDone" },
+			{ "X", shared_icons.get("checkbox_checked"), "AtlasMarkdownTaskDone" },
 		}) do
 			local prefix = "  " .. case[2] .. " "
 			assert.are.same({

@@ -312,15 +312,17 @@ function M.manage(on_done)
 	end
 
 	local options = {
-		{ id = "create", label = "Create template", icon = icons.action("create") },
-		{ id = "edit", label = "Edit template", icon = icons.action("edit") },
+		{ id = "create", label = "Create template", icon = icons.get("create", "actions") },
+		{ id = "edit", label = "Edit template", icon = icons.get("edit", "actions") },
 	}
 
 	picker.select({
 		title = "Templates",
 		items = options,
 		size = { width = 0.35, height = 0.15 },
-		format_item = icons.format_action,
+		format_item = function(action)
+			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+		end,
 		on_select = function(choice)
 			if choice == nil then
 				finish()
@@ -431,15 +433,17 @@ end
 ---@param context AtlasTemplateContext
 function M.open(context)
 	local actions = {
-		{ id = "apply", label = "Apply template", icon = icons.action("success") },
-		{ id = "save", label = "Save current description as template", icon = icons.action("save") },
+		{ id = "apply", label = "Apply template", icon = icons.get("success", "actions") },
+		{ id = "save", label = "Save current description as template", icon = icons.get("save", "actions") },
 	}
 
 	picker.select({
 		title = "Templates",
 		items = actions,
 		size = { width = 0.35, height = 0.15 },
-		format_item = icons.format_action,
+		format_item = function(action)
+			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+		end,
 		on_select = function(action)
 			if action == nil then
 				return

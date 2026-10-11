@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
@@ -68,11 +69,15 @@ end
 local function jira_card(issue, width)
 	local prefix, star_hl = "", nil
 	if issue.is_starred then
-		prefix, star_hl = icons.general("star")
+		prefix, star_hl = icons.get("star")
 		prefix = prefix .. " "
 	end
 
-	local priority, priority_hl = icons.issues_priority(issue.priority)
+	local priority, priority_hl = "", nil
+	if issue.priority and issue.priority ~= "" then
+		priority, priority_hl = icons.get(issue.priority, "priority")
+	end
+
 	local priority_text = priority ~= "" and (priority .. " ") or ""
 	local points = issue.story_points ~= nil
 			and utils.truncate(clean(issue.story_points) .. " pts", math.floor(width / 3))
@@ -140,9 +145,10 @@ function M.jira(opts, issues)
 		return column
 	end
 
+	local status_icons = config.options.issues.jira.project_config.status_icons
 	for _, status in ipairs(opts.statuses or {}) do
 		local column = column_for(status.id, status.name)
-		local icon = icons.issues_status(status.category, status.name)
+		local icon = status_icons[status.name] or status_icons[status.category] or icons.get("fallback")
 
 		column.name = clean(icon ~= "" and (icon .. " " .. status.name) or status.name)
 	end

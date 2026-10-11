@@ -439,10 +439,10 @@ function M.block.list(lines, index)
 		content = task
 
 		if checked == " " then
-			marker = icons.general("checkbox_unchecked")
+			marker = icons.get("checkbox_unchecked")
 			style = "task_todo"
 		else
-			marker = icons.general("checkbox_checked")
+			marker = icons.get("checkbox_checked")
 			style = "task_done"
 		end
 	elseif marker:match("^[-+*]$") then

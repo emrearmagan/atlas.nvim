@@ -83,11 +83,11 @@ end
 function M.label(link)
 	local icon
 	if link.kind == "pr" then
-		icon = icons.pulls("pr")
+		icon = icons.get("pr")
 	elseif link.kind == "issue" then
-		icon = icons.issues("issue")
+		icon = icons.get("issue")
 	else
-		icon = icons.action("open_in_browser")
+		icon = icons.get("open_in_browser", "actions")
 	end
 	local relationship = clean(link.relationship)
 	local title = clean(link.title)
@@ -312,7 +312,7 @@ end
 function M.action(state)
 	return {
 		label = "Open related items",
-		icon = icons.general("link"),
+		icon = icons.get("link"),
 		callback = function()
 			M.select(state)
 		end,
@@ -352,7 +352,7 @@ function M.chips(state)
 		end
 	end
 	local chips = {}
-	local icon = icons.general("link")
+	local icon = icons.get("link")
 	for _, entry in ipairs({ { "issue", "issue" }, { "pr", "PR" }, { "external", "link" } }) do
 		if counts[entry[1]] > 0 then
 			local count = counts[entry[1]]

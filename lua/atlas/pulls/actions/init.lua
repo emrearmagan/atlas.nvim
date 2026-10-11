@@ -65,7 +65,7 @@ local function draft_action(draft)
 	return {
 		id = id,
 		label = label,
-		icon = draft and icons.pulls("draft_pr") or icons.action("review"),
+		icon = draft and icons.get("draft_pr") or icons.get("review", "actions"),
 		is_available = function(context)
 			if not context.pr then
 				return false, "No PR selected"
@@ -164,7 +164,9 @@ function M.open(context, on_done, extra_items)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		format_item = icons.format_action,
+		format_item = function(action)
+			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+		end,
 		on_select = function(action)
 			if not action then
 				if on_done then
@@ -184,7 +186,7 @@ end
 M.edit_pr = {
 	id = "edit_pr",
 	label = "Edit PR",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	is_available = function(context)
 		if not context.pr then
 			return false, "No PR selected"
@@ -209,7 +211,7 @@ M.convert_to_draft = draft_action(true)
 M.merge = {
 	id = "merge",
 	label = "Merge",
-	icon = icons.action("merge"),
+	icon = icons.get("merge", "actions"),
 	is_available = function(context)
 		return context.pr ~= nil and context.pr.state == "open" and context.provider.capabilities.core.merge ~= nil
 	end,
@@ -241,7 +243,7 @@ M.merge = {
 M.decline = {
 	id = "decline",
 	label = "Decline",
-	icon = icons.action("close"),
+	icon = icons.get("close", "actions"),
 	is_available = function(context)
 		return context.pr ~= nil and (context.pr.state == "open" or context.pr.state == "draft")
 	end,
@@ -272,7 +274,7 @@ M.decline = {
 M.edit_reviewers = {
 	id = "edit_reviewers",
 	label = "Edit reviewers",
-	icon = icons.action("user"),
+	icon = icons.get("user", "actions"),
 	is_available = function(context)
 		if not context.pr then
 			return false, "No PR selected"
@@ -363,7 +365,7 @@ M.edit_reviewers = {
 M.browse_repository = {
 	id = "browse_repository",
 	label = "Browse Current Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
@@ -375,7 +377,7 @@ M.browse_repository = {
 M.open_pipelines = {
 	id = "open_pipelines",
 	label = "Open Pipelines",
-	icon = icons.action("pipeline"),
+	icon = icons.get("pipeline", "actions"),
 	is_available = function(context)
 		if not has_pr(context) then
 			return false
@@ -391,7 +393,7 @@ M.open_pipelines = {
 M.open_diff = {
 	id = "open_diff",
 	label = "Open diff",
-	icon = icons.action("changes"),
+	icon = icons.get("changes", "actions"),
 	is_available = has_pr,
 	run = function(context, done)
 		diff.open_pr(context.pr, function(err)
@@ -408,7 +410,7 @@ M.open_diff = {
 M.checkout = {
 	id = "checkout",
 	label = "Checkout PR branch",
-	icon = icons.action("checkout"),
+	icon = icons.get("checkout", "actions"),
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)

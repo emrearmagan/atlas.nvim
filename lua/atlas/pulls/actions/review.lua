@@ -1,6 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
+local completion = require("atlas.completion")
 local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local editor = require("atlas.ui.popups.editor")
@@ -163,7 +164,7 @@ end
 M.add_comment = {
 	id = "add_comment",
 	label = "Add comment",
-	icon = icons.general("comment"),
+	icon = icons.get("comment"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -204,11 +205,12 @@ M.add_comment = {
 			preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.7), 80))
 		end
 		local template_action = comment_template_action()
+		local mention = parent and completion.format_mention(context.provider, parent.author)
 
 		open_editor(context, {
 			key = "pr-comment",
 			title = title,
-			initial_text = opts.initial_text,
+			initial_text = opts.initial_text or (mention and (mention .. " ")),
 			preview = preview,
 			actions = template_action and { template_action } or nil,
 			on_save = function(text)
@@ -254,7 +256,7 @@ M.add_comment = {
 M.add_task = {
 	id = "add_task",
 	label = "Add task",
-	icon = icons.general("checkbox_unchecked"),
+	icon = icons.get("checkbox_unchecked"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -345,7 +347,7 @@ end
 M.edit_comment = {
 	id = "edit_comment",
 	label = "Edit comment",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -407,7 +409,7 @@ M.edit_comment = {
 M.edit_review = {
 	id = "edit_review",
 	label = "Edit review",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -468,7 +470,7 @@ end
 M.delete_comment = {
 	id = "delete_comment",
 	label = "Delete comment",
-	icon = icons.action("delete"),
+	icon = icons.get("delete", "actions"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -551,7 +553,7 @@ M.delete_comment = {
 M.toggle_task = {
 	id = "toggle_task",
 	label = "Toggle task",
-	icon = icons.general("checkbox_checked"),
+	icon = icons.get("checkbox_checked"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -600,7 +602,7 @@ M.toggle_task = {
 M.toggle_resolved = {
 	id = "toggle_resolved",
 	label = "Toggle resolved",
-	icon = icons.action("success"),
+	icon = icons.get("success", "actions"),
 	---@param context AtlasReviewActionContext
 	---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 	---@return boolean handled
@@ -681,7 +683,7 @@ end
 M.start_review = {
 	id = "start_review",
 	label = "Start review",
-	icon = icons.action("review"),
+	icon = icons.get("review", "actions"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews
@@ -707,7 +709,7 @@ M.start_review = {
 M.submit_review = {
 	id = "submit_review",
 	label = "Submit review",
-	icon = icons.action("review"),
+	icon = icons.get("review", "actions"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -723,7 +725,7 @@ M.submit_review = {
 M.approve = {
 	id = "approve",
 	label = "Approve",
-	icon = icons.action("success"),
+	icon = icons.get("success", "actions"),
 	run = function(context, on_done)
 		return open_review_editor(context, "approve", " Approve ", "Approving...", "Approved", on_done)
 	end,
@@ -732,7 +734,7 @@ M.approve = {
 M.request_changes = {
 	id = "request_changes",
 	label = "Request changes",
-	icon = icons.action("changes"),
+	icon = icons.get("changes", "actions"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -748,7 +750,7 @@ M.request_changes = {
 M.discard_review = {
 	id = "discard_review",
 	label = "Discard review",
-	icon = icons.action("delete"),
+	icon = icons.get("delete", "actions"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews

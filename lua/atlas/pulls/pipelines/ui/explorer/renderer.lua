@@ -15,7 +15,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.pipelines.explorer")
 ---@param selection PullsPipelinesSelection|nil
 ---@return table
 local function job_row(pipeline, stage, job, loading_frame, selection)
-	local icon, icon_hl = icons.pulls_status(tostring(job.state or "UNKNOWN"):lower())
+	local icon, icon_hl = icons.get(tostring(job.state or "UNKNOWN"), "status")
 	if loading_frame then
 		icon, icon_hl = loading_frame, "AtlasTextMuted"
 	end
@@ -28,7 +28,7 @@ local function job_row(pipeline, stage, job, loading_frame, selection)
 	if selection and selection.pipeline.id == pipeline.id and selection.job and selection.job.id == job.id then
 		row.children = {}
 		for index, step in ipairs(job.steps or {}) do
-			local step_icon, step_hl = icons.pulls_status(step.state:lower())
+			local step_icon, step_hl = icons.get(step.state, "status")
 			local seconds = step.duration
 			row.children[#row.children + 1] = {
 				icon = step_icon,
@@ -62,7 +62,7 @@ local function pipeline_children(pipeline, loading_job_id, loading_frame, select
 		if stage.name == nil then
 			vim.list_extend(rows, jobs)
 		else
-			local icon, icon_hl = icons.pulls_status(tostring(stage.state or "UNKNOWN"):lower())
+			local icon, icon_hl = icons.get(tostring(stage.state or "UNKNOWN"), "status")
 			rows[#rows + 1] = {
 				icon = icon,
 				label = string.format("%s %s", icon, stage.name),
@@ -129,7 +129,7 @@ local function build_content(pane)
 		if #rows > 0 then
 			table.insert(rows, { kind = "separator" })
 		end
-		local icon, icon_hl = icons.pulls_status(tostring(pipeline.state or "UNKNOWN"):lower())
+		local icon, icon_hl = icons.get(tostring(pipeline.state or "UNKNOWN"), "status")
 		local children, has_steps = pipeline_children(pipeline, pane.loading_job_id, loading_frame, pane.selection)
 		if has_steps then
 			columns[2] = { key = "duration", name = "", align = "right", hl = "AtlasTextMuted", can_grow = false }

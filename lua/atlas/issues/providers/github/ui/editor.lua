@@ -270,7 +270,7 @@ local function render_meta(state)
 		end
 	end
 
-	local prefix = icons.general("user") .. " "
+	local prefix = icons.get("user") .. " "
 	local assignees = {
 		key = "Assignees:",
 		value = prefix .. "Unassigned",

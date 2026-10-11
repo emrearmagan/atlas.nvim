@@ -117,7 +117,7 @@ end
 local function window_title()
 	local provider = current_provider
 	local provider_name = provider and provider.name or "Atlas"
-	local bell = icons.general("bell")
+	local bell = icons.get("bell")
 	return string.format(" %s Notifications (%s) ", bell, provider_name)
 end
 

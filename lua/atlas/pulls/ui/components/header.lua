@@ -105,7 +105,7 @@ function M.render(pr, width, extra_fields)
 		title_lines[index] = " " .. line
 	end
 
-	local author_icon, author_icon_hl = icons.general("user")
+	local author_icon, author_icon_hl = icons.get("user")
 	local by_prefix = string.format(" %s by @", author_icon)
 	local by_sep = " - "
 	local byline = by_prefix .. author_name .. by_sep .. created_text
@@ -118,7 +118,7 @@ function M.render(pr, width, extra_fields)
 	local fields = {
 		{
 			label = "Repo",
-			value = string.format("%s %s", icons.pulls("repo"), repo_name),
+			value = string.format("%s %s", icons.get("repo"), repo_name),
 			hl = highlights.dynamic_for(repo_name) or "AtlasTextMuted",
 		},
 		{
@@ -133,7 +133,7 @@ function M.render(pr, width, extra_fields)
 	end
 	table.insert(fields, {
 		label = "Branch",
-		value = string.format("%s %s → %s", icons.pulls("branch"), src, dst),
+		value = string.format("%s %s → %s", icons.get("branch"), src, dst),
 		hl = "AtlasTextMuted",
 	})
 

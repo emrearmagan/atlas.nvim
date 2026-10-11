@@ -15,7 +15,7 @@ local function render_header(repo, width)
 
 	local metadata = { repo.is_private and "Private" or "Public" }
 	if repo.default_branch then
-		table.insert(metadata, icons.pulls("branch") .. " " .. repo.default_branch)
+		table.insert(metadata, icons.get("branch") .. " " .. repo.default_branch)
 	end
 	local created = utils.format_date(repo.created_on)
 	if created ~= "" then
@@ -26,9 +26,9 @@ local function render_header(repo, width)
 
 	local stats = ""
 	for _, stat in ipairs({
-		{ label = "stars", count = repo.stars, icon = { icons.general("star") } },
-		{ label = "forks", count = repo.forks, icon = { icons.pulls("fork") } },
-		{ label = "watchers", count = repo.watchers, icon = { icons.general("watching") } },
+		{ label = "stars", count = repo.stars, icon = { icons.get("star") } },
+		{ label = "forks", count = repo.forks, icon = { icons.get("fork") } },
+		{ label = "watchers", count = repo.watchers, icon = { icons.get("watching") } },
 	}) do
 		if stat.count ~= nil then
 			stats = stats .. (stats ~= "" and "   " or "")

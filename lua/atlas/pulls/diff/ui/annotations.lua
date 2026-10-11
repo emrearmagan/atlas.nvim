@@ -214,7 +214,7 @@ function M.render_virtual_text(items)
 		end
 
 		local text = utils.truncate(utils.strip_markup(body):gsub("%s+", " "), 48)
-		local icon, highlight = icons.general(item.note and "pin" or "comment")
+		local icon, highlight = icons.get(item.note and "pin" or "comment")
 		if index > 1 then
 			chunks[#chunks + 1] = { "   ", "AtlasTextMuted" }
 		end

@@ -50,7 +50,7 @@ function M.render(release, width)
 	end
 	local tag = single_line(release.tag)
 	if tag ~= "" then
-		parts[#parts + 1] = icons.pulls("tag") .. " " .. tag
+		parts[#parts + 1] = icons.get("tag") .. " " .. tag
 	end
 	local author = single_line(release.author)
 	if author ~= "" then

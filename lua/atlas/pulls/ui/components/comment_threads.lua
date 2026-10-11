@@ -80,24 +80,24 @@ end
 ---@return [string, string][]
 function M.status_marker(comment)
 	if comment.state == "DELETED" then
-		return { { icons.general("delete") } }
+		return { { icons.get("delete") } }
 	end
 
 	local chunks = {}
 	if comment.pending then
-		chunks[#chunks + 1] = { icons.pulls_status("inprogress") }
+		chunks[#chunks + 1] = { icons.get("inprogress", "status") }
 	end
 	if comment.state == "RESOLVED" then
 		if #chunks > 0 then
 			chunks[#chunks + 1] = { " ", "AtlasTextMuted" }
 		end
-		chunks[#chunks + 1] = { icons.general("success") }
+		chunks[#chunks + 1] = { icons.get("success") }
 	end
 	if is_outdated(comment) then
 		if #chunks > 0 then
 			chunks[#chunks + 1] = { " ", "AtlasTextMuted" }
 		end
-		local icon = icons.general("progress")
+		local icon = icons.get("progress")
 		chunks[#chunks + 1] = { icon, "AtlasTextWarning" }
 	end
 	return chunks
@@ -112,7 +112,7 @@ local function comment_item(comment, opts, is_root)
 	local is_resolved = comment.state == "RESOLVED"
 	local author = presentation.author_name(comment.author)
 	local author_hl = presentation.author_hl(author)
-	local user_icon = icons.general("user")
+	local user_icon = icons.get("user")
 	local additional = utils.relative_time(comment.created_on)
 	local location = is_root and opts.location and opts.location(comment) or ""
 	if location ~= "" then
@@ -410,7 +410,7 @@ function M.render_compact(node, width, expanded, location, opts)
 		end
 	end
 
-	local expander = icons.general(expanded and "fold_open" or "fold_closed")
+	local expander = icons.get(expanded and "fold_open" or "fold_closed")
 	item.icon = expander
 	item.author = "@" .. presentation.author_name(comment.author)
 	item.line_map.tree_key = M.comment_key(comment)

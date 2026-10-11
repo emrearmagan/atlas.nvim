@@ -14,57 +14,77 @@
 --       gitlab = {
 --         views = {
 --           {
---             name = "Assigned",
+--             name = "Waiting for review",
 --             key = "1",
 --             layout = "compact", -- "compact", "grouped", or "plain".
---             scope = "assigned_to_me",
+--             scope = "reviews_for_me",
+--             state = "opened", -- "opened", "closed", "merged", or "all".
+--             review_states = { "UNREVIEWED", "REVIEW_STARTED" },
 --             -- current_repo = true, -- Local repository; alternative to project/group.
---             -- project = "group/project", -- Project path or numeric ID.
---             -- group = "group", -- Group path or numeric ID.
+--             -- project = "group/project", -- Full project path.
+--             -- group = "group/subgroup", -- Full group path.
 --             -- labels = "bug,backend",
 --             -- milestone = "v1.0",
 --             -- assignee_username = "your-user",
 --             -- author_username = "your-user",
+--             -- source_branch = "feature",
+--             -- target_branch = "main",
 --             -- search = "fix",
 --             -- order_by = "updated_at",
 --             -- sort = "desc", -- "asc" or "desc".
---             -- extra_params = { target_branch = "main" },
 --           },
---           { name = "Created",   key = "2", scope = "created_by_me" },
---           { name = "Reviewing", key = "3", scope = "reviews_for_me" },
+--           {
+--             name = "Assigned to me",
+--             key = "2",
+--             scope = "assigned_to_me",
+--             state = "opened",
+--           },
+--           {
+--             name = "Created by me",
+--             key = "3",
+--             scope = "created_by_me",
+--             state = "opened",
+--           },
 --         },
 --         bookmarks = {
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["Reviewing"]   = { layout = "compact", scope = "reviews_for_me" },
---             ["Created by me"] = { scope = "all", author_username = "me" },
+--             ["Reviewed by me"] = {
+--               scope = "reviews_for_me",
+--               state = "opened",
+--               review_states = { "REVIEWED", "REQUESTED_CHANGES", "APPROVED" },
+--             },
+--             ["Changes requested on mine"] = {
+--               scope = "created_by_me",
+--               state = "opened",
+--               review_states = { "REQUESTED_CHANGES" },
+--             },
 --           },
 --         },
 --       },
 --     },
 --   })
 --
--- View options map directly to GitLab API:
---   scope:    "created_by_me" | "assigned_to_me" | "reviews_for_me" | "all"
---   labels, milestone, assignee_username, author_username, search
---   order_by: "created_at" | "updated_at" | "title" | ...
---   sort:     "asc" | "desc"
---
--- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
--- TODO: It should work in theory, but i have not tested it yet...
+-- scope = "all" requires project, group, or current_repo.
+-- TODO: Self-hosted GitLab should work in theory, but I have not tested it yet.
+
+---@alias AtlasGitLabReviewState "UNREVIEWED"|"REVIEW_STARTED"|"REVIEWED"|"REQUESTED_CHANGES"|"APPROVED"|"UNAPPROVED"
 
 ---@class AtlasGitLabPullsSearchConfig
----@field scope string|nil
----@field project string|number|nil
----@field group string|number|nil
+---@field scope "created_by_me"|"assigned_to_me"|"reviews_for_me"|"all"|nil
+---@field project string|nil
+---@field group string|nil
+---@field state "opened"|"closed"|"merged"|"all"|nil
+---@field review_states AtlasGitLabReviewState[]|nil
 ---@field labels string|nil
 ---@field milestone string|nil
 ---@field assignee_username string|nil
 ---@field author_username string|nil
+---@field source_branch string|nil
+---@field target_branch string|nil
 ---@field sort "asc"|"desc"|nil
----@field order_by string|nil
----@field extra_params table<string, string>|nil
+---@field order_by "created_at"|"updated_at"|"title"|nil
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig, AtlasGitLabPullsSearchConfig
 

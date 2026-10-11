@@ -25,7 +25,7 @@ function M.new(web_base, request)
 		{
 			id = "run_pipeline",
 			label = "Run pipeline",
-			icon = icons.action("run"),
+			icon = icons.get("run", "actions"),
 			is_available = function(ctx)
 				return active_states[ctx.pipeline.state] ~= true and ctx.pipeline.state ~= "MANUAL"
 			end,
@@ -37,7 +37,7 @@ function M.new(web_base, request)
 		{
 			id = "rerun_failed_jobs",
 			label = "Re-run failed jobs",
-			icon = icons.action("retry"),
+			icon = icons.get("retry", "actions"),
 			is_available = function(ctx)
 				return ctx.pipeline.state == "FAILED"
 			end,
@@ -48,7 +48,7 @@ function M.new(web_base, request)
 		{
 			id = "stop_job",
 			label = "Stop job",
-			icon = icons.action("stop"),
+			icon = icons.get("stop", "actions"),
 			confirm = "Stop this job?",
 			is_available = function(ctx)
 				return ctx.job ~= nil and active_states[ctx.job.state] == true

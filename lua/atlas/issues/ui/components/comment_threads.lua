@@ -24,7 +24,7 @@ local function comment_item(comment, reaction_options)
 
 	local author = helper.person_name(comment.author)
 	local author_hl = helper.person_hl(author)
-	local user_icon = icons.general("user")
+	local user_icon = icons.get("user")
 	return {
 		icon = user_icon,
 		icon_hl = author_hl,
@@ -41,10 +41,10 @@ local function comment_item(comment, reaction_options)
 end
 
 ---@param padding_x integer
----@param opts IssuesCommentThreadRenderOptions
+---@param max_lines integer|fun(comment: IssueComment): integer|nil
+---@param truncated_key string|nil
 ---@return AtlasThreadRenderOpts
-local function render_options(padding_x, opts)
-	local max_lines = opts.content_max_lines
+local function render_options(padding_x, max_lines, truncated_key)
 	if type(max_lines) == "function" then
 		local callback = max_lines
 		max_lines = function(item)
@@ -56,7 +56,7 @@ local function render_options(padding_x, opts)
 	return {
 		padding_x = padding_x,
 		content_max_lines = max_lines,
-		content_truncated_key = opts.content_truncated_key,
+		content_truncated_key = truncated_key,
 		content_hl = function(item, row)
 			if item.meta.deleted then
 				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
@@ -159,18 +159,18 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes) do
 		table.insert(items, build_item(node, opts, nil))
 	end
-	return threads.render_comments(items, width, render_options(opts.padding_x or 1, opts))
+	return threads.render_comments(
+		items,
+		width,
+		render_options(opts.padding_x or 1, opts.content_max_lines, opts.content_truncated_key)
+	)
 end
 
 ---@param comment IssueComment
 ---@param width integer
 ---@return AtlasEditorPreview
 function M.render_comment(comment, width)
-	local lines, highlights = M.render({ { comment = comment, children = {} } }, width, {
-		expanded = function()
-			return true
-		end,
-	})
+	local lines, highlights = threads.render({ comment_item(comment, nil) }, width, render_options(1, nil, nil))
 	return { lines = lines, highlights = highlights }
 end
 

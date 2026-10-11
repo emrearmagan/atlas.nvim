@@ -76,32 +76,33 @@ local function custom_action(item)
 				end)
 			end
 			local pr = assert(context.pr)
-			local repo_path = git_checkout.resolve_repo_path_for_pr(pr, {
+			return git_checkout.resolve_repo_path_for_pr(pr, {
 				require_existing = false,
-			})
-			local ok, err = pcall(item.run, pr, {
-				repo_path = repo_path,
-				pr = pr,
-				user = context.current_user,
-				write = function(text)
+			}, function(repo_path)
+				local ok, err = pcall(item.run, pr, {
+					repo_path = repo_path,
+					pr = pr,
+					user = context.current_user,
+					write = function(text)
+						if finished then
+							return
+						end
+						if not output then
+							output = console.start(item.label, repo_path)
+							console.open()
+						end
+						output:write(text)
+					end,
+				}, complete_custom)
+				if not ok then
+					local message = "Custom action failed: " .. tostring(err)
 					if finished then
-						return
+						log_failure(message)
+					else
+						complete_custom(false, message)
 					end
-					if not output then
-						output = console.start(item.label, repo_path)
-						console.open()
-					end
-					output:write(text)
-				end,
-			}, complete_custom)
-			if not ok then
-				local message = "Custom action failed: " .. tostring(err)
-				if finished then
-					log_failure(message)
-				else
-					complete_custom(false, message)
 				end
-			end
+			end)
 		end,
 	}
 end

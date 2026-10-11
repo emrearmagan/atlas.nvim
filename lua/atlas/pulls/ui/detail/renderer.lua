@@ -67,7 +67,7 @@ function M.render(tab_items)
 			end
 		end
 		if details and details.is_subscribed ~= nil then
-			local bell, bell_hl = icons.general(details.is_subscribed and "bell" or "bell_no")
+			local bell, bell_hl = icons.get(details.is_subscribed and "bell" or "bell_no")
 			if details.is_subscribed then
 				bell_hl = "AtlasLogInfo"
 			end

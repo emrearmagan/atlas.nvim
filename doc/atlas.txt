@@ -65,7 +65,7 @@ REQUIREMENTS                                               *atlas-requirements*
   - `git` and `curl` on `$PATH`
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
-  - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For GitLab: GitLab 17.7+ and a Personal Access Token with the `api` scope
   - For Jira: Cloud REST API v3 or Server REST API v2
 
 CodeDiff requires v3.0.0 or newer. Diffview and Diffview-plus are also supported.
@@ -153,6 +153,7 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "show_repo_status",
         label = "Show repository status",
         icon = "",
+        confirmation = true,
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -186,6 +187,7 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "copy_branch_name",
         label = "Copy branch name",
         icon = "",
+        confirmation = false,
         ---@param issue Issue
         ---@param ctx AtlasIssuesCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -500,10 +502,9 @@ Bitbucket Cloud only. Auth uses an API token.
 <
 GITLAB PULLS                                              *atlas-pulls-gitlab*
 
-Auth uses a Personal Access Token with the `api` scope. Set
+Requires GitLab 17.7+ and a Personal Access Token with the `api` scope. Set
 `providers.gitlab.base_url` to `https://gitlab.com` for the SaaS or your
 self-hosted URL.
-
 >lua
   pulls = {
     ---@type AtlasGitLabPullsConfig
@@ -513,11 +514,12 @@ self-hosted URL.
           scope = "assigned_to_me",
           -- current_repo = true, -- Limit this view to the local repository.
         },
-        { name = "Reviewing", key = "3", scope = "reviews_for_me" },
+        { name = "Waiting for review", key = "3", scope = "reviews_for_me",
+          state = "opened", review_states = { "UNREVIEWED", "REVIEW_STARTED" } },
         -- One project:
         { name = "GitLab",    key = "G", project = "gitlab-org/gitlab",
-          extra_params = { target_branch = "main" } },
-        -- All projects in a group:
+          target_branch = "main" },
+        -- Projects directly in a group:
         { name = "GitLab Org", key = "O", group = "gitlab-org" },
       },
       bookmarks = {
@@ -525,14 +527,12 @@ self-hosted URL.
         -- label = "Search", -- default
         items = {
           ["Reviewing"]    = { scope = "reviews_for_me" },
-          ["Created by me"] = { scope = "all", author_username = "me" },
+          ["Created by me"] = { scope = "created_by_me" },
         },
       },
     },
   }
 <
-`extra_params` is passed through to the MR list endpoint. Use it for
-anything not covered by the explicit view fields.
 
 
 6. ISSUES                                                        *atlas-issues*
@@ -669,16 +669,13 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
         { name = "Created",  key = "2",
           scope = "created_by_me", state = "opened" },
         { name = "All open", key = "3",
-          scope = "all", state = "opened",
-          extra_params = { ["not[labels]"] = "wontfix" } },
+          scope = "all", state = "opened" },
       },
       bookmarks = {
         -- key   = "S",      -- default
         -- label = "Search", -- default
         items = {
-          ["No labels"] = { scope = "all", state = "opened",
-                            extra_params = { ["not[labels]"] = "*" } },
-          ["Closed"]    = { scope = "created_by_me", state = "closed" },
+          ["Closed"] = { scope = "created_by_me", state = "closed" },
         },
       },
     },

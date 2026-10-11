@@ -16,6 +16,9 @@ function M.get_transitions(issue_key, callback)
 			return
 		end
 
+		local icons = require("atlas.ui.shared.icons")
+		local status_icons = require("atlas.config").options.issues.jira.project_config.status_icons
+
 		---@type IssueTransition[]
 		local transitions = {}
 		for _, t in ipairs(result.transitions or {}) do
@@ -24,6 +27,10 @@ function M.get_transitions(issue_key, callback)
 			table.insert(transitions, {
 				id = tostring(t.id or ""),
 				name = tostring(t.name or ""),
+				icon = {
+					icon = status_icons[to.name] or status_icons[category.key] or icons.get("fallback"),
+					hl_group = category.key == "done" and "AtlasTextPositive" or "AtlasTextMuted",
+				},
 				to_status_id = to.id and tostring(to.id) or nil,
 				to_status_name = to.name and tostring(to.name) or nil,
 				to_status_category = category.key and tostring(category.key) or nil,

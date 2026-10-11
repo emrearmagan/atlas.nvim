@@ -34,7 +34,7 @@ function M.update(session)
 	local client = vim.lsp.get_clients({ bufnr = session.view.right.buf })[1]
 	if client then
 		items[#items + 1] = {
-			text = string.format("%s %s", icons.general("lsp"), client.name),
+			text = string.format("%s %s", icons.get("lsp"), client.name),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 10,
@@ -46,7 +46,7 @@ function M.update(session)
 	end, review_data and review_data.comments or {})
 	if #comments > 0 then
 		items[#items + 1] = {
-			text = string.format("%s %d", icons.general("comment"), #comments),
+			text = string.format("%s %d", icons.get("comment"), #comments),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 30,
@@ -56,7 +56,7 @@ function M.update(session)
 	local notes = result.notes and result.notes.items or {}
 	if #notes > 0 then
 		items[#items + 1] = {
-			text = string.format("%s %d", icons.general("pin"), #notes),
+			text = string.format("%s %d", icons.get("pin"), #notes),
 			hl_group = "AtlasFooterNote",
 			align = "right",
 			priority = 20,
@@ -72,7 +72,7 @@ function M.update(session)
 
 	if pending_comments > 0 or (review_data and review_data.review.pending) then
 		items[#items + 1] = {
-			text = icons.pulls_status("inprogress")
+			text = icons.get("inprogress", "status")
 				.. " "
 				.. (pending_comments > 0 and string.format("%d pending", pending_comments) or "Pending review"),
 			hl_group = "AtlasFooterWarning",

@@ -3,6 +3,7 @@ local modules = {
 	"atlas.providers.jira.users",
 	"atlas.providers.jira.completion",
 	"atlas.ui.shared.icons",
+	"atlas.config",
 }
 
 describe("Jira completion", function()
@@ -27,9 +28,18 @@ describe("Jira completion", function()
 		response, failure, server = { alice }, nil, false
 		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
-			issues_status = function(category, name)
-				return category .. "/" .. name
+			get = function(name)
+				return name
 			end,
+		}
+		package.loaded["atlas.config"] = {
+			options = {
+				issues = {
+					jira = {
+						project_config = { status_icons = { ["To Do"] = "todo", new = "new", done = "done" } },
+					},
+				},
+			},
 		}
 		local cache = {}
 		package.loaded["atlas.providers.jira.client"] = {
@@ -192,13 +202,13 @@ describe("Jira completion", function()
 		}
 		local expected = {
 			{
-				label = "new/To Do KAN-7",
+				label = "todo KAN-7",
 				insert_text = "[KAN-7](https://jira.example/jira/browse/KAN-7)",
 				filter_text = "KAN-7 Linear issue",
 				detail = "Linear issue",
 			},
 			{
-				label = "done/Done KAN-77",
+				label = "done KAN-77",
 				insert_text = "[KAN-77](https://jira.example/jira/browse/KAN-77)",
 				filter_text = "KAN-77 Completed issue",
 				detail = "Completed issue",

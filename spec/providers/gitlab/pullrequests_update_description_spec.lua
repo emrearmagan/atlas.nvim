@@ -1,4 +1,5 @@
 local module_name = "atlas.pulls.providers.gitlab.api.pullrequests"
+local cleared
 
 local function fresh_module()
 	package.loaded[module_name] = nil
@@ -14,6 +15,10 @@ local function stub_service(request)
 				return (tostring(value):gsub("/", "%%2F"))
 			end,
 			delete_memory_cache = function() end,
+			clear_cache = function(prefix)
+				assert.equal("gitlab_pulls:merge_requests:gql:", prefix)
+				cleared = cleared + 1
+			end,
 		}
 	end)
 end
@@ -23,6 +28,7 @@ describe("gitlab pull request updates", function()
 
 	before_each(function()
 		calls = {}
+		cleared = 0
 		package.loaded[module_name] = nil
 		package.loaded["atlas.providers.gitlab.client"] = nil
 	end)
@@ -48,6 +54,7 @@ describe("gitlab pull request updates", function()
 		assert.is_false(ok)
 		assert.equal("Invalid MR identifier", err)
 		assert.equal(0, #calls)
+		assert.equal(0, cleared)
 	end)
 
 	it("PUTs descriptions including an empty body and accepts empty responses", function()
@@ -78,6 +85,7 @@ describe("gitlab pull request updates", function()
 			}, calls[index])
 		end
 		assert.equal(3, #calls)
+		assert.equal(3, cleared)
 	end)
 
 	it("uses the merge or squash message field", function()
@@ -100,6 +108,7 @@ describe("gitlab pull request updates", function()
 			calls[1]
 		)
 		assert.same({ squash = true, should_remove_source_branch = true, squash_commit_message = "Subject" }, calls[2])
+		assert.equal(2, cleared)
 	end)
 
 	it("clears selections and removes draft from a changed title", function()
@@ -133,6 +142,7 @@ describe("gitlab pull request updates", function()
 		}, calls)
 		assert.equal("New title", pr.title)
 		assert.equal("open", pr.state)
+		assert.equal(1, cleared)
 	end)
 
 	it("propagates errors from the request", function()
@@ -149,5 +159,6 @@ describe("gitlab pull request updates", function()
 
 		assert.is_false(ok)
 		assert.equal("boom", err)
+		assert.equal(0, cleared)
 	end)
 end)

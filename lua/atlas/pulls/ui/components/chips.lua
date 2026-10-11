@@ -26,7 +26,7 @@ local function checks_chip(checks)
 	if status == CHECK_STATES.muted then
 		return nil
 	end
-	local icon, hl = icons.pulls_status(status.icon)
+	local icon, hl = icons.get(status.icon, "status")
 	return { label = icon .. " " .. status.label, hl = hl }
 end
 
@@ -50,7 +50,7 @@ function M.render(pr, opts)
 	elseif type(checks) == "string" then
 		table.insert(
 			chips,
-			{ label = icons.pulls_status("inprogress") .. " Checks unavailable", hl = "AtlasTextWarning" }
+			{ label = icons.get("inprogress", "status") .. " Checks unavailable", hl = "AtlasTextWarning" }
 		)
 	end
 

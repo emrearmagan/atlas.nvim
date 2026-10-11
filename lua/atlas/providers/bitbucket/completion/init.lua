@@ -1,6 +1,14 @@
 local service = require("atlas.providers.bitbucket.client")
 local json = require("atlas.core.json")
 
+---@param user AtlasUser|PullsAuthor
+---@return string|nil
+local function format_mention(user)
+	if user.id and user.id ~= "" then
+		return "@{" .. user.id:gsub("[{}]", "") .. "}"
+	end
+end
+
 ---@param users table[]
 ---@param query string
 ---@return AtlasCompletionItem[]
@@ -9,14 +17,15 @@ local function completion_items(users, query)
 	local needle = query:lower()
 	for _, user in ipairs(users) do
 		local id = json.safe_str(user.account_id) or json.safe_str(user.uuid)
+		local mention = format_mention({ id = id, name = user.display_name })
 		local key = json.safe_str(user.uuid) or id
 		local nickname = json.safe_str(user.nickname)
 		local filter_text = user.display_name .. " " .. (nickname or "")
-		if id and not seen[key] and filter_text:lower():find(needle, 1, true) then
+		if key and mention and not seen[key] and filter_text:lower():find(needle, 1, true) then
 			seen[key] = true
 			items[#items + 1] = {
 				label = "@" .. user.display_name,
-				insert_text = "@{" .. id:gsub("[{}]", "") .. "}",
+				insert_text = mention,
 				filter_text = filter_text,
 				detail = nickname,
 			}
@@ -31,6 +40,7 @@ end
 ---@type AtlasCompletionSource
 local users = {
 	triggers = { "@" },
+	format_mention = format_mention,
 
 	complete = function(context, query, done)
 		local repository = context.repository or (context.pr and context.pr.repo_full_name)
@@ -134,7 +144,7 @@ local pulls = {
 					icon = "declined_pr"
 				end
 				items[#items + 1] = {
-					label = icons.pulls(icon) .. " " .. reference,
+					label = icons.get(icon) .. " " .. reference,
 					insert_text = "pull request " .. reference,
 					filter_text = item.id .. " " .. item.title,
 					detail = item.title,

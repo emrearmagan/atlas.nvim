@@ -25,11 +25,8 @@ describe("GitLab completion", function()
 		reference_nodes = { issues = { { iid = "42", title = "Fix login", state = "opened" } }, pulls = {} }
 		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
-			issues = function(name)
-				return "issues." .. name
-			end,
-			pulls = function(name)
-				return "pulls." .. name
+			get = function(name)
+				return name
 			end,
 		}
 		package.loaded["atlas.providers.gitlab.client"] = {
@@ -161,7 +158,7 @@ describe("GitLab completion", function()
 				assert.is_nil(err)
 				assert.same({
 					{
-						label = "issues.issue #42",
+						label = "issue #42",
 						insert_text = "#42",
 						filter_text = "42 Fix login",
 						detail = "Fix login",
@@ -195,11 +192,11 @@ describe("GitLab completion", function()
 		}
 		assert.same({ "!" }, pull_source.triggers)
 		for _, case in ipairs({
-			{ issue_source, { "#77", "#178" }, { "issues.issue #77", "issues.success #178" } },
+			{ issue_source, { "#77", "#178" }, { "issue #77", "success #178" } },
 			{
 				pull_source,
 				{ "!78", "!179", "!180", "!181" },
-				{ "pulls.pr !78", "pulls.declined_pr !179", "pulls.merged_pr !180", "pulls.draft_pr !181" },
+				{ "pr !78", "declined_pr !179", "merged_pr !180", "draft_pr !181" },
 			},
 		}) do
 			for _, query in ipairs({ "", "7", "77", "Lin", "Linear" }) do

@@ -176,7 +176,7 @@ end
 M.add_note = {
 	id = "add_note",
 	label = "Add note",
-	icon = icons.general("pin"),
+	icon = icons.get("pin"),
 	run = function(context, on_done)
 		local data = context.session.data.notes
 		if not data then
@@ -216,7 +216,7 @@ M.add_note = {
 M.edit_note = {
 	id = "edit_note",
 	label = "Edit note",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	run = function(context, on_done)
 		local data = context.session.data.notes
 		local note = context.note
@@ -245,7 +245,7 @@ M.edit_note = {
 M.delete_note = {
 	id = "delete_note",
 	label = "Delete note",
-	icon = icons.action("delete"),
+	icon = icons.get("delete", "actions"),
 	run = function(context, on_done)
 		local data = context.session.data.notes
 		local note = context.note
@@ -286,7 +286,7 @@ M.delete_note = {
 M.toggle_note_resolved = {
 	id = "toggle_note_resolved",
 	label = "Toggle note resolved",
-	icon = icons.action("success"),
+	icon = icons.get("success", "actions"),
 	run = function(context, on_done)
 		local data = context.session.data.notes
 		local note = context.note
@@ -382,7 +382,7 @@ end
 M.refresh_review = {
 	id = "refresh_review",
 	label = "Refresh review",
-	icon = icons.action("retry"),
+	icon = icons.get("retry", "actions"),
 	run = function(context, on_done)
 		notify.loading("Refreshing review...")
 		reload_review(context.session, function(ok)
@@ -399,7 +399,7 @@ M.refresh_review = {
 M.toggle_detail_panel = {
 	id = "toggle_detail_panel",
 	label = "Show details",
-	icon = icons.action("details"),
+	icon = icons.get("details", "actions"),
 	run = function(context, on_done)
 		local session = context.session
 		local pr = session.data.pr
@@ -435,7 +435,7 @@ M.toggle_detail_panel = {
 M.open_in_browser = {
 	id = "open_in_browser",
 	label = "Open in browser",
-	icon = icons.action("open_in_browser"),
+	icon = icons.get("open_in_browser", "actions"),
 	run = function(context)
 		local session = context.session
 		local pr = session.data.pr
@@ -462,7 +462,7 @@ M.open_in_browser = {
 M.view_commits = {
 	id = "view_commits",
 	label = "View commits",
-	icon = icons.pulls("commit"),
+	icon = icons.get("commit"),
 	is_available = function(context)
 		return #context.session.data.commits > 0, "No commits available"
 	end,
@@ -499,7 +499,7 @@ M.view_commits = {
 M.open_actions = {
 	id = "open_actions",
 	label = "Review actions",
-	icon = icons.action("review"),
+	icon = icons.get("review", "actions"),
 	run = function(context, on_done)
 		local review = review_context(context)
 		if not review then
@@ -539,7 +539,9 @@ M.open_actions = {
 		picker.select({
 			title = "Review action",
 			items = items,
-			format_item = icons.format_action,
+			format_item = function(action)
+				return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+			end,
 			on_select = function(action)
 				if action then
 					M.dispatch(action.id, context, on_done)

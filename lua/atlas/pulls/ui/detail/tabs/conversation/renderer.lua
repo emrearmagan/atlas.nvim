@@ -144,25 +144,25 @@ end
 ---@param review PullsReviewHistoryEntry
 ---@return string, string, string
 local function review_status(review)
-	local icon, hl = icons.pulls("activity")
+	local icon, hl = icons.get("activity")
 	local label = "left a review"
 	if review.state == "approved" then
-		icon, hl = icons.pulls_status("successful")
+		icon, hl = icons.get("successful", "status")
 		label = "approved"
 	elseif review.state == "changes_requested" then
-		icon, hl = icons.pulls_status("failed")
+		icon, hl = icons.get("failed", "status")
 		label = "requested changes"
 	elseif review.state == "dismissed" then
 		if review.previous_state == "approved" then
-			icon = icons.pulls_status("successful")
+			icon = icons.get("successful", "status")
 			hl = "AtlasTextMuted"
 			label = "previously approved"
 		elseif review.previous_state == "changes_requested" then
-			icon = icons.pulls_status("failed")
+			icon = icons.get("failed", "status")
 			hl = "AtlasTextMuted"
 			label = "previously requested changes"
 		else
-			icon, hl = icons.pulls_status("stopped")
+			icon, hl = icons.get("stopped", "status")
 			label = "dismissed"
 		end
 	end

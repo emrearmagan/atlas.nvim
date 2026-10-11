@@ -1,5 +1,8 @@
 local M = {}
 local adf = require("atlas.formats.adf.to_markdown")
+local config = require("atlas.config")
+local highlights = require("atlas.ui.highlights")
+local icons = require("atlas.ui.shared.icons")
 local json = require("atlas.core.json")
 local users = require("atlas.providers.jira.users")
 
@@ -51,6 +54,21 @@ function M.to_project(raw_project)
 	}
 end
 
+---@param name string|nil
+---@return AtlasIconStyle
+local function issue_type_icon(name)
+	local key = tostring(name or ""):lower()
+	local style = config.options.issues.jira.project_config.issue_types[key]
+	if style then
+		return { icon = style.icon or icons.get("issue"), hl_group = style.hl_group or "AtlasTextMuted" }
+	end
+
+	return {
+		icon = icons.get("issue"),
+		hl_group = highlights.dynamic_for(key ~= "" and ("jira-issue-type:" .. key) or nil) or "AtlasTextMuted",
+	}
+end
+
 ---@param raw_type any Decoded API value.
 ---@return IssueType|nil
 function M.to_issue_type(raw_type)
@@ -67,6 +85,7 @@ function M.to_issue_type(raw_type)
 	return {
 		id = id,
 		name = name,
+		icon = issue_type_icon(name),
 		description = raw_type.description and tostring(raw_type.description) or nil,
 		subtask = raw_type.subtask == true,
 	}
@@ -157,6 +176,7 @@ end
 function M.to_issue(raw, sp_field)
 	local fields = json.safe_table(raw.fields)
 	local status, status_id = extract_status(safe_get(fields, "status"))
+	local issue_type = M.to_issue_type(safe_get(fields, "issuetype"))
 
 	return {
 		id = raw.id,
@@ -165,7 +185,8 @@ function M.to_issue(raw, sp_field)
 		project = M.to_project(safe_get(fields, "project")),
 		status = status,
 		status_id = status_id,
-		type = M.to_issue_type(safe_get(fields, "issuetype")),
+		type = issue_type,
+		icon = issue_type and issue_type.icon,
 		priority = safe_get(fields, "priority", "name"),
 		assignee = normalize_issue_user(safe_get(fields, "assignee")),
 		reporter = normalize_issue_user(safe_get(fields, "reporter")),
@@ -291,7 +312,6 @@ function M.to_comments_list(raw, context)
 	return comments
 end
 
-local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.presentation")
 
 local FIELD_LABELS = {
@@ -383,15 +403,15 @@ local function activity_from_history_item(raw_item, actor, date)
 		body = string.format("%s -> %s", from or "Unassigned", to or "Unassigned")
 		body_hl = arrow_hl(helper.person_hl(from), helper.person_hl(to))
 	elseif field == "priority" then
-		local from_icon, from_hl = icons.issues_priority(from or "")
-		local to_icon, to_hl = icons.issues_priority(to or "")
+		local from_icon, from_hl = icons.get(from or "", "priority")
+		local to_icon, to_hl = icons.get(to or "", "priority")
 		body = string.format("%s %s -> %s %s", from_icon, from or "", to_icon, to or "")
 		body_hl = arrow_hl(from_hl, to_hl)
 	elseif field == "issuetype" then
-		local from_icon, from_hl = icons.issues_type(from or "")
-		local to_icon, to_hl = icons.issues_type(to or "")
-		body = string.format("%s %s -> %s %s", from_icon, from or "", to_icon, to or "")
-		body_hl = arrow_hl(from_hl, to_hl)
+		local from_icon = issue_type_icon(from)
+		local to_icon = issue_type_icon(to)
+		body = string.format("%s %s -> %s %s", from_icon.icon, from or "", to_icon.icon, to or "")
+		body_hl = arrow_hl(from_icon.hl_group, to_icon.hl_group)
 	elseif field == "status" then
 		body = string.format("%s -> %s", from or "", to or "")
 		body_hl = arrow_hl(helper.status_hl(json.safe_str(raw_item.from)), helper.status_hl(json.safe_str(raw_item.to)))

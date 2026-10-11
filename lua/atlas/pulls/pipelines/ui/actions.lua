@@ -23,7 +23,9 @@ function M.open(backend, ctx, on_select)
 	picker.select({
 		title = "Actions: " .. (ctx.job and ctx.job.name or ctx.stage and ctx.stage.name or ctx.pipeline.name),
 		items = available,
-		format_item = icons.format_action,
+		format_item = function(action)
+			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+		end,
 		on_select = function(action)
 			if not action then
 				return

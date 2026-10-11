@@ -45,7 +45,7 @@ function M.render(items, width, opts)
 	local function render_gap(count)
 		local text = string.format(
 			"%s  ... %d more %s",
-			icons.general("activity_more"),
+			icons.get("activity_more"),
 			count,
 			count == 1 and "activity" or "activities"
 		)

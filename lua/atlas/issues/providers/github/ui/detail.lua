@@ -117,7 +117,7 @@ function M.header_fields(issue, details, _loading)
 		},
 		{
 			label = "Reporter",
-			value = string.format("%s %s", icons.general("user"), reporter_name),
+			value = string.format("%s %s", icons.get("user"), reporter_name),
 			hl = helper.person_hl(reporter_name),
 		},
 		{ label = "Assignee", value = assignees_text, hl = assignees_hl },
@@ -147,7 +147,7 @@ function M.header_fields(issue, details, _loading)
 		end
 		table.insert(fields, {
 			label = "Sub-issues",
-			value = string.format("%s %d/%d", icons.issues("issue"), closed, #subs),
+			value = string.format("%s %d/%d", icons.get("issue"), closed, #subs),
 			hl = closed == #subs and "AtlasTextPositive" or "AtlasTextMuted",
 		})
 	end
@@ -156,7 +156,7 @@ function M.header_fields(issue, details, _loading)
 	if total > 0 then
 		table.insert(fields, {
 			label = "Tasks",
-			value = string.format("%s %d/%d", icons.pulls("tasks"), completed, total),
+			value = string.format("%s %d/%d", icons.get("tasks"), completed, total),
 			hl = completed == total and "AtlasTextPositive" or "AtlasTextWarning",
 		})
 	end
@@ -190,8 +190,8 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
-	local overview_icon = icons.general("overview")
-	local conversation_icon = icons.general("conversation")
+	local overview_icon = icons.get("overview")
+	local conversation_icon = icons.get("conversation")
 	return {
 		{
 			key = "overview",

@@ -19,6 +19,7 @@ local loading_ns = vim.api.nvim_create_namespace("atlas.completion.loading")
 
 ---@class AtlasCompletionSource
 ---@field triggers string[]
+---@field format_mention? fun(user: AtlasUser|PullsAuthor): string|nil
 ---@field match? fun(before: string, triggers: string[], context: AtlasCompletionContext): integer|nil, string|nil
 ---@field complete fun(context: AtlasCompletionContext, query: string, done: fun(items: AtlasCompletionItem[]|nil, err: string|nil)): { cancel: fun() }|nil
 
@@ -279,6 +280,25 @@ local function on_event(state, event)
 	state.last_input = event == "CompleteDone" and get_input(state) or nil
 	if event == "BufWipeout" then
 		attached[state.buf] = nil
+	end
+end
+
+---@param provider IssuesProvider|PullsProvider
+---@param user AtlasUser|PullsAuthor|nil
+---@return string|nil
+function M.format_mention(provider, user)
+	if not user then
+		return nil
+	end
+
+	local sources = provider.capabilities.completion
+	local users = sources and sources.users
+	if users and users.format_mention then
+		return users.format_mention(user)
+	end
+
+	if user.username and user.username ~= "" then
+		return "@" .. user.username
 	end
 end
 

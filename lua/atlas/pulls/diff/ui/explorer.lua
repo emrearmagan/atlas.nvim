@@ -167,7 +167,7 @@ end
 ---@param file AtlasDiffFile
 local function file_chunks(state, file, prefix, available)
 	local name = file.path:match("[^/]+$") or file.path
-	local icon, icon_hl = icons.pulls("file")
+	local icon, icon_hl = icons.get("file")
 	if has_devicons then
 		local glyph, highlight = devicons.get_icon(name, nil, { default = true })
 		icon, icon_hl = glyph or icon, highlight or icon_hl
@@ -196,11 +196,11 @@ local function file_chunks(state, file, prefix, available)
 	local annotation = state.annotated_paths[file.path]
 	local previous_annotation = state.annotated_paths[file.old_path]
 	if annotation and annotation.comments or previous_annotation and previous_annotation.comments then
-		local glyph = icons.general("comment")
+		local glyph = icons.get("comment")
 		chunks[#chunks + 1] = { glyph .. " ", "AtlasLogInfo" }
 	end
 	if annotation and annotation.notes or previous_annotation and previous_annotation.notes then
-		local glyph, highlight = icons.general("pin")
+		local glyph, highlight = icons.get("pin")
 		chunks[#chunks + 1] = { glyph .. " ", highlight }
 	end
 	chunks[#chunks + 1] = { icon .. " ", icon_hl }
@@ -240,7 +240,7 @@ local function row_chunks(state, row, available)
 
 	if row.path then
 		local collapsed = state.collapsed[row.section][row.path]
-		local icon, highlight = icons.general(collapsed and "folder_closed" or "folder_open")
+		local icon, highlight = icons.get(collapsed and "folder_closed" or "folder_open")
 		local label = utils.truncate(
 			vim.fn.strtrans(row.label),
 			math.max(1, available - vim.fn.strdisplaywidth(row.prefix .. icon) - 2)

@@ -8,7 +8,7 @@ local M = {}
 ---@param pipeline PullsPipeline
 ---@return string, AtlasPickerChunk[]
 local function format_run(pipeline)
-	local icon, hl = icons.pulls_status(pipeline.state:lower())
+	local icon, hl = icons.get(pipeline.state, "status")
 	local parts = { pipeline_utils.display_name(pipeline) }
 	if pipeline.commit then
 		parts[#parts + 1] = pipeline.commit:sub(1, 7)

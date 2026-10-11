@@ -24,8 +24,8 @@ describe("Bitbucket completion", function()
 		references = { { id = 42, title = "Fix login", state = "OPEN", draft = false } }
 		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
-			pulls = function(name)
-				return "pulls." .. name
+			get = function(name)
+				return name
 			end,
 		}
 		pull_request = {
@@ -131,7 +131,7 @@ describe("Bitbucket completion", function()
 				assert.is_nil(err)
 				assert.same({
 					{
-						label = "pulls.pr #42",
+						label = "pr #42",
 						insert_text = "pull request #42",
 						filter_text = "42 Fix login",
 						detail = "Fix login",
@@ -169,11 +169,11 @@ describe("Bitbucket completion", function()
 				assert.is_nil(err)
 				assert.same(
 					{
-						"pulls.pr #42",
-						"pulls.draft_pr #43",
-						"pulls.merged_pr #44",
-						"pulls.declined_pr #45",
-						"pulls.declined_pr #46",
+						"pr #42",
+						"draft_pr #43",
+						"merged_pr #44",
+						"declined_pr #45",
+						"declined_pr #46",
 					},
 					vim.tbl_map(function(item)
 						return item.label

@@ -11,13 +11,13 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.review_panel")
 local review_states = {
-	approved = { "Approved", icons.pulls_status("successful") },
-	changes_requested = { "Changes requested", icons.pulls_status("failed") },
-	pending = { "Pending", icons.pulls_status("inprogress") },
-	commented = { "Commented", icons.general("comment") },
-	dismissed = { "Dismissed", icons.pulls_status("stopped") },
-	unapproved = { "Approval removed", icons.pulls_status("stopped") },
-	reviewed = { "Reviewed", icons.pulls("review") },
+	approved = { "Approved", icons.get("successful", "status") },
+	changes_requested = { "Changes requested", icons.get("failed", "status") },
+	pending = { "Pending", icons.get("inprogress", "status") },
+	commented = { "Commented", icons.get("comment") },
+	dismissed = { "Dismissed", icons.get("stopped", "status") },
+	unapproved = { "Approval removed", icons.get("stopped", "status") },
+	reviewed = { "Reviewed", icons.get("review") },
 }
 
 ---@class AtlasDiffReviewPanelRow
@@ -183,9 +183,9 @@ local function render_review(item, width, expanded, history_expanded, head_revis
 
 	local fold, fold_hl = " ", nil
 	if #history > 0 then
-		fold, fold_hl = icons.general(expanded and "fold_open" or "fold_closed")
+		fold, fold_hl = icons.get(expanded and "fold_open" or "fold_closed")
 	end
-	local user, user_hl = icons.general("user")
+	local user, user_hl = icons.get("user")
 	local label = status[2] .. " " .. status[1]
 	local name_width = math.max(1, width - vim.fn.strdisplaywidth(fold .. " " .. user .. "   " .. label .. previous))
 	add_line({
@@ -254,7 +254,7 @@ local function render_review(item, width, expanded, history_expanded, head_revis
 
 	add_review(#history)
 	if #history > 1 then
-		local icon, hl = icons.general(history_expanded and "fold_open" or "fold_closed")
+		local icon, hl = icons.get(history_expanded and "fold_open" or "fold_closed")
 		local count = #history - 1
 		local history_label = string.format("%d earlier %s", count, count == 1 and "review" or "reviews")
 		add_line({ { icon .. " ", hl }, { history_label, "AtlasTextMuted" } }, {
@@ -306,7 +306,7 @@ function M.render(state)
 			if #lines > 0 then
 				lines[#lines + 1] = ""
 			end
-			local icon, hl = icons.general(section_open and "fold_open" or "fold_closed")
+			local icon, hl = icons.get(section_open and "fold_open" or "fold_closed")
 			local header = icon .. " " .. section.title
 			local count = #section.items
 			local name = count == 1 and section.item_name or section.item_name .. "s"

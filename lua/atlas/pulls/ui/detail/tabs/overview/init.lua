@@ -93,10 +93,10 @@ local DECISION_GROUPS = { "approved", "changes_requested", "reviewed", "pending"
 local OTHER_DECISION_GROUPS = { "approved", "changes_requested" }
 
 local DECISION_ICONS = {
-	approved = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
-	changes_requested = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
-	reviewed = { icon = icons.pulls("review"), hl = "AtlasTextMuted" },
-	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
+	approved = { icon = icons.get("successful", "status"), hl = "AtlasTextPositive" },
+	changes_requested = { icon = icons.get("failed", "status"), hl = "AtlasLogError" },
+	reviewed = { icon = icons.get("review"), hl = "AtlasTextMuted" },
+	pending = { icon = icons.get("inprogress", "status"), hl = "AtlasTextMuted" },
 }
 
 ---@param decisions PullsReviewer[]
@@ -248,7 +248,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			table.insert(rows, { kind = "separator" })
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
-		local icon, status_hl = icons.pulls_status(state_value:lower())
+		local icon, status_hl = icons.get(state_value, "status")
 		local label = pipeline.name
 		local job_count = tonumber(pipeline.job_count)
 		if job_count ~= nil then
@@ -277,7 +277,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		for _, pipeline_stage in ipairs(pipeline_utils.sort_by_state(pipeline.stages)) do
 			if pipeline_stage.name ~= nil then
 				local stage_state = tostring(pipeline_stage.state or "UNKNOWN"):upper()
-				local stage_icon, stage_hl = icons.pulls_status(stage_state:lower())
+				local stage_icon, stage_hl = icons.get(stage_state, "status")
 				table.insert(row.children, {
 					label = string.format("%s %s", stage_icon, pipeline_stage.name),
 					status = "",
@@ -295,7 +295,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			local entry = sorted_jobs[index]
 			local job = entry.job
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
-			local job_icon, job_hl = icons.pulls_status(job_state:lower())
+			local job_icon, job_hl = icons.get(job_state, "status")
 			table.insert(row.children, {
 				label = string.format("%s %s", job_icon, job.name),
 				status = "",
@@ -444,11 +444,11 @@ end
 -- Merge checks
 
 local MERGE_CHECK_STATE = {
-	successful = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
-	failed = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
-	inprogress = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
-	warning = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextWarning" },
-	muted = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
+	successful = { icon = icons.get("successful", "status"), hl = "AtlasTextPositive" },
+	failed = { icon = icons.get("failed", "status"), hl = "AtlasLogError" },
+	inprogress = { icon = icons.get("inprogress", "status"), hl = "AtlasTextMuted" },
+	warning = { icon = icons.get("inprogress", "status"), hl = "AtlasTextWarning" },
+	muted = { icon = icons.get("inprogress", "status"), hl = "AtlasTextMuted" },
 }
 
 local MERGE_CHECK_PRIORITY = {

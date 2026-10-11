@@ -26,12 +26,12 @@ function M.render(state, width)
 		line_map[#lines] = run
 	end
 
-	add(icons.pulls("branch") .. " " .. state.branch .. "  " .. #runs .. " runs", "AtlasTextMuted")
+	add(icons.get("branch") .. " " .. state.branch .. "  " .. #runs .. " runs", "AtlasTextMuted")
 	add("")
 	for _, run in ipairs(runs) do
 		local name = pipeline_utils.display_name(run)
 		local title = run.title and run.title ~= "" and run.title or name
-		local icon, hl = icons.pulls_status(run.state:lower())
+		local icon, hl = icons.get(run.state, "status")
 		local leading = icon .. "  "
 		local time = content_width >= 60 and run.started_at and utils.relative_time_text(run.started_at) or ""
 		local available = content_width - vim.fn.strdisplaywidth(leading) - (time ~= "" and #time + 2 or 0)

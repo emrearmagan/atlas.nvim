@@ -65,17 +65,17 @@ local function to_thread_item(commit, width)
 	-- Pipeline status
 	local pipeline_state = state.status_by_hash[commit.hash]
 	if pipeline_state == "loading" then
-		content = content .. "  " .. icons.pulls_status("inprogress") .. " pipelines"
+		content = content .. "  " .. icons.get("inprogress", "status") .. " pipelines"
 	elseif pipeline_state ~= nil and pipeline_state ~= "unknown" then
 		content = content
 			.. "  "
-			.. icons.pulls_status(pipeline_state)
+			.. icons.get(pipeline_state, "status")
 			.. " "
 			.. pipeline_utils.state_label(pipeline_state)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
-	local commit_icon, commit_icon_hl = icons.pulls("commit")
+	local commit_icon, commit_icon_hl = icons.get("commit")
 	local icon_width = vim.api.nvim_strwidth(commit_icon) + 1
 	local hash_width = #hash + 2
 	local max_msg = width - PADDING_X - icon_width - hash_width
@@ -230,7 +230,7 @@ function M.render(_pr, _details, width)
 			local pipeline_state = item.meta and tostring(item.meta.pipeline_state or "") or ""
 
 			if pipeline_state ~= "" and pipeline_state ~= "unknown" and pipeline_state ~= "loading" then
-				local icon, hl = icons.pulls_status(pipeline_state)
+				local icon, hl = icons.get(pipeline_state, "status")
 				local marker = icon .. " " .. pipeline_utils.state_label(pipeline_state)
 				local start_col, end_col = row:find(marker, 1, true)
 				if start_col ~= nil and end_col ~= nil then

@@ -11,7 +11,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
-local PR_ICON = icons.pulls("pr")
+local PR_ICON = icons.get("pr")
 
 ---@param pulls PullRequest[]
 ---@return table[]
@@ -45,7 +45,7 @@ local function statusline_items(pulls)
 		local user_name = tostring(user.username or user.name or "")
 		if user_name ~= "" then
 			table.insert(items, {
-				text = string.format("%s @%s", icons.general("user"), user_name),
+				text = string.format("%s @%s", icons.get("user"), user_name),
 				hl_group = "AtlasFooterText",
 				priority = 50,
 				min_width = 8,
@@ -79,7 +79,7 @@ local function append_search_text(lines, spans)
 	if text == "" then
 		return
 	end
-	local line = string.format(" %s %s", icons.general("search"), text)
+	local line = string.format(" %s %s", icons.get("search"), text)
 	table.insert(lines, line)
 	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
 	table.insert(lines, "")
@@ -92,7 +92,7 @@ local function render_header(lines, spans, width)
 	local function view_id(view)
 		return view and tostring(view.key or view.name or "") or ""
 	end
-	local icon = state.provider and state.provider.icon or icons.fallback()
+	local icon = state.provider and state.provider.icon or icons.get("fallback")
 	local title = state.provider and state.provider.name or "Atlas"
 	local hl = state.provider and state.provider.hl_group or "Title"
 	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
@@ -137,7 +137,7 @@ local function render_header(lines, spans, width)
 			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		end
 		local count = notif_state.unread_count
-		local bell, bell_hl = icons.general(count > 0 and "bell_unread" or "bell")
+		local bell, bell_hl = icons.get(count > 0 and "bell_unread" or "bell")
 		table.insert(actions, {
 			label = count > 0 and string.format("%s %d", bell, count) or bell,
 			hl_group = bell_hl,

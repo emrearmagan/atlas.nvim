@@ -17,7 +17,7 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = { icon = icons.general("overview") },
+		icon = { icon = icons.get("overview") },
 		mod = require("atlas.pulls.ui.detail.tabs.overview"),
 	},
 }
@@ -310,10 +310,10 @@ end
 
 ---@return PullsDetailTab[]
 function M.default_tabs()
-	local overview_icon = icons.general("overview")
-	local conversation_icon = icons.general("conversation")
-	local review_icon = icons.pulls("review")
-	local commit_icon = icons.pulls("commit")
+	local overview_icon = icons.get("overview")
+	local conversation_icon = icons.get("conversation")
+	local review_icon = icons.get("review")
+	local commit_icon = icons.get("commit")
 	return {
 		{
 			key = "overview",

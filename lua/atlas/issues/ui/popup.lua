@@ -14,7 +14,8 @@ end
 local function generic_rows(issue)
 	local rows = {}
 	local issue_type = issue.type and issue.type.name or nil
-	local _, issue_type_hl = icons.issues_type(issue_type)
+	local _, issue_type_hl = icons.get("issue")
+	issue_type_hl = issue.icon and issue.icon.hl_group or issue_type_hl
 	local assignee = issue.assignee and issue.assignee.name or nil
 	local reporter = issue.reporter and issue.reporter.name or nil
 
@@ -57,7 +58,7 @@ end
 local function jira_rows(issue)
 	local rows = {}
 	---@cast issue JiraIssue
-	local _, priority_hl = icons.issues_priority(issue.priority)
+	local _, priority_hl = icons.get(issue.priority or "", "priority")
 	add(rows, "Priority", issue.priority, priority_hl)
 	local project = issue.project
 	if project then

@@ -146,7 +146,7 @@ local function edit_assignees(ctx, done)
 				format_item = function(item)
 					return string.format(
 						"%s %s%s",
-						icons.general("user"),
+						icons.get("user"),
 						item.name,
 						item.username and item.username ~= "" and (" (@" .. item.username .. ")") or ""
 					)
@@ -214,15 +214,12 @@ end
 
 ---@param opts {
 --- title: string,
---- include_all: boolean,
 --- on_select: fun(project: string),
 --- on_cancel: fun(),
 ---}
 local function select_project(opts)
-	local initial_items = opts.include_all and { { id = "all", label = "All projects", project = "" } } or {}
 	picker.search({
 		title = opts.title,
-		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -230,7 +227,7 @@ local function select_project(opts)
 		fetch = function(query, fetch_done)
 			query = vim.trim(query)
 			if query == "" then
-				fetch_done(initial_items, nil)
+				fetch_done({}, nil)
 				return
 			end
 
@@ -298,7 +295,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function search_merge_requests(project, ctx, done)
 	picker.search({
-		title = project ~= "" and "Search " .. project .. " Merge Requests" or "Search GitLab Merge Requests",
+		title = "Search " .. project .. " Merge Requests",
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -326,10 +323,7 @@ local function search_merge_requests(project, ctx, done)
 			end
 
 			---@type AtlasGitLabPullsViewConfig
-			local view = { name = "Search", scope = "all", search = query }
-			if project ~= "" then
-				view.project = project
-			end
+			local view = { name = "Search", project = project, scope = "all", search = query }
 			return pullrequests_api.fetch_pullrequests(view, {
 				force_refresh = false,
 				pagelen = 30,
@@ -365,7 +359,6 @@ end
 local function search(ctx, done)
 	select_project({
 		title = "Search Merge Requests - Project",
-		include_all = true,
 		on_select = function(project)
 			search_merge_requests(project, ctx, done)
 		end,
@@ -380,7 +373,6 @@ end
 local function open_project(_, done)
 	select_project({
 		title = "Open Project",
-		include_all = false,
 		on_select = function(project)
 			require("atlas").open("pulls", "gitlab", {
 				initial_view = {
@@ -474,7 +466,7 @@ register({
 register({
 	id = "merge",
 	label = "Merge MR",
-	icon = icons.action("merge"),
+	icon = icons.get("merge", "actions"),
 	is_available = merge_available,
 	run = actions.merge.run,
 })
@@ -486,7 +478,7 @@ register(actions.ready_for_review)
 register({
 	id = "reopen",
 	label = "Reopen MR",
-	icon = icons.action("reopen"),
+	icon = icons.get("reopen", "actions"),
 	is_available = reopen_available,
 	run = reopen,
 })
@@ -497,7 +489,7 @@ register(actions.edit_reviewers)
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
-	icon = icons.action("user"),
+	icon = icons.get("user", "actions"),
 	is_available = review_available,
 	run = edit_assignees,
 })
@@ -505,14 +497,14 @@ register({
 register({
 	id = "search",
 	label = "Search Merge Requests",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = search,
 })
 
 register({
 	id = "open_project",
 	label = "Open Project",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = open_project,
 })
 
@@ -520,11 +512,10 @@ register(actions.browse_repository)
 register({
 	id = "browse_repositories",
 	label = "Browse Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	run = function(ctx, done)
 		select_project({
 			title = "Browse Repository",
-			include_all = false,
 			on_select = function(project)
 				require("atlas.ui.repository").open(project, ctx.provider)
 				done(nil, nil)
@@ -539,7 +530,7 @@ register({
 register({
 	id = "edit_search",
 	label = "Edit Current Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")
 		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
@@ -568,7 +559,7 @@ register({
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
-	icon = icons.action("notification"),
+	icon = icons.get("notification", "actions"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })

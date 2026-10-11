@@ -28,7 +28,7 @@ return {
 	{
 		id = "rerun_failed_jobs",
 		label = "Re-run failed jobs",
-		icon = icons.action("retry"),
+		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and ctx.pipeline.state == "FAILED" and not is_active(ctx.pipeline)
 		end,
@@ -41,7 +41,7 @@ return {
 	{
 		id = "rerun_pipeline",
 		label = "Re-run pipeline",
-		icon = icons.action("retry"),
+		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and not is_active(ctx.pipeline)
 		end,
@@ -54,7 +54,7 @@ return {
 	{
 		id = "cancel_pipeline",
 		label = "Cancel pipeline",
-		icon = icons.action("close"),
+		icon = icons.get("close", "actions"),
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and is_active(ctx.pipeline)
@@ -68,7 +68,7 @@ return {
 	{
 		id = "rerun_job",
 		label = "Re-run job",
-		icon = icons.action("retry"),
+		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
 			return ctx.job ~= nil
 				and tonumber(ctx.job.id) ~= nil

@@ -27,7 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 local M = {
 	key = "releases",
 	label = "Releases",
-	icon = icons.pulls("tag"),
+	icon = icons.get("tag"),
 }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.releases")
 ---@type table<integer, RepositoryReleases>

@@ -14,7 +14,7 @@ return {
 	{
 		id = "run_pipeline",
 		label = "Run new build",
-		icon = icons.action("run"),
+		icon = icons.get("run", "actions"),
 		confirm = "Start a new build from this branch's latest commit?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil
@@ -33,7 +33,7 @@ return {
 	{
 		id = "stop_pipeline",
 		label = "Stop pipeline",
-		icon = icons.action("stop"),
+		icon = icons.get("stop", "actions"),
 		confirm = "Stop this pipeline?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and active_states[ctx.pipeline.state] == true

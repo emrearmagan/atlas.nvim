@@ -158,7 +158,7 @@ register({
 register({
 	id = "merge",
 	label = "Merge",
-	icon = icons.action("merge"),
+	icon = icons.get("merge", "actions"),
 	is_available = merge_available,
 	run = actions.merge.run,
 })
@@ -179,7 +179,7 @@ register(actions.edit_reviewers)
 register({
 	id = "search",
 	label = "Search repositories",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(ctx, done)
 		select_repository(ctx, function(repo)
 			---@type AtlasBitbucketViewConfig
@@ -199,7 +199,7 @@ register(actions.browse_repository)
 register({
 	id = "browse_repositories",
 	label = "Browse Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	run = function(ctx, done)
 		select_repository(ctx, function(repo)
 			require("atlas.ui.repository").open(repo.full_name, ctx.provider)
@@ -211,7 +211,7 @@ register({
 register({
 	id = "search_pull_requests",
 	label = "New Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		bitbucket_search.open({ name = "Search", search = state.query })
 		done(nil, nil)
@@ -221,7 +221,7 @@ register({
 register({
 	id = "edit_search",
 	label = "Edit Current Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)
 			local view = state.search_view()

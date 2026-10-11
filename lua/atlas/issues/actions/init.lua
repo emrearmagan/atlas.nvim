@@ -104,7 +104,9 @@ function M.open(context, on_done, extra_items)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		format_item = icons.format_action,
+		format_item = function(action)
+			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
+		end,
 		on_select = function(action)
 			if not action then
 				if on_done then
@@ -124,7 +126,7 @@ end
 M.browse_repository = {
 	id = "browse_repository",
 	label = "Browse Current Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	is_available = function(context)
 		return context.issue ~= nil and context.issue.url ~= nil
 	end,
@@ -146,7 +148,7 @@ M.copy_issue_url = utils.copy_issue_url
 M.manage_templates = {
 	id = "manage_templates",
 	label = "Manage Templates",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	run = function(_, done)
 		templates.manage(function(err)
 			done(nil, err)

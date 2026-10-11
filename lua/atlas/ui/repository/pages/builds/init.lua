@@ -27,7 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field group integer
 ---@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
 
-local M = { key = "builds", label = "Builds", icon = icons.pulls("pipeline") }
+local M = { key = "builds", label = "Builds", icon = icons.get("pipeline") }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.builds")
 ---@type table<integer, RepositoryBuilds>
 local states = {}

@@ -1,5 +1,6 @@
 local M = {}
 
+local completion = require("atlas.completion")
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
 local comment_threads = require("atlas.issues.ui.components.comment_threads")
@@ -67,6 +68,7 @@ function M.reply(issue, entry, refresh)
 	---@type IssueComment
 	local comment = item.entity
 	local comments = detail.provider.capabilities.comments
+	local mention = completion.format_mention(detail.provider, comment.author)
 
 	local parent = entry.thread_root or comment
 	md_editor.open({
@@ -75,6 +77,7 @@ function M.reply(issue, entry, refresh)
 			context = { provider = detail.provider.id, issue = { key = issue.key } },
 		},
 		title = " Reply to Comment ",
+		initial_text = mention and (mention .. " "),
 		width_ratio = 0.7,
 		height_ratio = 0.5,
 		preview = comment_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.7), 80)),

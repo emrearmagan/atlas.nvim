@@ -27,35 +27,36 @@
 --             -- search = "fix",
 --             -- order_by = "updated_at",
 --             -- sort = "desc", -- "asc" or "desc".
---             -- extra_params = { ["not[labels]"] = "wontfix" },
 --           },
---           { name = "Created",  key = "2", scope = "created_by_me",  state = "opened" },
---           { name = "All open", key = "3", scope = "all",            state = "opened" },
+--           {
+--             name = "Created",
+--             key = "2",
+--             scope = "created_by_me",
+--             state = "opened",
+--           },
+--           {
+--             name = "All open",
+--             key = "3",
+--             scope = "all",
+--             state = "opened",
+--           },
 --         },
 --         bookmarks = {
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["No labels"] = { layout = "compact", scope = "all", state = "opened",
---                               extra_params = { ["not[labels]"] = "*" } },
---             ["Closed"]    = { scope = "created_by_me", state = "closed" },
+--             ["Closed"] = {
+--               scope = "created_by_me",
+--               state = "closed",
+--             },
 --           },
 --         },
 --       },
 --     },
 --   })
---
--- View options map directly to GitLab API:
---   scope:    "created_by_me" | "assigned_to_me" | "all"
---   state:    "opened" | "closed" | "all"
---   labels, milestone, assignee_username, author_username, search
---   order_by: "created_at" | "updated_at" | "priority" | ...
---   sort:     "asc" | "desc"
---
--- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
 
 ---@class AtlasGitLabIssuesSearchConfig
----@field scope string|nil
+---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
 ---@field project string|number|nil
 ---@field state "opened"|"closed"|"all"|nil
 ---@field labels string|nil
@@ -65,7 +66,6 @@
 ---@field search string|nil
 ---@field sort "asc"|"desc"|nil
 ---@field order_by string|nil
----@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
 ---@field layout "compact"|"plain"|nil

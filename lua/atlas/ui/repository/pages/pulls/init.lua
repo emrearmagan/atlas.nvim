@@ -29,7 +29,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field group integer
 ---@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
 
-local M = { key = "pulls", label = "Pull Requests", icon = icons.pulls("pr") }
+local M = { key = "pulls", label = "Pull Requests", icon = icons.get("pr") }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.pulls")
 ---@type PullsStateFilter[]
 local filters = { "open", "merged", "declined" }

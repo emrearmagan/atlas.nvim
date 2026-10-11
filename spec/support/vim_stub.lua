@@ -53,6 +53,7 @@ _G.vim = {
 	NIL = {},
 	o = { background = "dark" },
 	deepcopy = deepcopy,
+	inspect = json_encode,
 
 	split = function(s, sep, opts)
 		local plain = opts and opts.plain

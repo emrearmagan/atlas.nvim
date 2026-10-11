@@ -30,17 +30,17 @@ function M.render(notifications, width)
 	for i, n in ipairs(notifications) do
 		local dot, dot_hl = " ", "AtlasTextMuted"
 		if n.unread then
-			dot = icons.general("dot")
+			dot = icons.get("dot")
 			dot_hl = "AtlasLogInfo"
 		end
 
-		local type_icon, type_hl = icons.general("info")
+		local type_icon, type_hl = icons.get("info")
 		if n.kind == "pr" then
-			type_icon, type_hl = icons.pulls("pr")
+			type_icon, type_hl = icons.get("pr")
 		elseif n.kind == "issue" then
-			type_icon, type_hl = icons.issues("issue")
+			type_icon, type_hl = icons.get("issue")
 		elseif n.kind == "checks" then
-			type_icon, type_hl = icons.pulls("tasks")
+			type_icon, type_hl = icons.get("tasks")
 		end
 
 		local prefix

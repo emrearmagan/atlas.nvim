@@ -5,9 +5,9 @@ local threads = require("atlas.ui.components.threads")
 local utils = require("atlas.ui.shared.utils")
 
 local M = {}
-local note_icon, note_icon_hl = icons.general("pin")
-local progress_icon = icons.general("progress")
-local resolved_icon, resolved_icon_hl = icons.general("success")
+local note_icon, note_icon_hl = icons.get("pin")
+local progress_icon = icons.get("progress")
+local resolved_icon, resolved_icon_hl = icons.get("success")
 
 ---@class AtlasNotesUIItem
 ---@field target AtlasNoteTarget|nil
@@ -236,7 +236,7 @@ local function list_item(item, opts)
 		metadata[#metadata + 1] = { resolved_icon .. " resolved", resolved_icon_hl }
 	end
 
-	local expander, expander_hl = icons.general(item.expanded and "fold_open" or "fold_closed")
+	local expander, expander_hl = icons.get(item.expanded and "fold_open" or "fold_closed")
 	return {
 		icon = expander,
 		icon_hl = expander_hl,
@@ -301,7 +301,7 @@ function M.render_manager(opts)
 			local target = notes.target_label(document.target)
 			local key = "target:" .. document.target.ref
 			local expanded = opts.expanded[key] == true
-			local expander = icons.general(expanded and "fold_open" or "fold_closed")
+			local expander = icons.get(expanded and "fold_open" or "fold_closed")
 			local count = string.format("  %d %s", #items, #items == 1 and "note" or "notes")
 			local header = string.format("%s %s%s", expander, target, count)
 			local target_start = #expander + 1

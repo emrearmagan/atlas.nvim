@@ -70,7 +70,7 @@ local function transition(ctx, done)
 		title = string.format("Transition %s", issue_key),
 		debounce_ms = 0,
 		format_item = function(item)
-			local icon = icons.issues_status(item.value.to_status_category, item.value.to_status_name)
+			local icon = item.value.icon and item.value.icon.icon or icons.get("fallback")
 			return icon ~= "" and string.format("%s %s", icon, item.label) or item.label
 		end,
 		fetch = function(query, fetch_done)
@@ -177,7 +177,7 @@ local function assign(ctx, done)
 			if item.id == "__unassign__" then
 				return item.label
 			end
-			return string.format("%s %s", icons.general("user"), item.label)
+			return string.format("%s %s", icons.get("user"), item.label)
 		end,
 		fetch = function(query, fetch_done)
 			return issues_api.get_assignable_users(
@@ -241,7 +241,7 @@ local function reporter(ctx, done)
 		size = { width = 0.3, height = 0.3 },
 		fetch_on_open = false,
 		format_item = function(item)
-			return string.format("%s %s", icons.general("user"), item.label)
+			return string.format("%s %s", icons.get("user"), item.label)
 		end,
 		fetch = function(query, fetch_done)
 			return issues_api.get_assignable_users({ issue_key = issue_key, project = nil }, query, function(users, err)
@@ -332,7 +332,7 @@ end
 ---@param project JiraIssueProject
 ---@return string
 local function format_project(project)
-	local label = string.format("%s %s - %s", icons.issues_provider("jira", "provider"), project.key, project.name)
+	local label = string.format("%s %s - %s", icons.provider_icon("jira", "issues"), project.key, project.name)
 	local category = project.category and project.category.name or ""
 	return category ~= "" and label .. " (" .. category .. ")" or label
 end
@@ -541,7 +541,7 @@ local function search_issue(ctx, done)
 			format_item = function(item)
 				local project = item.value
 				if not project then
-					return icons.issues_provider("jira", "provider") .. " " .. item.label
+					return icons.provider_icon("jira", "issues") .. " " .. item.label
 				end
 				return format_project(project)
 			end,
@@ -698,53 +698,53 @@ end
 register({
 	id = "transition",
 	label = "Transition",
-	icon = icons.action("transition"),
+	icon = icons.get("transition", "actions"),
 	is_available = has_issue_key,
 	run = transition,
 })
 register({
 	id = "assign",
 	label = "Edit Assignee",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	is_available = has_issue_key,
 	run = assign,
 })
 register({
 	id = "reporter",
 	label = "Edit Reporter",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	is_available = has_issue_key,
 	run = reporter,
 })
 register({
 	id = "edit_issue",
 	label = "Edit Issue",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	is_available = has_issue_key,
 	run = edit_issue,
 })
 register({
 	id = "search",
 	label = "Search Issue",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = search_issue,
 })
 register({
 	id = "open_project",
 	label = "Open Project",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = open_project,
 })
 register({
 	id = "search_jql",
 	label = "Search JQL",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = search_jql,
 })
 register({
 	id = "edit_search",
 	label = "Edit Current Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		require("atlas.issues.providers.jira.completion.search").edit(current_jql(), function(query)
 			local view = issues_state.search_view()
@@ -777,20 +777,20 @@ register({
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
-	icon = icons.action("notification"),
+	icon = icons.get("notification", "actions"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
 register({
 	id = "create_issue",
 	label = "Create Issue",
-	icon = icons.action("create"),
+	icon = icons.get("create", "actions"),
 	run = create_issue,
 })
 register({
 	id = "delete_issue",
 	label = "Delete Issue",
-	icon = icons.action("delete"),
+	icon = icons.get("delete", "actions"),
 	is_available = has_issue_key,
 	run = delete_issue,
 })

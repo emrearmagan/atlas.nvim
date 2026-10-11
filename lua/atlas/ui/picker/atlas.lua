@@ -238,9 +238,9 @@ function M.open(request)
 			local marker, marker_hl = "", nil
 			if request.multi then
 				if state.selected[request.key(item)] then
-					marker, marker_hl = icons.picker("selected")
+					marker, marker_hl = icons.get("selected", "picker")
 				else
-					marker, marker_hl = icons.picker("unselected")
+					marker, marker_hl = icons.get("unselected", "picker")
 				end
 				marker = marker .. " "
 			end
@@ -319,7 +319,7 @@ function M.open(request)
 		vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, {
 			virt_lines = virtual_lines.render(rows, highlights, { width = picker_layout.main_width }),
 		})
-		local prompt, prompt_hl = icons.picker("prompt")
+		local prompt, prompt_hl = icons.get("prompt", "picker")
 		vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, { sign_text = prompt, sign_hl_group = prompt_hl })
 		if not state.loading and not state.err then
 			vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, {

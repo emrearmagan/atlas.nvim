@@ -73,8 +73,8 @@ local function render()
 		for _, document in ipairs(state.documents) do
 			note_count = note_count + #document.notes
 		end
-		local pull_icon = icons.pulls("pr")
-		local note_icon = icons.general("pin")
+		local pull_icon = icons.get("pr")
+		local note_icon = icons.get("pin")
 		vim.api.nvim_set_option_value(
 			"winbar",
 			string.format(

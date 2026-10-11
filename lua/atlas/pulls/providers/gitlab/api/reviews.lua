@@ -68,6 +68,7 @@ local function invalidate_review_caches(path, iid)
 	comments_api.invalidate_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
 	service.delete_memory_cache(metadata_cache_key(path, iid))
+	service.clear_cache("gitlab_pulls:merge_requests:gql:")
 end
 
 ---@param pr PullRequest
@@ -75,6 +76,7 @@ local function invalidate_details_cache(pr)
 	local path, iid = project_iid(pr)
 	if path ~= "" and iid then
 		service.delete_memory_cache(string.format("gitlab_pulls:details:%s!%d", path, iid))
+		service.clear_cache("gitlab_pulls:merge_requests:gql:")
 	end
 end
 

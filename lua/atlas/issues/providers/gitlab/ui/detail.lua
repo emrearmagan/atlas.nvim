@@ -21,7 +21,7 @@ end
 ---@param loading boolean
 ---@return IssuesDetailHeaderField[]
 function M.header_fields(issue, details, _loading)
-	local user_icon = icons.general("user")
+	local user_icon = icons.get("user")
 
 	local assignee = details and details.assignees[1] or issue.assignee
 	local assignee_name = assignee and assignee.name or ""
@@ -88,8 +88,8 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
-	local overview_icon = icons.general("overview")
-	local conversation_icon = icons.general("conversation")
+	local overview_icon = icons.get("overview")
+	local conversation_icon = icons.get("conversation")
 	return {
 		{
 			key = "overview",

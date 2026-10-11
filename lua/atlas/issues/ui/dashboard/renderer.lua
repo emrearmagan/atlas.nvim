@@ -35,7 +35,7 @@ local function append_search_text(lines, spans, text)
 		return
 	end
 
-	local line = string.format(" %s %s", icons.general("search"), vim.trim(text:gsub("%s+", " ")))
+	local line = string.format(" %s %s", icons.get("search"), vim.trim(text:gsub("%s+", " ")))
 	table.insert(lines, line)
 	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
 	table.insert(lines, "")
@@ -45,7 +45,7 @@ end
 ---@return string[], table[], table<integer, table>
 function M.render(opts)
 	local provider = state.provider
-	local provider_icon = provider and provider.icon or icons.fallback()
+	local provider_icon = provider and provider.icon or icons.get("fallback")
 	local provider_name = provider and provider.name or "Issues"
 	local provider_hl = provider and provider.hl_group or "Title"
 	local issue_count = #state.issues
@@ -109,9 +109,9 @@ function M.render(opts)
 		local count = notif_state.unread_count
 		local bell_icon, bell_hl
 		if count > 0 then
-			bell_icon, bell_hl = icons.general("bell_unread")
+			bell_icon, bell_hl = icons.get("bell_unread")
 		else
-			bell_icon, bell_hl = icons.general("bell")
+			bell_icon, bell_hl = icons.get("bell")
 		end
 		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
 		table.insert(actions, { label = bell_label, hl_group = bell_hl })

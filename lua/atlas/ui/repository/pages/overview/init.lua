@@ -26,7 +26,7 @@ local states = {}
 local M = {
 	key = "overview",
 	label = "Overview",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.overview")
 

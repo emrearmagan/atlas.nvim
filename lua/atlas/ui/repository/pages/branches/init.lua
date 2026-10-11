@@ -45,7 +45,7 @@ local states = {}
 local M = {
 	key = "branches",
 	label = "Branches",
-	icon = icons.pulls("branch"),
+	icon = icons.get("branch"),
 }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.branches")
 

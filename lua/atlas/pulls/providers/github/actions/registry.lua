@@ -530,7 +530,7 @@ register({
 register({
 	id = "merge",
 	label = "Merge",
-	icon = icons.action("merge"),
+	icon = icons.get("merge", "actions"),
 	is_available = merge_available,
 	run = actions.merge.run,
 })
@@ -542,7 +542,7 @@ register(actions.ready_for_review)
 register({
 	id = "reopen",
 	label = "Reopen PR",
-	icon = icons.action("reopen"),
+	icon = icons.get("reopen", "actions"),
 	is_available = reopen_available,
 	run = reopen,
 })
@@ -553,7 +553,7 @@ register(actions.edit_reviewers)
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
-	icon = icons.action("user"),
+	icon = icons.get("user", "actions"),
 	is_available = repository_available,
 	run = edit_assignees,
 })
@@ -561,7 +561,7 @@ register({
 register({
 	id = "labels",
 	label = "Edit labels",
-	icon = icons.action("label"),
+	icon = icons.get("label", "actions"),
 	is_available = repository_available,
 	run = edit_labels,
 })
@@ -569,14 +569,14 @@ register({
 register({
 	id = "search",
 	label = "Search Pull Requests",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = search,
 })
 
 register({
 	id = "open_repo",
 	label = "Open Repository",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = open_repo,
 })
 
@@ -584,7 +584,7 @@ register(actions.browse_repository)
 register({
 	id = "browse_repositories",
 	label = "Browse Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	run = function(ctx, done)
 		select_repository({
 			title = "Browse Repository",
@@ -603,7 +603,7 @@ register({
 register({
 	id = "search_pull_requests",
 	label = "New Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local query = require("atlas.pulls.state").query
 		require("atlas.providers.github.completion.search").open(query .. " ")
@@ -614,7 +614,7 @@ register({
 register({
 	id = "edit_search",
 	label = "Edit Current Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")
 		require("atlas.providers.github.completion.search").edit(state.query .. " ", function(query)
@@ -632,7 +632,7 @@ register({
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
-	icon = icons.action("notification"),
+	icon = icons.get("notification", "actions"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
@@ -644,7 +644,7 @@ register(actions.checkout)
 register({
 	id = "create_issue",
 	label = "Create issue",
-	icon = icons.action("create"),
+	icon = icons.get("create", "actions"),
 	is_available = repository_available,
 	run = create_issue,
 })

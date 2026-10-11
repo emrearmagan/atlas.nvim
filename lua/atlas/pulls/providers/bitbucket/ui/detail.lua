@@ -16,9 +16,9 @@ function M.header_fields(_pr, details, _loading)
 	if details and details.close_source_branch ~= nil then
 		local state_icon, state_icon_hl
 		if details.close_source_branch then
-			state_icon, state_icon_hl = icons.general("success")
+			state_icon, state_icon_hl = icons.get("success")
 		else
-			state_icon, state_icon_hl = icons.general("error")
+			state_icon, state_icon_hl = icons.get("error")
 		end
 		table.insert(fields, {
 			label = "Close source",

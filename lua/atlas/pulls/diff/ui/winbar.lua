@@ -13,9 +13,9 @@ function M.set(win, path)
 	local parts = vim.split(path, "/", { plain = true })
 	local breadcrumbs = {}
 	for index, name in ipairs(parts) do
-		local icon, highlight = icons.general("folder_open")
+		local icon, highlight = icons.get("folder_open")
 		if index == #parts then
-			icon, highlight = icons.pulls("file")
+			icon, highlight = icons.get("file")
 			if has_devicons then
 				local glyph, group = devicons.get_icon(name, nil, { default = true })
 				icon, highlight = glyph or icon, group or highlight
@@ -25,7 +25,7 @@ function M.set(win, path)
 		breadcrumbs[#breadcrumbs + 1] = string.format("%%#%s#%s %%#Normal#%s", highlight, icon, name:gsub("%%", "%%%%"))
 	end
 
-	local separator, highlight = icons.general("fold_closed")
+	local separator, highlight = icons.get("fold_closed")
 	vim.wo[win].winbar = "%#Normal# " .. table.concat(breadcrumbs, string.format("%%#%s# %s ", highlight, separator))
 end
 

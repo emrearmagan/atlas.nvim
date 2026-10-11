@@ -24,7 +24,7 @@ return {
 	{
 		id = "retry_pipeline",
 		label = "Retry pipeline",
-		icon = icons.action("retry"),
+		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and can_retry(ctx.pipeline)
 		end,
@@ -37,7 +37,7 @@ return {
 	{
 		id = "cancel_pipeline",
 		label = "Cancel pipeline",
-		icon = icons.action("close"),
+		icon = icons.get("close", "actions"),
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and can_cancel(ctx.pipeline)
@@ -51,7 +51,7 @@ return {
 	{
 		id = "retry_job",
 		label = "Retry job",
-		icon = icons.action("retry"),
+		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_retry(ctx.job)
 		end,
@@ -64,7 +64,7 @@ return {
 	{
 		id = "cancel_job",
 		label = "Cancel job",
-		icon = icons.action("close"),
+		icon = icons.get("close", "actions"),
 		confirm = "Cancel this job?",
 		is_available = function(ctx)
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_cancel(ctx.job)

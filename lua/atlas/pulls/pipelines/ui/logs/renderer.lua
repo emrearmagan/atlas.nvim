@@ -67,7 +67,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 			local collapsed = pane.collapsed[entry.fold_key] ~= false
 			local prefix = indent
 			if #entry.entries > 0 then
-				local icon, hl = icons.general(collapsed and "fold_closed" or "fold_open")
+				local icon, hl = icons.get(collapsed and "fold_closed" or "fold_open")
 				prefix = prefix .. icon .. " "
 				spans[#spans + 1] = {
 					line = #lines,
@@ -77,7 +77,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 				}
 			end
 			if entry.level then
-				local status_icon, status_hl = icons.log_level(entry.level)
+				local status_icon, status_hl = icons.get(entry.level, "log")
 				spans[#spans + 1] = {
 					line = #lines,
 					start_col = #prefix,

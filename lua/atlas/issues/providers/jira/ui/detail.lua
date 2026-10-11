@@ -15,10 +15,10 @@ local spinner = require("atlas.ui.components.spinner")
 ---@return IssuesDetailHeaderField[]
 function M.header_fields(issue, details, loading)
 	---@cast issue JiraIssue
-	local user_icon = icons.general("user")
+	local user_icon = icons.get("user")
 	local priority = tostring(issue.priority or "-")
-	local priority_icon, priority_hl = icons.issues_priority(priority)
-	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
+	local priority_icon, priority_hl = icons.get(priority, "priority")
+	local priority_text = string.format("%s %s", priority_icon, priority)
 	local assignee_name = issue.assignee and issue.assignee.name or ""
 	local reporter_name = issue.reporter and issue.reporter.name or ""
 
@@ -82,7 +82,7 @@ function M.chips(issue, details, loading)
 	local parent_key = issue.parent and issue.parent.key or nil
 	if parent_key then
 		table.insert(chips, {
-			label = string.format("%s %s", icons.pulls("branch"), parent_key),
+			label = string.format("%s %s", icons.get("branch"), parent_key),
 			hl = "AtlasJiraChipParent",
 		})
 	end
@@ -90,7 +90,7 @@ function M.chips(issue, details, loading)
 	local sp = issue.story_points
 	if sp ~= nil then
 		table.insert(chips, {
-			label = string.format("%s %s", icons.issues_provider("jira", "provider"), sp),
+			label = string.format("%s %s", icons.provider_icon("jira", "issues"), sp),
 			hl = "AtlasJiraChipStoryPoints",
 		})
 	end
@@ -98,7 +98,7 @@ function M.chips(issue, details, loading)
 	local due = utils.format_date(issue.duedate)
 	if due ~= "" then
 		table.insert(chips, {
-			label = string.format("%s %s", icons.general("created"), due),
+			label = string.format("%s %s", icons.get("created"), due),
 			hl = "AtlasJiraChipDueDate",
 		})
 	end
@@ -124,9 +124,9 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
-	local overview_icon = icons.general("overview")
-	local conversation_icon = icons.general("conversation")
-	local activity_icon = icons.pulls("activity")
+	local overview_icon = icons.get("overview")
+	local conversation_icon = icons.get("conversation")
+	local activity_icon = icons.get("activity")
 	return {
 		{
 			key = "overview",

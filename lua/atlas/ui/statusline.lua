@@ -282,7 +282,7 @@ local function notice_style(level)
 		error = "AtlasFooterError",
 		info = "AtlasFooterInfo",
 	}
-	return icons.general(icon_name), highlights[level] or "AtlasFooterText"
+	return icons.get(icon_name), highlights[level] or "AtlasFooterText"
 end
 
 ---@param context "atlas"|"diff"|nil

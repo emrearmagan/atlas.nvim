@@ -4,7 +4,7 @@ local shared = require("atlas.pulls.ui.layouts.shared")
 
 local M = {}
 
-local STAR_ICON = icons.general("star")
+local STAR_ICON = icons.get("star")
 
 local function diff_stats(additions, deletions)
 	if additions + deletions == 0 then
@@ -57,65 +57,65 @@ function M.github(opts, pulls)
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{
 			key = "conversation",
-			name = icons.general("conversation"),
+			name = icons.get("conversation"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "review",
-			name = icons.general("success"),
+			name = icons.get("success"),
 			min_width = 1,
 			can_grow = false,
 		},
 		{
 			key = "ci",
-			name = icons.pulls("tasks"),
+			name = icons.get("tasks"),
 			min_width = 1,
 			can_grow = false,
 		},
 		{
 			key = "author",
-			name = string.format("%s Author", icons.general("user")),
+			name = string.format("%s Author", icons.get("user")),
 			min_width = 10,
 			can_grow = false,
 		},
 		{
 			key = "diff",
-			name = icons.pulls("changes"),
+			name = icons.get("changes"),
 			min_width = 5,
 			max_width = 15,
 			can_grow = false,
 		},
 		{
 			key = "created",
-			name = icons.general("created"),
+			name = icons.get("created"),
 			min_width = 4,
 			can_grow = false,
 		},
 		{
 			key = "updated",
-			name = icons.general("updated"),
+			name = icons.get("updated"),
 			min_width = 4,
 			can_grow = false,
 		},
 	}
 
 	local ci_icons = {
-		SUCCESS = { icons.pulls_status("successful") },
-		FAILURE = { icons.pulls_status("failed") },
-		ERROR = { icons.pulls_status("failed") },
-		PENDING = { icons.pulls_status("inprogress") },
-		EXPECTED = { icons.pulls_status("inprogress") },
+		SUCCESS = { icons.get("successful", "status") },
+		FAILURE = { icons.get("failed", "status") },
+		ERROR = { icons.get("failed", "status") },
+		PENDING = { icons.get("inprogress", "status") },
+		EXPECTED = { icons.get("inprogress", "status") },
 	}
 
 	local review_icons = {
-		APPROVED = { icons.pulls_status("successful") },
-		CHANGES_REQUESTED = { icons.pulls_status("failed") },
-		REVIEW_REQUIRED = { icons.pulls_status("inprogress"), "AtlasTextMuted" },
+		APPROVED = { icons.get("successful", "status") },
+		CHANGES_REQUESTED = { icons.get("failed", "status") },
+		REVIEW_REQUIRED = { icons.get("inprogress", "status"), "AtlasTextMuted" },
 	}
 
 	local function values(pr)
-		local ci = { icons.pulls_status("inprogress"), "AtlasTextMuted" }
+		local ci = { icons.get("inprogress", "status"), "AtlasTextMuted" }
 		if pr.check_status then
 			ci = ci_icons[pr.check_status:upper()] or ci
 		end
@@ -163,31 +163,31 @@ function M.gitlab(opts, pulls)
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{
 			key = "conversation",
-			name = icons.general("comment"),
+			name = icons.get("comment"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "ci",
-			name = icons.pulls("pipeline"),
+			name = icons.get("pipeline"),
 			min_width = 1,
 			can_grow = false,
 		},
 		{
 			key = "author",
-			name = string.format("%s Author", icons.general("user")),
+			name = string.format("%s Author", icons.get("user")),
 			min_width = 10,
 			can_grow = false,
 		},
 		{
 			key = "created",
-			name = icons.general("created"),
+			name = icons.get("created"),
 			min_width = 4,
 			can_grow = false,
 		},
 		{
 			key = "updated",
-			name = icons.general("updated"),
+			name = icons.get("updated"),
 			min_width = 4,
 			can_grow = false,
 		},
@@ -199,7 +199,7 @@ function M.gitlab(opts, pulls)
 			return { ci = "", ci_hl = "AtlasTextMuted" }
 		end
 
-		local icon, hl_group = icons.pulls_status(status)
+		local icon, hl_group = icons.get(status, "status")
 		return { ci = icon, ci_hl = hl_group }
 	end
 
@@ -223,37 +223,37 @@ function M.bitbucket(opts, pulls)
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{
 			key = "conversation",
-			name = icons.general("comment"),
+			name = icons.get("comment"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "tasks",
-			name = icons.pulls("tasks"),
+			name = icons.get("tasks"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "author",
-			name = string.format("%s Author", icons.general("user")),
+			name = string.format("%s Author", icons.get("user")),
 			min_width = 10,
 			can_grow = false,
 		},
 		{
 			key = "review",
-			name = icons.general("success"),
+			name = icons.get("success"),
 			min_width = 1,
 			can_grow = false,
 		},
 		{
 			key = "created",
-			name = icons.general("created"),
+			name = icons.get("created"),
 			min_width = 4,
 			can_grow = false,
 		},
 		{
 			key = "updated",
-			name = icons.general("updated"),
+			name = icons.get("updated"),
 			min_width = 4,
 			can_grow = false,
 		},
@@ -270,13 +270,13 @@ function M.bitbucket(opts, pulls)
 		end
 
 		if changes_requested > 0 then
-			return icons.pulls_status("failed")
+			return icons.get("failed", "status")
 		elseif approved > 0 then
 			-- The list API does not expose the minimum required approvals.
-			return icons.pulls_status("successful")
+			return icons.get("successful", "status")
 		end
 
-		return icons.pulls_status("inprogress"), "AtlasTextMuted"
+		return icons.get("inprogress", "status"), "AtlasTextMuted"
 	end
 
 	local function values(pr)
@@ -312,25 +312,25 @@ function M.default(opts, pulls)
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{
 			key = "conversation",
-			name = icons.general("conversation"),
+			name = icons.get("conversation"),
 			min_width = 2,
 			can_grow = false,
 		},
 		{
 			key = "author",
-			name = string.format("%s Author", icons.general("user")),
+			name = string.format("%s Author", icons.get("user")),
 			min_width = 10,
 			can_grow = false,
 		},
 		{
 			key = "created",
-			name = icons.general("created"),
+			name = icons.get("created"),
 			min_width = 4,
 			can_grow = false,
 		},
 		{
 			key = "updated",
-			name = icons.general("updated"),
+			name = icons.get("updated"),
 			min_width = 4,
 			can_grow = false,
 		},

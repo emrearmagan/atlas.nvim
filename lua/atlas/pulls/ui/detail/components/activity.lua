@@ -6,33 +6,33 @@ local activity = require("atlas.ui.components.activity")
 local presentation = require("atlas.pulls.ui.presentation")
 
 local EVENT = {
-	approval = icons.pulls_status("successful"),
-	unapproval = icons.pulls_status("inprogress"),
-	changes_requested = icons.pulls_status("inprogress"),
-	review = icons.pulls("activity"),
-	review_dismissed = icons.pulls_status("stopped"),
-	comment = icons.general("user"),
-	comment_deleted = icons.general("delete"),
-	closed = icons.pulls("declined_pr"),
-	merged = icons.pulls("merged_pr"),
-	reopened = icons.pulls("pr"),
-	committed = icons.pulls("commit"),
-	force_pushed = icons.general("edit"),
-	labeled = icons.pulls("tag"),
-	unlabeled = icons.pulls("tag"),
-	assigned = icons.general("user"),
-	unassigned = icons.general("user"),
-	review_requested = icons.general("user"),
-	renamed = icons.general("edit"),
-	ready_for_review = icons.pulls("pr"),
-	convert_to_draft = icons.pulls("draft_pr"),
-	update = icons.pulls("activity"),
+	approval = icons.get("successful", "status"),
+	unapproval = icons.get("inprogress", "status"),
+	changes_requested = icons.get("inprogress", "status"),
+	review = icons.get("activity"),
+	review_dismissed = icons.get("stopped", "status"),
+	comment = icons.get("user"),
+	comment_deleted = icons.get("delete"),
+	closed = icons.get("declined_pr"),
+	merged = icons.get("merged_pr"),
+	reopened = icons.get("pr"),
+	committed = icons.get("commit"),
+	force_pushed = icons.get("edit"),
+	labeled = icons.get("tag"),
+	unlabeled = icons.get("tag"),
+	assigned = icons.get("user"),
+	unassigned = icons.get("user"),
+	review_requested = icons.get("user"),
+	renamed = icons.get("edit"),
+	ready_for_review = icons.get("pr"),
+	convert_to_draft = icons.get("draft_pr"),
+	update = icons.get("activity"),
 }
 
 ---@param entry PullsActivityEntry
 ---@return { icon: string, icon_hl: string|nil, additional: string, additional_hl: string, content: string|nil }
 local function classify(entry)
-	local icon = EVENT[entry.kind] or icons.pulls("activity")
+	local icon = EVENT[entry.kind] or icons.get("activity")
 	local icon_hl = "AtlasTextMuted"
 	local additional_hl = "AtlasTextMuted"
 	if entry.kind == "approval" then

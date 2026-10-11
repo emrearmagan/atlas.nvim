@@ -119,8 +119,8 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
-	local action = issue.status_id == "closed" and reopen or close
-	action(ctx, done)
+	local action = issue.status_id == "closed" and "reopen" or "close"
+	return actions.run(action, ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -161,7 +161,7 @@ local function assign(ctx, done)
 				return item.username or ""
 			end,
 			format_item = function(item)
-				return string.format("%s %s", icons.general("user"), item.name or item.username)
+				return string.format("%s %s", icons.get("user"), item.name or item.username)
 			end,
 			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
@@ -505,32 +505,32 @@ end
 register({
 	id = "edit_issue",
 	label = "Edit Issue",
-	icon = icons.action("edit"),
+	icon = icons.get("edit", "actions"),
 	is_available = function(ctx)
 		return ctx.issue ~= nil, "No issue selected"
 	end,
 	run = edit_issue,
 })
-register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
+register({ id = "create_issue", label = "Create Issue", icon = icons.get("create", "actions"), run = create_issue })
 register({
 	id = "close",
 	label = "Close Issue",
 	confirmation = true,
-	icon = icons.action("close"),
+	icon = icons.get("close", "actions"),
 	is_available = close_available,
 	run = close,
 })
 register({
 	id = "reopen",
 	label = "Reopen Issue",
-	icon = icons.action("reopen"),
+	icon = icons.get("reopen", "actions"),
 	is_available = reopen_available,
 	run = reopen,
 })
 register({
 	id = "transition",
 	label = "Transition Issue",
-	icon = icons.action("transition"),
+	icon = icons.get("transition", "actions"),
 	hidden = true,
 	is_available = issue_available,
 	run = transition,
@@ -538,22 +538,22 @@ register({
 register({
 	id = "assign",
 	label = "Edit Assignees",
-	icon = icons.action("user"),
+	icon = icons.get("user", "actions"),
 	is_available = issue_available,
 	run = assign,
 })
 register({
 	id = "labels",
 	label = "Edit Labels",
-	icon = icons.action("label"),
+	icon = icons.get("label", "actions"),
 	is_available = issue_available,
 	run = labels,
 })
-register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
+register({ id = "search", label = "Search Issues", icon = icons.get("search", "actions"), run = search })
 register({
 	id = "edit_search",
 	label = "Edit Current Search",
-	icon = icons.action("search"),
+	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
 		require("atlas.providers.github.completion.search").edit(state.query .. " ", function(query)
@@ -566,12 +566,12 @@ register({
 		done(nil, nil)
 	end,
 })
-register({ id = "open_repo", label = "Open Repository", icon = icons.action("search"), run = open_repo })
+register({ id = "open_repo", label = "Open Repository", icon = icons.get("search", "actions"), run = open_repo })
 register(actions.browse_repository)
 register({
 	id = "browse_repositories",
 	label = "Browse Repository",
-	icon = icons.general("overview"),
+	icon = icons.get("overview"),
 	run = function(ctx, done)
 		select_repository({
 			title = "Browse Repository",
@@ -592,7 +592,7 @@ register(actions.copy_issue_key)
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
-	icon = icons.action("notification"),
+	icon = icons.get("notification", "actions"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
