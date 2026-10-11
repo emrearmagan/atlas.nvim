@@ -26,19 +26,27 @@ local function cells(node)
 	return node and node.kind == "board_row" and node.cells or nil
 end
 
+local function cell_in_column(row, column)
+	for _, cell in ipairs(row) do
+		if cell.column == column then
+			return cell
+		end
+	end
+end
+
 local function item_at(node, col)
 	local row = cells(node)
 	if not row then
 		return node
 	end
-	local selected = row[1]
-	for _, cell in ipairs(row) do
+	local selected = 1
+	for index, cell in ipairs(row) do
 		if cell.start_col > col then
 			break
 		end
-		selected = cell
+		selected = index
 	end
-	return selected
+	return row[selected], selected
 end
 
 function M.current_item()
@@ -47,7 +55,8 @@ function M.current_item()
 		return nil
 	end
 	local cursor = vim.api.nvim_win_get_cursor(win)
-	return item_at(ui_state.line_map[cursor[1]], cursor[2])
+	local item = item_at(ui_state.line_map[cursor[1]], cursor[2])
+	return item
 end
 
 function M.highlight_current_item()
@@ -87,18 +96,9 @@ end
 
 local function focus(win, lnum, item, select)
 	vim.api.nvim_win_set_cursor(win, { lnum, item.start_col or 0 })
-	if item.virt_col then
+	if item.start_col then
 		vim.api.nvim_win_call(win, function()
-			local view = vim.fn.winsaveview()
-			local width = vim.api.nvim_win_get_width(win)
-			local left = item.virt_col
-			local right = left + math.min(item.width, width)
-			if left < view.leftcol then
-				view.leftcol = left
-			elseif right > view.leftcol + width then
-				view.leftcol = right - width
-			end
-			vim.fn.winrestview(view)
+			vim.fn.winrestview({ leftcol = 0 })
 		end)
 	end
 	if select ~= false then
@@ -166,12 +166,12 @@ function M.move_cursor(direction)
 	local max_line = vim.api.nvim_buf_line_count(buf)
 	local step = direction == "up" and -1 or 1
 	local line_map = ui_state.line_map
-	local column = current_column(win)
+	local _, column = item_at(line_map[line], col)
 
 	for lnum = line + step, (direction == "up" and 1 or max_line), step do
 		local row = cells(line_map[lnum])
-		local item = row and row[column or 1] or line_map[lnum]
-		if is_selectable(item) then
+		local item = row and row[math.min(column or 1, #row)] or line_map[lnum]
+		if is_selectable(item) and (column == nil or row ~= nil) then
 			if row then
 				focus(win, lnum, item)
 			else
@@ -237,7 +237,7 @@ function M.restore_board_selection(previous)
 	if item == nil then
 		lnum = vim.api.nvim_win_get_cursor(win)[1]
 		local row = cells(ui_state.line_map[lnum])
-		item = row and row[previous.column]
+		item = row and cell_in_column(row, previous.column)
 	end
 	if item ~= nil then
 		focus(win, lnum, item, false)
@@ -265,7 +265,7 @@ function M.focus_last_item()
 	local column = current_column(win)
 	for lnum = max_line, 1, -1 do
 		local row = cells(line_map[lnum]) or { line_map[lnum] }
-		for index = column or #row, column or 1, -1 do
+		for index = #row, 1, -1 do
 			local item = row[index]
 			if is_selectable(item) and (column == nil or item.column == column) then
 				focus(win, lnum, item)
@@ -286,8 +286,15 @@ function M.move_column(step)
 	if not row then
 		return
 	end
-	local column = math.max(1, math.min(#row, (current_column(win) or 1) + step))
-	focus(win, cursor[1], row[column])
+	local column = current_column(win) + step
+	local item = cell_in_column(row, column)
+	if item then
+		focus(win, cursor[1], item)
+	else
+		M.focus_item(function(candidate)
+			return candidate.column == column
+		end)
+	end
 end
 
 return M

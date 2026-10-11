@@ -28,7 +28,7 @@ function M.render()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	if board then
+	if board and #state.issues > 0 then
 		navigation.restore_board_selection(selected)
 	else
 		vim.api.nvim_win_call(win, function()
