@@ -309,6 +309,15 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		general,
+		item("ui.cycle_layout", {
+			desc = "Cycle layout",
+			index = 19,
+			callback = controller.cycle_layout,
+		})
+	)
+
+	utils.insert_if(
+		general,
 		item("pulls.open_repository", {
 			desc = "Open repository browser",
 			index = 40,

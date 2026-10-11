@@ -253,6 +253,7 @@ local defaults = {
 				react = "gr",
 			},
 			toggle_panel = "p",
+			cycle_layout = "t",
 			toggle_fold = "za",
 			toggle_all_folds = "zA",
 			toggle_description_mode = "<leader>m",

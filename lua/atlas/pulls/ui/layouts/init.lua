@@ -6,6 +6,12 @@ local layouts = {
 
 local M = {}
 
+---@param layout AtlasPullsViewLayout|nil
+---@return AtlasPullsViewLayout
+function M.next(layout)
+	return ({ compact = "plain", plain = "grouped", grouped = "compact" })[layout] or "plain"
+end
+
 ---@param opts table
 ---@param pulls PullRequest[]
 ---@return string[], table<integer, table>, table[]

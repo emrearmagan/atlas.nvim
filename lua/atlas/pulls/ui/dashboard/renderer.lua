@@ -188,7 +188,7 @@ function M.render(opts)
 		append_centered_loading(lines, loading, opts.width, opts.height)
 	else
 		local search_view = state.search_view()
-		local layout = search_view and search_view.layout or "compact"
+		local layout = state.layout or (search_view and search_view.layout) or "compact"
 		local body_lines, body_map, body_spans = layouts.render({
 			width = opts.width,
 			provider_id = state.provider and state.provider.id,

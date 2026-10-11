@@ -1,5 +1,6 @@
 ---@class IssuesState
 ---@field view IssuesViewConfig|nil
+---@field layout AtlasIssuesViewLayout|nil
 ---@field bookmarks AtlasBookmarksState|nil
 ---@field query string
 ---@field is_loading boolean
@@ -17,6 +18,7 @@
 ---@field reload_spinner_frame string
 local M = {
 	view = nil,
+	layout = nil,
 	bookmarks = nil,
 	query = "",
 	is_loading = false,
@@ -92,7 +94,7 @@ end
 ---@param view IssuesViewConfig|nil
 ---@return AtlasIssuesViewLayout
 function M.view_layout(view)
-	local layout = view == nil and "compact" or view.layout
+	local layout = M.layout or (view == nil and "compact" or view.layout)
 	return require("atlas.issues.ui.layouts").resolve(layout, M.provider and M.provider.id)
 end
 

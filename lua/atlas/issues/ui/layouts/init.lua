@@ -18,6 +18,14 @@ function M.resolve(layout, provider_id)
 	return "plain"
 end
 
+---@param layout AtlasIssuesViewLayout|nil
+---@param provider_id string|nil
+---@return AtlasIssuesViewLayout
+function M.next(layout, provider_id)
+	local next_layout = { plain = "compact", compact = "board", board = "plain" }
+	return M.resolve(next_layout[M.resolve(layout, provider_id)], provider_id)
+end
+
 ---@param opts table
 ---@param issues Issue[]
 ---@return string[], table<integer, table>, table[]

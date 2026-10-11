@@ -1,6 +1,7 @@
 ---@class PullsState
 ---@field available_states PullsStateFilter[]
 ---@field view AtlasPullsViewConfig|nil
+---@field layout AtlasPullsViewLayout|nil
 ---@field views AtlasPullsViewConfig[]
 ---@field bookmarks AtlasBookmarksState|nil
 ---@field query string
@@ -17,6 +18,7 @@
 local M = {
 	available_states = { "open", "merged", "declined" },
 	view = nil,
+	layout = nil,
 	views = {},
 	bookmarks = nil,
 	query = "",

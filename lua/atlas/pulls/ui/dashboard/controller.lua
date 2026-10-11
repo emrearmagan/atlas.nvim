@@ -3,6 +3,7 @@ local M = {}
 local notify = require("atlas.core.notify")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
+local layouts = require("atlas.pulls.ui.layouts")
 local dashboard_host = require("atlas.ui.dashboard")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
@@ -367,6 +368,17 @@ function M.previous_page()
 	show_cached_page(state.current_page - 1)
 end
 
+function M.cycle_layout()
+	local view = state.search_view()
+	if view == nil and #state.pulls == 0 then
+		return
+	end
+
+	state.layout = layouts.next(state.layout or (view and view.layout) or "compact")
+	render_if_active()
+	navigation.focus_first_item()
+end
+
 function M.refresh_view()
 	if state.view == nil then
 		return
@@ -496,6 +508,7 @@ end
 ---@param view AtlasPullsViewConfig|nil
 function M.switch_view(view)
 	state.view = view
+	state.layout = nil
 	state.bookmarks.selection = nil
 	load_view(false, function()
 		navigation.focus_first_item()
@@ -505,6 +518,7 @@ end
 ---@param bookmark AtlasBookmarkSelection
 function M.select_bookmark(bookmark)
 	state.bookmarks.selection = bookmark
+	state.layout = nil
 	load_view(false)
 end
 

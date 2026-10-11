@@ -233,7 +233,8 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 	end
 
 	load_requests.run(function(done)
-		return provider.capabilities.core.fetch_issues(view, {
+		local fetch_view = vim.tbl_extend("force", view, { layout = state.view_layout(view) })
+		return provider.capabilities.core.fetch_issues(fetch_view, {
 			force_refresh = force_refresh,
 			pagelen = 50,
 			cursor = cursor,
@@ -453,9 +454,28 @@ function M.refresh_view()
 	load_view(true, finish)
 end
 
+function M.cycle_layout()
+	local view = state.search_view()
+	if view == nil and #state.issues == 0 then
+		return
+	end
+
+	state.layout = require("atlas.issues.ui.layouts").next(state.view_layout(view), state.provider.id)
+
+	if view then
+		load_view(false, function()
+			navigation.focus_first_item({ all_columns = true })
+		end)
+	else
+		render_if_active()
+		navigation.focus_first_item({ all_columns = true })
+	end
+end
+
 ---@param view IssuesViewConfig|nil
 function M.switch_view(view)
 	state.view = view
+	state.layout = nil
 	state.bookmarks.selection = nil
 	load_view(false, function()
 		navigation.focus_first_item({ all_columns = true })
@@ -464,6 +484,7 @@ end
 
 ---@param bookmark AtlasBookmarkSelection
 function M.select_bookmark(bookmark)
+	state.layout = nil
 	state.bookmarks.selection = bookmark
 	load_view(false)
 end

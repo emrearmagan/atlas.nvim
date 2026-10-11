@@ -64,6 +64,15 @@ function M.register(buf, views)
 
 	local items = {}
 	local filters = {}
+	utils.insert_if(
+		items,
+		item("ui.cycle_layout", {
+			desc = "Cycle layout",
+			index = 19,
+			callback = controller.cycle_layout,
+		})
+	)
+
 	if require("atlas.issues.ui.layouts").resolve("board", provider.id) == "board" then
 		utils.insert_if(
 			items,

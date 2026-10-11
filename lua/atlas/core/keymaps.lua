@@ -16,6 +16,7 @@ local config = require("atlas.config")
 ---@field delete? AtlasKeymapValue
 ---@field comments? AtlasUICommentKeymaps
 ---@field toggle_panel? AtlasKeymapValue
+---@field cycle_layout? AtlasKeymapValue
 ---@field toggle_fold? AtlasKeymapValue
 ---@field toggle_all_folds? AtlasKeymapValue
 ---@field toggle_description_mode? AtlasKeymapValue
@@ -168,6 +169,7 @@ local config = require("atlas.config")
 ---| "ui.comments.edit"
 ---| "ui.comments.react"
 ---| "ui.toggle_panel"
+---| "ui.cycle_layout"
 ---| "ui.toggle_fold"
 ---| "ui.toggle_all_folds"
 ---| "ui.toggle_description_mode"
