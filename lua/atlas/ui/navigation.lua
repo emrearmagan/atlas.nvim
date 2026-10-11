@@ -94,16 +94,14 @@ local function on_cursor_moved()
 	end, DEBOUNCE_MS)
 end
 
-local function focus(win, lnum, item, select)
+local function focus(win, lnum, item)
 	vim.api.nvim_win_set_cursor(win, { lnum, item.start_col or 0 })
 	if item.start_col then
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ leftcol = 0 })
 		end)
 	end
-	if select ~= false then
-		on_cursor_moved()
-	end
+	on_cursor_moved()
 end
 
 local function current_column(win)
@@ -219,29 +217,6 @@ function M.focus_item(predicate)
 		return true
 	end
 	return false
-end
-
----Retain the selected board card or empty column across a passive render.
----@param previous table|nil
-function M.restore_board_selection(previous)
-	local win = require("atlas.ui.dashboard").win()
-	if win == nil or previous == nil or previous.column == nil then
-		return
-	end
-	local lnum, item
-	if previous.key ~= nil then
-		lnum, item = find_item(function(candidate)
-			return candidate.column ~= nil and candidate.key == previous.key
-		end)
-	end
-	if item == nil then
-		lnum = vim.api.nvim_win_get_cursor(win)[1]
-		local row = cells(ui_state.line_map[lnum])
-		item = row and cell_in_column(row, previous.column)
-	end
-	if item ~= nil then
-		focus(win, lnum, item, false)
-	end
 end
 
 ---@param opts? { all_columns?: boolean }

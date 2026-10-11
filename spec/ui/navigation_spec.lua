@@ -1,5 +1,5 @@
-describe("ui.navigation board selection", function()
-	local navigation, state, cursor, scheduled, leftcol
+describe("ui.navigation board movement", function()
+	local navigation, state, cursor, leftcol
 	local original_api, original_defer, original_fn, saved
 	local modules = { "atlas.ui.navigation", "atlas.ui.dashboard", "atlas.ui.state" }
 
@@ -9,18 +9,8 @@ describe("ui.navigation board selection", function()
 			saved[name] = package.loaded[name]
 		end
 		original_api, original_defer, original_fn = vim.api, vim.defer_fn, vim.fn
-		cursor, scheduled, leftcol = { 1, 42 }, 0, 20
-		state = {
-			line_map = {
-				{
-					kind = "board_row",
-					cells = {
-						{ kind = "issue", key = "AT-1", column = 1, start_col = 1, end_col = 39 },
-						{ kind = "issue", key = "AT-2", column = 2, start_col = 42, end_col = 80 },
-					},
-				},
-			},
-		}
+		cursor, leftcol = { 1, 0 }, 20
+		state = { line_map = {} }
 		package.loaded["atlas.ui.state"] = state
 		package.loaded["atlas.ui.dashboard"] = {
 			win = function()
@@ -40,9 +30,6 @@ describe("ui.navigation board selection", function()
 			nvim_win_call = function(_, callback)
 				return callback()
 			end,
-			nvim_buf_line_count = function()
-				return #state.line_map
-			end,
 			nvim_buf_clear_namespace = function() end,
 			nvim_buf_set_extmark = function() end,
 			nvim_set_option_value = function() end,
@@ -53,7 +40,6 @@ describe("ui.navigation board selection", function()
 			end,
 		})
 		vim.defer_fn = function()
-			scheduled = scheduled + 1
 			return { stop = function() end, close = function() end }
 		end
 		package.loaded["atlas.ui.navigation"] = nil
@@ -65,24 +51,6 @@ describe("ui.navigation board selection", function()
 		for _, name in ipairs(modules) do
 			package.loaded[name] = saved[name]
 		end
-	end)
-
-	it("restores the same card after Unicode byte shifts and status moves without scheduling selection", function()
-		local previous = navigation.current_item()
-		-- A Unicode title in the preceding column moves this card's byte offset.
-		state.line_map[1].cells[2] = vim.tbl_extend("force", previous, { start_col = 43, end_col = 81 })
-		assert.equals("AT-1", navigation.current_item().key)
-		navigation.restore_board_selection(previous)
-		assert.same({ 1, 43 }, cursor)
-
-		previous = navigation.current_item()
-		state.line_map[1].cells = {
-			{ kind = "issue", key = "AT-2", column = 1, start_col = 1, end_col = 39 },
-			{ kind = "issue", key = "AT-1", column = 2, start_col = 43, end_col = 81 },
-		}
-		navigation.restore_board_selection(previous)
-		assert.same({ 1, 1 }, cursor)
-		assert.equals(0, scheduled)
 	end)
 
 	it("continues vertical movement through wrapped groups while keeping workflow column jumps", function()
