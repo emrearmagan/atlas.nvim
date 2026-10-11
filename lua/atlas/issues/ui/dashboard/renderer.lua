@@ -177,10 +177,7 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree
-		local layout = search_view and tostring(search_view.layout or "plain") or "compact"
-		if layout ~= "compact" and layout ~= "board" then
-			layout = "plain"
-		end
+		local layout = state.view_layout(search_view)
 		local issues = state.issues
 		if search_view ~= nil then
 			append_search_text(lines, spans, state.query)
@@ -208,7 +205,6 @@ function M.render(opts)
 				tbl_lines, tbl_map, tbl_spans = require("atlas.issues.ui.dashboard.board").render({
 					issues = issues,
 					statuses = page and page.statuses,
-					provider_id = provider and provider.id,
 				})
 				if state.is_loading then
 					table.insert(tbl_lines, "")

@@ -89,6 +89,18 @@ function M.search_view()
 	return M.view
 end
 
+---@param view IssuesViewConfig|nil
+---@return AtlasIssuesViewLayout
+function M.view_layout(view)
+	if view == nil or view.layout == "compact" then
+		return "compact"
+	end
+	if M.provider and M.provider.id == "jira" and view.layout == "board" then
+		return "board"
+	end
+	return "plain"
+end
+
 ---@param issues Issue[]
 function M.set_issues(issues)
 	M.issues = starred_first(issues, function(issue)

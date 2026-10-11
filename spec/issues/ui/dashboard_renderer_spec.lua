@@ -102,4 +102,32 @@ describe("issues.ui.dashboard.renderer", function()
 			assert.equals(case[2], #issues)
 		end
 	end)
+
+	it("falls back to plain lists for non-Jira board views and bookmarks", function()
+		local board_view = state.view
+		local issue = {
+			key = "org/repo#12",
+			number = 12,
+			iid = 12,
+			title = "Existing board configuration",
+			status_id = "open",
+			status = "Open",
+		}
+		state.set_issues({ issue })
+		for _, provider in ipairs({ "github", "gitlab" }) do
+			state.provider.id = provider
+			for _, bookmarked in ipairs({ false, true }) do
+				state.view = bookmarked and state.bookmarks.tab or board_view
+				state.bookmarks.selection = bookmarked and { kind = "bookmark", view = board_view } or nil
+				local lines, _, map = renderer.render({ width = 120 })
+				local found = false
+				for _, item in pairs(map) do
+					assert.is_not.equal("board_row", item.kind)
+					found = found or item._issue == issue
+				end
+				assert.is_true(found)
+				assert.truthy(table.concat(lines, "\n"):find(issue.title, 1, true))
+			end
+		end
+	end)
 end)

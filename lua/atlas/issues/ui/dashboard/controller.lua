@@ -90,7 +90,7 @@ end
 ---@param view IssuesViewConfig
 ---@return boolean
 local function relationships_enabled(view)
-	return view.layout ~= "compact" and view.layout ~= "board" and config.options.issues.with_relationships
+	return state.view_layout(view) == "plain" and config.options.issues.with_relationships
 end
 
 ---@param issues Issue[]
@@ -425,8 +425,7 @@ function M.previous_page()
 	show_cached_page(state.current_page - 1)
 end
 
----@param opts? { current_page?: boolean }
-function M.refresh_view(opts)
+function M.refresh_view()
 	local selected = navigation.current_item()
 	local selected_bookmark = selected and (selected.kind == "bookmark" or selected.kind == "starred")
 	local selected_key = selected and selected.kind == "issue" and selected._issue and selected._issue.key or nil
@@ -451,13 +450,7 @@ function M.refresh_view(opts)
 		end
 	end
 
-	local view = state.search_view()
-	if opts and opts.current_page and view then
-		local previous = state.page_history[state.current_page - 1]
-		load_page(view, state.current_page, previous and previous.next_cursor, true, finish)
-	else
-		load_view(true, finish)
-	end
+	load_view(true, finish)
 end
 
 ---@param view IssuesViewConfig|nil
@@ -540,13 +533,6 @@ local function refresh_issue(issue)
 		return
 	end
 
-	local view = state.search_view()
-	if provider.id == "github" and view and view.layout == "board" and view.project then
-		-- Project workflow fields must be reloaded from the project, not the issue endpoint.
-		M.refresh_view({ current_page = true })
-		return
-	end
-
 	notify.loading(string.format("Reloading %s...", issue_key))
 	begin_issue_reload(issue_key)
 
@@ -615,8 +601,7 @@ function M.update_issue(issue)
 end
 
 function M.toggle_current_issue_collapsed()
-	local view = state.search_view()
-	if view and view.layout == "board" then
+	if state.view_layout(state.search_view()) == "board" then
 		return
 	end
 	local node = navigation.current_item()
@@ -629,8 +614,7 @@ function M.toggle_current_issue_collapsed()
 end
 
 function M.toggle_all_issues_collapsed()
-	local view = state.search_view()
-	if view and view.layout == "board" then
+	if state.view_layout(state.search_view()) == "board" then
 		return
 	end
 	if state.toggle_all_issues_collapsed() then

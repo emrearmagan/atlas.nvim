@@ -20,8 +20,7 @@ function M.render()
 		width = width,
 	})
 	local state = require("atlas.issues.state")
-	local view = state.search_view()
-	local board = view ~= nil and view.layout == "board" and not state.error
+	local board = state.view_layout(state.search_view()) == "board" and not state.error
 
 	ui_state.line_map = line_map
 

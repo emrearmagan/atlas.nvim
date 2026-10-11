@@ -619,9 +619,8 @@ issues = {
 }
 ```
 
-Issue views support `plain`, `compact`, and `board` layouts. Boards group the current
-page by status. Use `h`/`l` to move between columns and `j`/`k` or `gg`/`G` to navigate
-within a column. GitHub board views can use a `project` source, as shown below.
+Issue views support `plain` and `compact` layouts. Jira also supports `board`, which
+groups the current page by workflow status.
 
 <a id="jira"></a>
 
@@ -642,7 +641,7 @@ issues = {
       {
         name = "My Board",
         key = "M",
-        layout = "plain",
+        layout = "board",
         jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
       },
       {
@@ -735,12 +734,6 @@ issues = {
         key = "3",
         layout = "plain",
         search = "mentions:@me is:open",
-      },
-      {
-        name = "Board",
-        key = "4",
-        layout = "board",
-        project = { owner = "your-org", number = 1 },
       },
     },
 

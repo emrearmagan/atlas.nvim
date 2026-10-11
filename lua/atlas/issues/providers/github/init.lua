@@ -3,7 +3,6 @@
 ---@field number integer
 ---@field node_id string|nil
 ---@field is_pinned boolean
----@field project_status_id string|nil
 
 ---@class GitHubIssueMilestone : IssueMilestone
 ---@field number integer|nil
@@ -66,37 +65,30 @@ local function fetch_issues(view, opts, on_done)
 		return resolve_view(view, done)
 	end, function(resolved)
 		local query = resolve_search(resolved)
-		local project = resolved.layout == "board" and resolved.project or nil
 		requests.run(function(done)
-			local fetch_opts = {
+			return issues_api.search_issues(query, done, {
 				force_refresh = opts.force_refresh == true,
 				pagelen = opts.pagelen,
 				cursor = opts.cursor,
-			}
-			if project then
-				return issues_api.search_project_issues(project, query, done, fetch_opts)
-			end
-			return issues_api.search_issues(query, done, fetch_opts)
+			})
 		end, function(page, err)
 			if err then
 				on_done({ items = {}, query = query }, err)
 				return
 			end
 
-			if not project then
-				local pinned, rest = {}, {}
-				for _, issue in ipairs(page.items) do
-					---@cast issue GitHubIssue
-					if issue.is_pinned == true then
-						table.insert(pinned, issue)
-					else
-						table.insert(rest, issue)
-					end
+			local pinned, rest = {}, {}
+			for _, issue in ipairs(page.items) do
+				---@cast issue GitHubIssue
+				if issue.is_pinned == true then
+					table.insert(pinned, issue)
+				else
+					table.insert(rest, issue)
 				end
-				local sorted = vim.list_extend({}, pinned)
-				vim.list_extend(sorted, rest)
-				page.items = sorted
 			end
+			local sorted = vim.list_extend({}, pinned)
+			vim.list_extend(sorted, rest)
+			page.items = sorted
 			page.query = query
 			on_done(page, nil)
 		end)

@@ -64,34 +64,34 @@ function M.register(buf, views)
 
 	local items = {}
 	local filters = {}
-	utils.insert_if(
-		items,
-		item("ui.previous_column", {
-			desc = "Previous status column (board)",
-			callback = function()
-				local view = state.search_view()
-				if view and view.layout == "board" then
-					require("atlas.ui.navigation").move_column(-vim.v.count1)
-				else
-					vim.cmd("normal! " .. vim.v.count1 .. "h")
-				end
-			end,
-		})
-	)
-	utils.insert_if(
-		items,
-		item("ui.next_column", {
-			desc = "Next status column (board)",
-			callback = function()
-				local view = state.search_view()
-				if view and view.layout == "board" then
-					require("atlas.ui.navigation").move_column(vim.v.count1)
-				else
-					vim.cmd("normal! " .. vim.v.count1 .. "l")
-				end
-			end,
-		})
-	)
+	if provider.id == "jira" then
+		utils.insert_if(
+			items,
+			item("ui.previous_column", {
+				desc = "Previous status column (board)",
+				callback = function()
+					if state.view_layout(state.search_view()) == "board" then
+						require("atlas.ui.navigation").move_column(-vim.v.count1)
+					else
+						vim.cmd("normal! " .. vim.v.count1 .. "h")
+					end
+				end,
+			})
+		)
+		utils.insert_if(
+			items,
+			item("ui.next_column", {
+				desc = "Next status column (board)",
+				callback = function()
+					if state.view_layout(state.search_view()) == "board" then
+						require("atlas.ui.navigation").move_column(vim.v.count1)
+					else
+						vim.cmd("normal! " .. vim.v.count1 .. "l")
+					end
+				end,
+			})
+		)
+	end
 
 	for _, view in ipairs(views) do
 		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then

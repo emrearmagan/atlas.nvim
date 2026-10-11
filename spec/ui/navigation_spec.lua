@@ -27,7 +27,6 @@ describe("ui.navigation issue boards", function()
 		pending_select, selected = nil, nil
 		local line_map
 		board_opts = {
-			provider_id = "jira",
 			statuses = {
 				{ id = "todo", name = "To do" },
 				{ id = "active", name = "In progress" },
@@ -64,11 +63,10 @@ describe("ui.navigation issue boards", function()
 				return rendered, spans, map
 			end,
 		}
-		package.loaded["atlas.issues.state"] = {
-			search_view = function()
-				return { layout = "board" }
-			end,
-		}
+		package.loaded["atlas.issues.state"] = nil
+		local issue_state = require("atlas.issues.state")
+		issue_state.provider = { id = "jira" }
+		issue_state.view = { layout = "board" }
 		package.loaded["atlas.ui.statusline"] = {}
 		vim.api = vim.tbl_extend("force", original_api, {
 			nvim_win_get_cursor = function()
@@ -230,5 +228,21 @@ describe("ui.navigation issue boards", function()
 		assert.equals(2, navigation.current_item().column)
 		navigation.focus_first_item({ all_columns = true })
 		assert.equals("KAN-1", navigation.current_item().key)
+	end)
+
+	it("clears board scrolling when a non-Jira board configuration falls back to a list", function()
+		navigation.focus_first_item()
+		navigation.move_column(2)
+		assert.is_true(view.leftcol > 0)
+		require("atlas.issues.state").provider.id = "github"
+		package.loaded["atlas.issues.ui.dashboard.renderer"] = {
+			render = function()
+				return { "Issue list" }, {}, { { kind = "issue", key = "org/repo#1" } }
+			end,
+		}
+		render_dashboard()
+		assert.equals(0, view.leftcol)
+		assert.is_true(options.cursorline)
+		assert.same({}, marks)
 	end)
 end)

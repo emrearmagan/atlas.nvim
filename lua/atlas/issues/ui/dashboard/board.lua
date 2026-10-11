@@ -13,7 +13,7 @@ local function clean(value)
 	return (tostring(value or ""):gsub("%c", " "))
 end
 
-local function group_issues(issues, provider_id, statuses)
+local function group_issues(issues, statuses)
 	local columns, by_status = {}, {}
 
 	local function add_column(id, name)
@@ -21,11 +21,6 @@ local function group_issues(issues, provider_id, statuses)
 		by_status[id] = column
 		columns[#columns + 1] = column
 		return column
-	end
-
-	if statuses == nil and (provider_id == "github" or provider_id == "gitlab") then
-		add_column("id:open", "Open")
-		add_column("id:closed", "Closed")
 	end
 
 	local function status_column(status_id, name)
@@ -40,24 +35,12 @@ local function group_issues(issues, provider_id, statuses)
 
 	for _, status in ipairs(statuses or {}) do
 		local name = status.name
-		if provider_id == "jira" then
-			---@cast status JiraIssueStatus
-			local icon = icons.issues_status(status.category, name)
-			name = icon ~= "" and (icon .. " " .. name) or name
-		end
+		local icon = icons.issues_status(status.category, name)
+		name = icon ~= "" and (icon .. " " .. name) or name
 		status_column(status.id, name)
 	end
 	for _, issue in ipairs(issues) do
-		local column
-		if provider_id == "github" and statuses then
-			---@cast issue GitHubIssue
-			column = by_status["id:" .. (issue.project_status_id or "no_status")] or by_status["id:no_status"]
-			if column == nil then
-				column = status_column("no_status", "No status")
-			end
-		else
-			column = status_column(issue.status_id, issue.status)
-		end
+		local column = status_column(issue.status_id, issue.status)
 		column.issues[#column.issues + 1] = issue
 	end
 	return columns
@@ -75,7 +58,7 @@ local function issue_text(issue)
 	local points = issue.story_points ~= nil and (clean(issue.story_points) .. " pts") or ""
 	local metadata = points ~= "" and (" " .. points) or ""
 	local key_width = math.min(16, COLUMN_WIDTH - ui_utils.text_width(prefix .. priority_text .. metadata) - 2)
-	key = utils.truncate(key:match("#%d+$") or key, key_width, true)
+	key = utils.truncate(key, key_width, true)
 	local suffix = (key ~= "" and (" " .. key) or "") .. metadata
 	local title_width = COLUMN_WIDTH - ui_utils.text_width(prefix .. priority_text .. suffix)
 	local title = utils.truncate(clean(issue.title), title_width)
@@ -104,12 +87,12 @@ local function issue_text(issue)
 	return text, spans
 end
 
----@param opts { issues: Issue[], provider_id: string, statuses?: IssueStatus[] }
+---@param opts { issues: JiraIssue[], statuses?: JiraIssueStatus[] }
 ---@return string[] lines
 ---@return table<integer, table> line_map
 ---@return table[] spans
 function M.render(opts)
-	local columns = group_issues(opts.issues or {}, opts.provider_id, opts.statuses)
+	local columns = group_issues(opts.issues or {}, opts.statuses)
 	if #columns == 0 then
 		return { " No issues found." }, {}, {}
 	end

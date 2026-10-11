@@ -551,10 +551,8 @@ Shared config that applies to all issue providers:
   }
 <
 
-Issue views support "plain", "compact", and "board" layouts. Boards group the
-current page by status. Use h/l to move between columns and j/k or gg/G to
-navigate within a column. GitHub board views can use a project source; see
-|atlas-issues-github|.
+Issue views support "plain" and "compact" layouts. Jira also supports "board",
+which groups the current page by workflow status.
 
 ------------------------------------------------------------------------------
 JIRA                                                       *atlas-issues-jira*
@@ -605,7 +603,7 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
         },
       },
       views = {
-        { name = "My Board",  key = "M", layout = "plain",
+        { name = "My Board",  key = "M", layout = "board",
           jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC" },
         { name = "Team Board", key = "T", layout = "compact",
           jql = "project = KAN ORDER BY updated DESC" },
@@ -641,8 +639,6 @@ issue search expression.
           search = "author:@me is:open" },
         { name = "Mentions", key = "3", layout = "plain",
           search = "mentions:@me is:open" },
-        { name = "Board", key = "4", layout = "board",
-          project = { owner = "your-org", number = 1 } },
       },
       bookmarks = {
         -- key   = "S",      -- default

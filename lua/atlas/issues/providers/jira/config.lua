@@ -45,12 +45,12 @@
 --           {
 --             name = "Open",
 --             key = "1",
---             layout = "plain", -- "compact" | "plain"
+--             layout = "plain", -- "compact" | "plain" | "board"
 --             jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 --           },
 --           { name = "Reported",   key = "2", jql = "reporter = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
 --           { name = "Watching",   key = "3", jql = "watcher = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
---           { name = "Sprint",     key = "4", jql = "sprint in openSprints() AND assignee = currentUser() ORDER BY rank" },
+--           { name = "Sprint",     key = "4", layout = "board", jql = "sprint in openSprints() AND assignee = currentUser() ORDER BY rank" },
 --         },
 --         bookmarks = {
 --           -- key   = "J",   -- default

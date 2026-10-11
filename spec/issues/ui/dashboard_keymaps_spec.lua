@@ -57,7 +57,7 @@ describe("issues.ui.dashboard.keymaps", function()
 			end,
 		}
 		state = require("atlas.issues.state")
-		state.provider = { capabilities = { actions = { items = { { id = "transition" } } } } }
+		state.provider = { id = "jira", capabilities = { actions = { items = { { id = "transition" } } } } }
 		state.current_user = { name = "Reviewer" }
 		state.view = { name = "Board", layout = "board" }
 		state.views = { state.view }
@@ -112,5 +112,24 @@ describe("issues.ui.dashboard.keymaps", function()
 		assert.equals("normal! 3h", calls.command)
 		next_column.callback()
 		assert.equals("normal! 3l", calls.command)
+	end)
+
+	it("leaves native horizontal keys unbound for non-Jira board views and bookmarks", function()
+		local board_view = state.view
+		for _, provider in ipairs({ "github", "gitlab" }) do
+			state.provider.id = provider
+			for _, bookmarked in ipairs({ false, true }) do
+				state.view = bookmarked and state.bookmarks.tab or board_view
+				state.bookmarks.selection = bookmarked and { kind = "bookmark", view = board_view } or nil
+				mappings.register(1, state.views)
+				for _, entries in pairs(groups) do
+					for _, entry in ipairs(entries) do
+						assert.is_not.equal("h", entry.key)
+						assert.is_not.equal("l", entry.key)
+						assert.is_nil(entry.desc:find("status column", 1, true))
+					end
+				end
+			end
+		end
 	end)
 end)

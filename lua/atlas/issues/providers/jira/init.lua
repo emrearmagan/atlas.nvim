@@ -10,7 +10,9 @@
 ---@field project JiraIssueProject|nil
 ---@field priority string|nil
 
----@class JiraIssueStatus : IssueStatus
+---@class JiraIssueStatus
+---@field id string
+---@field name string
 ---@field category string|nil
 
 ---@class JiraIssueCustomField
