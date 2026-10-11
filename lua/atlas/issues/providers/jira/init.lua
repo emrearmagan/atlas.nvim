@@ -35,7 +35,6 @@ local projects_api = require("atlas.issues.providers.jira.api.projects")
 local links_api = require("atlas.issues.providers.jira.api.links")
 local requests = require("atlas.core.requests")
 local notify = require("atlas.core.notify")
-local icons = require("atlas.ui.shared.icons")
 
 local CATEGORY_ORDER = { new = 1, indeterminate = 2, done = 3 }
 
@@ -113,10 +112,6 @@ local function fetch_issues(view, opts, on_done)
 				end
 				return a.id < b.id
 			end)
-			for _, status in ipairs(statuses) do
-				local icon = icons.issues_status(status.category, status.name)
-				status.name = icon ~= "" and (icon .. " " .. status.name) or status.name
-			end
 			if next(errors) then
 				notify.warn("Failed to load board statuses: " .. table.concat(vim.tbl_values(errors), "; "))
 			end

@@ -1,6 +1,31 @@
 local board = require("atlas.issues.ui.dashboard.board")
+local config = require("atlas.config")
 
 describe("issues.ui.dashboard.board", function()
+	local status_icons
+
+	before_each(function()
+		status_icons = config.options.issues.jira.project_config.status_icons
+	end)
+
+	after_each(function()
+		config.options.issues.jira.project_config.status_icons = status_icons
+	end)
+
+	it("formats Jira status icons at render time without changing provider metadata", function()
+		local statuses = { { id = "1", name = "Open", category = "new" } }
+		config.options.issues.jira.project_config.status_icons = { new = "N", Open = "O" }
+		local opts = { provider_id = "jira", statuses = statuses, issues = {} }
+		local lines = board.render(opts)
+		assert.truthy(lines[1]:find("O Open (0)", 1, true))
+		assert.equals("Open", statuses[1].name)
+		config.options.issues.jira.project_config.status_icons.Open = ""
+		lines = board.render(opts)
+		assert.truthy(lines[1]:find(" Open (0)", 1, true))
+		assert.is_nil(lines[1]:find("O Open", 1, true))
+		assert.equals("Open", statuses[1].name)
+	end)
+
 	it("keeps empty provider status columns and preserves issue payloads", function()
 		local issue = { key = "org/repo#12", title = "Fix issue", status_id = "closed", status = "Closed" }
 		for _, provider in ipairs({ "github", "gitlab" }) do

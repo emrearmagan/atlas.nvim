@@ -85,7 +85,7 @@ local function on_cursor_moved()
 	end, DEBOUNCE_MS)
 end
 
-local function focus(win, lnum, item)
+local function focus(win, lnum, item, select)
 	vim.api.nvim_win_set_cursor(win, { lnum, item.start_col or 0 })
 	if item.virt_col then
 		vim.api.nvim_win_call(win, function()
@@ -101,7 +101,9 @@ local function focus(win, lnum, item)
 			vim.fn.winrestview(view)
 		end)
 	end
-	on_cursor_moved()
+	if select ~= false then
+		on_cursor_moved()
+	end
 end
 
 local function current_column(win)
@@ -188,30 +190,64 @@ function M.move_cursor(direction)
 	on_cursor_moved()
 end
 
----@param predicate fun(item: table): boolean
----@return boolean
-function M.focus_item(predicate)
-	local dashboard = require("atlas.ui.dashboard")
-	local win, buf = dashboard.win(), dashboard.buf()
-	if win == nil or buf == nil then
-		return false
+local function find_item(predicate)
+	local buf = require("atlas.ui.dashboard").buf()
+	if buf == nil then
+		return nil
 	end
 
 	local line_map = ui_state.line_map
 	for lnum = 1, vim.api.nvim_buf_line_count(buf) do
 		for _, item in ipairs(cells(line_map[lnum]) or { line_map[lnum] }) do
 			if is_selectable(item) and predicate(item) then
-				focus(win, lnum, item)
-				return true
+				return lnum, item
 			end
 		end
+	end
+end
+
+---@param predicate fun(item: table): boolean
+---@return boolean
+function M.focus_item(predicate)
+	local win = require("atlas.ui.dashboard").win()
+	if win == nil then
+		return false
+	end
+	local lnum, item = find_item(predicate)
+	if lnum then
+		focus(win, lnum, item)
+		return true
 	end
 	return false
 end
 
-function M.focus_first_item()
+---Retain the selected board card or empty column across a passive render.
+---@param previous table|nil
+function M.restore_board_selection(previous)
 	local win = require("atlas.ui.dashboard").win()
-	local column = win and current_column(win)
+	if win == nil or previous == nil or previous.column == nil then
+		return
+	end
+	local lnum, item
+	if previous.key ~= nil then
+		lnum, item = find_item(function(candidate)
+			return candidate.column ~= nil and candidate.key == previous.key
+		end)
+	end
+	if item == nil then
+		lnum = vim.api.nvim_win_get_cursor(win)[1]
+		local row = cells(ui_state.line_map[lnum])
+		item = row and row[previous.column]
+	end
+	if item ~= nil then
+		focus(win, lnum, item, false)
+	end
+end
+
+---@param opts? { all_columns?: boolean }
+function M.focus_first_item(opts)
+	local win = require("atlas.ui.dashboard").win()
+	local column = not (opts and opts.all_columns) and win and current_column(win) or nil
 	M.focus_item(function(item)
 		return column == nil or item.column == column
 	end)

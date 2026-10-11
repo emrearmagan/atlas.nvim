@@ -93,12 +93,6 @@ local ICONS = {
 	},
 }
 
-ICONS.issues.status = {
-	new = ICONS.general.dot,
-	indeterminate = ICONS.general.info,
-	done = ICONS.general.success,
-}
-
 ICONS.log = {
 	error = ICONS.general.error,
 	warn = ICONS.general.warning,
@@ -206,10 +200,9 @@ end
 ---@param name string|nil
 ---@return string, string
 function M.issues_status(category, name)
-	local jira = config.domain_options("jira", "issues") or {}
-	local configured = (jira.project_config or {}).status_icons or {}
-	local icon, hl_group = get(ICONS.issues.status[category])
-	return configured[name] or configured[category] or icon, hl_group
+	local configured = config.options.issues.jira.project_config.status_icons
+	local hl_group = category == "done" and ICONS.general.success.hl_group or ICONS.fallback.hl_group
+	return configured[name] or configured[category] or ICONS.fallback.icon, hl_group
 end
 
 ---@param name string

@@ -1,17 +1,15 @@
 local provider = require("atlas.issues.providers.jira")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
-local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 
 describe("Jira issue board provider", function()
-	local original_search, original_statuses, original_icon, original_warn, original_values
+	local original_search, original_statuses, original_warn, original_values
 	local search_done, status_done, request, cancelled, warnings
 
 	before_each(function()
 		original_search = issues_api.search_issues
 		original_statuses = projects_api.get_statuses
-		original_icon = icons.issues_status
 		original_warn = notify.warn
 		original_values = vim.tbl_values
 		vim.tbl_values = function(values)
@@ -40,9 +38,6 @@ describe("Jira issue board provider", function()
 				end,
 			}
 		end
-		icons.issues_status = function(category)
-			return category == "done" and "OK" or ""
-		end
 		notify.warn = function(message)
 			warnings[#warnings + 1] = message
 		end
@@ -51,7 +46,6 @@ describe("Jira issue board provider", function()
 	after_each(function()
 		issues_api.search_issues = original_search
 		projects_api.get_statuses = original_statuses
-		icons.issues_status = original_icon
 		notify.warn = original_warn
 		vim.tbl_values = original_values
 	end)
@@ -83,7 +77,7 @@ describe("Jira issue board provider", function()
 		assert.same({
 			{ id = "1", name = "Open", category = "new" },
 			{ id = "2", name = "Doing", category = "indeterminate" },
-			{ id = "3", name = "OK Done", category = "done" },
+			{ id = "3", name = "Done", category = "done" },
 		}, result.statuses)
 	end)
 

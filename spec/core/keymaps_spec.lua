@@ -54,5 +54,24 @@ describe("core.keymaps", function()
 				"pulls.review.request_changes",
 			}, pulls_conflicts[key])
 		end)
+
+		it("checks board column conflicts only in issues", function()
+			for _, action in ipairs({ "previous_column", "next_column" }) do
+				local key = config.options.keymaps.ui[action]
+				config.options.keymaps.pulls.checkout = key
+				config.options.keymaps.issues.transition_issue = key
+				local conflicts = keymaps.validate()
+
+				assert.is_nil(conflicts.pulls[key])
+				assert.are.same({ "issues.transition_issue", "ui." .. action }, conflicts.issues[key])
+			end
+		end)
+
+		it("still reports shared UI conflicts in pulls when a board key is reused", function()
+			config.options.keymaps.ui.toggle_panel = "h"
+			config.options.keymaps.pulls.checkout = "h"
+
+			assert.are.same({ "pulls.checkout", "ui.toggle_panel" }, keymaps.validate().pulls.h)
+		end)
 	end)
 end)

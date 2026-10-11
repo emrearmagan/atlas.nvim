@@ -1,8 +1,21 @@
 describe("ui.navigation issue boards", function()
-	local navigation, state, lines, cursor, view, marks, options, pending_select, selected
+	local navigation, state, lines, cursor, view, marks, options, pending_select, selected, board_opts
 	local original_api, original_fn, original_defer
 	local saved_modules
-	local modules = { "atlas.ui.navigation", "atlas.ui.dashboard", "atlas.ui.state", "atlas.issues.ui.dashboard" }
+	local modules = {
+		"atlas.ui.navigation",
+		"atlas.ui.dashboard",
+		"atlas.ui.state",
+		"atlas.ui.statusline",
+		"atlas.issues.state",
+		"atlas.issues.ui.dashboard",
+		"atlas.issues.ui.dashboard.renderer",
+	}
+
+	local function render_dashboard()
+		package.loaded["atlas.issues.ui.dashboard"] = nil
+		require("atlas.issues.ui.dashboard").render()
+	end
 
 	before_each(function()
 		saved_modules = {}
@@ -13,7 +26,7 @@ describe("ui.navigation issue boards", function()
 		cursor, view, marks, options = { 1, 0 }, { leftcol = 0 }, {}, {}
 		pending_select, selected = nil, nil
 		local line_map
-		lines, line_map = require("atlas.issues.ui.dashboard.board").render({
+		board_opts = {
 			provider_id = "jira",
 			statuses = {
 				{ id = "todo", name = "To do" },
@@ -25,7 +38,8 @@ describe("ui.navigation issue boards", function()
 				{ key = "KAN-2", title = "First active", status_id = "active", status = "In progress" },
 				{ key = "KAN-3", title = "Second active", status_id = "active", status = "In progress" },
 			},
-		})
+		}
+		lines, line_map = require("atlas.issues.ui.dashboard.board").render(board_opts)
 		state = { domain = "issues", line_map = line_map }
 		package.loaded["atlas.ui.state"] = state
 		package.loaded["atlas.ui.dashboard"] = {
@@ -44,6 +58,18 @@ describe("ui.navigation issue boards", function()
 				selected = item
 			end,
 		}
+		package.loaded["atlas.issues.ui.dashboard.renderer"] = {
+			render = function()
+				local rendered, map, spans = require("atlas.issues.ui.dashboard.board").render(board_opts)
+				return rendered, spans, map
+			end,
+		}
+		package.loaded["atlas.issues.state"] = {
+			search_view = function()
+				return { layout = "board" }
+			end,
+		}
+		package.loaded["atlas.ui.statusline"] = {}
 		vim.api = vim.tbl_extend("force", original_api, {
 			nvim_win_get_cursor = function()
 				return cursor
@@ -53,6 +79,11 @@ describe("ui.navigation issue boards", function()
 			end,
 			nvim_buf_line_count = function()
 				return #lines
+			end,
+			nvim_buf_set_lines = function(_, _, _, _, rendered)
+				lines = rendered
+				cursor[1] = math.min(cursor[1], #lines)
+				cursor[2] = math.min(cursor[2], #lines[cursor[1]] - 1)
 			end,
 			nvim_win_get_width = function()
 				return 60
@@ -154,5 +185,50 @@ describe("ui.navigation issue boards", function()
 		assert.same({}, marks)
 		navigation.move_cursor("down")
 		assert.equals("KAN-4", navigation.current_item().key)
+	end)
+
+	it("retains the selected card when another column's Unicode byte width changes", function()
+		navigation.focus_first_item()
+		navigation.move_column(1)
+		local old_column = cursor[2]
+		board_opts.issues[1].title = "Café résumé"
+		pending_select = nil
+		render_dashboard()
+		assert.equals("KAN-2", navigation.current_item().key)
+		assert.is_true(cursor[2] > old_column)
+		assert.is_nil(pending_select)
+	end)
+
+	it("follows a selected card into its new status column without reselecting details", function()
+		navigation.focus_first_item()
+		board_opts.issues[1].status_id = "done"
+		pending_select = nil
+		render_dashboard()
+		assert.equals("KAN-1", navigation.current_item().key)
+		assert.equals(3, navigation.current_item().column)
+		assert.is_nil(pending_select)
+	end)
+
+	it("retains empty columns when earlier cards change their byte width", function()
+		navigation.focus_first_item()
+		navigation.move_column(2)
+		board_opts.issues[1].title = "Café résumé"
+		pending_select = nil
+		render_dashboard()
+		assert.equals("issue_column", navigation.current_item().kind)
+		assert.equals(3, navigation.current_item().column)
+		assert.is_nil(pending_select)
+	end)
+
+	it("can reset selection across columns after paging without changing column-local first-item navigation", function()
+		navigation.focus_first_item()
+		navigation.move_column(1)
+		board_opts.issues = { board_opts.issues[1] }
+		render_dashboard()
+		navigation.focus_first_item()
+		assert.equals("issue_column", navigation.current_item().kind)
+		assert.equals(2, navigation.current_item().column)
+		navigation.focus_first_item({ all_columns = true })
+		assert.equals("KAN-1", navigation.current_item().key)
 	end)
 end)

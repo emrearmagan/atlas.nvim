@@ -15,6 +15,7 @@ function M.render()
 
 	local width = vim.api.nvim_win_get_width(win)
 	local navigation = require("atlas.ui.navigation")
+	local selected = navigation.current_item()
 	local lines, spans, line_map = require("atlas.issues.ui.dashboard.renderer").render({
 		width = width,
 	})
@@ -28,7 +29,9 @@ function M.render()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	if not board then
+	if board then
+		navigation.restore_board_selection(selected)
+	else
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ leftcol = 0 })
 		end)

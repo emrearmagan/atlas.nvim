@@ -137,6 +137,24 @@ describe("GitHub issue board provider", function()
 end)
 
 describe("GitHub project issue mapping", function()
+	it("ignores JSON null nodes without indexing them", function()
+		local original_null = vim.NIL
+		-- Match Neovim's userdata sentinel: indexing JSON null must raise an error.
+		vim.NIL = setmetatable({}, {
+			__index = function()
+				error("Cannot index JSON null")
+			end,
+		})
+		local ok, page = pcall(mapper.to_project_page, {
+			field = { options = {} },
+			items = { nodes = { vim.NIL, { content = vim.NIL } } },
+		}, 50)
+		vim.NIL = original_null
+		assert.is_true(ok, page)
+		assert.same({}, page.items)
+		assert.same({ { id = "no_status", name = "No status" } }, page.statuses)
+	end)
+
 	it("retains project options, issue status IDs and cursor pagination", function()
 		local function issue(number)
 			return { number = number, title = "Issue", state = "OPEN", repository = { nameWithOwner = "team/repo" } }

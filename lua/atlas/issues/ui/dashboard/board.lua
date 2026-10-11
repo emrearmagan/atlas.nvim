@@ -39,7 +39,13 @@ local function group_issues(issues, provider_id, statuses)
 	end
 
 	for _, status in ipairs(statuses or {}) do
-		status_column(status.id, status.name)
+		local name = status.name
+		if provider_id == "jira" then
+			---@cast status JiraIssueStatus
+			local icon = icons.issues_status(status.category, name)
+			name = icon ~= "" and (icon .. " " .. name) or name
+		end
+		status_column(status.id, name)
 	end
 	for _, issue in ipairs(issues) do
 		local column

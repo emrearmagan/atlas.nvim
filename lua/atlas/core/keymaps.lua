@@ -399,10 +399,19 @@ function M.validate()
 		return conflicts
 	end
 
+	-- Column navigation is registered only by issue dashboards.
+	local pulls_actions = actions_for({ "ui", "pulls" })
+	for index = #pulls_actions, 1, -1 do
+		local action_id = pulls_actions[index]
+		if action_id == "ui.previous_column" or action_id == "ui.next_column" then
+			table.remove(pulls_actions, index)
+		end
+	end
+
 	local result = {
 		picker = conflicts_for(actions_for({ "picker" })),
 		ui = conflicts_for(actions_for({ "ui" })),
-		pulls = conflicts_for(vim.list_extend(actions_for({ "ui", "pulls" }), {
+		pulls = conflicts_for(vim.list_extend(pulls_actions, {
 			"pulls.review.approve",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",

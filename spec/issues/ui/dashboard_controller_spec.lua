@@ -1,7 +1,7 @@
 local config = require("atlas.config")
 
 describe("issues.ui.dashboard.controller", function()
-	local saved, state, controller, parent_fetches, original_relationships
+	local saved, state, controller, parent_fetches, original_relationships, focus_options
 	local modules = {
 		"atlas.issues.ui.dashboard.controller",
 		"atlas.issues.state",
@@ -11,6 +11,7 @@ describe("issues.ui.dashboard.controller", function()
 		"atlas.ui.navigation",
 		"atlas.ui.components.spinner",
 		"atlas.ui.popups.info",
+		"atlas.issues.ui.detail",
 	}
 
 	before_each(function()
@@ -32,7 +33,12 @@ describe("issues.ui.dashboard.controller", function()
 				return false
 			end,
 		}
-		package.loaded["atlas.ui.navigation"] = { focus_first_item = function() end }
+		focus_options = nil
+		package.loaded["atlas.ui.navigation"] = {
+			focus_first_item = function(opts)
+				focus_options = opts
+			end,
+		}
 		package.loaded["atlas.ui.popups.info"] = {}
 		package.loaded["atlas.ui.components.spinner"] = {
 			create = function()
@@ -109,5 +115,55 @@ describe("issues.ui.dashboard.controller", function()
 		controller.toggle_current_issue_collapsed()
 		controller.toggle_all_issues_collapsed()
 		assert.same({ ["AT-1"] = true }, state.collapsed_issue_keys)
+	end)
+
+	it("resets selection across all columns when loading and paging", function()
+		controller.switch_view({ layout = "board" })
+		assert.same({ all_columns = true }, focus_options)
+		focus_options = nil
+		state.page_history[1].next_cursor = "next"
+		controller.next_page()
+		assert.same({ all_columns = true }, focus_options)
+		focus_options = nil
+		controller.previous_page()
+		assert.same({ all_columns = true }, focus_options)
+	end)
+
+	it("reloads project workflow status on issue refresh and actions without changing pages", function()
+		state.provider.id = "github"
+		state.view = { layout = "board", project = { owner = "team", number = 1 } }
+		local issue = { key = "team/repo#1", title = "Issue", project_status_id = "doing" }
+		state.set_issues({ issue })
+		state.current_page = 2
+		state.page_history = { { items = {}, next_cursor = "page-2" }, { items = { issue } } }
+		package.loaded["atlas.issues.ui.detail"] = {
+			is_open = function()
+				return false
+			end,
+		}
+		local navigation = package.loaded["atlas.ui.navigation"]
+		navigation.current_item = function()
+			return { kind = "issue", _issue = state.issues[1] }
+		end
+		navigation.focus_item = function(predicate)
+			return predicate(navigation.current_item())
+		end
+		local requests = 0
+		state.provider.capabilities.core.fetch_issues = function(view, opts, done)
+			requests = requests + 1
+			assert.equals(state.view, view)
+			assert.same({ force_refresh = true, pagelen = 50, cursor = "page-2" }, opts)
+			done({
+				items = { { key = issue.key, title = issue.title, project_status_id = "done" } },
+				statuses = { { id = "doing", name = "Doing" }, { id = "done", name = "Done" } },
+			})
+		end
+		controller.refresh_current_issue()
+		controller.apply_action_result({ issue_key = issue.key })
+		assert.equals(2, requests)
+		assert.equals(0, parent_fetches)
+		assert.equals(2, state.current_page)
+		assert.equals("done", state.issues[1].project_status_id)
+		assert.equals("done", state.page_history[2].items[1].project_status_id)
 	end)
 end)

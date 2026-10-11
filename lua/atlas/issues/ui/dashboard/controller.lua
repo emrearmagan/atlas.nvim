@@ -397,7 +397,7 @@ local function show_cached_page(page_number)
 	state.query = page.query or ""
 	state.error = nil
 	render_if_active()
-	navigation.focus_first_item()
+	navigation.focus_first_item({ all_columns = true })
 	return true
 end
 
@@ -417,7 +417,7 @@ function M.next_page()
 		return
 	end
 	load_page(view, page_number, current.next_cursor, false, function()
-		navigation.focus_first_item()
+		navigation.focus_first_item({ all_columns = true })
 	end)
 end
 
@@ -425,7 +425,8 @@ function M.previous_page()
 	show_cached_page(state.current_page - 1)
 end
 
-function M.refresh_view()
+---@param opts? { current_page?: boolean }
+function M.refresh_view(opts)
 	local selected = navigation.current_item()
 	local selected_bookmark = selected and (selected.kind == "bookmark" or selected.kind == "starred")
 	local selected_key = selected and selected.kind == "issue" and selected._issue and selected._issue.key or nil
@@ -437,7 +438,7 @@ function M.refresh_view()
 			end)
 		end
 		if not focused and not selected_bookmark then
-			navigation.focus_first_item()
+			navigation.focus_first_item({ all_columns = true })
 		end
 		local item = navigation.current_item()
 		local detail = require("atlas.issues.ui.detail")
@@ -450,7 +451,13 @@ function M.refresh_view()
 		end
 	end
 
-	load_view(true, finish)
+	local view = state.search_view()
+	if opts and opts.current_page and view then
+		local previous = state.page_history[state.current_page - 1]
+		load_page(view, state.current_page, previous and previous.next_cursor, true, finish)
+	else
+		load_view(true, finish)
+	end
 end
 
 ---@param view IssuesViewConfig|nil
@@ -458,7 +465,7 @@ function M.switch_view(view)
 	state.view = view
 	state.bookmarks.selection = nil
 	load_view(false, function()
-		navigation.focus_first_item()
+		navigation.focus_first_item({ all_columns = true })
 	end)
 end
 
@@ -530,6 +537,13 @@ local function refresh_issue(issue)
 
 	local provider = state.provider
 	if provider == nil then
+		return
+	end
+
+	local view = state.search_view()
+	if provider.id == "github" and view and view.layout == "board" and view.project then
+		-- Project workflow fields must be reloaded from the project, not the issue endpoint.
+		M.refresh_view({ current_page = true })
 		return
 	end
 

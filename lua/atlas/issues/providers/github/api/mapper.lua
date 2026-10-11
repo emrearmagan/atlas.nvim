@@ -185,6 +185,7 @@ function M.to_project_page(project, pagelen)
 		page.statuses[#page.statuses + 1] = { id = "no_status", name = "No status" }
 	end
 	for _, item in ipairs(json.safe_table(items.nodes)) do
+		item = json.safe_table(json.nilify(item))
 		local issue = M.to_issue(item.content)
 		if issue then
 			page.items[#page.items + 1] = issue
