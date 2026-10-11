@@ -2,6 +2,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local highlights = require("atlas.ui.highlights")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.presentation")
 local spinner = require("atlas.ui.components.spinner")
@@ -18,8 +19,8 @@ function M.header_fields(issue, details, loading)
 	local priority = tostring(issue.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
 	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
-	local assignee_name = issue.assignee and issue.assignee.display_name or ""
-	local reporter_name = issue.reporter and issue.reporter.display_name or ""
+	local assignee_name = issue.assignee and issue.assignee.name or ""
+	local reporter_name = issue.reporter and issue.reporter.name or ""
 
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
@@ -110,7 +111,7 @@ function M.chips(issue, details, loading)
 			if field.display == "chip" then
 				table.insert(chips, {
 					label = field.formatted,
-					hl = field.hl_group or "AtlasChipActive",
+					hl = field.hl_group and highlights.chip_from_group(field.hl_group) or "AtlasChipActive",
 				})
 			end
 		end
@@ -123,26 +124,26 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
-	local overview_icon, overview_hl = icons.general("overview")
-	local conversation_icon, conversation_hl = icons.general("conversation")
-	local activity_icon, activity_hl = icons.pulls("activity")
+	local overview_icon = icons.general("overview")
+	local conversation_icon = icons.general("conversation")
+	local activity_icon = icons.pulls("activity")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = { icon = overview_icon, hl_group = overview_hl },
+			icon = { icon = overview_icon },
 			mod = require("atlas.issues.providers.jira.ui.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = { icon = conversation_icon, hl_group = conversation_hl },
+			icon = { icon = conversation_icon },
 			mod = require("atlas.issues.ui.detail.tabs.conversation"),
 		},
 		{
 			key = "activity",
 			label = "History",
-			icon = { icon = activity_icon, hl_group = activity_hl },
+			icon = { icon = activity_icon },
 			mod = require("atlas.issues.ui.detail.tabs.activity"),
 		},
 	}

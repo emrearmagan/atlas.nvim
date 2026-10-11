@@ -17,18 +17,16 @@ local function status_value(kind, label)
 end
 
 local function generic_rows(pr)
-	local state = tostring(pr.state or "-")
+	local state = pr.state
 	local author = presentation.user_handle(pr.author)
-	local repo = tostring(pr.repo_full_name or "")
-	local branch = tostring((pr.source or {}).branch or "?")
-		.. " → "
-		.. tostring((pr.destination or {}).branch or "?")
+	local repo = pr.repo_full_name
+	local branch = pr.source.branch .. " → " .. pr.destination.branch
 	return {
 		{ "State", state, presentation.pr_state_hl(state) },
 		{ "Author", author, presentation.author_hl(author) },
 		{ "Repo", repo ~= "" and repo or "-", repo ~= "" and presentation.repo_hl(repo) or "AtlasTextMuted" },
 		{ "Branch", branch, "AtlasTextMuted" },
-		{ "Comments", tostring(pr.comments_count or 0), "AtlasTextMuted" },
+		{ "Comments", tostring(pr.comments_count), "AtlasTextMuted" },
 		{ "Created", utils.relative_time(pr.created_on), "AtlasTextMuted" },
 		{ "Updated", utils.relative_time(pr.updated_on), "AtlasTextMuted" },
 	}
@@ -70,31 +68,9 @@ end
 local function gitlab_rows(pr)
 	---@cast pr GitLabPullRequest
 	local rows = {}
-	local merge_status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
-	if merge_status ~= "" then
-		local kind = "unknown"
-		if merge_status == "mergeable" or merge_status == "can_be_merged" then
-			kind = "successful"
-		elseif
-			merge_status == "conflict"
-			or merge_status == "cannot_be_merged"
-			or merge_status == "ci_must_pass"
-			or merge_status == "discussions_not_resolved"
-			or merge_status == "blocked_status"
-			or merge_status == "merge_request_blocked"
-			or merge_status == "need_rebase"
-			or merge_status == "requested_changes"
-			or merge_status == "status_checks_must_pass"
-			or merge_status == "security_policy_violations"
-			or merge_status == "policies_denied"
-		then
-			kind = "failed"
-		elseif merge_status == "draft_status" or merge_status == "not_open" then
-			kind = "stopped"
-		else
-			kind = "inprogress"
-		end
-		local value, hl_group = icons.pulls_status(kind)
+	local merge_status = presentation.gitlab_merge_status(pr)
+	if merge_status then
+		local value, hl_group = icons.pulls_status(merge_status)
 		add(rows, "Merge", value, hl_group)
 	end
 
@@ -112,18 +88,8 @@ end
 local function bitbucket_rows(pr)
 	---@cast pr BitbucketPullRequest
 	local rows = {}
-	local approved, changes_requested, total = 0, 0, 0
-	for _, reviewer in ipairs(pr.reviewers or {}) do
-		total = total + 1
-		if reviewer.decision == "approved" then
-			approved = approved + 1
-		elseif reviewer.decision == "changes_requested" then
-			changes_requested = changes_requested + 1
-		end
-	end
-	if total > 0 then
-		local kind = changes_requested > 0 and "failed" or (approved == total and "successful" or "inprogress")
-		local label = changes_requested > 0 and "Changes requested" or string.format("%d/%d approved", approved, total)
+	local kind, label = presentation.review_progress(pr.reviewers)
+	if kind then
 		local value, hl_group = status_value(kind, label)
 		add(rows, "Review", value, hl_group)
 	end
@@ -138,10 +104,10 @@ local provider_rows = {
 }
 
 local function render(pr, rows)
-	local id = tostring(pr.id or "")
+	local id = tostring(pr.id)
 	local marker = pr.provider == "gitlab" and "!" or "#"
 
-	local lines = { string.format(" %s%s: %s", marker, id, tostring(pr.title or "")), "" }
+	local lines = { string.format(" %s%s: %s", marker, id, pr.title), "" }
 	---@type AtlasUIHighlight[]
 	local highlights = {}
 	if id ~= "" then

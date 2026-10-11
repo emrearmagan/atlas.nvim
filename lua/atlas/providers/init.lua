@@ -1,12 +1,17 @@
-local M = {}
 local config = require("atlas.config")
 local url = require("atlas.providers.url")
+local jira = require("atlas.providers.jira")
+local github = require("atlas.providers.github")
+local bitbucket = require("atlas.providers.bitbucket")
+local gitlab = require("atlas.providers.gitlab")
+
+local M = {}
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
----@alias AtlasEntity "pr"|"issue"|"repo"
+---@alias AtlasEntity "pr"|"issue"|"repo"|"pipeline"
 
 ---@class AtlasTarget
 ---@field provider AtlasProviderId
@@ -33,8 +38,10 @@ local url = require("atlas.providers.url")
 ---@class AtlasProvider
 ---@field id AtlasProviderId
 ---@field name string
+---@field hostname fun(): string|nil
 ---@field resolver { resolve: fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil }
 ---@field domains table<"pulls"|"issues", AtlasProviderDomain>
+---@field capabilities AtlasProviderCapabilities|nil
 
 ---@type AtlasProvider[]
 local all = {}
@@ -75,6 +82,9 @@ function M.load(id, domain)
 		return nil
 	end
 	local implementation = require(provider_domain.module)
+	for name, capability in pairs(provider.capabilities or {}) do
+		implementation.capabilities[name] = capability
+	end
 	implementation.id = id
 	implementation.name = provider.name
 	if provider_domain.icon ~= nil then
@@ -85,10 +95,35 @@ function M.load(id, domain)
 end
 
 ---@param value string
+---@param opts? { repository?: AtlasTarget, domain?: AtlasDomain }
 ---@return AtlasTarget|nil, string|nil
-function M.resolve(value)
+function M.resolve(value, opts)
+	opts = opts or {}
 	local cleaned = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	cleaned = cleaned:match("^<(.*)>$") or cleaned
+
+	local prefix, number = cleaned:match("^([#!]?)(%d+)$")
+	if number then
+		local repository = opts.repository
+		if not repository then
+			return nil, "A numeric reference requires a supported local Git repository"
+		end
+		local domain = opts.domain or repository.domain
+		if prefix == "!" and (repository.provider ~= "gitlab" or domain ~= "pulls") then
+			return nil, "! references are only supported for GitLab merge requests"
+		end
+		if not M.domain(repository.provider, domain) then
+			return nil, string.format("Provider does not support %s: %s", domain, repository.provider)
+		end
+		local id = assert(tonumber(number))
+		---@cast id integer
+		return vim.tbl_extend("force", {}, repository, {
+			domain = domain,
+			entity = domain == "pulls" and "pr" or "issue",
+			id = id,
+			number = id,
+		})
+	end
 
 	local parsed, parse_err = url.parse(cleaned)
 	local resolve_err
@@ -115,67 +150,9 @@ function M.configured(domain)
 	return result
 end
 
-add({
-	id = "jira",
-	name = "Jira",
-	resolver = require("atlas.providers.jira.resolve"),
-	domains = {
-		issues = {
-			module = "atlas.issues.providers.jira",
-			icon = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
-			bookmark_key = "J",
-			bookmark_label = "JQL",
-		},
-	},
-})
-
-add({
-	id = "github",
-	name = "GitHub",
-	resolver = require("atlas.providers.github.resolve"),
-	domains = {
-		pulls = {
-			module = "atlas.pulls.providers.github",
-			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
-			bookmark_key = "S",
-		},
-		issues = {
-			module = "atlas.issues.providers.github",
-			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
-			bookmark_key = "S",
-		},
-	},
-})
-
-add({
-	id = "bitbucket",
-	name = "Bitbucket",
-	resolver = require("atlas.providers.bitbucket.resolve"),
-	domains = {
-		pulls = {
-			module = "atlas.pulls.providers.bitbucket",
-			icon = { icon = "", hl_group = "AtlasBitbucketTheme" },
-			bookmark_key = "S",
-		},
-	},
-})
-
-add({
-	id = "gitlab",
-	name = "GitLab",
-	resolver = require("atlas.providers.gitlab.resolve"),
-	domains = {
-		pulls = {
-			module = "atlas.pulls.providers.gitlab",
-			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
-			bookmark_key = "S",
-		},
-		issues = {
-			module = "atlas.issues.providers.gitlab",
-			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
-			bookmark_key = "S",
-		},
-	},
-})
+add(jira)
+add(github)
+add(bitbucket)
+add(gitlab)
 
 return M

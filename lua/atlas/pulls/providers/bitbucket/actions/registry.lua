@@ -5,26 +5,12 @@ local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local bitbucket_query = require("atlas.providers.bitbucket.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
-local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local state = require("atlas.pulls.state")
-local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
-local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
-local users_api = require("atlas.pulls.providers.bitbucket.api.users")
-local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
-local core_notify = require("atlas.core.notify")
+local users_api = require("atlas.providers.bitbucket.users")
+local repositories = require("atlas.providers.bitbucket.repositories")
 
----@param ctx AtlasPullActionContext
----@param level "loading"|"success"|"warn"|"error"|"info"
----@param message string
----@param duration integer|nil
-local function notify(ctx, level, message, duration)
-	if ctx.notify then
-		ctx.notify(level, message, duration)
-		return
-	end
-	core_notify.show(level, message, { timeout = duration })
-end
+local notify = action_utils.notify
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}
@@ -41,7 +27,8 @@ local function approve_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not reviews.has_action(ctx.pr, "approve") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.approve or "") == "" then
 		return false, "No approve URL available"
 	end
 	return true, nil
@@ -53,7 +40,8 @@ local function merge_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not pullrequests.has_action(ctx.pr, "merge") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.merge or "") == "" then
 		return false, "No merge URL available"
 	end
 	return true, nil
@@ -65,7 +53,8 @@ local function decline_available(ctx)
 	if not actions.decline.is_available(ctx) or ctx.pr == nil then
 		return false, "PR is not open"
 	end
-	if not pullrequests.has_action(ctx.pr, "decline") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.decline or "") == "" then
 		return false, "No decline URL available"
 	end
 	return true, nil
@@ -77,59 +66,17 @@ local function request_changes_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not reviews.has_action(ctx.pr, "request_changes") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.request_changes or "") == "" then
 		return false, "No request changes URL available"
 	end
 	return true, nil
 end
 
 ---@param ctx AtlasPullActionContext
+---@param on_select fun(repo: AtlasRepository)
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function merge(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
-
-	local options = action_utils.merge_options()
-	local label = options.method == "squash" and "squash merge" or "merge"
-	vim.ui.input({
-		prompt = string.format("Confirm %s of PR #%s? [y/N]: ", label, tostring(pr.id or "")),
-	}, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-
-		local normalized = vim.trim(tostring(input)):lower()
-		if normalized ~= "y" and normalized ~= "yes" then
-			notify(ctx, "info", "Merge cancelled")
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-
-		notify(ctx, "loading", "Starting Merge...")
-		pullrequests.merge(pr, {
-			merge_strategy = options.method == "merge" and "merge_commit" or options.method,
-			close_source_branch = options.delete_branch,
-		}, function(_, err)
-			if err ~= nil then
-				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
-				done(nil, tostring(err))
-				return
-			end
-
-			notify(ctx, "success", "Merge succeeded", 1200)
-			notes.clear_for_pull_request(pr)
-			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function search(ctx, done)
+local function select_repository(ctx, on_select, done)
 	notify(ctx, "loading", "Loading workspaces...")
 	users_api.fetch_workspaces(function(workspaces, err)
 		if err ~= nil then
@@ -163,19 +110,7 @@ local function search(ctx, done)
 				fetch = function(query, fetch_done)
 					return repositories.fetch_workspace_repositories(selected_ws.slug, vim.trim(query), fetch_done)
 				end,
-				on_select = function(repo)
-					---@type AtlasBitbucketViewConfig
-					local search_view = {
-						name = "Search",
-						key = nil,
-						layout = "compact",
-						search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
-					}
-
-					notify(ctx, "success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
-					require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
-					done({ changed_pr = false, message = "Search view switched" }, nil)
-				end,
+				on_select = on_select,
 				on_cancel = function()
 					done({ changed_pr = false, message = "Search cancelled" }, nil)
 				end,
@@ -225,7 +160,7 @@ register({
 	label = "Merge",
 	icon = icons.action("merge"),
 	is_available = merge_available,
-	run = merge,
+	run = actions.merge.run,
 })
 
 register({
@@ -236,8 +171,7 @@ register({
 	run = actions.decline.run,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
+register(actions.edit_pr)
 register(actions.ready_for_review)
 register(actions.convert_to_draft)
 register(actions.edit_reviewers)
@@ -246,12 +180,37 @@ register({
 	id = "search",
 	label = "Search repositories",
 	icon = icons.action("search"),
-	run = search,
+	run = function(ctx, done)
+		select_repository(ctx, function(repo)
+			---@type AtlasBitbucketViewConfig
+			local search_view = {
+				name = "Search",
+				layout = "compact",
+				search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
+			}
+			notify(ctx, "success", string.format("Search view -> %s", repo.full_name))
+			require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
+			done({ changed_pr = false, message = "Search view switched" }, nil)
+		end, done)
+	end,
+})
+
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository(ctx, function(repo)
+			require("atlas.ui.repository").open(repo.full_name, ctx.provider)
+			done(nil, nil)
+		end, done)
+	end,
 })
 
 register({
 	id = "search_pull_requests",
-	label = "Search pull requests",
+	label = "New Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		bitbucket_search.open({ name = "Search", search = state.query })
@@ -261,7 +220,7 @@ register({
 
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)

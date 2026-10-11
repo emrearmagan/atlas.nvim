@@ -1,6 +1,5 @@
 local M = {}
 
-local state = require("atlas.issues.state")
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -16,8 +15,8 @@ local function generic_rows(issue)
 	local rows = {}
 	local issue_type = issue.type and issue.type.name or nil
 	local _, issue_type_hl = icons.issues_type(issue_type)
-	local assignee = issue.assignee and issue.assignee.display_name or nil
-	local reporter = issue.reporter and issue.reporter.display_name or nil
+	local assignee = issue.assignee and issue.assignee.name or nil
+	local reporter = issue.reporter and issue.reporter.name or nil
 
 	add(rows, "Type", issue_type, issue_type_hl)
 	add(rows, "Status", issue.status, helper.status_hl(issue.status_id))
@@ -30,24 +29,20 @@ local function generic_rows(issue)
 	local parent_key = parent and tostring(parent.key or "") or ""
 	if parent_key ~= "" then
 		local parent_title = tostring(parent.title or "")
-		local value = parent_title ~= "" and (parent_key .. " — " .. parent_title) or parent_key
+		local value = parent_title ~= "" and (parent_key .. " - " .. parent_title) or parent_key
 		add(rows, "Parent", value, helper.issue_hl(parent_key))
 	end
 	if issue.comment_count ~= nil then
 		add(rows, "Comments", tostring(issue.comment_count))
 	end
-	if type(issue.created_at) == "string" and issue.created_at ~= "" then
+	if issue.created_at and issue.created_at ~= "" then
 		add(rows, "Created", utils.relative_time(issue.created_at))
 	end
-	if type(issue.updated_at) == "string" and issue.updated_at ~= "" then
+	if issue.updated_at and issue.updated_at ~= "" then
 		add(rows, "Updated", utils.relative_time(issue.updated_at))
 	end
 
 	return rows
-end
-
-local function github_rows(_issue)
-	return {}
 end
 
 local function gitlab_rows(issue)
@@ -75,14 +70,13 @@ local function jira_rows(issue)
 end
 
 local provider_rows = {
-	github = github_rows,
 	gitlab = gitlab_rows,
 	jira = jira_rows,
 }
 
 local function render(issue, rows)
-	local key = tostring(issue.key or "")
-	local title = tostring(issue.title or "")
+	local key = issue.key
+	local title = issue.title
 	local lines = { string.format(" %s: %s", key, title), "" }
 	local highlights = {
 		{ line = 0, start_col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
@@ -92,7 +86,7 @@ local function render(issue, rows)
 			line = 0,
 			start_col = 3 + #key,
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(title),
+			hl_group = "Normal",
 		}
 	end
 
@@ -127,10 +121,10 @@ local function render(issue, rows)
 end
 
 ---@param issue Issue
+---@param provider IssuesProvider|nil
 ---@return string[], AtlasUIHighlight[]
-function M.content(issue)
+function M.content(issue, provider)
 	local rows = generic_rows(issue)
-	local provider = state.provider
 	local extend = provider and provider_rows[provider.id] or nil
 	if extend then
 		vim.list_extend(rows, extend(issue))

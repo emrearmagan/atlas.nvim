@@ -51,14 +51,15 @@ local function render()
 		return
 	end
 
+	local win = valid_window() and state.win or nil
 	local selected
-	if valid_window() then
-		local item = state.line_map[vim.api.nvim_win_get_cursor(state.win)[1]]
+	if win then
+		local item = state.line_map[vim.api.nvim_win_get_cursor(win)[1]]
 		selected = item and item.tree_key or nil
 	end
 	local lines, spans, line_map = renderer.render_manager({
 		documents = state.documents,
-		width = valid_window() and vim.api.nvim_win_get_width(state.win) or vim.o.columns,
+		width = win and vim.api.nvim_win_get_width(win) or vim.o.columns,
 		target_filter = state.target_filter,
 		expanded = state.expanded,
 		action_keys = {
@@ -141,9 +142,7 @@ local function refresh()
 	render()
 end
 
-function M.refresh()
-	refresh()
-end
+M.refresh = refresh
 
 ---@return integer
 local function ensure_buffer()
@@ -157,8 +156,7 @@ local function ensure_buffer()
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "atlas.notes", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-ui.notes", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
 	keymaps.register(buf, actions.new(state, refresh, render))
 	vim.api.nvim_create_autocmd("BufWipeout", {
@@ -177,7 +175,6 @@ end
 ---@param opts { target: string|nil }|nil
 function M.open(opts)
 	opts = opts or {}
-	require("atlas.ui.shared.highlights").setup()
 	local target, err
 	if opts.target and opts.target ~= "" then
 		target, err = notes.resolve_target(opts.target)
@@ -214,20 +211,20 @@ function M.open(opts)
 end
 
 function M.clear_all()
-	vim.ui.input({ prompt = "Delete all local review notes? [y/N]: " }, function(answer)
+	vim.ui.input({ prompt = "Delete all review notes? [y/N]: " }, function(answer)
 		answer = vim.trim(tostring(answer or "")):lower()
 		if answer ~= "y" and answer ~= "yes" then
 			return
 		end
 		local cleared, err = notes.clear_all()
 		if not cleared then
-			notify.error(err or "Unable to delete local notes", { vim_notify = true })
+			notify.error(err or "Unable to delete notes", { vim_notify = true })
 			return
 		end
 		state.documents = {}
 		state.expanded = {}
 		render()
-		notify.info("Local review notes deleted", { vim_notify = true })
+		notify.info("Review notes deleted", { vim_notify = true })
 	end)
 end
 

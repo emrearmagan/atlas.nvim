@@ -3,7 +3,7 @@ local M = {}
 local dashboard = require("atlas.pulls.ui.dashboard")
 
 ---@param provider PullsProvider
----@param opts? { initial_view?: AtlasPullsViewConfig }
+---@param opts { initial_view: AtlasPullsViewConfig|nil }|nil
 function M.init(provider, opts)
 	dashboard.init(provider, opts)
 end

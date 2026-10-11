@@ -1,17 +1,12 @@
 local M = {}
 
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 
 ---@param pr PullRequest
 ---@return string
 local function endpoint(pr)
-	return string.format(
-		"/repositories/%s/%s/pullrequests/%s/tasks",
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		tostring(pr.id or "")
-	)
+	return string.format("/repositories/%s/%s/pullrequests/%s/tasks", pr.repo.owner, pr.repo.repo_name, pr.id)
 end
 
 ---@param pr PullRequest
@@ -27,6 +22,7 @@ function M.fetch_tasks(pr, opts, on_done)
 		"values.creator.username",
 		"values.creator.account_id",
 		"values.content.raw",
+		"values.content.html",
 		"values.created_on",
 		"values.resolved_on",
 		"values.resolved_by.display_name",
@@ -40,12 +36,7 @@ function M.fetch_tasks(pr, opts, on_done)
 		"next",
 	}, ",")
 	local url = string.format("%s?pagelen=100&fields=%s", endpoint(pr), fields)
-	local key = string.format(
-		"bitbucket:pr:tasks:%s/%s/%s",
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		tostring(pr.id or "")
-	)
+	local key = string.format("bitbucket:pr:tasks:%s/%s/%s", pr.repo.owner, pr.repo.repo_name, pr.id)
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -61,9 +52,9 @@ function M.fetch_tasks(pr, opts, on_done)
 		end
 		local tasks = mapper.to_tasks_list(result)
 		table.sort(tasks, function(a, b)
-			return tostring(a.created_on or "") < tostring(b.created_on or "")
+			return a.created_on < b.created_on
 		end)
-		service.set_cache(key, tasks, service.cache_ttl())
+		service.set_cache(key, tasks)
 		on_done(tasks, nil)
 	end, { action = "Fetch PR tasks", repo = pr.repo_full_name, id = pr.id })
 end
@@ -79,7 +70,7 @@ function M.add_task(pr, content, parent, on_done)
 	}
 	if parent then
 		payload.comment = { id = tonumber(parent.id) or parent.id }
-		if parent.state == "PENDING" then
+		if parent.pending then
 			payload.pending = true
 		end
 	end

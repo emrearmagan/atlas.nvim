@@ -5,21 +5,12 @@ local renderer = require("atlas.issues.ui.detail.renderer")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local state = require("atlas.issues.ui.detail.state")
+local links = require("atlas.ui.links")
 
 local SPINNER_INTERVAL_MS = 100
 
 ---@type IssueRef|nil
 local pending_ref = nil
-
----@param tab_key string|nil
----@return IssuesDetailTabModule|nil
-local function tab_module(tab_key)
-	for _, tab in ipairs(state.tabs) do
-		if tab.key == tab_key then
-			return tab.mod
-		end
-	end
-end
 
 local function reset_tabs()
 	for _, tab in ipairs(state.tabs) do
@@ -43,18 +34,18 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.issue_loading or state.details_loading then
+	if state.issue_loading or state.details_loading or (state.links and state.links.loading) then
 		return true
 	end
 	if state.current_issue == nil then
 		return false
 	end
-	local tab = tab_module(state.current_tab)
+	local tab = state.tab_module(state.current_tab)
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
 local function render()
-	renderer.render(state.tabs, tab_module)
+	renderer.render()
 end
 
 local function start_spinner()
@@ -106,7 +97,7 @@ local function set_tab(tab_key)
 	end
 
 	if old_key then
-		local old_tab = tab_module(old_key)
+		local old_tab = state.tab_module(old_key)
 		if old_tab and old_tab.deactivate then
 			old_tab.deactivate(buf)
 		end
@@ -114,7 +105,7 @@ local function set_tab(tab_key)
 
 	state.current_tab = tab_key
 	if tab_key then
-		local new_tab = tab_module(tab_key)
+		local new_tab = state.tab_module(tab_key)
 		if new_tab and new_tab.activate then
 			new_tab.activate(buf, render_if_open)
 		end
@@ -125,7 +116,7 @@ end
 ---@param right IssueRef|nil
 ---@return boolean
 local function same_ref(left, right)
-	return left ~= nil and tostring(left.key or "") == tostring(right and right.key or "")
+	return left ~= nil and right ~= nil and left.key == right.key
 end
 
 ---@param issue Issue
@@ -143,7 +134,7 @@ end
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_active_tab(issue, opts)
-	local tab = tab_module(state.current_tab)
+	local tab = state.tab_module(state.current_tab)
 	if tab and tab.on_select then
 		tab.on_select(issue, refresh_callback(issue), opts)
 	end
@@ -185,6 +176,7 @@ local function clear_issue()
 	state.details_loading = false
 	state.issue_loading = false
 	state.line_map = {}
+	links.reset(state)
 end
 
 ---@param issue Issue
@@ -193,6 +185,7 @@ local function show_issue(issue, force_refresh)
 	state.current_issue = issue
 	pending_ref = nil
 	state.issue_loading = false
+	links.load(state, issue, force_refresh, refresh_callback(issue))
 	load_active_tab(issue, { force_refresh = force_refresh })
 	update_spinner()
 	render()
@@ -273,7 +266,6 @@ local function prepare_open(opts)
 	set_provider(provider)
 	state.on_update = opts.on_update
 
-	require("atlas.issues.ui.highlights").setup()
 	return provider, opts.force_refresh == true
 end
 

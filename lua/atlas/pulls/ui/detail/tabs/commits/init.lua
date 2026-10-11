@@ -3,10 +3,13 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local threads = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local detail = require("atlas.pulls.ui.detail.state")
+local pipeline_api = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
+local keymaps = require("atlas.pulls.ui.detail.tabs.commits.keymaps")
 
 local PADDING_X = 1
 local MAX_STATUS_COMMITS = 5
@@ -32,6 +35,7 @@ end
 
 function M.reset()
 	reset_requests()
+	keymaps.close_pin()
 	state.current_pr = nil
 	state.commits = nil
 	state.status_by_hash = {}
@@ -46,34 +50,9 @@ local function is_current(pr)
 		and tostring(state.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
----@param state_name string|nil
----@return string
-local function status_hl(state_name)
-	if state_name == "successful" then
-		return "AtlasTextPositive"
-	end
-	if state_name == "failed" then
-		return "AtlasLogError"
-	end
-	if state_name == "inprogress" then
-		return "AtlasTextWarning"
-	end
-	return "AtlasTextMuted"
-end
-
----@param status string
----@return string
-local function status_label(status)
-	local s = tostring(status or ""):lower()
-	if s == "" then
-		return "Unknown"
-	end
-	return s:sub(1, 1):upper() .. s:sub(2)
-end
-
 ---@param commit PullsCommit
 ---@param width integer
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function to_thread_item(commit, width)
 	local message = tostring(commit.message or ""):gsub("\r\n", "\n")
 	message = message:match("([^\n]+)") or message
@@ -88,7 +67,11 @@ local function to_thread_item(commit, width)
 	if pipeline_state == "loading" then
 		content = content .. "  " .. icons.pulls_status("inprogress") .. " pipelines"
 	elseif pipeline_state ~= nil and pipeline_state ~= "unknown" then
-		content = content .. "  " .. icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
+		content = content
+			.. "  "
+			.. icons.pulls_status(pipeline_state)
+			.. " "
+			.. pipeline_utils.state_label(pipeline_state)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
@@ -104,7 +87,8 @@ local function to_thread_item(commit, width)
 		icon = commit_icon,
 		icon_hl = commit_icon_hl,
 		author = message,
-		right_text = hash,
+		author_hl = "Normal",
+		right_text = { { hash, "AtlasTextMuted" } },
 		content = content,
 		meta = {
 			pipeline_state = pipeline_state,
@@ -114,6 +98,38 @@ local function to_thread_item(commit, width)
 			pipeline_url = state.url_by_hash[commit.hash],
 		},
 	}
+end
+
+---@param pr PullRequest
+---@param pipelines PullsPipelineBackend|nil
+---@param opts { force_refresh: boolean|nil }
+---@param refresh fun()
+local function load_statuses(pr, pipelines, opts, refresh)
+	if not pipelines or not pipelines.fetch_commit_status then
+		return
+	end
+	local count = math.min(MAX_STATUS_COMMITS, #state.commits)
+	for i = 1, count do
+		local commit = state.commits[i]
+		local hash = tostring(commit.hash or "")
+		if hash ~= "" then
+			state.status_by_hash[hash] = "loading"
+			state.requests.run(function(done)
+				return pipelines.fetch_commit_status(commit, opts, done)
+			end, function(status, url, status_err)
+				if not is_current(pr) then
+					return
+				end
+				if status_err then
+					state.status_by_hash[hash] = "unknown"
+				else
+					state.status_by_hash[hash] = status or "unknown"
+					state.url_by_hash[hash] = url
+				end
+				refresh()
+			end)
+		end
+	end
 end
 
 ---@param pr PullRequest
@@ -127,7 +143,7 @@ function M.on_select(pr, refresh, opts)
 		return
 	end
 	local core = provider.capabilities.core
-	local pipelines = provider.capabilities.pipelines
+	local pipelines = pipeline_api.get(provider)
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
@@ -161,31 +177,8 @@ function M.on_select(pr, refresh, opts)
 		state.commits = commits or {}
 		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
-		-- Fetch pipeline statuses for the first N commits
-		if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
-			local count = math.min(MAX_STATUS_COMMITS, #state.commits)
-			for i = 1, count do
-				local commit = state.commits[i]
-				local hash = tostring(commit.hash or "")
-				if hash ~= "" then
-					state.status_by_hash[hash] = "loading"
-					state.requests.run(function(done)
-						return pipelines.fetch_commit_status(commit, opts, done)
-					end, function(status, url, status_err)
-						if not is_current(pr) then
-							return
-						end
-						if status_err then
-							state.status_by_hash[hash] = "unknown"
-						else
-							state.status_by_hash[hash] = status or "unknown"
-							state.url_by_hash[hash] = url
-						end
-						refresh()
-					end)
-				end
-			end
-		end
+		-- Fetch statuses for the latest five commits.
+		load_statuses(pr, pipelines, opts, refresh)
 
 		refresh()
 	end)
@@ -232,21 +225,19 @@ function M.render(_pr, _details, width)
 	local thread_lines, thread_spans, thread_map = threads.render(items, width, {
 		padding_x = PADDING_X,
 		mode = "linked",
-		author_hl = function()
-			return "Normal"
-		end,
 		content_hl = function(item, row, _)
 			local out = { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
 			local pipeline_state = item.meta and tostring(item.meta.pipeline_state or "") or ""
 
 			if pipeline_state ~= "" and pipeline_state ~= "unknown" and pipeline_state ~= "loading" then
-				local marker = icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
+				local icon, hl = icons.pulls_status(pipeline_state)
+				local marker = icon .. " " .. pipeline_utils.state_label(pipeline_state)
 				local start_col, end_col = row:find(marker, 1, true)
 				if start_col ~= nil and end_col ~= nil then
 					table.insert(out, {
 						start_col = start_col - 1,
 						end_col = end_col,
-						hl_group = status_hl(pipeline_state),
+						hl_group = hl,
 					})
 				end
 			end
@@ -294,7 +285,20 @@ function M.is_loading()
 	return false
 end
 
-function M.deactivate()
+---@param buf integer
+---@param refresh fun()
+function M.activate(buf, refresh)
+	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+		return
+	end
+	keymaps.setup(buf, refresh)
+end
+
+---@param buf integer
+function M.deactivate(buf)
+	if buf and vim.api.nvim_buf_is_valid(buf) then
+		keymaps.teardown(buf)
+	end
 	M.reset()
 	notify.clear()
 end

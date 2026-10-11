@@ -25,6 +25,7 @@ query($path:ID!,$iids:[String!]!){
     mergeRequests(iids:$iids,first:100){
       nodes{
         iid
+        reference(full:true)
         title
         state
         draft
@@ -83,26 +84,16 @@ function M.fetch_pullrequests(view, opts, on_done)
 		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
+		labels = view.labels or nil,
+		milestone = view.milestone or nil,
+		assignee_username = view.assignee_username or nil,
+		author_username = view.author_username or nil,
+		search = view.search or nil,
 	}
 	if project == nil and group == nil then
 		params.scope = view.scope or "assigned_to_me"
 	elseif view.scope then
 		params.scope = view.scope
-	end
-	if view.labels then
-		params.labels = view.labels
-	end
-	if view.milestone then
-		params.milestone = view.milestone
-	end
-	if view.assignee_username then
-		params.assignee_username = view.assignee_username
-	end
-	if view.author_username then
-		params.author_username = view.author_username
-	end
-	if view.search and view.search ~= "" then
-		params.search = view.search
 	end
 	for k, v in pairs(view.extra_params or {}) do
 		if k ~= "state" and k ~= "page" and k ~= "per_page" then
@@ -121,7 +112,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		endpoint = "/merge_requests" .. build_query(params)
 	end
 
-	local cache_key = "gitlab_pulls:merge_requests:" .. endpoint
+	local cache_key = "gitlab_pulls:merge_requests:v2:" .. endpoint
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -230,9 +221,9 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local starts = {}
 	for path, iids in pairs(iids_by_project) do
 		starts[path] = function(done)
-			local sorted_iids = vim.deepcopy(iids)
-			table.sort(sorted_iids)
-			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(sorted_iids, ","))
+			local string_iids = vim.tbl_map(tostring, iids)
+			table.sort(iids)
+			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(iids, ","))
 			if not opts.force_refresh then
 				local cached, ok = service.get_memory_cache(cache_key)
 				if ok then
@@ -240,7 +231,6 @@ function M.fetch_by_refs(refs, opts, on_done)
 					return nil
 				end
 			end
-			local string_iids = vim.tbl_map(tostring, iids)
 			return service.graphql(MR_SUMMARIES_QUERY, { path = path, iids = string_iids }, function(result, err)
 				if err then
 					done(nil, err)
@@ -266,14 +256,12 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local requests = request_scope.new()
 	requests.all(starts, function(values, errors)
 		local pulls = {}
+		local err
 		for path in pairs(iids_by_project) do
-			if errors[path] then
-				on_done({}, errors[path])
-				return
-			end
+			err = err or errors[path]
 			vim.list_extend(pulls, values[path] or {})
 		end
-		on_done(pulls, nil)
+		on_done(pulls, err)
 	end)
 	return requests
 end
@@ -327,10 +315,10 @@ local function project_iid(pr)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh?: boolean }|nil
+---@param _ { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_description(pr, _opts, on_done)
+function M.fetch_description(pr, _, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
@@ -386,6 +374,31 @@ local function update(pr, payload, on_done)
 	})
 end
 
+---@param path string
+---@param iid integer
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(path, iid, subscribed, on_done)
+	local action = subscribed and "subscribe" or "unsubscribe"
+	local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
+	return service.request("POST", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local value = type(result) == "table" and result.subscribed
+		if type(value) ~= "boolean" then
+			value = subscribed
+		end
+		on_done(value, nil)
+	end, {
+		action = subscribed and "Subscribe to MR" or "Unsubscribe from MR",
+		project_path = path,
+		iid = iid,
+	})
+end
+
 ---@param pr PullRequest
 ---@param state_event "close"|"reopen"
 ---@param on_done fun(ok: boolean, err: string|nil)
@@ -418,34 +431,68 @@ function M.update_description(pr, description, on_done)
 end
 
 ---@param pr PullRequest
----@param draft boolean
+---@param opts PullsUpdatePROpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_draft(pr, draft, on_done)
-	local title = tostring(pr.title or ""):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
-	if title == "" then
-		on_done(false, "MR title is empty after stripping draft prefix")
-		return nil
+function M.update_pr(pr, opts, on_done)
+	local payload = {
+		title = opts.title,
+		description = opts.body,
+		target_branch = opts.base,
+		labels = opts.labels and table.concat(opts.labels, ",") or nil,
+	}
+
+	if opts.reviewers then
+		local ids = {}
+		for _, reviewer in ipairs(opts.reviewers) do
+			ids[#ids + 1] = tonumber(reviewer.provider_id)
+		end
+		payload.reviewer_ids = #ids == 0 and { 0 } or ids
 	end
-	if draft then
-		title = "Draft: " .. title
+	if opts.assignees then
+		local ids = {}
+		for _, user in ipairs(opts.assignees) do
+			ids[#ids + 1] = tonumber(user.id)
+		end
+		payload.assignee_ids = #ids == 0 and { 0 } or ids
 	end
 
-	return update(pr, { title = title }, function(ok, err)
+	if opts.draft ~= nil then
+		local title = (opts.title or pr.title):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
+		if title == "" then
+			on_done(false, "MR title is empty after stripping draft prefix")
+			return nil
+		end
+		payload.title = opts.draft and "Draft: " .. title or title
+	end
+
+	return update(pr, payload, function(ok, err)
 		if not ok then
 			on_done(false, err)
 			return
 		end
-		pr.title = title
-		pr.state = draft and "draft" or "open"
+		if payload.title then
+			pr.title = payload.title
+		end
+		if opts.draft ~= nil then
+			pr.state = opts.draft and "draft" or "open"
+		end
 		on_done(true, nil)
 	end)
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.set_draft(pr, draft, on_done)
+	return M.update_pr(pr, { draft = draft }, on_done)
+end
+
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	if slug == "" then
 		vim.schedule(function()
@@ -458,7 +505,7 @@ function M.fetch_default_reviewers(opts, on_done)
 	local starts = {
 		members = function(done)
 			return service.request("GET", endpoint, nil, done, {
-				action = "Fetch default reviewers",
+				action = "Fetch reviewer candidates",
 				project_path = slug,
 			})
 		end,
@@ -498,7 +545,6 @@ function M.fetch_default_reviewers(opts, on_done)
 					label = "@" .. username,
 					provider_id = tostring(id),
 					selected = selected[key] ~= nil,
-					default = false,
 				})
 			end
 		end
@@ -511,7 +557,6 @@ function M.fetch_default_reviewers(opts, on_done)
 					label = "@" .. tostring(reviewer.username),
 					provider_id = id,
 					selected = true,
-					default = false,
 				})
 			end
 		end
@@ -521,11 +566,11 @@ function M.fetch_default_reviewers(opts, on_done)
 end
 
 ---@param pr PullRequest
----@param reviewers PullsCreatePRReviewer[]
----@param _original_reviewers PullsCreatePRReviewer[]
+---@param reviewers PullsReviewerCandidate[]
+---@param _ PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_reviewers(pr, reviewers, _original_reviewers, on_done)
+function M.update_reviewers(pr, reviewers, _, on_done)
 	local ids = {}
 	for _, reviewer in ipairs(reviewers) do
 		local id = tonumber(reviewer.provider_id)
@@ -548,7 +593,7 @@ function M.update_assignees(pr, ids, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { squash: boolean|nil, should_remove_source_branch: boolean|nil, merge_commit_message: string|nil, squash_commit_message: string|nil }|nil
+---@param opts PullsMergeOpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
@@ -557,19 +602,17 @@ function M.merge(pr, opts, on_done)
 		on_done(false, "Invalid MR identifier")
 		return nil
 	end
-	opts = opts or {}
-	local body = {}
-	if opts.squash ~= nil then
-		body.squash = opts.squash == true
-	end
-	if opts.should_remove_source_branch ~= nil then
-		body.should_remove_source_branch = opts.should_remove_source_branch == true
-	end
-	if opts.merge_commit_message and opts.merge_commit_message ~= "" then
-		body.merge_commit_message = opts.merge_commit_message
-	end
-	if opts.squash_commit_message and opts.squash_commit_message ~= "" then
-		body.squash_commit_message = opts.squash_commit_message
+	---@type table<string, boolean|string>
+	local body = {
+		squash = opts.method == "squash",
+		should_remove_source_branch = opts.delete_source_branch == true,
+	}
+	if opts.subject ~= nil or opts.body ~= nil then
+		local message = opts.subject or ""
+		if opts.body and opts.body ~= "" then
+			message = message .. (message ~= "" and "\n\n" or "") .. opts.body
+		end
+		body[opts.method == "squash" and "squash_commit_message" or "merge_commit_message"] = message
 	end
 
 	local endpoint = string.format("/projects/%s/merge_requests/%d/merge", service.url_encode(path), iid)

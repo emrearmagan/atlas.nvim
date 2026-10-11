@@ -6,43 +6,8 @@ local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
-
----@param pr PullRequest
----@param action "approve"|"request_changes"
----@return boolean
-function M.has_action(pr, action)
-	---@cast pr BitbucketPullRequest
-	return tostring(pr.links[action] or "") ~= ""
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
----@return nil
-function M.fetch_review_context(pr, _opts, on_done)
-	local mention_candidates = {}
-	local seen = {}
-	---@param author PullsAuthor|nil
-	local function add(author)
-		if not author then
-			return
-		end
-		local key = tostring(author.id or "")
-		if key == "" then
-			key = tostring(author.username or author.nickname or author.name or "")
-		end
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(mention_candidates, author)
-	end
-
-	add(pr.author)
-	on_done({ mention_candidates = mention_candidates }, nil)
-end
 
 ---@param user table|nil
 ---@return PullsAuthor|nil
@@ -150,7 +115,7 @@ local function fetch_thread_comments(pr, opts, on_done)
 				table.insert(items, comment)
 			end
 		end
-		service.set_cache(key, items, service.cache_ttl())
+		service.set_cache(key, items)
 		on_done(items, nil)
 	end, { action = "Fetch PR threads", repo = pr.repo_full_name, id = pr.id })
 end
@@ -188,7 +153,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 
 		local filtered_comments = {}
 		for _, comment in ipairs(values.comments) do
-			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
+			if comment.inline or comment.file then
 				table.insert(filtered_comments, comment)
 			end
 		end
@@ -196,7 +161,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 		for _, items in ipairs({ values.comments, values.tasks }) do
 			for _, item in ipairs(items) do
 				-- Bitbucket only exposes pending items to their author.
-				if item.state == "PENDING" then
+				if item.pending then
 					has_pending = true
 					break
 				end
@@ -230,21 +195,21 @@ function M.fetch_threads(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _review PullsReview|nil
+---@param action "approve"|"request_changes"
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve(pr, _review, body, on_done)
+local function set_review_state(pr, action, body, on_done)
 	---@cast pr BitbucketPullRequest
-	local url = tostring(pr.links.approve or "")
+	local url = tostring(pr.links[action] or "")
 	if url == "" then
-		on_done(false, "No approve URL available")
+		on_done(false, "No " .. action:gsub("_", " ") .. " URL available")
 		return nil
 	end
 	local requests = request_scope.new()
 	requests.run(function(done)
 		return service.request("POST", url, nil, nil, done, {
-			action = "Approve pull request",
+			action = action == "approve" and "Approve pull request" or "Request PR changes",
 			repo = pr.repo_full_name,
 			id = pr.id,
 		})
@@ -272,37 +237,17 @@ end
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
+function M.approve(pr, _review, body, on_done)
+	return set_review_state(pr, "approve", body, on_done)
+end
+
+---@param pr PullRequest
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.request_changes(pr, _review, body, on_done)
-	---@cast pr BitbucketPullRequest
-	local url = tostring(pr.links.request_changes or "")
-	if url == "" then
-		on_done(false, "No request changes URL available")
-		return nil
-	end
-	local requests = request_scope.new()
-	requests.run(function(done)
-		return service.request("POST", url, nil, nil, done, {
-			action = "Request PR changes",
-			repo = pr.repo_full_name,
-			id = pr.id,
-		})
-	end, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		service.clear_cache()
-		if vim.trim(body) == "" then
-			on_done(true, nil)
-			return
-		end
-		requests.run(function(done)
-			return comments.add_comment(pr, body, nil, done)
-		end, function(comment, comment_err)
-			on_done(comment ~= nil, comment_err)
-		end)
-	end)
-	return requests
+	return set_review_state(pr, "request_changes", body, on_done)
 end
 
 ---@param pr PullRequest
@@ -366,12 +311,12 @@ function M.discard_review(pr, _review, on_done)
 
 		local items = {}
 		for _, task in ipairs(values.tasks) do
-			if task.state == "PENDING" then
+			if task.pending then
 				table.insert(items, task)
 			end
 		end
 		for index = #values.comments, 1, -1 do
-			if values.comments[index].state == "PENDING" then
+			if values.comments[index].pending then
 				table.insert(items, values.comments[index])
 			end
 		end

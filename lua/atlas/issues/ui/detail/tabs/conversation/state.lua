@@ -47,7 +47,7 @@ end
 ---@param issue Issue
 ---@return boolean
 function M.is_current(issue)
-	return M.current_issue ~= nil and tostring(M.current_issue.key or "") == tostring(issue.key or "")
+	return M.current_issue ~= nil and M.current_issue.key == issue.key
 end
 
 ---@param run_id any
@@ -157,34 +157,53 @@ function M.toggle_comment(comment)
 end
 
 ---@param root_id any
+---@param has_replies boolean
 ---@return boolean
-function M.is_collapsed(root_id)
-	return M.collapsed[tostring(root_id)] == true
+function M.is_collapsed(root_id, has_replies)
+	local collapsed = M.collapsed[tostring(root_id)]
+	if collapsed == nil then
+		return has_replies
+	end
+	return collapsed
 end
 
 ---@param root_id any
 function M.toggle(root_id)
 	local key = tostring(root_id)
-	M.collapsed[key] = not M.collapsed[key]
+	M.collapsed[key] = not M.is_collapsed(root_id, true)
 end
 
 ---@param threads IssuesCommentThreadNode[]
 ---@return boolean
 function M.toggle_all_threads(threads)
 	local roots = {}
+	local comment_keys = {}
 	local expand = false
 	for _, thread in ipairs(threads) do
 		if #thread.children > 0 then
 			table.insert(roots, thread.comment)
-			if M.is_collapsed(thread.comment.id) then
+			if M.is_collapsed(thread.comment.id, true) then
 				expand = true
 			end
 		end
 	end
+	for _, comment in ipairs(M.comments()) do
+		if is_comment_long(comment) then
+			local key = tostring(comment.id)
+			table.insert(comment_keys, key)
+			if M.expanded_comments[key] ~= true then
+				expand = true
+			end
+		end
+	end
+
 	for _, root in ipairs(roots) do
 		M.collapsed[tostring(root.id)] = not expand
 	end
-	return #roots > 0
+	for _, key in ipairs(comment_keys) do
+		M.expanded_comments[key] = expand
+	end
+	return #roots > 0 or #comment_keys > 0
 end
 
 return M

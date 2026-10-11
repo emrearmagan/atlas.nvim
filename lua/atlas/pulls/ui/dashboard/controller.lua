@@ -8,19 +8,9 @@ local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
 local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
-local bookmarks = require("atlas.ui.shared.bookmarks")
 
 local active_requests = requests.new()
 local pr_reload_requests = requests.new()
-
----@param view AtlasPullsViewConfig|nil
-local function resolve_view(view)
-	if view ~= nil then
-		state.query, view._states = state.provider.resolve_search(view)
-	else
-		state.query = ""
-	end
-end
 
 ---@param pulls PullRequest[]
 ---@return PullRequest[]
@@ -141,12 +131,11 @@ local function load_starred(on_done)
 	end
 
 	state.starred_items = records
-	state.views = bookmarks.views(state.provider_views, state.bookmarks, records)
 	if #records == 0 then
 		state.bookmarks.selection = nil
 		state.pulls = {}
 		if next(state.bookmarks.items) == nil then
-			M.switch_view(state.provider_views[1])
+			M.switch_view(state.views[1])
 			return
 		end
 	else
@@ -202,9 +191,12 @@ local function get_current_user(scope, on_done)
 		on_done("no provider")
 		return
 	end
-	scope.run(function(done)
-		return provider.capabilities.core.fetch_user(done)
-	end, function(user, err)
+	local users = provider.capabilities.users
+	if not users then
+		on_done(nil)
+		return
+	end
+	scope.run(users.fetch_user, function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -244,11 +236,13 @@ local function load_page(provider, view, page_number, cursor, force_refresh, on_
 			state.current_page = previous_page
 			if page_number == 1 then
 				state.error = tostring(first_err)
+				state.query = page.query or ""
 				state.pulls = {}
 			end
 			notify.error(string.format("Failed to fetch pull requests: %s", tostring(first_err)))
 		else
 			page.items = mark_starred(page.items)
+			state.query = page.query or ""
 			state.error = nil
 			state.page_history[page_number] = page
 			state.pulls = page.items
@@ -269,6 +263,7 @@ end
 ---@param force_refresh boolean
 ---@param on_done fun()|nil
 local function load_view(force_refresh, on_done)
+	state.query = ""
 	local view = state.search_view()
 	local provider = state.provider
 	if provider == nil then
@@ -329,6 +324,23 @@ local function load_view(force_refresh, on_done)
 	load_page(provider, view, 1, nil, force_refresh, on_done)
 end
 
+---@param page_number integer
+---@return boolean
+local function show_cached_page(page_number)
+	local page = state.page_history[page_number]
+	if page == nil then
+		return false
+	end
+	cancel_active_requests()
+	state.current_page = page_number
+	state.pulls = page.items
+	state.query = page.query or ""
+	state.error = nil
+	render_if_active()
+	navigation.focus_first_item()
+	return true
+end
+
 function M.next_page()
 	local current = state.page_history[state.current_page]
 	if current == nil or current.next_cursor == nil then
@@ -336,13 +348,7 @@ function M.next_page()
 	end
 
 	local page_number = state.current_page + 1
-	local cached = state.page_history[page_number]
-	if cached ~= nil then
-		state.current_page = page_number
-		state.pulls = cached.items
-		state.error = nil
-		render_if_active()
-		navigation.focus_first_item()
+	if show_cached_page(page_number) then
 		return
 	end
 
@@ -358,23 +364,11 @@ function M.next_page()
 end
 
 function M.previous_page()
-	local page_number = state.current_page - 1
-	local page = state.page_history[page_number]
-	if page == nil then
-		return
-	end
-	cancel_active_requests()
-	state.current_page = page_number
-	state.pulls = page.items
-	state.error = nil
-	render_if_active()
-	navigation.focus_first_item()
+	show_cached_page(state.current_page - 1)
 end
 
 function M.refresh_view()
-	resolve_view(state.search_view())
-	local view = state.view
-	if view == nil then
+	if state.view == nil then
 		return
 	end
 
@@ -399,7 +393,6 @@ function M.refresh_view()
 		end
 
 		local detail = require("atlas.pulls.ui.detail")
-		local repo_detail = require("atlas.pulls.ui.repo_detail")
 		local item = navigation.current_item()
 		if
 			(selected_pr ~= nil and not focused)
@@ -410,16 +403,11 @@ function M.refresh_view()
 			if detail.is_open() then
 				detail.close()
 			end
-			if repo_detail.is_open() then
-				repo_detail.close()
-			end
 			return
 		end
 
 		if detail.is_open() then
 			detail.select(item.pr, { force_refresh = true })
-		elseif repo_detail.is_open() then
-			repo_detail.select(item.repo, { force_refresh = true })
 		end
 	end
 
@@ -493,7 +481,6 @@ function M.toggle_star(pr)
 	local records = starred.list("pulls", state.provider.id)
 	if records ~= nil then
 		state.starred_items = records
-		state.views = bookmarks.views(state.provider_views, state.bookmarks, records)
 	end
 	notify.success(now_starred and "Pull request starred" or "Pull request unstarred", { timeout = 1200 })
 
@@ -510,7 +497,6 @@ end
 function M.switch_view(view)
 	state.view = view
 	state.bookmarks.selection = nil
-	resolve_view(state.search_view())
 	load_view(false, function()
 		navigation.focus_first_item()
 	end)
@@ -519,7 +505,6 @@ end
 ---@param bookmark AtlasBookmarkSelection
 function M.select_bookmark(bookmark)
 	state.bookmarks.selection = bookmark
-	resolve_view(state.search_view())
 	load_view(false)
 end
 

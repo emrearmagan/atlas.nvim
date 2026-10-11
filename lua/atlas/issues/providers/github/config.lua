@@ -3,14 +3,21 @@
 --     providers = {
 --       ---@type AtlasGitHubConfig
 --       github = {
---         cache_ttl = 300,
+--         -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
 --       },
 --     },
 --     issues = {
 --       ---@type AtlasGitHubIssuesConfig
 --       github = {
 --         views = {
---           { name = "Assigned", key = "1", search = "assignee:@me is:open" },
+--           {
+--             name = "Assigned",
+--             key = "1",
+--             layout = "plain", -- "plain" | "compact"
+--             -- current_repo = true, -- Restrict the search to the current Git repository.
+--             search = "assignee:@me is:open",
+--           },
 --           { name = "Created",  key = "2", search = "author:@me is:open" },
 --           { name = "Mention",  key = "3", search = "mentions:@me is:open" },
 --           { name = "Updated",  key = "4", search = "involves:@me sort:updated-desc" },
@@ -19,7 +26,10 @@
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["Bugs"]       = "is:issue is:open label:bug",
+--             ["Bugs"] = {
+--               layout = "compact",
+--               search = "is:issue is:open label:bug",
+--             },
 --             ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
 --           },
 --         },

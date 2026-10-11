@@ -1,26 +1,12 @@
 local M = {}
 
 local client = require("atlas.providers.github.client")
-local icons = require("atlas.ui.shared.icons")
 
-local pull_icon, pull_icon_hl = icons.pulls("pr")
-local checks_icon, checks_icon_hl = icons.pulls("tasks")
-local SUBJECT_ICON = {
-	PullRequest = { icon = pull_icon, hl = pull_icon_hl },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
-	CheckSuite = { icon = checks_icon, hl = checks_icon_hl },
+local SUBJECT_KIND = {
+	PullRequest = "pr",
+	Issue = "issue",
+	CheckSuite = "checks",
 }
-
-local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
-
----@param reason string
----@return string
-local function pretty_reason(reason)
-	if reason == nil or reason == "" then
-		return ""
-	end
-	return (reason:gsub("_", " "))
-end
 
 ---@param raw table
 ---@return AtlasNotification
@@ -36,20 +22,18 @@ local function normalize(raw)
 		local number = subject_url:match("/(%d+)$")
 		if number then
 			if subject_type == "PullRequest" then
-				html_url = string.format("https://github.com/%s/pull/%s", repo, number)
+				html_url = string.format("https://%s/%s/pull/%s", client.hostname(), repo, number)
 			elseif subject_type == "Issue" then
-				html_url = string.format("https://github.com/%s/issues/%s", repo, number)
+				html_url = string.format("https://%s/%s/issues/%s", client.hostname(), repo, number)
 			end
 		end
 	end
-
-	local icon_def = SUBJECT_ICON[subject_type] or FALLBACK_ICON
 
 	local subtitle_parts = {}
 	if repo ~= "" then
 		table.insert(subtitle_parts, repo)
 	end
-	local reason = pretty_reason(tostring(raw.reason or ""))
+	local reason = tostring(raw.reason or ""):gsub("_", " ")
 	if reason ~= "" then
 		table.insert(subtitle_parts, reason)
 	end
@@ -61,8 +45,7 @@ local function normalize(raw)
 		title = raw_title,
 		subtitle = table.concat(subtitle_parts, "  "),
 		timestamp = updated_at ~= "" and updated_at or nil,
-		icon = icon_def.icon,
-		icon_hl = icon_def.hl,
+		kind = SUBJECT_KIND[subject_type],
 		unread = raw.unread == true,
 		url = html_url,
 	}
@@ -125,6 +108,7 @@ function M.mark_read(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
+		client.clear_mem("github:notifications:")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification read",
@@ -141,6 +125,7 @@ function M.mark_done(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
+		client.clear_mem("github:notifications:")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification done",

@@ -1,16 +1,31 @@
 local M = {}
 
-local highlights = require("atlas.ui.shared.highlights")
+local highlights = require("atlas.ui.highlights")
+
+---@param author PullsAuthor|nil
+---@return string
+function M.author_name(author)
+	if author == nil then
+		return "Unknown"
+	end
+	if author.nickname and author.nickname ~= "" then
+		return author.nickname
+	end
+	if author.name and author.name ~= "" then
+		return author.name
+	end
+	return "Unknown"
+end
 
 ---@param name string|nil
 ---@return string
 function M.author_hl(name)
 	if name == nil then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	local lower = vim.trim(name):lower()
 	if lower == "" or lower == "unknown" or lower == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end
@@ -34,11 +49,11 @@ end
 ---@return string
 function M.repo_hl(repo)
 	if repo == nil then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	local lower = vim.trim(repo):lower()
 	if lower == "" or lower == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end
@@ -62,17 +77,52 @@ function M.pr_state_hl(pr_state)
 	return "AtlasTextMuted"
 end
 
----@param pr PullRequest
----@return PullsRepo
-function M.repo(pr)
-	return {
-		id = pr.repo_full_name,
-		name = pr.repo_full_name,
-		full_name = pr.repo_full_name,
-		owner = pr.workspace,
-		workspace = pr.workspace,
-		repo_name = pr.repo,
-	}
+local gitlab_merge_states = {
+	mergeable = "successful",
+	can_be_merged = "successful",
+	conflict = "failed",
+	cannot_be_merged = "failed",
+	ci_must_pass = "failed",
+	discussions_not_resolved = "failed",
+	blocked_status = "failed",
+	merge_request_blocked = "failed",
+	need_rebase = "failed",
+	requested_changes = "failed",
+	status_checks_must_pass = "failed",
+	security_policy_violations = "failed",
+	jira_association_missing = "failed",
+	policies_denied = "failed",
+	draft_status = "stopped",
+	not_open = "stopped",
+}
+
+---@param pr GitLabPullRequest
+---@return string|nil
+function M.gitlab_merge_status(pr)
+	local status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
+	if status ~= "" then
+		return gitlab_merge_states[status] or "inprogress"
+	end
+end
+
+---@param reviewers PullsReviewer[]|nil
+---@return string|nil, string|nil
+function M.review_progress(reviewers)
+	local approved, changes_requested, total = 0, 0, 0
+	for _, reviewer in ipairs(reviewers or {}) do
+		total = total + 1
+		if reviewer.decision == "approved" then
+			approved = approved + 1
+		elseif reviewer.decision == "changes_requested" then
+			changes_requested = changes_requested + 1
+		end
+	end
+	if total == 0 then
+		return nil, nil
+	end
+	local kind = changes_requested > 0 and "failed" or (approved == total and "successful" or "inprogress")
+	local label = changes_requested > 0 and "Changes requested" or string.format("%d/%d approved", approved, total)
+	return kind, label
 end
 
 return M

@@ -24,7 +24,7 @@ end
 ---@param v any
 ---@return table
 function M.safe_table(v)
-	if v == nil or v == vim.NIL or type(v) ~= "table" then
+	if type(v) ~= "table" then
 		return {}
 	end
 	return v

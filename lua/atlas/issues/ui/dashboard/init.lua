@@ -2,21 +2,9 @@ local M = {}
 
 local dashboard_host = require("atlas.ui.dashboard")
 local ui_state = require("atlas.ui.state")
+local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local ns = vim.api.nvim_create_namespace("atlas.ui")
-
----@param buf integer
----@param spans table[]
-local function apply_spans(buf, spans)
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
-			end_row = span.line,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
-end
 
 function M.render()
 	local win = dashboard_host.win()
@@ -38,7 +26,7 @@ function M.render()
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	apply_spans(buf, spans)
+	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	if not board then
 		vim.api.nvim_win_call(win, function()
@@ -66,8 +54,11 @@ end
 
 ---@param item { kind: string, _issue: Issue|nil }|nil
 function M.select(item)
-	local detail = require("atlas.issues.ui.detail")
-	if detail.is_open() and type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
+	local detail = require("atlas.ui.detail")
+	if not detail.is_open(vim.api.nvim_get_current_tabpage()) then
+		return
+	end
+	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
 		open_detail(item._issue)
 	end
 end
@@ -99,7 +90,7 @@ function M.prev_detail_tab()
 end
 
 ---@param provider IssuesProvider
----@param opts? { initial_view?: IssuesViewConfig }
+---@param opts { initial_view: IssuesViewConfig|nil }|nil
 function M.init(provider, opts)
 	local state = require("atlas.issues.state")
 	local controller = require("atlas.issues.ui.dashboard.controller")
@@ -108,7 +99,7 @@ function M.init(provider, opts)
 		state.current_user = nil
 	end
 	state.provider = provider
-	state.provider_views = provider.views()
+	state.views = provider.views()
 	state.query = ""
 
 	local notifications = require("atlas.ui.notifications")
@@ -119,13 +110,10 @@ function M.init(provider, opts)
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
 
-	require("atlas.issues.ui.highlights").setup()
-
 	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "issues")
-	state.views = bookmarks.views(state.provider_views, state.bookmarks, state.starred_items)
-	state.view = (opts and opts.initial_view) or state.views[1]
+	state.view = (opts and opts.initial_view) or bookmarks.views(state.views, state.bookmarks, state.starred_items)[1]
 
 	statusline.clear_items()
 
@@ -134,13 +122,6 @@ function M.init(provider, opts)
 		keymaps.register(buf, state.views)
 	end
 
-	if state.view == nil then
-		state.error = "No issues view configured"
-		M.render()
-		return
-	end
-
-	M.render()
 	controller.switch_view(state.view)
 
 	if provider.capabilities.notifications then

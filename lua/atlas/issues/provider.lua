@@ -14,17 +14,13 @@
 ---@class IssuesPage
 ---@field items Issue[]
 ---@field statuses IssueStatus[]|nil
+---@field query string|nil
 ---@field next_cursor string|nil
 ---@field total_pages integer|nil
 
 ---@class IssueStatus
 ---@field id string
 ---@field name string
-
----@class AtlasIssuesCommentCompletionContext
----@field issue Issue
----@field details IssueDetails|nil
----@field comments IssueComment[]
 
 ---@class IssuesProvider
 ---@field id string
@@ -33,47 +29,37 @@
 ---@field hl_group string
 ---@field views fun(): IssuesViewConfig[]
 ---@field view_for_target fun(target: AtlasTarget): IssuesViewConfig
----@field resolve_search fun(view: IssuesViewConfig): string
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 
----@class IssuesProviderCapabilities
+---@class IssuesProviderCapabilities : AtlasProviderCapabilities
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
----@field notifications AtlasNotificationsCapability|nil
----@field actions IssuesActionsCapability|nil
 ---@field ui IssuesUICapability|nil
 
 ---@class IssuesCoreCapability
----@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field refresh fun()|nil
+---@field fetch_links (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class IssuesCommentsCapability
 ---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_conversation (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: IssueConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field add_comment (fun(issue: Issue, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field reply_comment (fun(issue: Issue, parent: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_comment (fun(issue: Issue, content: string, opts: { parent?: IssueComment }|nil, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue: Issue, comment: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(issue: Issue, item: IssueConversationItem, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reaction_options IssueReactionOption[]|nil
----@field comment_completion (fun(context: AtlasIssuesCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
-
----@class IssuesActionsCapability
----@field items AtlasIssueAction[]
----@field is_available fun(action_id: string, context: AtlasIssueActionContext): boolean
----@field run fun(action_id: string, context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean
 
 ---@class IssuesActionResult
 ---@field issue_key string|nil
 ---@field removed boolean|nil
+---@field message string|nil
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil
+---@field repository { pages: fun(pages: table<string, RepositoryPage>): RepositoryPage[] }|nil
 
 --------------------------------------------------------------------------------
 -- Detail interface

@@ -1,2 +1,2 @@
----@class AtlasGitHubConfig
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
+---@class AtlasGitHubConfig : AtlasProviderConfig
+---@field hostname string|nil GitHub hostname; defaults to GH_HOST, then github.com.

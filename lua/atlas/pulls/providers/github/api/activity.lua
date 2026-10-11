@@ -97,25 +97,20 @@ function M.fetch_conversation(pr, _opts, on_done)
 						entity = comment,
 					})
 				else
-					local review = nil
-					if event_name == "reviewed" then
-						review = mapper.to_conversation_review(item)
-						if review then
-							review.previous_state = dismissed_states[tostring(item.id or "")]
-							table.insert(items, {
-								id = "review:" .. tostring(review.id or review.submitted_on),
-								kind = "review",
-								created_on = review.submitted_on,
-								entity = review,
-							})
+					local review = event_name == "reviewed" and mapper.to_conversation_review(item) or nil
+					if review then
+						review.previous_state = dismissed_states[tostring(item.id or "")]
+						table.insert(items, {
+							id = "review:" .. tostring(review.id or review.submitted_on),
+							kind = "review",
+							created_on = review.submitted_on,
+							entity = review,
+						})
+					else
+						local entry = mapper.to_activity(item)
+						if entry then
+							table.insert(events, entry)
 						end
-					end
-					local entry = nil
-					if not (event_name == "reviewed" and review) then
-						entry = mapper.to_activity(item)
-					end
-					if entry then
-						table.insert(events, entry)
 					end
 				end
 			end

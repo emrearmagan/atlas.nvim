@@ -17,6 +17,7 @@ end
 ---@field default_expanded? boolean When row has no expanded field.
 ---@field indent? string Per depth level (default "  ").
 ---@field leaf_prefix? string For non-branch rows at depth > 0 (default "└─ ").
+---@field leaf_hl? string Highlight group for the leaf prefix.
 ---@field show_indicator? boolean Branch expand/collapse glyphs (default true).
 ---@field separator? string If set, inserts a full-width separator line between root siblings.
 ---@field is_expanded? fun(row:table):boolean Overrides expanded_field when set.
@@ -35,6 +36,7 @@ local function resolve_tree(tree)
 		default_expanded = tree.default_expanded == true,
 		indent = tree.indent or "  ",
 		leaf_prefix = tree.leaf_prefix or "└─ ",
+		leaf_hl = tree.leaf_hl,
 		show_indicator = tree.show_indicator ~= false,
 		separator = tree.separator,
 		is_expanded = tree.is_expanded,
@@ -61,9 +63,6 @@ end
 ---@param row table
 ---@return boolean
 local function is_pass_through_row(row)
-	if row == nil then
-		return true
-	end
 	if row.kind == "separator" then
 		return true
 	end
@@ -77,47 +76,24 @@ end
 ---@param tree TableTreeTreeOpts|nil
 ---@return table[]
 local function flatten(rows, tree)
-	if tree == nil then
-		local out = {}
-		for _, row in ipairs(rows or {}) do
-			table.insert(
-				out,
-				vim.tbl_extend("force", row, {
-					_tv2_depth = 0,
-					_tv2_has_children = false,
-					_tv2_expanded = false,
-				})
-			)
-		end
-		return out
-	end
-
 	local out = {}
-	local root_count = #(rows or {})
+	local root_count = #rows
 
 	local function walk(list, depth)
-		for index, row in ipairs(list or {}) do
-			if is_pass_through_row(row) then
-				table.insert(
-					out,
-					vim.tbl_extend("force", row, {
-						_tv2_depth = 0,
-						_tv2_has_children = false,
-						_tv2_expanded = false,
-					})
-				)
-			else
+		for index, row in ipairs(list) do
+			local item = vim.tbl_extend("force", row, {
+				_tv2_depth = 0,
+				_tv2_has_children = false,
+				_tv2_expanded = false,
+			})
+			table.insert(out, item)
+			if tree and not is_pass_through_row(row) then
 				local children = row[tree.children_key]
 				local has_children = type(children) == "table" and #children > 0
 				local expanded = row_is_expanded(row, has_children, tree)
-				table.insert(
-					out,
-					vim.tbl_extend("force", row, {
-						_tv2_depth = depth,
-						_tv2_has_children = has_children,
-						_tv2_expanded = expanded,
-					})
-				)
+				item._tv2_depth = depth
+				item._tv2_has_children = has_children
+				item._tv2_expanded = expanded
 
 				if has_children and expanded then
 					walk(children, depth + 1)
@@ -202,12 +178,12 @@ end
 ---@param gap_after fun(index:number):number
 ---@param tree TableTreeTreeOpts|nil
 ---@param fill boolean|nil
-local function compute_widths(columns, rows, available_width, gap_after, tree, fill)
+---@param hide_columns string[]|nil
+local function compute_widths(columns, rows, available_width, gap_after, tree, fill, hide_columns)
 	local widths = {}
 	for i, c in ipairs(columns) do
 		widths[i] = natural_width(c, rows, tree)
 	end
-	local desired = vim.deepcopy(widths)
 
 	local function total_used()
 		local sum = 0
@@ -218,6 +194,52 @@ local function compute_widths(columns, rows, available_width, gap_after, tree, f
 			sum = sum + gap_after(i)
 		end
 		return sum
+	end
+
+	if hide_columns then
+		for i, column in ipairs(columns) do
+			local overflow = total_used() - available_width
+			if overflow <= 0 then
+				break
+			end
+			if not column.width and column.can_grow ~= false and column.min_width then
+				widths[i] = math.max(column.min_width, widths[i] - overflow)
+			end
+		end
+	end
+
+	for _, key in ipairs(hide_columns or {}) do
+		local overflow = total_used() - available_width
+		if overflow <= 0 then
+			break
+		end
+		for i, column in ipairs(columns) do
+			if column.key == key then
+				if not column.width and column.min_width then
+					widths[i] = math.max(column.min_width, widths[i] - overflow)
+				end
+				break
+			end
+		end
+	end
+
+	for _, key in ipairs(hide_columns or {}) do
+		if total_used() <= available_width then
+			break
+		end
+		for i, column in ipairs(columns) do
+			if column.key == key then
+				table.remove(columns, i)
+				table.remove(widths, i)
+				break
+			end
+		end
+	end
+	local desired = vim.deepcopy(widths)
+	for i, column in ipairs(columns) do
+		if not column.width then
+			widths[i] = math.min(widths[i], available_width)
+		end
 	end
 
 	while total_used() > available_width do
@@ -280,6 +302,7 @@ end
 ---@field show_header? boolean
 ---@field column_gap? integer
 ---@field fill? boolean
+---@field hide_columns? string[] Columns to shrink to min_width, then hide, in order.
 ---@field tree? TableTreeTreeOpts
 ---@field cell_hl? fun(row:table, col:table, ctx:{text:string, padded:string, width:integer}):string|table[]|nil
 ---@field align_title? boolean If true and header_align is nil, header uses column align.
@@ -310,35 +333,26 @@ function M.render(opts)
 		return default_gap
 	end
 
-	local function join_parts(parts)
-		if #parts == 0 then
-			return ""
-		end
-
-		local out = parts[1]
-		for i = 2, #parts do
-			out = out .. string.rep(" ", gap_after(i - 1)) .. parts[i]
-		end
-		return out
-	end
-
-	compute_widths(columns, rows, math.max(width - (margin * 2), 1), gap_after, tree, fill)
+	compute_widths(columns, rows, math.max(width - (margin * 2), 1), gap_after, tree, fill, opts.hide_columns)
 
 	local lines = {}
 	local line_map = {}
 	local spans = {}
 
-	local col_start = margin
 	if show_header then
-		local header_parts = {}
+		local line = string.rep(" ", margin)
 		for i, c in ipairs(columns) do
+			if i > 1 then
+				line = line .. string.rep(" ", gap_after(i - 1))
+			end
+			local col_start = #line
 			local label = truncate(c.name or "", c._computed)
 			local header_align = c.header_align
 			if header_align == nil and c.align_title == true then
 				header_align = c.align
 			end
 			local padded = pad_aligned(label, c._computed, header_align)
-			table.insert(header_parts, padded)
+			line = line .. padded
 
 			table.insert(spans, {
 				line = 0,
@@ -346,10 +360,8 @@ function M.render(opts)
 				end_col = col_start + #padded,
 				hl_group = c.header_hl or "AtlasColumnHeader",
 			})
-
-			col_start = col_start + #padded + gap_after(i)
 		end
-		table.insert(lines, string.rep(" ", margin) .. join_parts(header_parts))
+		table.insert(lines, line)
 		table.insert(lines, "")
 	end
 
@@ -369,12 +381,15 @@ function M.render(opts)
 			line_map[#lines] = row
 			table.insert(lines, "")
 		else
-			local line_parts = {}
-			col_start = margin
+			local line = string.rep(" ", margin)
 			for i, c in ipairs(columns) do
+				if i > 1 then
+					line = line .. string.rep(" ", gap_after(i - 1))
+				end
+				local col_start = #line
 				local cell = truncate(cell_text(row, c, tree), c._computed, c.truncate_from == "start")
 				local padded = pad_aligned(cell, c._computed, c.align)
-				table.insert(line_parts, padded)
+				line = line .. padded
 
 				local cell_spans = nil
 				if type(cell_hl) == "function" then
@@ -416,9 +431,29 @@ function M.render(opts)
 					})
 				end
 
-				col_start = col_start + #padded + gap_after(i)
+				if
+					tree
+					and tree.leaf_hl
+					and c.key == tree.column_key
+					and row._tv2_depth > 0
+					and (not tree.show_indicator or not row._tv2_has_children)
+				then
+					local prefix = tree_glyphs_for_row(row, tree)
+					if cell:sub(1, #prefix) == prefix then
+						local padding = #padded - #cell
+						local offset = c.align == "right" and padding
+							or c.align == "center" and math.floor(padding / 2)
+							or 0
+						table.insert(spans, {
+							line = #lines,
+							start_col = col_start + offset,
+							end_col = col_start + offset + #prefix,
+							hl_group = tree.leaf_hl,
+						})
+					end
+				end
 			end
-			table.insert(lines, string.rep(" ", margin) .. join_parts(line_parts))
+			table.insert(lines, line)
 			line_map[#lines] = row._item or row
 
 			if row.separator == true then

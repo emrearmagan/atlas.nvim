@@ -98,24 +98,20 @@ end
 ---@param target_buf integer
 ---@param lines string[]
 ---@param spans table[]
----@param line_map table<integer, table>
----@return table<integer, table>
-local function flush(target_buf, lines, spans, line_map)
+local function flush(target_buf, lines, spans)
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
 	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = target_buf })
 
 	vim.api.nvim_buf_clear_namespace(target_buf, ns, 0, -1)
 
-	for _, span in ipairs(spans or {}) do
+	for _, span in ipairs(spans) do
 		pcall(vim.api.nvim_buf_set_extmark, target_buf, ns, span.line, span.start_col, {
 			end_row = span.line,
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
 	end
-
-	return line_map
 end
 
 local function window_title()
@@ -164,24 +160,28 @@ local function rerender()
 		body_spans = { { line = 0, start_col = 0, end_col = #err, hl_group = "AtlasLogError" } }
 		body_map = {}
 	else
-		body_lines, body_spans, body_map = renderer.render(state.notifications or {}, width)
+		body_lines, body_spans, body_map = renderer.render(state.notifications, width)
 	end
 
-	if buf ~= nil then
-		current_line_map = flush(buf, body_lines, body_spans, body_map)
-	end
+	flush(buf, body_lines, body_spans)
+	current_line_map = body_map
 end
 
-local function first_notification_line()
+local function focus_first()
+	if not valid_win(win) then
+		return
+	end
 	local min = nil
 	for lnum, item in pairs(current_line_map) do
-		if type(item) == "table" and item.kind == "notification" then
+		if item.kind == "notification" then
 			if min == nil or lnum < min then
 				min = lnum
 			end
 		end
 	end
-	return min
+	if min ~= nil then
+		pcall(vim.api.nvim_win_set_cursor, win, { min, 0 })
+	end
 end
 
 local function notification_under_cursor()
@@ -191,16 +191,16 @@ local function notification_under_cursor()
 	local cursor = vim.api.nvim_win_get_cursor(win)
 	local lnum = cursor[1]
 	local item = current_line_map[lnum]
-	if type(item) == "table" and item.kind == "notification" then
+	if item and item.kind == "notification" then
 		return item.notification
 	end
 	for offset = 1, 3 do
 		local up = current_line_map[lnum - offset]
-		if type(up) == "table" and up.kind == "notification" then
+		if up and up.kind == "notification" then
 			return up.notification
 		end
 		local down = current_line_map[lnum + offset]
-		if type(down) == "table" and down.kind == "notification" then
+		if down and down.kind == "notification" then
 			return down.notification
 		end
 	end
@@ -237,15 +237,9 @@ local function load(force_refresh)
 			state.error = nil
 			state.set_notifications(notifications)
 		end
-		state.last_provider_id = provider.id
 		rerender()
 
-		if valid_win(win) then
-			local first = first_notification_line()
-			if first ~= nil then
-				pcall(vim.api.nvim_win_set_cursor, win, { first, 0 })
-			end
-		end
+		focus_first()
 	end)
 end
 
@@ -365,8 +359,7 @@ local function ensure_buf()
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "atlas.notifications", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-ui.notifications", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
 	register_keymaps(buf)
 	return buf
@@ -426,13 +419,10 @@ function M.open()
 
 	rerender()
 
-	if state.last_provider_id ~= provider.id or #(state.notifications or {}) == 0 then
+	if #state.notifications == 0 then
 		load(false)
 	else
-		local first = first_notification_line()
-		if first ~= nil then
-			pcall(vim.api.nvim_win_set_cursor, win, { first, 0 })
-		end
+		focus_first()
 	end
 end
 
@@ -455,7 +445,6 @@ function M.refresh(opts)
 			return
 		end
 		state.set_notifications(notifications)
-		state.last_provider_id = provider.id
 		if M.is_open() then
 			rerender()
 		end

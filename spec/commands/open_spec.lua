@@ -1,3 +1,5 @@
+local providers = require("atlas.providers")
+
 describe("commands.open", function()
 	local command
 	local repository
@@ -8,7 +10,6 @@ describe("commands.open", function()
 	local issue_error
 	local calls
 	local original_loaded
-	local original_trim
 
 	local mocked_modules = {
 		"atlas.commands.open",
@@ -26,12 +27,14 @@ describe("commands.open", function()
 		for _, name in ipairs(mocked_modules) do
 			original_loaded[name] = package.loaded[name]
 		end
-		original_trim = vim.trim
-		vim.trim = function(value)
-			return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-		end
-
-		repository = nil
+		repository = {
+			provider = "github",
+			domain = "pulls",
+			entity = "repo",
+			host = "github.com",
+			repo_full_name = "owner/repo",
+			url = "https://github.com/owner/repo",
+		}
 		resolved = {}
 		pull_result = nil
 		pull_error = "Pull request not found"
@@ -77,9 +80,9 @@ describe("commands.open", function()
 		}
 
 		package.loaded["atlas.core.git"] = {
-			local_repository = function()
+			local_repository = function(_, on_done)
 				calls.local_repository = calls.local_repository + 1
-				return repository
+				on_done(repository, nil)
 			end,
 		}
 		package.loaded["atlas.core.notify"] = {
@@ -93,10 +96,13 @@ describe("commands.open", function()
 			end,
 		}
 		package.loaded["atlas.providers"] = {
-			resolve = function(value)
-				table.insert(calls.resolve, value)
+			resolve = function(value, opts)
+				table.insert(calls.resolve, { value = value, opts = opts })
+				if opts then
+					return providers.resolve(value, opts)
+				end
 				local target = resolved[value]
-				return target, target and nil or "Unsupported Atlas target"
+				return target, not target and "Unsupported Atlas target" or nil
 			end,
 			domain = function(_, domain)
 				return domain == "pulls" or domain == "issues"
@@ -125,7 +131,6 @@ describe("commands.open", function()
 	end)
 
 	after_each(function()
-		vim.trim = original_trim
 		for _, name in ipairs(mocked_modules) do
 			package.loaded[name] = original_loaded[name]
 		end
@@ -145,21 +150,12 @@ describe("commands.open", function()
 
 		command.open(value)
 
-		assert.same({ value }, calls.resolve)
+		assert.same({ { value = value } }, calls.resolve)
 		assert.are.equal(0, #calls.fetch)
 		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
 	end)
 
 	it("opens dot as the current repository dashboard", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-			url = "https://github.com/owner/repo",
-		}
-
 		command.open(".")
 
 		assert.are.equal("pulls", calls.dashboard[1].domain)
@@ -168,41 +164,40 @@ describe("commands.open", function()
 	end)
 
 	it("resolves a number against the current repository with PR priority", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-		}
 		pull_result = { id = 42, title = "PR" }
+		pull_error = nil
 
 		command.open("#42")
 
-		assert.are.equal(0, #calls.resolve)
+		assert.same({
+			{ value = "#42", opts = { repository = repository, domain = "pulls" } },
+			{ value = "#42", opts = { repository = repository, domain = "issues" } },
+		}, calls.resolve)
 		assert.are.equal(1, #calls.fetch)
 		assert.same({ "pulls" }, { calls.fetch[1].domain })
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
 		assert.are.equal(pull_result, calls.pull_detail[1].entity)
 		assert.are.equal(0, #calls.issue_detail)
 	end)
 
 	it("falls back from a missing PR to the issue in the same repository", function()
-		repository = {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			host = "github.com",
-			repo_full_name = "owner/repo",
-		}
 		issue_result = { key = "ISSUE-42", title = "Issue" }
+		issue_error = nil
 
 		command.open("42")
 
+		assert.same({
+			{ value = "42", opts = { repository = repository, domain = "pulls" } },
+			{ value = "42", opts = { repository = repository, domain = "issues" } },
+		}, calls.resolve)
 		assert.same({ "pulls", "issues" }, { calls.fetch[1].domain, calls.fetch[2].domain })
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
+		assert.same({ key = "ISSUE-42" }, calls.fetch[2].ref)
 		assert.are.equal(issue_result, calls.issue_detail[1].entity)
 	end)
 
 	it("requires local repository context for a number", function()
+		repository = nil
 		command.open("42")
 
 		assert.are.equal(0, #calls.resolve)
@@ -212,7 +207,7 @@ describe("commands.open", function()
 	it("does not give owner/repo#number special repository handling", function()
 		command.open("owner/repo#42")
 
-		assert.same({ "owner/repo#42" }, calls.resolve)
+		assert.same({ { value = "owner/repo#42" } }, calls.resolve)
 		assert.are.equal(0, calls.local_repository)
 		assert.are.equal("Unsupported Atlas target", calls.errors[1])
 	end)

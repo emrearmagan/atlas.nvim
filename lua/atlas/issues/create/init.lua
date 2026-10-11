@@ -1,5 +1,6 @@
 local M = {}
 
+local actions = require("atlas.issues.actions")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
@@ -7,7 +8,6 @@ local providers = require("atlas.providers")
 ---@return { label: string, provider: IssuesProvider }[]
 local function build_choices()
 	local choices = {}
-	local actions = require("atlas.issues.actions")
 	for _, provider_config in ipairs(providers.configured("issues")) do
 		local provider = providers.load(provider_config.id, "issues")
 		if provider then
@@ -23,10 +23,10 @@ end
 
 ---@param provider IssuesProvider
 local function create(provider)
-	require("atlas.issues.actions").run("create_issue", { provider = provider })
+	actions.run("create_issue", { provider = provider })
 end
 
-function M.start()
+function M.open()
 	local choices = build_choices()
 
 	if #choices == 0 then

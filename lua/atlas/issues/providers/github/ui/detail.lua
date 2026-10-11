@@ -2,6 +2,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local highlights = require("atlas.ui.highlights")
 local helper = require("atlas.issues.ui.presentation")
 local spinner = require("atlas.ui.components.spinner")
 
@@ -22,25 +23,18 @@ local function task_progress(body)
 	return completed, total
 end
 
----@param assignees IssueUser[]
+---@param assignees AtlasUser[]
 ---@return string, string|table[]
 local function assignees_display(assignees)
-	local usernames = {}
-	for _, assignee in ipairs(assignees) do
-		local username = tostring(assignee.account_id or assignee.display_name or "")
-		if username ~= "" then
-			table.insert(usernames, username)
-		end
-	end
-
-	if #usernames == 0 then
+	if #assignees == 0 then
 		return "Unassigned", "AtlasTextMuted"
 	end
 
 	local parts = {}
 	local spans = {}
 	local cursor = 0
-	for i, username in ipairs(usernames) do
+	for i, assignee in ipairs(assignees) do
+		local username = assignee.username
 		local token = "@" .. username
 		table.insert(parts, token)
 		table.insert(spans, {
@@ -50,7 +44,7 @@ local function assignees_display(assignees)
 		})
 		cursor = cursor + #token
 
-		if i < #usernames then
+		if i < #assignees then
 			local sep = ", "
 			table.insert(parts, sep)
 			table.insert(spans, {
@@ -72,12 +66,12 @@ local function milestone_display(milestone)
 		return ""
 	end
 
-	local title = tostring(milestone.title or "")
+	local title = milestone.title
 	if title == "" then
 		return ""
 	end
 
-	local percent = tonumber(milestone.progress_percentage)
+	local percent = milestone.progress_percentage
 	local open_count = milestone.open_issues
 	local closed_count = milestone.closed_issues
 	local total = open_count and closed_count and (open_count + closed_count) or nil
@@ -107,7 +101,7 @@ end
 function M.header_fields(issue, details, _loading)
 	---@cast issue GitHubIssue
 	---@cast details GitHubIssueDetails|nil
-	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
+	local reporter_name = issue.reporter and issue.reporter.name or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
@@ -134,7 +128,7 @@ function M.header_fields(issue, details, _loading)
 		local pkey = parent.key
 		local title = tostring(parent.title or "")
 		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
-		local hl = helper.issue_hl and helper.issue_hl(pkey) or "AtlasTextMuted"
+		local hl = helper.issue_hl(pkey)
 		table.insert(fields, { label = "Parent", value = text, hl = hl })
 	end
 
@@ -172,18 +166,6 @@ end
 
 -- Chips: labels
 
----@param hex string|nil
----@return string
-local function label_hl(hex)
-	local clean = tostring(hex or ""):lower():gsub("[^0-9a-f]", "")
-	if #clean ~= 6 then
-		return "AtlasChipActive"
-	end
-	local name = "AtlasGHIssueLabel_" .. clean
-	vim.api.nvim_set_hl(0, name, { fg = "#000000", bg = "#" .. clean, bold = true })
-	return name
-end
-
 ---@param _issue Issue
 ---@param details IssueDetails|nil
 ---@param loading boolean
@@ -197,9 +179,9 @@ function M.chips(_issue, details, loading)
 	end
 
 	for _, label in ipairs(details and details.labels or {}) do
-		local name = tostring(label.name or "")
+		local name = label.name
 		if name ~= "" then
-			table.insert(chips, { label = name, hl = label_hl(label.color) })
+			table.insert(chips, { label = name, hl = highlights.chip(label.color) })
 		end
 	end
 
@@ -208,19 +190,19 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
-	local overview_icon, overview_hl = icons.general("overview")
-	local conversation_icon, conversation_hl = icons.general("conversation")
+	local overview_icon = icons.general("overview")
+	local conversation_icon = icons.general("conversation")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = { icon = overview_icon, hl_group = overview_hl },
+			icon = { icon = overview_icon },
 			mod = require("atlas.issues.ui.detail.tabs.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = { icon = conversation_icon, hl_group = conversation_hl },
+			icon = { icon = conversation_icon },
 			mod = require("atlas.issues.ui.detail.tabs.conversation"),
 		},
 	}

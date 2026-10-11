@@ -3,7 +3,7 @@ local M = {}
 local comments = require("atlas.pulls.providers.bitbucket.api.comments")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
 ---@param all_comments PullsComment[]

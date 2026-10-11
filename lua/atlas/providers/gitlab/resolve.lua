@@ -41,12 +41,14 @@ function M.resolve(value, parsed)
 		return nil, nil
 	end
 
+	local project_path
 	if parsed.remote then
-		local project_path = path:gsub("^/", ""):gsub("%.git$", "")
-		local owner, repo = split_project(project_path)
-		if owner == nil then
-			return nil, "Unsupported GitLab remote. Expected group/repository"
-		end
+		project_path = path:gsub("^/", ""):gsub("%.git$", "")
+	elseif not path:find("/-/", 1, true) then
+		project_path = path:match("^/(.+/.+)$")
+	end
+	local owner, repo = split_project(project_path)
+	if owner then
 		local web_url, repository_url = repository(parsed, project_path)
 		return {
 			provider = "gitlab",
@@ -61,14 +63,26 @@ function M.resolve(value, parsed)
 			repo_full_name = project_path,
 		}
 	end
+	if parsed.remote then
+		return nil, "Unsupported GitLab remote. Expected group/repository"
+	end
 
-	local project_path, number, tail = path:match("^/(.-)/%-/merge_requests/(%d+)(.*)$")
+	local number, tail
+	project_path, number, tail = path:match("^/(.-)/%-/merge_requests/(%d+)(.*)$")
 	local domain, entity = "pulls", "pr"
 	if project_path == nil then
 		project_path, number, tail = path:match("^/(.-)/%-/issues/(%d+)(.*)$")
 		domain, entity = "issues", "issue"
 	end
-	local owner, repo = split_project(project_path)
+	if project_path == nil and not path:match("^/groups/") then
+		project_path, number, tail = path:match("^/(.-)/%-/work_items/(%d+)(.*)$")
+		domain, entity = "issues", "issue"
+	end
+	if project_path == nil then
+		project_path, number, tail = path:match("^/(.-)/%-/pipelines/(%d+)(.*)$")
+		domain, entity = "pulls", "pipeline"
+	end
+	owner, repo = split_project(project_path)
 	if owner then
 		if not url.valid_tail(tail) then
 			return nil, "Unsupported GitLab URL"
@@ -86,31 +100,11 @@ function M.resolve(value, parsed)
 			repo = repo,
 			project_path = project_path,
 			repo_full_name = project_path,
-			id = entity == "pr" and id or nil,
+			id = entity ~= "issue" and id or nil,
 			number = id,
 		}
 	end
 
-	if not path:find("/-/", 1, true) then
-		project_path = path:match("^/(.+/.+)$")
-		owner, repo = split_project(project_path)
-		if owner then
-			local web_url, repository_url = repository(parsed, project_path)
-			return {
-				provider = "gitlab",
-				domain = "pulls",
-				entity = "repo",
-				url = web_url,
-				repository_url = repository_url,
-				host = parsed.host,
-				owner = owner,
-				repo = repo,
-				project_path = project_path,
-				repo_full_name = project_path,
-			}
-		end
-	end
-
-	return nil, "Unsupported GitLab URL. Expected a repository, issue, or merge request URL"
+	return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"
 end
 return M

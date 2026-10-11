@@ -29,6 +29,14 @@
 ---@class AtlasPullsRepoSettings
 ---@field readme string|nil
 ---@field pr_template string|nil
+---@field merge_method "merge"|"squash"|nil
+---@field delete_source_branch boolean|nil
+
+---@class AtlasPullsDescriptionConfig
+---@field include_summary boolean|nil
+---@field include_commit_hashes boolean|nil
+---@field include_related boolean|nil
+---@field include_diffstat boolean|nil
 
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
@@ -37,22 +45,32 @@
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
+---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
 
 ---@class AtlasPullsDiffReviewPanelConfig
+---@field hidden boolean|nil
 ---@field height integer|nil
 
----@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+---@alias AtlasPullsDiffOpenCommand "auto"|"AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+
+-- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
+-- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
+-- the default location. `link` names directories symlinked from the main checkout (node_modules,
+-- .venv, ...) so servers can resolve dependencies; they are the same directories on disk.
+---@class AtlasPullsDiffLspConfig
+---@field enabled boolean|nil
+---@field dir string|(fun(ctx: AtlasWorktreeContext): string|nil)|nil
+---@field link string[]|nil
 
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
 ---@field compact boolean|nil
----@field compact_context_lines integer|nil
----@field show_review_panel boolean|nil
 ---@field comment_display "virtual_lines"|"virtual_text"|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
+---@field lsp AtlasPullsDiffLspConfig|nil
 
 ---@class AtlasPullsCommentTemplate
 ---@field label string
@@ -65,8 +83,8 @@
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
 ---@field pr PullRequest
----@field user PullsUser|nil
----@field output fun(title: string): AtlasLiveOutput
+---@field user AtlasUser|nil
+---@field write fun(text: string)
 
 ---@class AtlasPullsCustomAction
 ---@field id string
@@ -86,10 +104,11 @@
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
 ---@field repo_config AtlasPullsRepoConfig|nil
+---@field description AtlasPullsDescriptionConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
----@field default_delete_branch boolean|nil
+---@field default_delete_source_branch boolean|nil
 ---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
@@ -98,8 +117,8 @@
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
----@field user IssueUser|nil
----@field output fun(title: string): AtlasLiveOutput
+---@field user AtlasUser|nil
+---@field write fun(text: string)
 
 ---@class AtlasIssuesCustomAction
 ---@field id string
@@ -117,8 +136,12 @@
 
 -- Config
 
+---@class AtlasUIStatuslineConfig
+---@field atlas? boolean Show the statusline in Atlas's main UI (default: true)
+---@field diff? boolean Show the statusline in Atlas-owned diff/review sessions (default: true)
+
 ---@class AtlasUIConfig
----@field statusline boolean|nil Show the Atlas statusline (default: true)
+---@field statusline AtlasUIStatuslineConfig|nil
 ---@field picker AtlasPickerName|nil
 ---@field listed_buffer boolean|nil Make the main Atlas dashboard a listed buffer (default: false)
 
@@ -131,12 +154,10 @@
 
 local M = {}
 
-local notify = require("atlas.core.notify")
-
 ---@type AtlasConfig
-M.options = {
+local defaults = {
 	ui = {
-		statusline = true,
+		statusline = { atlas = true, diff = true },
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -144,7 +165,13 @@ M.options = {
 		git_transport = "https",
 		delete_notes = false,
 		default_merge_method = "merge",
-		default_delete_branch = false,
+		default_delete_source_branch = false,
+		description = {
+			include_summary = true,
+			include_commit_hashes = true,
+			include_related = true,
+			include_diffstat = false,
+		},
 		comment_templates = {
 			insert_mode = true,
 			items = {
@@ -160,14 +187,19 @@ M.options = {
 			},
 		},
 		diff = {
-			open_cmd = "AtlasDiff",
+			open_cmd = "auto",
 			layout = "inline",
 			compact = true,
-			compact_context_lines = 3,
-			show_review_panel = false,
 			comment_display = "virtual_lines",
 			review_panel = {
+				hidden = true,
 				height = 10,
+			},
+			lsp = {
+				enabled = false,
+				dir = nil,
+				-- Keep empty: setup() deep extends, which merges lists element-wise.
+				link = {},
 			},
 			explorer = {
 				grouped = true,
@@ -176,11 +208,31 @@ M.options = {
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
+				focus_on_select = false,
 				ignore = { ".git/**", ".jj/**" },
 			},
 		},
 	},
-	issues = nil,
+	issues = {
+		with_relationships = true,
+		jira = {
+			project_config = {
+				story_points_field = "customfield_10016",
+				issue_types = {
+					epic = { icon = "", hl_group = "AtlasJiraEpic" },
+					story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
+					task = { icon = "", hl_group = "AtlasLogInfo" },
+					bug = { icon = "", hl_group = "AtlasLogError" },
+					subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
+				},
+				status_icons = {
+					new = "●",
+					indeterminate = "",
+					done = "",
+				},
+			},
+		},
+	},
 	keymaps = {
 		ui = {
 			next_item = "j",
@@ -203,6 +255,7 @@ M.options = {
 			toggle_panel = "p",
 			toggle_fold = "za",
 			toggle_all_folds = "zA",
+			toggle_description_mode = "<leader>m",
 			previous_panel_tab = "<S-Tab>",
 			next_panel_tab = "<Tab>",
 			notifications = {
@@ -218,10 +271,12 @@ M.options = {
 			previous_page = "[p",
 			open_actions = "A",
 			open_in_browser = "gx",
+			open_references = "gl",
 			copy_id = "y",
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
+			edit_search = "i",
 		},
 		picker = {
 			next_item = { "<Down>", "<C-n>", "<C-j>" },
@@ -233,48 +288,57 @@ M.options = {
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
-			external_help = "gA", -- Atlas help in external diff viewers.
-			toggle_repo_panel = "o",
-			toggle_repo_issue_state = "t",
-			edit_title = "T",
-			edit_description = "D",
-			edit_search = "i",
+			open_repository = "o",
+			edit_pr = "ge",
+			pipelines = {
+				next_job = { "]j", "<Tab>" },
+				previous_job = { "[j", "<S-Tab>" },
+				show_history = "gH",
+				toggle_raw_logs = "gL",
+				toggle_auto_refresh = "gR",
+			},
 			review = {
-				focus_item = "gd",
-				approve = "ga",
-				request_changes = "gr",
-				submit_review = "gs",
+				show_details = "K", -- File/commit details.
+				toggle_file_reviewed = "-",
+				next_comment = "]c",
+				prev_comment = "[c",
+				next_note = "]n",
+				prev_note = "[n",
+				add_comment = "c",
+				submit_comment = "C",
+				add_suggestion = "s",
+				submit_suggestion = "S",
+				add_note = "<leader>n",
+				toggle_resolved = "x",
+				approve = "<leader>ga",
+				request_changes = "<leader>gr",
+				submit_review = "<leader>gs",
 				add_task = "<leader>t",
 				comment_templates = "gT",
-				find_file = "<leader>ff",
-				explorer = {
-					find_file = { "f", "<leader>ff" },
-					next_file = { "]f", "<Tab>" },
-					previous_file = { "[f", "<S-Tab>" },
-					next_unreviewed_file = "]u",
-					previous_unreviewed_file = "[u",
-					toggle_grouping = "T",
-					toggle_file_reviewed = "-",
-					toggle_commits = "gC",
-				},
-				diff = {
-					toggle_layout = "t",
-					toggle_compact = "gc",
-					next_hunk = "]h",
-					previous_hunk = "[h",
+				view = {
+					external_help = "gA", -- External diff viewer help.
 					toggle_review_panel = "gR",
 					toggle_detail_panel = "gD",
 					toggle_comments = "gH",
-					next_comment = "]c",
-					previous_comment = "[c",
-					next_note = "]n",
-					previous_note = "[n",
-					add_comment = "c",
-					submit_comment = "C",
-					add_suggestion = "s",
-					submit_suggestion = "S",
-					add_note = "<leader>n",
-					toggle_resolved = "x",
+				},
+				explorer = {
+					toggle_commits = "gC",
+					next_unreviewed_file = "]u",
+					prev_unreviewed_file = "[u",
+					find_file = "<leader>f",
+				},
+				-- Built-in navigation; external viewers use their own keys.
+				atlas = {
+					next_file = { "]f", "<Tab>" },
+					prev_file = { "[f", "<S-Tab>" },
+					toggle_explorer = "<leader>b",
+					focus_explorer = "<leader>e",
+					open_file = "gf",
+					toggle_view_mode = "i",
+					next_hunk = "]h",
+					prev_hunk = "[h",
+					toggle_layout = "t",
+					toggle_compact = "gc",
 				},
 			},
 			filters = {
@@ -288,12 +352,34 @@ M.options = {
 			change_assignee = "ga",
 			change_reporter = "gr",
 			edit_issue = "ge",
-			edit_search = "i",
 			create_issue = "c",
-			toggle_description_mode = "m",
 		},
 	},
 }
+
+---@type AtlasConfig
+M.options = vim.deepcopy(defaults)
+
+---@param context "atlas"|"diff"
+---@return boolean
+function M.statusline_enabled(context)
+	return M.options.ui.statusline[context] ~= false
+end
+
+---@return string
+function M.diff_command()
+	local command = vim.trim(M.options.pulls.diff.open_cmd or "auto")
+	if command ~= "auto" and command ~= "" then
+		return command
+	end
+
+	for _, candidate in ipairs({ "CodeDiff", "DiffviewOpen" }) do
+		if vim.fn.exists(":" .. candidate) == 2 then
+			return candidate
+		end
+	end
+	return "AtlasDiff"
+end
 
 ---@param id AtlasProviderId
 ---@return table|nil
@@ -314,65 +400,19 @@ end
 
 -- Setup
 
---TODO: Remove with 0.8.0
-local function migrate_legacy(opts)
-	local migrated = false
-	opts.providers = type(opts.providers) == "table" and opts.providers or {}
-
-	for _, domain in ipairs({ "pulls", "issues" }) do
-		local section = type(opts[domain]) == "table" and opts[domain] or nil
-		local legacy = section and section.providers or nil
-		if type(legacy) == "table" then
-			migrated = true
-			section.providers = nil
-			for id, legacy_config in pairs(legacy) do
-				if type(legacy_config) == "table" then
-					local provider_config = type(opts.providers[id]) == "table" and opts.providers[id] or {}
-					local domain_config = type(section[id]) == "table" and section[id] or {}
-					opts.providers[id] = provider_config
-					section[id] = domain_config
-
-					for key, value in pairs(legacy_config) do
-						local domain_scoped = key == "views"
-							or key == "bookmarks"
-							or (domain == "issues" and id == "jira" and key == "project_config")
-						if domain_scoped then
-							if domain_config[key] == nil then
-								domain_config[key] = value
-							end
-						elseif provider_config[key] == nil then
-							provider_config[key] = value
-						end
-					end
-				end
-			end
-		end
-	end
-
-	local jira_provider = type(opts.providers.jira) == "table" and opts.providers.jira or nil
-	if jira_provider and jira_provider.project_config ~= nil then
-		local issues = type(opts.issues) == "table" and opts.issues or {}
-		local jira_issues = type(issues.jira) == "table" and issues.jira or {}
-		if jira_issues.project_config == nil then
-			jira_issues.project_config = jira_provider.project_config
-		end
-		jira_provider.project_config = nil
-		issues.jira = jira_issues
-		opts.issues = issues
-		migrated = true
-	end
-
-	if migrated then
-		notify.warn("Deprecated Config", { vim_notify = true })
-	end
-	return opts
-end
-
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
-	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
-	M.options = vim.tbl_deep_extend("force", M.options, resolved)
-	if M.options.ui.statusline ~= false then
+	local resolved = vim.deepcopy(opts or {})
+	local project = vim.tbl_get(resolved, "issues", "jira", "project_config")
+	if project and project.issue_types then
+		local issue_types = {}
+		for name, style in pairs(project.issue_types) do
+			issue_types[name:lower()] = style
+		end
+		project.issue_types = issue_types
+	end
+	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
+	if M.statusline_enabled("atlas") or M.statusline_enabled("diff") then
 		vim.opt.laststatus = 3
 	end
 end

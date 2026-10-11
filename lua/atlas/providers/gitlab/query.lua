@@ -1,5 +1,7 @@
 local M = {}
 
+local utils = require("atlas.core.utils")
+
 local API_STATES = { open = "opened", merged = "merged", declined = "closed" }
 local ATLAS_STATES = { opened = "open", merged = "merged", closed = "declined" }
 local ALL_STATES = { "open", "merged", "declined" }
@@ -83,25 +85,7 @@ end
 ---@param field_by_query table<string, string>
 ---@return table, string[]
 local function parse_query(input, field_by_query)
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #input do
-		local char = input:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
+	local tokens = utils.split_tokens(input)
 
 	local fields = {}
 	local search = {}
@@ -179,34 +163,23 @@ function M.api_states(view)
 	return api_states
 end
 
----@param input string
----@return AtlasGitLabPullsViewConfig|nil, string|nil
-function M.parse(input)
-	local parsed, states = parse_query(input, PULL_FIELD_BY_QUERY)
-	local view = { name = "Search", layout = "compact" }
-	apply_fields(view, parsed, PULL_FIELDS)
-	for _, state in ipairs(states) do
-		view._states = {}
-		for status in state:gmatch("[^,]+") do
-			if API_STATES[status] == nil then
-				return nil, "Unknown state: " .. status
-			end
-			table.insert(view._states, status)
-		end
-	end
-	return view, nil
-end
-
 ---@param view AtlasGitLabPullsViewConfig
 ---@param input string
 ---@return boolean, string|nil
 function M.apply(view, input)
-	local parsed, err = M.parse(input)
-	if parsed == nil then
-		return false, err
+	local parsed, states = parse_query(input, PULL_FIELD_BY_QUERY)
+	local selected
+	for _, state in ipairs(states) do
+		selected = {}
+		for status in state:gmatch("[^,]+") do
+			if API_STATES[status] == nil then
+				return false, "Unknown state: " .. status
+			end
+			table.insert(selected, status)
+		end
 	end
 	apply_fields(view, parsed, PULL_FIELDS)
-	view._states = parsed._states
+	view._states = selected
 	return true, nil
 end
 

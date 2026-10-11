@@ -68,9 +68,8 @@ local function ensure_buf()
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = logs_buf })
 	vim.api.nvim_set_option_value("bufhidden", "hide", { buf = logs_buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = logs_buf })
-	vim.api.nvim_set_option_value("filetype", "atlas.logs", { buf = logs_buf })
+	vim.api.nvim_set_option_value("filetype", "atlas-ui.logs", { buf = logs_buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = logs_buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = logs_buf })
 	pcall(vim.treesitter.stop, logs_buf)
 
 	return logs_buf
@@ -84,8 +83,7 @@ local function refresh_buffer()
 	local lines = logger.read_lines()
 	local rows = {}
 	for index, line in ipairs(lines) do
-		local raw = tostring(line or "")
-		local row = parse_log_line(raw)
+		local row = parse_log_line(line)
 		row._log_index = index
 		row.display_message = (expanded_rows[index] and "▾ " or "▸ ") .. row.message
 		table.insert(rows, row)
@@ -142,9 +140,6 @@ local function refresh_buffer()
 		end
 	end
 
-	for _, span in ipairs(spans or {}) do
-		span.line = translated_lines[span.line] or span.line
-	end
 	line_map = final_line_map
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = logs_buf })
@@ -152,9 +147,10 @@ local function refresh_buffer()
 	vim.api.nvim_set_option_value("modifiable", false, { buf = logs_buf })
 
 	vim.api.nvim_buf_clear_namespace(logs_buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
-		vim.api.nvim_buf_set_extmark(logs_buf, ns, span.line, span.start_col, {
-			end_row = span.line,
+	for _, span in ipairs(spans) do
+		local line = translated_lines[span.line] or span.line
+		vim.api.nvim_buf_set_extmark(logs_buf, ns, line, span.start_col, {
+			end_row = line,
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
@@ -240,9 +236,6 @@ local function move_cursor_to_last_line()
 	end
 
 	local line_count = vim.api.nvim_buf_line_count(logs_buf)
-	if line_count < 1 then
-		line_count = 1
-	end
 
 	vim.api.nvim_win_set_cursor(logs_win, { line_count, 0 })
 end

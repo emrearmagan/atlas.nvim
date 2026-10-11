@@ -76,11 +76,9 @@ end
 ---@param fallback string|nil
 ---@return string owner, string repo, string full_name
 function M.repository(raw, fallback)
-	local full_name = ""
-	local name = ""
 	raw = json.safe_table(raw)
-	full_name = json.safe_str(raw.nameWithOwner) or json.safe_str(raw.full_name) or ""
-	name = json.safe_str(raw.name) or ""
+	local full_name = json.safe_str(raw.nameWithOwner) or json.safe_str(raw.full_name) or ""
+	local name = json.safe_str(raw.name) or ""
 	if full_name == "" then
 		local owner = json.safe_str(json.safe_table(raw.owner).login) or ""
 		if owner ~= "" and name ~= "" then

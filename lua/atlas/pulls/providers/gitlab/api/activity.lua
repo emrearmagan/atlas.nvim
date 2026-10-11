@@ -1,15 +1,12 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client")
+local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
+local request_scope = require("atlas.core.requests")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 local function same_actor(left, right)
-	local left_actor = left and left.actor or nil
-	local right_actor = right and right.actor or nil
-	return left_actor ~= nil
-		and right_actor ~= nil
-		and tostring(left_actor.username or left_actor.nickname or left_actor.name or "")
-			== tostring(right_actor.username or right_actor.nickname or right_actor.name or "")
+	return left.actor ~= nil and right.actor ~= nil and left.actor.username == right.actor.username
 end
 
 ---@param entries PullsActivityEntry[]
@@ -78,7 +75,7 @@ function M.fetch_activity(pr, opts, on_done)
 	end
 
 	local endpoint = string.format(
-		"/projects/%s/merge_requests/%d/notes?sort=asc&order_by=created_at&per_page=100",
+		"/projects/%s/merge_requests/%d/notes?sort=asc&order_by=created_at",
 		service.url_encode(path),
 		iid
 	)
@@ -102,6 +99,46 @@ function M.fetch_activity(pr, opts, on_done)
 		project_path = path,
 		iid = iid,
 	})
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(pr, opts, on_done)
+	local requests = request_scope.new()
+	requests.all({
+		activity = function(done)
+			return M.fetch_activity(pr, opts, done)
+		end,
+		comments = function(done)
+			return comments_api.fetch_conversation_comments(pr, opts, done)
+		end,
+	}, function(values, errors)
+		if values.activity == nil and values.comments == nil then
+			on_done(nil, errors.activity or errors.comments or "Failed to fetch conversation")
+			return
+		end
+		local items = {}
+		for _, comment in ipairs(values.comments or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_on = comment.created_on or "",
+				entity = comment,
+			})
+		end
+		for _, event in ipairs(values.activity or {}) do
+			table.insert(items, {
+				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
+				kind = "activity",
+				created_on = event.date or "",
+				entity = event,
+			})
+		end
+		on_done(items, errors.activity or errors.comments)
+	end)
+	return requests
 end
 
 return M

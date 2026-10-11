@@ -46,6 +46,9 @@ local function group_issues(issues, provider_id, statuses)
 		if provider_id == "github" and statuses then
 			---@cast issue GitHubIssue
 			column = by_status["id:" .. (issue.project_status_id or "no_status")] or by_status["id:no_status"]
+			if column == nil then
+				column = status_column("no_status", "No status")
+			end
 		else
 			column = status_column(issue.status_id, issue.status)
 		end

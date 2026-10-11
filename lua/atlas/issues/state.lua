@@ -4,14 +4,13 @@
 ---@field query string
 ---@field is_loading boolean
 ---@field error string|nil
----@field current_user IssueUser|nil
+---@field current_user AtlasUser|nil
 ---@field issues Issue[]
 ---@field current_page integer
 ---@field page_history IssuesPage[]
 ---@field issue_tree IssuesGroup[]
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
----@field provider_views IssuesViewConfig[]
 ---@field views IssuesViewConfig[]
 ---@field starred_items AtlasStarredItem[]
 ---@field reloading_issue_keys table<string, boolean>
@@ -29,7 +28,6 @@ local M = {
 	issue_tree = {},
 	collapsed_issue_keys = {},
 	provider = nil,
-	provider_views = {},
 	views = {},
 	starred_items = {},
 	reloading_issue_keys = {},

@@ -27,7 +27,7 @@ function M.on_select(issue, refresh, opts)
 		return
 	end
 
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	state.items = "loading"
 	notify.loading(string.format("Loading conversation for %s...", key))
 	state.requests.run(function(done)

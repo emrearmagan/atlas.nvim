@@ -28,9 +28,8 @@ local function item(action_id, map_item)
 		return nil
 	end
 
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param buf integer
@@ -40,10 +39,19 @@ function M.register(buf, views)
 	local controller = require("atlas.issues.ui.dashboard.controller")
 	local state = require("atlas.issues.state")
 	local provider = assert(state.provider)
-	local provider_name = provider.name
 	local capabilities = provider.capabilities
 	local function context(issue)
 		return { provider = provider, issue = issue, current_user = state.current_user }
+	end
+	local function run_with_issue(action_id, on_done)
+		return function()
+			local issue = selected_issue()
+			if issue == nil then
+				notify.warn("No issue selected")
+				return
+			end
+			actions.run(action_id, context(issue), on_done)
+		end
 	end
 	local function supports(action_id)
 		for _, action in ipairs((capabilities.actions and capabilities.actions.items) or {}) do
@@ -55,6 +63,7 @@ function M.register(buf, views)
 	end
 
 	local items = {}
+	local filters = {}
 	utils.insert_if(
 		items,
 		item("ui.previous_column", {
@@ -86,13 +95,12 @@ function M.register(buf, views)
 
 	for _, view in ipairs(views) do
 		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then
-			local v = view
 			table.insert(items, {
-				key = v.key,
-				desc = string.format("Switch to %s", v.name),
+				key = view.key,
+				desc = string.format("Switch to %s", view.name),
 				hidden = true,
 				callback = function()
-					controller.switch_view(v)
+					controller.switch_view(view)
 				end,
 			})
 		end
@@ -104,11 +112,8 @@ function M.register(buf, views)
 		desc = "Switch to bookmarks",
 		hidden = true,
 		callback = function()
-			for _, view in ipairs(state.views) do
-				if view == bookmark_view then
-					controller.switch_view(view)
-					return
-				end
+			if next(state.bookmarks.items) ~= nil or #state.starred_items > 0 then
+				controller.switch_view(bookmark_view)
 			end
 		end,
 	})
@@ -117,6 +122,7 @@ function M.register(buf, views)
 		items,
 		item("ui.select", {
 			desc = "Run bookmark",
+			index = 2,
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
@@ -146,7 +152,7 @@ function M.register(buf, views)
 			items,
 			item("issues.create_issue", {
 				desc = "Create issue",
-				index = 2,
+				index = 6,
 				callback = function()
 					local issue = selected_issue()
 					actions.run("create_issue", context(issue), controller.apply_action_result)
@@ -157,10 +163,10 @@ function M.register(buf, views)
 
 	if actions.is_available("search", context(nil)) then
 		utils.insert_if(
-			items,
+			filters,
 			item("ui.search", {
 				desc = "Search issues",
-				index = 3,
+				index = 1,
 				callback = function()
 					actions.run("search", context(nil), controller.apply_action_result)
 				end,
@@ -170,9 +176,10 @@ function M.register(buf, views)
 
 	if actions.is_available("edit_search", context(nil)) then
 		utils.insert_if(
-			items,
-			item("issues.edit_search", {
-				desc = "Edit search",
+			filters,
+			item("ui.edit_search", {
+				desc = "Edit current search",
+				index = 2,
 				callback = function()
 					actions.run("edit_search", context(nil), controller.apply_action_result)
 				end,
@@ -184,7 +191,7 @@ function M.register(buf, views)
 		items,
 		item("ui.show_details", {
 			desc = "Show issue details",
-			index = 4,
+			index = 3,
 			opts = { nowait = true },
 			callback = function()
 				controller.show_issue_details(buf)
@@ -196,7 +203,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_star", {
 			desc = "Star or unstar issue",
-			index = 5,
+			index = 30,
 			callback = function()
 				controller.toggle_issue_star(selected_issue())
 			end,
@@ -207,10 +214,8 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh", {
 			desc = "Reload selected issue",
-			index = 6,
-			callback = function()
-				controller.refresh_current_issue()
-			end,
+			index = 80,
+			callback = controller.refresh_current_issue,
 		})
 	)
 
@@ -218,10 +223,8 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
-			index = 7,
-			callback = function()
-				controller.refresh_view()
-			end,
+			index = 81,
+			callback = controller.refresh_view,
 		})
 	)
 
@@ -229,10 +232,8 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_fold", {
 			desc = "Toggle issue children",
-			index = 8,
-			callback = function()
-				controller.toggle_current_issue_collapsed()
-			end,
+			index = 17,
+			callback = controller.toggle_current_issue_collapsed,
 		})
 	)
 
@@ -240,10 +241,8 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_all_folds", {
 			desc = "Toggle all issue children",
-			index = 9,
-			callback = function()
-				controller.toggle_all_issues_collapsed()
-			end,
+			index = 18,
+			callback = controller.toggle_all_issues_collapsed,
 		})
 	)
 
@@ -251,16 +250,9 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_id", {
 			desc = "Copy issue key",
-			index = 10,
+			index = 8,
 			opts = { nowait = true },
-			callback = function()
-				local issue = selected_issue()
-				if issue == nil then
-					notify.warn("No issue selected")
-					return
-				end
-				actions.run("copy_issue_key", context(issue))
-			end,
+			callback = run_with_issue("copy_issue_key"),
 		})
 	)
 
@@ -268,34 +260,19 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_url", {
 			desc = "Copy issue URL",
-			index = 10,
+			index = 9,
 			opts = { nowait = true },
-			callback = function()
-				local issue = selected_issue()
-				if issue == nil then
-					notify.warn("No issue selected")
-					return
-				end
-				actions.run("copy_issue_url", context(issue))
-			end,
+			callback = run_with_issue("copy_issue_url"),
 		})
 	)
 
-	-- g* keys grouped together
 	if supports("transition") then
 		utils.insert_if(
 			items,
 			item("issues.transition_issue", {
 				desc = "Transition issue",
-				index = 11,
-				callback = function()
-					local issue = selected_issue()
-					if issue == nil then
-						notify.warn("No issue selected")
-						return
-					end
-					actions.run("transition", context(issue), controller.apply_action_result)
-				end,
+				index = 21,
+				callback = run_with_issue("transition", controller.apply_action_result),
 			})
 		)
 	end
@@ -305,15 +282,8 @@ function M.register(buf, views)
 			items,
 			item("issues.change_assignee", {
 				desc = "Change assignee",
-				index = 12,
-				callback = function()
-					local issue = selected_issue()
-					if issue == nil then
-						notify.warn("No issue selected")
-						return
-					end
-					actions.run("assign", context(issue), controller.apply_action_result)
-				end,
+				index = 22,
+				callback = run_with_issue("assign", controller.apply_action_result),
 			})
 		)
 	end
@@ -323,15 +293,8 @@ function M.register(buf, views)
 			items,
 			item("issues.change_reporter", {
 				desc = "Change reporter",
-				index = 13,
-				callback = function()
-					local issue = selected_issue()
-					if issue == nil then
-						notify.warn("No issue selected")
-						return
-					end
-					actions.run("reporter", context(issue), controller.apply_action_result)
-				end,
+				index = 23,
+				callback = run_with_issue("reporter", controller.apply_action_result),
 			})
 		)
 	end
@@ -341,15 +304,8 @@ function M.register(buf, views)
 			items,
 			item("issues.edit_issue", {
 				desc = "Edit issue",
-				index = 14,
-				callback = function()
-					local issue = selected_issue()
-					if issue == nil then
-						notify.warn("No issue selected")
-						return
-					end
-					actions.run("edit_issue", context(issue), controller.apply_action_result)
-				end,
+				index = 5,
+				callback = run_with_issue("edit_issue", controller.apply_action_result),
 			})
 		)
 	end
@@ -358,16 +314,9 @@ function M.register(buf, views)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
-			index = 15,
+			index = 7,
 			opts = { nowait = true },
-			callback = function()
-				local issue = selected_issue()
-				if issue == nil then
-					notify.warn("No issue selected")
-					return
-				end
-				actions.run("browse_issue", context(issue))
-			end,
+			callback = run_with_issue("browse_issue"),
 		})
 	)
 
@@ -375,9 +324,8 @@ function M.register(buf, views)
 		items,
 		item("ui.previous_page", {
 			desc = "Previous page",
-			callback = function()
-				controller.previous_page()
-			end,
+			index = 15,
+			callback = controller.previous_page,
 		})
 	)
 
@@ -385,25 +333,35 @@ function M.register(buf, views)
 		items,
 		item("ui.next_page", {
 			desc = "Next page",
-			callback = function()
-				controller.next_page()
-			end,
+			index = 16,
+			callback = controller.next_page,
 		})
 	)
 
+	local custom = resolver.custom_items("issues", function(callback)
+		local issue = selected_issue()
+		return callback(context(issue), controller.apply_action_result)
+	end)
+
 	M.remove(buf)
-	help.register(provider_name, items, {
-		index = 230,
-		buffer = buf,
-	})
-	registrations[buf] = { group = provider_name, items = items }
+	registrations[buf] = {
+		{ group = "General", items = items, index = 1 },
+		{ group = "Filters", items = filters, index = 2 },
+		{ group = "Custom", items = custom, index = 3 },
+	}
+	for _, registration in ipairs(registrations[buf]) do
+		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
+	end
 end
 
 ---@param buf integer
 function M.remove(buf)
-	local registration = registrations[buf]
-	if registration then
-		require("atlas.ui.popups.help").remove(registration.group, registration.items, { buffer = buf })
+	local registered = registrations[buf]
+	if registered then
+		local help = require("atlas.ui.popups.help")
+		for _, registration in ipairs(registered) do
+			help.remove(registration.group, registration.items, { buffer = buf })
+		end
 		registrations[buf] = nil
 	end
 end

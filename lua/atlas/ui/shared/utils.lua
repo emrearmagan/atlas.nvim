@@ -1,10 +1,10 @@
+local ui_utils = require("atlas.ui.utils")
+
 local M = {
 	window = {},
 	buffer = {},
 	tab = {},
 }
-
-local _cached_version = nil
 
 ---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
 
@@ -14,6 +14,13 @@ local _cached_version = nil
 ---@return boolean
 function M.window.valid(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
+---@param win integer|nil
+---@param buf integer|nil
+---@return boolean
+function M.window.has_buffer(win, buf)
+	return M.window.valid(win) and vim.api.nvim_win_get_buf(win) == buf
 end
 
 ---@param anchor integer
@@ -53,7 +60,6 @@ function M.buffer.create(name, filetype)
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("bufhidden", "hide", { buf = buf })
 	vim.api.nvim_set_option_value("filetype", filetype, { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	return buf
@@ -64,6 +70,37 @@ function M.buffer.delete(buf)
 	if M.buffer.valid(buf) then
 		pcall(vim.api.nvim_buf_delete, buf, { force = true })
 	end
+end
+
+---@param buf integer
+---@param win integer
+---@param text string
+---@param header string[]|nil
+function M.buffer.center_message(buf, win, text, header)
+	if not M.buffer.valid(buf) or not M.window.valid(win) then
+		return
+	end
+	local width = vim.api.nvim_win_get_width(win)
+	local message = {}
+	for _, line in ipairs(vim.split(text:gsub("\r\n", "\n"), "\n", { plain = true })) do
+		local wrapped = M.wrap_line(line:gsub("%c", " "), width)
+		vim.list_extend(message, wrapped)
+	end
+	local lines = header or {}
+	local padding = math.max(0, math.floor((vim.api.nvim_win_get_height(win) - #lines - #message) / 2))
+	for _ = 1, padding do
+		lines[#lines + 1] = ""
+	end
+	for _, line in ipairs(message) do
+		lines[#lines + 1] = ui_utils.center_text(line, width)
+	end
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	vim.bo[buf].modifiable = false
+	vim.api.nvim_win_set_cursor(win, { 1, 0 })
+	vim.api.nvim_win_call(win, function()
+		vim.fn.winrestview({ topline = 1, leftcol = 0, skipcol = 0 })
+	end)
 end
 
 -- Tab
@@ -96,9 +133,14 @@ end
 ---@param lines string[]
 ---@param spans AtlasUIHighlight[]
 ---@param block { lines: string[], highlights: AtlasUIHighlight[]|nil }
-function M.append_block(lines, spans, block)
+---@param padding integer|nil
+function M.append_block(lines, spans, block, padding)
 	local base = #lines
-	vim.list_extend(lines, block.lines or {})
+	local pad = padding or 0
+	local prefix = string.rep(" ", pad)
+	for _, line in ipairs(block.lines or {}) do
+		table.insert(lines, prefix .. line)
+	end
 	for _, span in ipairs(block.highlights or {}) do
 		if span.line_hl_group ~= nil then
 			table.insert(spans, {
@@ -108,7 +150,27 @@ function M.append_block(lines, spans, block)
 		else
 			table.insert(spans, {
 				line = base + span.line,
-				start_col = span.start_col,
+				start_col = pad + span.start_col,
+				end_col = pad + span.end_col,
+				hl_group = span.hl_group,
+			})
+		end
+	end
+end
+
+---@param buf integer
+---@param ns integer
+---@param spans AtlasUIHighlight[]
+function M.apply_spans(buf, ns, spans)
+	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+	for _, span in ipairs(spans) do
+		if span.line_hl_group then
+			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
+				line_hl_group = span.line_hl_group,
+			})
+		else
+			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
+				end_row = span.line,
 				end_col = span.end_col,
 				hl_group = span.hl_group,
 			})
@@ -116,24 +178,52 @@ function M.append_block(lines, spans, block)
 	end
 end
 
-function M.get_version()
-	if _cached_version then
-		return _cached_version
+---Wrap display content, preserving highlights and prefixing each resulting row.
+---@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string }[] }
+---@param width integer Content width, excluding the prefix.
+---@param prefix string
+---@return { lines: string[], highlights: AtlasUIHighlight[] }
+function M.wrap_content(content, width, prefix)
+	local lines, spans = {}, {}
+	local highlights_by_line = {}
+
+	for _, highlight in ipairs(content.highlights or {}) do
+		local line = highlight.line + 1
+		highlights_by_line[line] = highlights_by_line[line] or {}
+		table.insert(highlights_by_line[line], highlight)
 	end
 
-	local ok, version = pcall(function()
-		return vim.fn.system(
-			"git -C " .. vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h:h") .. " describe --tags --abbrev=0"
-		)
-	end)
+	for index, source in ipairs(content.lines) do
+		local rows, offsets = M.wrap_line(source, width)
+		for row_index, row in ipairs(rows) do
+			local offset = offsets[row_index]
+			table.insert(lines, prefix .. row)
 
-	if ok and type(version) == "string" and version ~= "" then
-		_cached_version = version:gsub("%s+", "")
-	else
-		_cached_version = "dev"
+			if prefix ~= "" then
+				table.insert(spans, {
+					line = #lines - 1,
+					start_col = 0,
+					end_col = #prefix,
+					hl_group = "AtlasTextMuted",
+				})
+			end
+
+			for _, highlight in ipairs(highlights_by_line[index] or {}) do
+				local start_col = math.max(0, highlight.start_col - offset)
+				local end_col = math.min(highlight.end_col - offset, #row)
+				if end_col > start_col then
+					table.insert(spans, {
+						line = #lines - 1,
+						start_col = #prefix + start_col,
+						end_col = #prefix + end_col,
+						hl_group = highlight.hl_group,
+					})
+				end
+			end
+		end
 	end
 
-	return _cached_version
+	return { lines = lines, highlights = spans }
 end
 
 ---Convert UTC date components to a Unix epoch without relying on the system timezone
@@ -165,6 +255,11 @@ function M.relative_time(iso)
 	end
 
 	local then_epoch = utc_epoch(tonumber(y), tonumber(mo), tonumber(d), tonumber(hh), tonumber(mm), tonumber(ss))
+	local sign, offset_hours, offset_minutes = iso:match("([+-])(%d%d):?(%d%d)$")
+	if sign then
+		local offset = (tonumber(offset_hours) * 60 + tonumber(offset_minutes)) * 60
+		then_epoch = then_epoch - (sign == "+" and offset or -offset)
+	end
 
 	local delta = os.time() - then_epoch
 	if delta < 0 then
@@ -353,10 +448,6 @@ function M.sanitize_lines(text)
 		table.insert(out, line)
 	end
 
-	if #out == 0 then
-		return { "-" }
-	end
-
 	return out
 end
 
@@ -378,23 +469,21 @@ function M.truncate(str, max_dw, from_start)
 	local marker = max_dw == 1 and "." or ".."
 
 	local nchars = strchars(str, true)
-	if from_start then
-		for i = 1, nchars do
-			local tail = strcharpart(str, i, nchars - i, true)
-			if strwidth(marker .. tail) <= max_dw then
-				return marker .. tail
-			end
-		end
-		return marker
-	end
-
-	for i = nchars - 1, 0, -1 do
-		local head = strcharpart(str, 0, i, true)
-		if strwidth(head .. marker) <= max_dw then
-			return head .. marker
+	local low, high = 0, nchars - 1
+	local result = marker
+	while low <= high do
+		local count = math.floor((low + high) / 2)
+		local start = from_start and (nchars - count) or 0
+		local part = strcharpart(str, start, count, true)
+		local candidate = from_start and (marker .. part) or (part .. marker)
+		if strwidth(candidate) <= max_dw then
+			result = candidate
+			low = count + 1
+		else
+			high = count - 1
 		end
 	end
-	return marker
+	return result
 end
 
 ---@param name string|nil
@@ -423,31 +512,33 @@ end
 
 ---@param text string
 ---@param max_dw integer
----@return string[]
+---@return string[] lines
+---@return integer[] offsets Zero-based byte offsets in the source.
 function M.wrap_line(text, max_dw)
-	if max_dw < 2 or strwidth(text) <= max_dw then
-		return { text }
+	if max_dw < 1 or strwidth(text) <= max_dw then
+		return { text }, { 0 }
 	end
 
-	local result = {}
+	local result, offsets = {}, {}
 	local remaining = text
 	while remaining ~= "" do
+		offsets[#result + 1] = #text - #remaining
 		if strwidth(remaining) <= max_dw then
 			result[#result + 1] = remaining
 			break
 		end
 
 		local nchars = strchars(remaining, true)
-		local cut = nchars
-		for i = nchars - 1, 1, -1 do
-			if strwidth(strcharpart(remaining, 0, i, true)) <= max_dw then
-				cut = i
+		local cut = 1
+		for i = 1, nchars - 1 do
+			if strwidth(strcharpart(remaining, 0, i, true)) > max_dw then
 				break
 			end
+			cut = i
 		end
 
 		local last_space = nil
-		local half = math.floor(cut * 0.5)
+		local half = math.max(1, math.floor(cut * 0.5))
 		for i = cut, half, -1 do
 			if strcharpart(remaining, i - 1, 1, true) == " " then
 				last_space = i
@@ -464,7 +555,7 @@ function M.wrap_line(text, max_dw)
 		end
 	end
 
-	return result
+	return result, offsets
 end
 
 ---@param text string|nil

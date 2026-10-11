@@ -2,6 +2,7 @@ local M = {}
 
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
+local pipelines = require("atlas.pulls.pipelines")
 local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
@@ -14,9 +15,8 @@ local function item(action_id, map_item)
 	if keys == nil then
 		return nil
 	end
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -35,18 +35,25 @@ function M.setup(buf, refresh)
 	local items = {}
 	utils.insert_if(
 		items,
-		item("ui.toggle_fold", {
-			desc = "Toggle description or pipeline",
+		item("ui.toggle_description_mode", {
+			desc = "Toggle description mode",
+			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = detail.line_map[lnum]
-				if entry and entry.kind == "pipeline" and entry.pipeline and state.toggle_pipeline(entry.pipeline) then
-					refresh()
-				elseif entry and entry.kind == "description" then
-					state.description_expanded = not state.description_expanded
-					refresh()
-				end
+				state.view_mode = state.view_mode == "raw" and "markdown" or "raw"
+				refresh()
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.toggle_fold", {
+			desc = "Toggle description",
+			index = 10,
+			opts = { nowait = true, silent = true },
+			callback = function()
+				state.description_expanded = not state.description_expanded
+				refresh()
 			end,
 		})
 	)
@@ -56,15 +63,14 @@ function M.setup(buf, refresh)
 		table.insert(items, {
 			key = open_keys,
 			desc = "Show pipeline details",
+			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]
 				local entry = detail.line_map[lnum]
 				local pr = detail.current_pr
 				if pr and entry and entry.pipeline then
-					local pipelines = type(detail.pipelines) == "table" and detail.pipelines or { entry.pipeline }
-					require("atlas.pulls.ui.pipelines").open(pr, detail.provider, {
-						pipelines = pipelines,
+					pipelines.open(pr, detail.provider, {
 						selected_pipeline = entry.pipeline,
 						selected_stage = entry.stage,
 						selected_job = entry.job,
@@ -73,12 +79,13 @@ function M.setup(buf, refresh)
 			end,
 		})
 	end
-	help.register("Detail", items, { index = 212, buffer = buf })
+	help.register("Detail", items, { index = 2, buffer = buf })
 end
 
 ---@param buf integer
 function M.teardown(buf)
 	local items = {}
+	utils.insert_if(items, remove_item("ui.toggle_description_mode"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	local open_keys = resolver.resolve("ui.show_details") or {}
 	vim.list_extend(open_keys, resolver.resolve("ui.select") or {})

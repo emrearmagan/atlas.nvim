@@ -3,6 +3,8 @@
 
 local M = {}
 
+local utils = require("atlas.core.utils")
+
 ---@class BitbucketRepoTarget
 ---@field workspace string
 ---@field repo string
@@ -50,27 +52,9 @@ end
 
 ---@param input string|nil
 ---@return BitbucketParsedSearch|nil, string|nil
-function M.parse(input)
+local function parse(input)
 	local input_value = vim.trim(input or "")
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #input_value do
-		local char = input_value:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
+	local tokens = utils.split_tokens(input_value)
 
 	local targets, query_tokens, seen = {}, {}, {}
 	for _, token in ipairs(tokens) do
@@ -92,10 +76,6 @@ function M.parse(input)
 		else
 			table.insert(query_tokens, token)
 		end
-	end
-
-	if #targets == 0 then
-		return nil, "Add repo:workspace/name or project:workspace/key"
 	end
 
 	local value = table.concat(query_tokens, " ")
@@ -128,6 +108,16 @@ function M.parse(input)
 	}, nil
 end
 
+---@param input string|nil
+---@return BitbucketParsedSearch|nil, string|nil
+function M.parse(input)
+	local parsed, err = parse(input)
+	if parsed and #parsed.targets == 0 then
+		return nil, "Add repo:workspace/name or project:workspace/key"
+	end
+	return parsed, err
+end
+
 ---@param parsed BitbucketParsedSearch
 ---@param states PullsStateFilter[]
 ---@return string
@@ -143,9 +133,9 @@ end
 ---@return string, PullsStateFilter[]
 function M.query(view)
 	---@cast view AtlasBitbucketViewConfig
-	local parsed = M.parse(view.search)
+	local parsed = parse(view.search)
 	local states = view._states or (parsed and parsed.states) or { "open" }
-	if parsed == nil then
+	if parsed == nil or #parsed.targets == 0 then
 		return vim.trim(view.search or ""), states
 	end
 

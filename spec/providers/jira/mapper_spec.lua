@@ -2,6 +2,7 @@ local mapper = require("atlas.issues.providers.jira.api.mapper")
 
 local function issue_raw()
 	return {
+		id = "10042",
 		key = "KAN-42",
 		fields = {
 			summary = "My issue",
@@ -20,6 +21,7 @@ describe("Jira issue mapping", function()
 	it("maps Jira fields directly onto the provider issue", function()
 		local issue = mapper.to_issue(issue_raw())
 
+		assert.equal("10042", issue.id)
 		assert.equal("KAN", issue.project.key)
 		assert.equal("High", issue.priority)
 		assert.is_nil(issue._raw)

@@ -4,7 +4,7 @@ local function fresh_module()
 end
 
 local function stub_service(request, clear_cache)
-	package.preload["atlas.pulls.providers.bitbucket.api.service"] = function()
+	package.preload["atlas.providers.bitbucket.client"] = function()
 		return {
 			request = request,
 			clear_cache = clear_cache or function() end,
@@ -19,12 +19,12 @@ describe("bitbucket pull request updates", function()
 	before_each(function()
 		calls = {}
 		cache_cleared = 0
-		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
+		package.loaded["atlas.providers.bitbucket.client"] = nil
 	end)
 
 	after_each(function()
-		package.preload["atlas.pulls.providers.bitbucket.api.service"] = nil
-		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
+		package.preload["atlas.providers.bitbucket.client"] = nil
+		package.loaded["atlas.providers.bitbucket.client"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.pullrequests"] = nil
 	end)
 
@@ -35,8 +35,9 @@ describe("bitbucket pull request updates", function()
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 5, links = {} }
 		local ok, err
-		api.update_description({ id = 5, links = {} }, "New body", function(success, e)
+		api.update_description(pr, "New body", function(success, e)
 			ok, err = success, e
 		end)
 
@@ -75,14 +76,66 @@ describe("bitbucket pull request updates", function()
 		assert.equal(2, cache_cleared)
 	end)
 
+	it("combines the merge title and body", function()
+		stub_service(function(_, _, _, body, callback)
+			table.insert(calls, body)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = {
+			id = 5,
+			links = { merge = "https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5/merge" },
+		}
+		for index, case in ipairs({
+			{ method = "merge", body = "Body", message = "Subject\n\nBody" },
+			{ method = "squash", body = "", message = "Subject" },
+		}) do
+			api.merge(pr, {
+				method = case.method,
+				delete_source_branch = true,
+				subject = "Subject",
+				body = case.body,
+			}, function() end)
+			assert.equal(
+				vim.json.encode({
+					close_source_branch = true,
+					merge_strategy = case.method == "merge" and "merge_commit" or "squash",
+					message = case.message,
+				}),
+				calls[index]
+			)
+		end
+	end)
+
+	it("preserves explicit empty selections and false draft", function()
+		stub_service(function(_, _, _, body, callback)
+			table.insert(calls, body)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = { id = 5, links = { self = "url" } }
+
+		api.update_pr(pr, { body = "", draft = false, reviewers = {} }, function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		api.update_pr(pr, { title = "New title" }, function() end)
+
+		assert.same({
+			vim.json.encode({ description = "", draft = false, reviewers = {} }),
+			vim.json.encode({ title = "New title" }),
+		}, calls)
+	end)
+
 	it("propagates errors from the request", function()
 		stub_service(function(_, _, _, _, callback)
 			callback(nil, "boom")
 		end)
 		local api = fresh_module()
 
+		local pr = { id = 5, links = { self = "url" } }
 		local ok, err
-		api.update_description({ id = 5, links = { self = "url" } }, "New body", function(success, e)
+		api.update_description(pr, "New body", function(success, e)
 			ok, err = success, e
 		end)
 

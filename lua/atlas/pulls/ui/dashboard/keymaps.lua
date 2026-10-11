@@ -4,9 +4,10 @@ local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
+local controller = require("atlas.pulls.ui.dashboard.controller")
 local registrations = {}
 
----@return PullRequest|nil, PullsRepo|nil
+---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
@@ -28,9 +29,8 @@ local function item(action_id, map_item)
 		return nil
 	end
 
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param buf integer
@@ -39,7 +39,16 @@ function M.register(buf, views)
 	local help = require("atlas.ui.popups.help")
 	M.remove(buf)
 	local state = require("atlas.pulls.state")
-	local provider_name = state.provider and state.provider.name or "Pulls"
+	local function context(pr)
+		return { provider = state.provider, pr = pr, current_user = state.current_user, buf = buf }
+	end
+	local function on_result(pr)
+		return function(result)
+			if pr ~= nil and result ~= nil and result.changed_pr then
+				controller.refresh_pr(pr)
+			end
+		end
+	end
 	---@param id AtlasPullActionId
 	---@param needs_pr boolean
 	local function run_action(id, needs_pr)
@@ -50,30 +59,21 @@ function M.register(buf, views)
 			return
 		end
 		if state.provider then
-			actions.run(id, {
-				provider = state.provider,
-				pr = pr,
-				current_user = state.current_user,
-				buf = buf,
-			}, function(result)
-				if pr ~= nil and result ~= nil and result.changed_pr then
-					require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
-				end
-			end)
+			actions.run(id, context(pr), on_result(pr))
 		end
 	end
 
-	local items = {}
+	local general = {}
+	local filters = {}
 
 	for _, view in ipairs(views) do
 		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then
 			local v = view
-			table.insert(items, {
+			table.insert(general, {
 				key = v.key,
 				desc = string.format("Switch to %s", v.name),
 				hidden = true,
 				callback = function()
-					local controller = require("atlas.pulls.ui.dashboard.controller")
 					controller.switch_view(v)
 				end,
 			})
@@ -81,42 +81,41 @@ function M.register(buf, views)
 	end
 
 	local bookmark_view = state.bookmarks.tab
-	table.insert(items, {
+	---@cast bookmark_view AtlasPullsViewConfig
+	table.insert(general, {
 		key = bookmark_view.key,
 		desc = "Switch to bookmarks",
 		hidden = true,
 		callback = function()
-			for _, view in ipairs(state.views) do
-				if view == bookmark_view then
-					require("atlas.pulls.ui.dashboard.controller").switch_view(view)
-					return
-				end
+			if next(state.bookmarks.items) ~= nil or #state.starred_items > 0 then
+				controller.switch_view(bookmark_view)
 			end
 		end,
 	})
 
 	utils.insert_if(
-		items,
+		general,
 		item("ui.select", {
 			desc = "Run bookmark",
+			index = 2,
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
 				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
-					require("atlas.pulls.ui.dashboard.controller").select_bookmark(node)
+					controller.select_bookmark(node)
 				end
 			end,
 		})
 	)
 
-	for _, status in ipairs(state.available_states) do
+	for index, status in ipairs(state.available_states) do
 		local value = status
 		utils.insert_if(
-			items,
+			filters,
 			item("pulls.filters." .. value, {
 				desc = string.format("Toggle %s filter", value),
+				index = 10 + index,
 				callback = function()
-					local controller = require("atlas.pulls.ui.dashboard.controller")
 					controller.toggle_status_filter(value)
 				end,
 			})
@@ -125,23 +124,14 @@ function M.register(buf, views)
 
 	if state.provider then
 		utils.insert_if(
-			items,
+			general,
 			item("ui.open_actions", {
 				desc = "Open PR actions",
 				index = 1,
 				callback = function()
 					local pr = selected_pr()
 					if state.provider then
-						actions.open({
-							provider = state.provider,
-							pr = pr,
-							current_user = state.current_user,
-							buf = buf,
-						}, function(result)
-							if pr ~= nil and result ~= nil and result.changed_pr then
-								require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
-							end
-						end)
+						actions.open(context(pr), on_result(pr))
 					end
 				end,
 			})
@@ -149,9 +139,10 @@ function M.register(buf, views)
 	end
 
 	utils.insert_if(
-		items,
+		general,
 		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
+			index = 7,
 			opts = { nowait = true },
 			callback = function()
 				run_action("open_in_browser", true)
@@ -160,9 +151,10 @@ function M.register(buf, views)
 	)
 
 	utils.insert_if(
-		items,
+		general,
 		item("ui.copy_url", {
 			desc = "Copy PR URL",
+			index = 9,
 			opts = { nowait = true },
 			callback = function()
 				run_action("copy_url", true)
@@ -171,9 +163,10 @@ function M.register(buf, views)
 	)
 
 	utils.insert_if(
-		items,
+		general,
 		item("ui.copy_id", {
 			desc = "Copy PR ID",
+			index = 8,
 			opts = { nowait = true },
 			callback = function()
 				run_action("copy_id", true)
@@ -182,35 +175,50 @@ function M.register(buf, views)
 	)
 
 	utils.insert_if(
-		items,
-		item("ui.show_details", {
-			desc = "Show PR details",
+		general,
+		item("pulls.edit_pr", {
+			desc = "Edit PR",
+			index = 5,
 			opts = { nowait = true },
 			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").show_pr_details(buf)
+				run_action("edit_pr", true)
 			end,
 		})
 	)
 
 	utils.insert_if(
-		items,
+		general,
+		item("ui.show_details", {
+			desc = "Show PR details",
+			index = 3,
+			opts = { nowait = true },
+			callback = function()
+				controller.show_pr_details(buf)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		general,
 		item("ui.toggle_star", {
 			desc = "Star or unstar PR",
+			index = 30,
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
 					notify.warn("No PR selected")
 					return
 				end
-				require("atlas.pulls.ui.dashboard.controller").toggle_star(pr)
+				controller.toggle_star(pr)
 			end,
 		})
 	)
 
 	utils.insert_if(
-		items,
+		general,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
+			index = 4,
 			opts = { nowait = true },
 			callback = function()
 				run_action("open_diff", true)
@@ -219,9 +227,10 @@ function M.register(buf, views)
 	)
 
 	utils.insert_if(
-		items,
+		general,
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
+			index = 6,
 			opts = { nowait = true },
 			callback = function()
 				run_action("checkout", true)
@@ -229,18 +238,14 @@ function M.register(buf, views)
 		})
 	)
 
-	local search_available = state.provider
-		and actions.is_available("search", {
-			provider = state.provider,
-			current_user = state.current_user,
-			buf = buf,
-		})
+	local search_available = state.provider and actions.is_available("search", context(nil))
 
 	if search_available then
 		utils.insert_if(
-			items,
+			filters,
 			item("ui.search", {
 				desc = "Search",
+				index = 1,
 				callback = function()
 					run_action("search", false)
 				end,
@@ -249,9 +254,10 @@ function M.register(buf, views)
 	end
 
 	utils.insert_if(
-		items,
-		item("pulls.edit_search", {
-			desc = "Edit search",
+		filters,
+		item("ui.edit_search", {
+			desc = "Edit current search",
+			index = 2,
 			callback = function()
 				run_action("edit_search", false)
 			end,
@@ -259,80 +265,89 @@ function M.register(buf, views)
 	)
 
 	utils.insert_if(
-		items,
+		general,
 		item("ui.refresh", {
 			desc = "Refetch selected PR",
+			index = 80,
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
 					notify.warn("No PR selected")
 					return
 				end
-				require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+				controller.refresh_pr(pr)
 			end,
 		})
 	)
 
-	utils.insert_if(
-		items,
-		item("ui.refresh_view", {
-			desc = "Refresh current view",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").refresh_view()
-			end,
-		})
-	)
-
-	utils.insert_if(
-		items,
-		item("ui.previous_page", {
-			desc = "Previous page",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").previous_page()
-			end,
-		})
-	)
-
-	utils.insert_if(
-		items,
-		item("ui.next_page", {
-			desc = "Next page",
-			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").next_page()
-			end,
-		})
-	)
-
-	help.register(provider_name, items, { index = 220, buffer = buf })
-
-	local general = {}
 	utils.insert_if(
 		general,
-		item("pulls.toggle_repo_panel", {
-			desc = "Open repo panel",
+		item("ui.refresh_view", {
+			desc = "Refresh current view",
+			index = 81,
+			callback = controller.refresh_view,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.previous_page", {
+			desc = "Previous page",
+			index = 15,
+			callback = controller.previous_page,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.next_page", {
+			desc = "Next page",
+			index = 16,
+			callback = controller.next_page,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("pulls.open_repository", {
+			desc = "Open repository browser",
+			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local _, repo = selected_pr()
+				local node = require("atlas.ui.navigation").current_item()
+				local repo = type(node) == "table" and node.repo or nil
 				if repo == nil then
 					notify.warn("No repository selected")
 					return
 				end
-				local repo_detail = require("atlas.pulls.ui.repo_detail")
-				if repo_detail.is_open() then
-					repo_detail.close()
+				if state.provider == nil then
+					notify.warn("Repository provider unavailable")
 					return
 				end
-				repo_detail.open(repo, {
-					provider = require("atlas.pulls.state").provider,
-				})
+				require("atlas.ui.repository").open(repo.full_name, state.provider)
 			end,
 		})
 	)
-	help.register("General", general, { buffer = buf })
+
+	local custom = resolver.custom_items("pulls", function(callback)
+		local pr = selected_pr()
+		if state.provider then
+			return callback(context(pr), function(result)
+				if pr and result and result.changed_pr then
+					controller.refresh_pr(pr)
+				end
+			end)
+		end
+	end)
+
 	registrations[buf] = {
-		{ group = provider_name, items = items },
-		{ group = "General", items = general },
+		{ group = "General", items = general, index = 1 },
+		{ group = "Filters", items = filters, index = 2 },
+		{ group = "Custom", items = custom, index = 3 },
 	}
+	for _, registration in ipairs(registrations[buf]) do
+		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
+	end
 end
 
 ---@param buf integer

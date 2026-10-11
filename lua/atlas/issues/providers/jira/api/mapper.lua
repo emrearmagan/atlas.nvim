@@ -1,6 +1,16 @@
 local M = {}
-local adf = require("atlas.issues.providers.jira.converted.adf")
+local adf = require("atlas.formats.adf.to_markdown")
 local json = require("atlas.core.json")
+local users = require("atlas.providers.jira.users")
+
+---@param raw any
+---@return AtlasUser|nil
+local function normalize_issue_user(raw)
+	local user = users.to_user(raw)
+	if user and user.id ~= "" and user.name ~= "" then
+		return user
+	end
+end
 
 ---@param raw_project any Decoded API value.
 ---@return JiraIssueProject|nil
@@ -94,26 +104,6 @@ local function extract_status(raw_status)
 	return name, id
 end
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-local function normalize_issue_user(raw_user)
-	raw_user = json.nilify(raw_user)
-	if type(raw_user) ~= "table" then
-		return nil
-	end
-
-	-- Replace accountId with name to support Jira server instances
-	local account_id = json.safe_str(raw_user.accountId) or json.safe_str(raw_user.name) or ""
-	local display_name = json.safe_str(raw_user.displayName) or ""
-	if account_id == "" or display_name == "" then
-		return nil
-	end
-	return {
-		account_id = account_id,
-		display_name = display_name,
-	}
-end
-
 ---@param raw_parent any Decoded API value.
 ---@return IssueRef|nil
 local function extract_parent(raw_parent)
@@ -169,6 +159,7 @@ function M.to_issue(raw, sp_field)
 	local status, status_id = extract_status(safe_get(fields, "status"))
 
 	return {
+		id = raw.id,
 		key = tostring(raw.key or ""),
 		title = tostring(fields.summary or ""),
 		project = M.to_project(safe_get(fields, "project")),
@@ -204,7 +195,9 @@ function M.to_issue_details(raw, project_config)
 	end
 	---@type JiraIssueDetails
 	local details = {
+		title = json.safe_str(fields.summary),
 		description = extract_description(fields.description),
+		type = M.to_issue_type(safe_get(fields, "issuetype")),
 		status = status,
 		priority = safe_get(fields, "priority", "name"),
 		reporter = normalize_issue_user(safe_get(fields, "reporter")),
@@ -350,7 +343,7 @@ local function arrow_hl(from_hl, to_hl)
 end
 
 ---@param raw_item table
----@param actor IssueUser|nil
+---@param actor AtlasUser|nil
 ---@param date string|nil
 ---@return IssueActivityEntry
 local function activity_from_history_item(raw_item, actor, date)

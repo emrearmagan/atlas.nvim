@@ -1,6 +1,7 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
+local markdown = require("atlas.formats.markdown")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
@@ -9,11 +10,11 @@ local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
-local PADDING = string.rep(" ", PADDING_X)
-local MAX_DESCRIPTION_LINES = 10
+local MAX_DESCRIPTION_LINES = 15
 
 ---@param pr PullRequest
 ---@return boolean
@@ -47,24 +48,11 @@ function M.on_select(pr, refresh, opts)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
-	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	local should_fetch_merge_checks = can_fetch_merge_checks
-		and (force_refresh or state.merge_checks == nil or state.merge_checks == "loading")
-
-	if should_fetch_reviewers or should_fetch_merge_checks then
+	if should_fetch_reviewers then
 		reset_requests()
-	end
-
-	if should_fetch_reviewers then
 		state.reviewers = "loading"
-	end
-	if should_fetch_merge_checks then
-		state.merge_checks = "loading"
-	end
-
-	if should_fetch_reviewers then
 		state.requests.run(function(done)
 			return core.fetch_reviewers(pr, opts, done)
 		end, function(reviewers, err)
@@ -79,22 +67,24 @@ function M.on_select(pr, refresh, opts)
 			refresh()
 		end)
 	end
+end
 
-	if should_fetch_merge_checks then
-		state.requests.run(function(done)
-			return core.fetch_merge_checks(pr, opts, done)
-		end, function(checks, err)
-			if not is_current(pr) then
-				return
-			end
-			if err then
-				state.merge_checks = err
-			else
-				state.merge_checks = checks or {}
-			end
-			refresh()
-		end)
+---@param title string
+---@param message string
+---@param width integer
+---@param lines string[]
+---@param spans table[]
+local function render_error(title, message, width, lines, spans)
+	utils.push(lines, spans, title, "AtlasColumnHeader", PADDING_X)
+	local content = { lines = {}, spans = {} }
+	local content_width = math.max(1, width - PADDING_X * 2 - 4)
+	for _, line in ipairs(utils.sanitize_lines(message)) do
+		for _, wrapped in ipairs(utils.wrap_line(line, content_width)) do
+			utils.push(content.lines, content.spans, wrapped, "AtlasLogError")
+		end
 	end
+	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
+	table.insert(lines, "")
 end
 
 -- Reviewers
@@ -165,19 +155,7 @@ local function render_reviewers(width, lines, spans)
 	end
 
 	if type(state.reviewers) == "string" then
-		utils.push(lines, spans, "Reviewers", "AtlasColumnHeader", PADDING_X)
-		local err_text = state.reviewers
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { err_text },
-					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+		render_error("Reviewers", state.reviewers, width, lines, spans)
 		return
 	end
 
@@ -226,18 +204,11 @@ local function render_reviewers(width, lines, spans)
 		})
 
 		local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
-		local line_offset = #content.lines
-		for _, line in ipairs(other_content.lines) do
-			table.insert(content.lines, line)
-		end
-		for _, span in ipairs(other_content.spans) do
-			table.insert(content.spans, {
-				line = line_offset + span.line,
-				start_col = span.start_col,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
-		end
+		utils.append_block(
+			content.lines,
+			content.spans,
+			{ lines = other_content.lines, highlights = other_content.spans }
+		)
 	end
 
 	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
@@ -246,61 +217,7 @@ end
 
 -- Pipelines
 
-local PIPELINE_HL = {
-	SUCCESSFUL = "AtlasPipelineLinkSuccess",
-	FAILED = "AtlasPipelineLinkFailed",
-	INPROGRESS = "AtlasPipelineLinkInProgress",
-	STOPPED = "AtlasPipelineLinkMuted",
-}
-
-local PIPELINE_STATUS_LABEL = {
-	SUCCESSFUL = "Passed",
-	FAILED = "Failed",
-	INPROGRESS = "Running",
-	STOPPED = "Stopped",
-}
-
-local PIPELINE_STATUS_PRIORITY = {
-	FAILED = 1,
-	INPROGRESS = 2,
-	STOPPED = 3,
-	UNKNOWN = 4,
-	SUCCESSFUL = 5,
-}
-
 local MAX_OVERVIEW_JOBS = 5
-
----@param status string
----@return string
-local function status_label(status)
-	return PIPELINE_STATUS_LABEL[tostring(status or ""):upper()] or "Unknown"
-end
-
----@generic T: { state: string }
----@param items T[]
----@return T[]
-local function sort_by_status(items)
-	local indexed = {}
-	for index, item in ipairs(items) do
-		table.insert(indexed, { item = item, index = index })
-	end
-	table.sort(indexed, function(a, b)
-		local a_state = tostring(a.item.state or "UNKNOWN"):upper()
-		local b_state = tostring(b.item.state or "UNKNOWN"):upper()
-		local a_priority = PIPELINE_STATUS_PRIORITY[a_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
-		local b_priority = PIPELINE_STATUS_PRIORITY[b_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
-		if a_priority == b_priority then
-			return a.index < b.index
-		end
-		return a_priority < b_priority
-	end)
-
-	local sorted = {}
-	for _, entry in ipairs(indexed) do
-		table.insert(sorted, entry.item)
-	end
-	return sorted
-end
 
 ---@param _pr PullRequest
 ---@param width integer
@@ -313,23 +230,11 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 	end
 
 	if type(detail.pipelines) == "string" then
-		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = detail.pipelines
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { err_text },
-					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+		render_error("Pipelines", detail.pipelines, width, lines, spans)
 		return
 	end
 
-	local entries = sort_by_status(detail.pipelines)
+	local entries = pipeline_utils.sort_by_state(detail.pipelines)
 
 	if #entries == 0 then
 		return
@@ -343,7 +248,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			table.insert(rows, { kind = "separator" })
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
-		local icon = icons.pulls_status(state_value:lower())
+		local icon, status_hl = icons.pulls_status(state_value:lower())
 		local label = pipeline.name
 		local job_count = tonumber(pipeline.job_count)
 		if job_count ~= nil then
@@ -351,8 +256,8 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local row = {
 			label = label,
-			status = string.format("%s %s", icon, status_label(state_value)),
-			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
+			status = string.format("%s %s", icon, pipeline_utils.state_label(state_value)),
+			status_hl = status_hl,
 			kind = "pipeline",
 			pipeline = pipeline,
 			url = tostring(pipeline.url or ""),
@@ -369,33 +274,33 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 				has_named_stage = true
 			end
 		end
-		for _, pipeline_stage in ipairs(sort_by_status(pipeline.stages)) do
+		for _, pipeline_stage in ipairs(pipeline_utils.sort_by_state(pipeline.stages)) do
 			if pipeline_stage.name ~= nil then
 				local stage_state = tostring(pipeline_stage.state or "UNKNOWN"):upper()
-				local stage_icon = icons.pulls_status(stage_state:lower())
+				local stage_icon, stage_hl = icons.pulls_status(stage_state:lower())
 				table.insert(row.children, {
 					label = string.format("%s %s", stage_icon, pipeline_stage.name),
 					status = "",
 					status_icon = stage_icon,
-					status_hl = PIPELINE_HL[stage_state] or "AtlasPipelineLinkMuted",
+					status_hl = stage_hl,
 					kind = "stage",
 					pipeline = pipeline,
 					stage = pipeline_stage,
 				})
 			end
 		end
-		local sorted_jobs = sort_by_status(unnamed_jobs)
+		local sorted_jobs = pipeline_utils.sort_by_state(unnamed_jobs)
 		local visible_jobs = math.min(#sorted_jobs, MAX_OVERVIEW_JOBS)
 		for index = 1, visible_jobs do
 			local entry = sorted_jobs[index]
 			local job = entry.job
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
-			local job_icon = icons.pulls_status(job_state:lower())
+			local job_icon, job_hl = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
 				label = string.format("%s %s", job_icon, job.name),
 				status = "",
 				status_icon = job_icon,
-				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
+				status_hl = job_hl,
 				kind = "pipeline",
 				pipeline = pipeline,
 				stage = entry.stage,
@@ -424,16 +329,14 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		column_gap = 1,
 		columns = {
 			{ key = "label", name = "", can_grow = true },
-			{ key = "status", name = "", can_grow = false },
+			{ key = "status", name = "", align = "right", can_grow = false },
 		},
 		rows = rows,
 		tree = {
 			column_key = "label",
 			leaf_prefix = "",
 			show_indicator = false,
-			is_expanded = function(row)
-				return state.is_pipeline_expanded(row.pipeline)
-			end,
+			default_expanded = true,
 		},
 		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
@@ -476,43 +379,38 @@ end
 
 -- Description
 
+local function description_block(text, width)
+	if state.view_mode == "raw" then
+		local content = {
+			lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true }),
+		}
+		return utils.wrap_content(content, math.max(1, width - PADDING_X * 2), string.rep(" ", PADDING_X))
+	end
+
+	return markdown.render(text, { width = width, padding = PADDING_X })
+end
+
 ---@param details PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
----@param line_map table<integer, table>
-local function render_description(details, width, lines, spans, line_map)
-	local start_line = #lines + 1
-	local function map_lines()
-		for lnum = start_line, #lines do
-			line_map[lnum] = { kind = "description" }
-		end
-	end
-
-	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
-
-	local desc_text = utils.strip_markup(details.description)
-	if desc_text == "" then
+local function render_description(details, width, lines, spans)
+	local desc_text = details.description or ""
+	if vim.trim(desc_text) == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
-		map_lines()
 		return
 	end
 
-	local desc_lines = utils.sanitize_lines(desc_text)
-	while #desc_lines > 0 and vim.trim(desc_lines[#desc_lines]) == "" do
-		table.remove(desc_lines)
+	local block = description_block(desc_text, width)
+	local truncated = not state.description_expanded and #block.lines > MAX_DESCRIPTION_LINES
+	if truncated then
+		block.lines = vim.list_slice(block.lines, 1, MAX_DESCRIPTION_LINES)
+		block.highlights = vim.tbl_filter(function(span)
+			return span.line < MAX_DESCRIPTION_LINES
+		end, block.highlights)
 	end
-
-	local truncated = false
-	if not state.description_expanded and #desc_lines > MAX_DESCRIPTION_LINES then
-		desc_lines = vim.list_slice(desc_lines, 1, MAX_DESCRIPTION_LINES)
-		truncated = true
-	end
-
-	for _, line in ipairs(desc_lines) do
-		table.insert(lines, PADDING .. line)
-	end
+	utils.append_block(lines, spans, block)
 
 	if truncated then
 		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}
@@ -541,7 +439,6 @@ local function render_description(details, width, lines, spans, line_map)
 	end
 
 	table.insert(lines, "")
-	map_lines()
 end
 
 -- Merge checks
@@ -596,49 +493,32 @@ local function render_merge_check_group(check, width)
 	return { lines = lines, spans = spans }
 end
 
----@param text string
----@param hl_group string
----@param width integer
----@return BoxContentGroup
-local function render_merge_check_message_group(text, hl_group, width)
-	local content_width = math.max(2, width - (PADDING_X * 2) - 3)
-	local lines = utils.wrap_line(text, content_width)
-	local spans = {}
-	for index, line in ipairs(lines) do
-		table.insert(spans, { line = index - 1, start_col = 0, end_col = #line, hl_group = hl_group })
-	end
-	return { lines = lines, spans = spans }
-end
-
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
 local function render_merge_checks(width, lines, spans)
-	if state.merge_checks == nil or state.merge_checks == "loading" then
+	local checks = detail.merge_checks
+	if checks == nil or checks == "loading" then
 		return
 	end
-	if type(state.merge_checks) == "table" and #state.merge_checks == 0 then
+	if type(checks) == "string" then
+		render_error("Merge Checks", checks, width, lines, spans)
+		return
+	end
+	if #checks == 0 then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
 
-	if type(state.merge_checks) == "string" then
-		local err_text = state.merge_checks --[[@as string]]
-		utils.append_block(
-			lines,
-			spans,
-			box.render(
-				{ render_merge_check_message_group(err_text, "AtlasLogError", width) },
-				{ width = width, padding_x = PADDING_X }
-			)
-		)
-		table.insert(lines, "")
-		return
-	end
-
-	local checks = vim.list_slice(state.merge_checks --[[@as PullsMergeCheck[] ]])
+	checks = vim.list_slice(checks)
 	table.sort(checks, function(a, b)
+		if a.key == "pipelines" then
+			return false
+		end
+		if b.key == "pipelines" then
+			return true
+		end
 		return (MERGE_CHECK_PRIORITY[a.state] or math.huge) < (MERGE_CHECK_PRIORITY[b.state] or math.huge)
 	end)
 
@@ -661,7 +541,7 @@ function M.render(pr, details, width)
 	local line_map = {}
 
 	if details then
-		render_description(details, width, lines, spans, line_map)
+		render_description(details, width, lines, spans)
 	elseif not detail.details_loading then
 		utils.push(lines, spans, "Pull request details unavailable.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
@@ -672,7 +552,7 @@ function M.render(pr, details, width)
 
 	if
 		state.reviewers == "loading"
-		or state.merge_checks == "loading"
+		or detail.merge_checks == "loading"
 		or detail.details_loading
 		or detail.pipelines == "loading"
 		or detail.diffstat == "loading"
@@ -702,18 +582,14 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.reviewers == "loading" or state.merge_checks == "loading"
+	return state.reviewers == "loading" or detail.pipelines == "loading"
 end
 
 function M.activate(buf, refresh)
 	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
 		return
 	end
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
-	if refresh ~= nil then
-		keymaps.setup(buf, refresh)
-	end
+	keymaps.setup(buf, refresh)
 end
 
 function M.deactivate(buf)
@@ -721,9 +597,6 @@ function M.deactivate(buf)
 		return
 	end
 	keymaps.teardown(buf)
-	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-	pcall(vim.treesitter.stop, buf)
 	reset_requests()
 end
 

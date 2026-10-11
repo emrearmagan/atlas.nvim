@@ -7,9 +7,11 @@ local request_scope = require("atlas.core.requests")
 ---@field tabs PullsDetailTab[]
 ---@field line_map table<integer, table>
 ---@field diffstat PullsDiffstatEntry[]|"loading"|string|nil
+---@field merge_checks PullsMergeCheck[]|"loading"|string|nil
 ---@field pipelines PullsPipeline[]|"loading"|string|nil
 ---@field pr_loading boolean
 ---@field details_loading boolean
+---@field links AtlasDetailLinks|nil
 ---@field win integer|nil
 ---@field buf integer|nil
 ---@field provider PullsProvider|nil
@@ -23,6 +25,7 @@ local M = {
 	tabs = {},
 	line_map = {},
 	diffstat = nil,
+	merge_checks = nil,
 	pipelines = nil,
 	pr_loading = false,
 	details_loading = false,
@@ -34,6 +37,16 @@ local M = {
 	spinner_timer = nil,
 }
 
+---@param key string|nil
+---@return PullsDetailTabModule|nil
+function M.tab_module(key)
+	for _, tab in ipairs(M.tabs) do
+		if tab.key == key then
+			return tab.mod
+		end
+	end
+end
+
 function M.reset()
 	M.current_pr = nil
 	M.current_details = nil
@@ -41,9 +54,11 @@ function M.reset()
 	M.tabs = {}
 	M.line_map = {}
 	M.diffstat = nil
+	M.merge_checks = nil
 	M.pipelines = nil
 	M.pr_loading = false
 	M.details_loading = false
+	M.links = nil
 	M.win = nil
 	M.buf = nil
 	M.provider = nil

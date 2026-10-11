@@ -1,16 +1,21 @@
-local M = {}
-
+local diff = require("atlas.pulls.diff")
+local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local pipelines = require("atlas.commands.pipelines")
 local providers = require("atlas.providers")
+local review = require("atlas.commands.review")
 local ui_utils = require("atlas.ui.utils")
+
+local M = {}
+local diff_completion = {}
 
 ---@class AtlasCommand
 ---@field name string
 ---@field usage string|nil
 ---@field description string
 ---@field run fun(args: string[])
----@field complete (fun(arglead: string): string[])|nil
+---@field complete (fun(arglead: string, args?: string[]): string[])|nil
 
 ---@type AtlasCommand[]
 M.commands = {}
@@ -37,6 +42,15 @@ local function find_command(name)
 	end
 end
 
+---@param arglead string
+---@param options string[]
+---@return string[]
+local function complete_options(arglead, options)
+	return vim.tbl_filter(function(option)
+		return option:find(arglead, 1, true) == 1
+	end, options)
+end
+
 ---@param domain "pulls"|"issues"
 ---@param arglead string
 ---@return string[]
@@ -45,18 +59,44 @@ local function complete_providers(domain, arglead)
 	for _, provider in ipairs(providers.configured(domain)) do
 		table.insert(ids, provider.id)
 	end
-	return vim.tbl_filter(function(provider)
-		return provider:find(arglead, 1, true) == 1
-	end, ids)
+	return complete_options(arglead, ids)
 end
 
 ---@param arglead string
----@param options string[]
+---@param args string[]|nil
 ---@return string[]
-local function complete_options(arglead, options)
-	return vim.tbl_filter(function(option)
-		return option:find(arglead, 1, true) == 1
-	end, options)
+local function complete_diff(arglead, args)
+	if (args and #args > 1) or arglead:find("://", 1, true) then
+		return {}
+	end
+
+	local cwd = git.default_cwd()
+	if diff_completion.cwd ~= cwd then
+		local res = vim.system({
+			"git",
+			"for-each-ref",
+			"--format=%(refname:short)",
+			"refs/heads",
+			"refs/remotes",
+		}, { cwd = cwd, text = true }):wait()
+
+		diff_completion = { cwd = cwd, refs = {} }
+		if res.code == 0 then
+			diff_completion.refs = { "HEAD" }
+			vim.list_extend(diff_completion.refs, vim.split(res.stdout, "\n", { plain = true, trimempty = true }))
+		end
+	end
+
+	local separator = arglead:find("...", 1, true)
+	local range = separator and arglead:sub(1, separator + 2) or ""
+	local prefix = arglead:sub(#range + 1)
+	local matches = {}
+	for _, ref in ipairs(diff_completion.refs) do
+		if ref:find(prefix, 1, true) == 1 then
+			table.insert(matches, range .. ref)
+		end
+	end
+	return matches
 end
 
 ---@param args string[]
@@ -72,6 +112,27 @@ local function with_argument(args, prompt, callback)
 	vim.ui.input({ prompt = prompt }, function(input)
 		if input and vim.trim(input) ~= "" then
 			callback(vim.trim(input))
+		end
+	end)
+end
+
+---@param value string
+local function open_diff(value)
+	local separator = value:find("...", 1, true)
+	if not separator then
+		review.open(value)
+		return
+	end
+
+	local base = vim.trim(value:sub(1, separator - 1))
+	local head = vim.trim(value:sub(separator + 3))
+	if base == "" or head == "" then
+		notify.error("Expected an explicit base...head range", { vim_notify = true })
+		return
+	end
+	diff.open_range({ base = base, head = head }, function(open_err)
+		if open_err then
+			notify.error(open_err, { vim_notify = true })
 		end
 	end)
 end
@@ -121,6 +182,22 @@ M.register({
 })
 
 M.register({
+	name = "browse",
+	usage = "browse [repository URL|.] [page]",
+	description = "Open the repository browser",
+	complete = function(arglead, args)
+		return require("atlas.commands.repository").complete(arglead, args)
+	end,
+	run = function(args)
+		if #args > 2 then
+			notify.error("Usage: :Atlas browse [repository URL|.] [page]", { vim_notify = true })
+			return
+		end
+		require("atlas.commands.repository").open(args[1], args[2])
+	end,
+})
+
+M.register({
 	name = "create",
 	usage = "create <pr|issue>",
 	description = "Create a pull request or issue",
@@ -128,24 +205,24 @@ M.register({
 		return complete_options(arglead, { "pr", "issue" })
 	end,
 	run = function(args)
-		local function start(kind)
+		local function open(kind)
 			if kind == "pr" then
-				require("atlas.pulls.create.pr").start()
+				require("atlas.pulls.editor").open()
 			elseif kind == "issue" then
-				require("atlas.issues.create").start()
+				require("atlas.issues.create").open()
 			else
 				notify.error("Usage: :Atlas create <pr|issue>", { vim_notify = true })
 			end
 		end
 
 		if args[1] then
-			start(args[1]:lower())
+			open(args[1]:lower())
 		else
 			picker.select({
 				title = "Create:",
 				items = { "pr", "issue" },
 				size = { width = 0.35, height = 0.15 },
-				on_select = start,
+				on_select = open,
 			})
 		end
 	end,
@@ -153,9 +230,25 @@ M.register({
 
 M.register({
 	name = "diff",
-	description = "Open native AtlasDiff",
+	description = "Open a Git range or pull request diff",
+	complete = complete_diff,
 	run = function(args)
-		with_argument(args, "Git range or pull request: ", require("atlas.pulls.diff").open_argument)
+		local value = vim.trim(table.concat(args, " "))
+		if value == "" then
+			notify.error("Usage: :Atlas diff <base...head|pull-request-url>", { vim_notify = true })
+			return
+		end
+		open_diff(value)
+	end,
+})
+
+M.register({
+	name = "pipelines",
+	usage = "pipelines [target|.]",
+	description = "Open branch, pull request, or build pipelines",
+	complete = pipelines.complete,
+	run = function(args)
+		with_argument(args, "Branch, pull request, or pipeline URL: ", pipelines.open)
 	end,
 })
 
@@ -163,13 +256,16 @@ M.register({
 	name = "review",
 	description = "Open or pick a pull request review",
 	run = function(args)
-		require("atlas.commands.review").open(args[1])
+		review.open(args[1])
 	end,
 })
 
 M.register({
 	name = "notes",
-	description = "Open local review notes",
+	description = "Open review notes",
+	complete = function(arglead, args)
+		return require("atlas.pulls.notes").complete(arglead, args)
+	end,
 	run = function(args)
 		require("atlas.pulls.notes.ui").open({ target = args[1] })
 	end,
@@ -180,21 +276,28 @@ local function clear_caches()
 	require("atlas.core.memory_cache").clear_all()
 end
 
+---@param prompt string
+---@param on_confirm fun()
+local function confirm(prompt, on_confirm)
+	vim.ui.input({ prompt = prompt }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer == "y" or answer == "yes" then
+			on_confirm()
+		end
+	end)
+end
+
 M.register({
 	name = "clear",
 	usage = "clear [cache|notes|stars]",
-	description = "Clear Atlas data, caches, local notes, or starred items",
+	description = "Clear Atlas data, caches, notes, or starred items",
 	complete = function(arglead)
 		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
 		if target == "cache" then
-			vim.ui.input({ prompt = "Delete Atlas caches and cloned repositories? [y/N]: " }, function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
+			confirm("Delete Atlas caches and cloned repositories? [y/N]: ", function()
 				clear_caches()
 				notify.info("Atlas caches cleared", { vim_notify = true })
 			end)
@@ -205,11 +308,7 @@ M.register({
 			return
 		end
 		if target == "stars" then
-			vim.ui.input({ prompt = "Delete all starred items? [y/N]: " }, function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
+			confirm("Delete all starred items? [y/N]: ", function()
 				local cleared, err = require("atlas.core.starred").clear_all()
 				if not cleared then
 					notify.error(err or "Unable to delete starred items", { vim_notify = true })
@@ -224,32 +323,33 @@ M.register({
 			return
 		end
 
-		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
-			function(answer)
-				answer = vim.trim(tostring(answer or "")):lower()
-				if answer ~= "y" and answer ~= "yes" then
-					return
-				end
-				local cleared, err = require("atlas.pulls.notes").clear_all()
-				if not cleared then
-					notify.error(err or "Unable to delete local notes", { vim_notify = true })
-					return
-				end
-				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
-				if not stars_cleared then
-					notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
-					return
-				end
-				clear_caches()
-				require("atlas.core.logger").clear()
-				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
-				if notes_ui then
-					notes_ui.refresh()
-				end
-				notify.info("Atlas data cleared", { vim_notify = true })
+		confirm("Delete Atlas caches, cloned repositories, notes, starred items, and logs? [y/N]: ", function()
+			local cleared, err = require("atlas.pulls.notes").clear_all()
+			if not cleared then
+				notify.error(err or "Unable to delete notes", { vim_notify = true })
+				return
 			end
-		)
+			local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+			if not stars_cleared then
+				notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
+				return
+			end
+			clear_caches()
+			require("atlas.core.logger").clear()
+			local notes_ui = package.loaded["atlas.pulls.notes.ui"]
+			if notes_ui then
+				notes_ui.refresh()
+			end
+			notify.info("Atlas data cleared", { vim_notify = true })
+		end)
+	end,
+})
+
+M.register({
+	name = "console",
+	description = "Open the latest command output",
+	run = function()
+		require("atlas.ui.console").open()
 	end,
 })
 
@@ -287,8 +387,7 @@ local function pick_command()
 			end
 		elseif command.name == "search" then
 			for _, provider_id in ipairs(assert(command.complete)("")) do
-				local provider = providers[provider_id]
-				add(command, { provider_id }, "Search " .. (provider and provider.name or provider_id))
+				add(command, { provider_id }, "Search " .. providers[provider_id].name)
 			end
 		elseif command.name == "create" then
 			add(command, { "pr" }, "Create a pull request")
@@ -296,7 +395,7 @@ local function pick_command()
 		elseif command.name == "clear" then
 			add(command, {}, "Clear caches, clones, notes, stars, and logs")
 			add(command, { "cache" }, "Clear caches and cloned repositories")
-			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "notes" }, "Clear review notes")
 			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)
@@ -340,27 +439,38 @@ end
 
 ---@param arglead string
 ---@param cmdline string
+---@param cursorpos integer
 ---@return string[]
-local function complete(arglead, cmdline)
+local function complete(arglead, cmdline, cursorpos)
+	cmdline = cmdline:sub(1, cursorpos)
 	local words = vim.split(vim.trim(cmdline), "%s+")
 	if #words < 2 or (#words == 2 and not cmdline:match("%s$")) then
-		return vim.tbl_filter(
-			function(name)
-				return name:find(arglead, 1, true) == 1
-			end,
+		return complete_options(
+			arglead:lower(),
 			vim.tbl_map(function(command)
 				return command.name
 			end, M.commands)
 		)
 	end
 
-	local command = find_command(words[2])
-	return command and command.complete and command.complete(arglead) or {}
+	local command = find_command(words[2]:lower())
+	local args = vim.list_slice(words, 3)
+	if cmdline:match("%s$") then
+		args[#args + 1] = ""
+	end
+	return command and command.complete and command.complete(arglead, args) or {}
 end
 
 function M.setup()
 	pcall(vim.api.nvim_del_user_command, "Atlas")
-	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
+
+	vim.api.nvim_create_autocmd("CmdlineLeave", {
+		group = vim.api.nvim_create_augroup("AtlasCommandCompletion", { clear = true }),
+		pattern = ":",
+		callback = function()
+			diff_completion = {}
+		end,
+	})
 
 	vim.api.nvim_create_user_command("Atlas", function(opts)
 		M.run(opts.fargs)
@@ -368,13 +478,6 @@ function M.setup()
 		desc = "Open Atlas or run a command",
 		nargs = "*",
 		complete = complete,
-	})
-
-	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
-		require("atlas.pulls.diff").open_argument(opts.args)
-	end, {
-		desc = "Open a Git range or pull request in AtlasDiff",
-		nargs = 1,
 	})
 end
 

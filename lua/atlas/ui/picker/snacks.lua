@@ -1,19 +1,20 @@
 local Snacks = require("snacks")
 
 local M = {}
+local picker_ui = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 
 ---@param request AtlasPickerRequest
 ---@param item any
 ---@return snacks.picker.finder.Item
 local function entry(request, item)
-	local text, hl_group = request.format_item(item)
+	local text, chunks = picker_ui.format_item(request, item)
 	return {
 		text = text,
 		key = request.key(item),
 		_select_key = request.key(item),
 		item = item,
-		hl_group = hl_group,
+		chunks = chunks,
 	}
 end
 
@@ -133,9 +134,19 @@ function M.open(request)
 		live = request.fetch ~= nil,
 		show_empty = true,
 		win = { input = { b = { completion = false } } },
+		layout = {
+			layout = {
+				width = request.size.width,
+				height = request.size.height,
+				min_width = 0,
+				max_width = math.huge,
+				min_height = 0,
+				max_height = math.huge,
+			},
+		},
 		finder = picker_finder,
 		format = function(item)
-			return { { item.text, item.hl_group } }
+			return item.chunks
 		end,
 		actions = {
 			confirm = function(picker, item)
@@ -170,7 +181,8 @@ function M.open(request)
 		end,
 	}
 	if not request.preview_item then
-		opts.layout = { preset = "select", preview = false }
+		opts.layout.preset = "select"
+		opts.layout.preview = false
 	end
 
 	if request.multi then
@@ -186,14 +198,18 @@ function M.open(request)
 			ctx.preview:set_lines({ "Loading..." })
 			preview_handle = request.preview_item(ctx.item.item, function(preview)
 				vim.schedule(function()
-					if ctx.picker.closed or generation ~= preview_generation then
+					if ctx.picker.closed or generation ~= preview_generation or not ctx.preview.win:valid() then
 						return
 					end
 					ctx.preview:reset()
 					ctx.preview:set_title(preview.title or request.title)
 					ctx.picker:update_titles()
-					ctx.preview:set_lines(preview.lines)
-					ctx.preview:highlight({ ft = "markdown" })
+					local result = picker_ui.format_preview(preview.lines, ctx.win)
+					ctx.preview:set_lines(result.lines)
+					vim.bo[ctx.buf].filetype = "atlas-markdown"
+					vim.bo[ctx.buf].syntax = "OFF"
+					ctx.preview:wo({ wrap = true, linebreak = true })
+					picker_ui.highlight_preview(ctx.buf, result.highlights)
 				end)
 			end)
 		end

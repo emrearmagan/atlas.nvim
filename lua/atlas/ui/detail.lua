@@ -22,7 +22,8 @@ local function configure(win)
 		foldmethod = "manual",
 		foldenable = false,
 		wrap = true,
-		breakindent = true,
+		linebreak = true,
+		breakindent = false,
 		cursorline = true,
 		scrollbind = false,
 		cursorbind = false,
@@ -40,8 +41,7 @@ local function reset_content()
 		vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 		vim.api.nvim_buf_clear_namespace(state.buf, -1, 0, -1)
 		vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, {})
-		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = state.buf })
-		vim.api.nvim_set_option_value("syntax", "OFF", { buf = state.buf })
+		vim.api.nvim_set_option_value("filetype", "atlas-ui.detail", { buf = state.buf })
 		vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
 	end
 	if utils.window.valid(state.win) then
@@ -63,7 +63,7 @@ local function create()
 	local dashboard = require("atlas.ui.dashboard")
 	local beside_dashboard = dashboard.is_active()
 	local source = beside_dashboard and dashboard.win() or vim.api.nvim_get_current_win()
-	local buf = utils.buffer.create("atlas://detail", "atlas.detail")
+	local buf = utils.buffer.create("atlas://detail", "atlas-ui.detail")
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	local win = utils.window.create(source, "botright vsplit", buf, configure)
 	pcall(vim.api.nvim_win_set_width, win, math.max(math.floor(vim.o.columns * 0.45), 40))
@@ -87,12 +87,11 @@ local function create()
 	})
 end
 
----@param kind "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"
 ---@param cleanup fun()
 ---@param render fun()
 ---@return integer win, integer buf
 function M.open(kind, cleanup, render)
-	require("atlas.ui.shared.highlights").setup()
 	if M.is_open() and vim.api.nvim_win_get_tabpage(state.win) ~= vim.api.nvim_get_current_tabpage() then
 		M.close()
 	end
@@ -121,11 +120,42 @@ function M.is_open(tab)
 		and (tab == nil or vim.api.nvim_win_get_tabpage(state.win) == tab)
 end
 
----@param kind "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"
 ---@param tab integer|nil
 ---@return boolean
 function M.is_showing(kind, tab)
 	return M.is_open(tab) and state.kind == kind
+end
+
+---@param direction "up"|"down"
+---@param is_selectable fun(lnum: integer): boolean
+function M.move_cursor(direction, is_selectable)
+	local win = state.win
+	local buf = state.buf
+	if not utils.window.valid(win) or not utils.buffer.valid(buf) then
+		return
+	end
+
+	local cursor = vim.api.nvim_win_get_cursor(win)
+	local line = cursor[1]
+	local col = cursor[2]
+	local max_line = vim.api.nvim_buf_line_count(buf)
+	local step = direction == "up" and -1 or 1
+	local bound = direction == "up" and 1 or max_line
+
+	if is_selectable(line) then
+		for lnum = line + step, bound, step do
+			if is_selectable(lnum) then
+				vim.api.nvim_win_set_cursor(win, { lnum, col })
+				return
+			end
+		end
+	end
+
+	local next_line = line + step
+	if next_line >= 1 and next_line <= max_line then
+		vim.api.nvim_win_set_cursor(win, { next_line, col })
+	end
 end
 
 ---@param tab integer|nil
@@ -146,13 +176,19 @@ function M.close(tab)
 	require("atlas.ui.dashboard").render()
 end
 
-vim.api.nvim_create_autocmd("VimResized", {
+vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 	group = vim.api.nvim_create_augroup("AtlasDetailResize", { clear = true }),
-	callback = function()
+	callback = function(event)
 		if not M.is_open() then
 			return
 		end
-		pcall(vim.api.nvim_win_set_width, state.win, math.max(math.floor(vim.o.columns * 0.45), 40))
+
+		if event.event == "VimResized" then
+			pcall(vim.api.nvim_win_set_width, state.win, math.max(math.floor(vim.o.columns * 0.45), 40))
+		elseif not vim.tbl_contains(vim.v.event.windows, state.win) then
+			return
+		end
+
 		if state.render then
 			state.render()
 		end

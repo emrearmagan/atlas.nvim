@@ -72,10 +72,8 @@ function M.render(items, active_tab, width, opts)
 	local lines = { padding .. line }
 	if padding_x > 0 then
 		for _, span in ipairs(spans) do
-			if (span.line or 0) == 0 then
-				span.start_col = span.start_col + padding_x
-				span.end_col = span.end_col + padding_x
-			end
+			span.start_col = span.start_col + padding_x
+			span.end_col = span.end_col + padding_x
 		end
 	end
 	local divider = string.rep("─", math.max(1, width))

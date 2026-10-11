@@ -71,11 +71,11 @@ local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
-      body
+      title body
       assignees(first: 100) { nodes { login name } }
       labels(first: 100) { nodes { name color } }
       milestone {
-        title progressPercentage
+        number title progressPercentage
         openIssues: issues(states: OPEN) { totalCount }
         closedIssues: issues(states: CLOSED) { totalCount }
       }
@@ -111,7 +111,7 @@ function M.search_issues(search, on_done, opts)
 		on_done({ items = {} }, "Missing search query")
 		return nil
 	end
-	local cache_key = string.format("github_issues:search:v6:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("github_issues:search:v7:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -222,7 +222,7 @@ function M.search_project_issues(project, search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(details: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: GitHubIssueDetails|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
@@ -233,8 +233,7 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local issues_cfg = require("atlas.config").options.issues or {}
-	local with_relationships = issues_cfg.with_relationships ~= false
+	local with_relationships = require("atlas.config").options.issues.with_relationships
 	local cache_key =
 		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_refresh then
@@ -377,7 +376,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 end
 
 ---@param key string
----@param on_done fun(assignees: IssueUser[]|nil, assignable_users: IssueUser[]|nil, err: string|nil)
+---@param on_done fun(assignees: AtlasUser[]|nil, assignable_users: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignee_options(key, on_done)
 	local slug, number = normalizer.parse_key(key)
@@ -417,23 +416,42 @@ function M.get_assignee_options(key, on_done)
 			return
 		end
 
-		local function users(connection)
-			local result_users = {}
-			for _, raw in ipairs(json.safe_table(json.safe_table(connection).nodes)) do
-				local user = normalizer.to_user(raw)
-				if user then
-					table.insert(result_users, user)
-				end
-			end
-			return result_users
-		end
-
-		on_done(users(issue.assignees), users(repository.assignableUsers), nil)
+		on_done(
+			normalizer.to_users(json.safe_table(issue.assignees).nodes),
+			normalizer.to_users(json.safe_table(repository.assignableUsers).nodes),
+			nil
+		)
 	end, {
 		action = "Fetch issue assignee options",
 		slug = slug,
 		number = number,
 	})
+end
+
+---@param issue GitHubIssue
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(issue, subscribed, on_done)
+	local node_id = tostring(issue.node_id or "")
+	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			cache.invalidate(issue.key)
+			on_done(subscribed, nil)
+		end,
+		{
+			action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
+			key = issue.key,
+		}
+	)
 end
 
 ---@param key string
@@ -657,31 +675,15 @@ end
 ---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
-	local title = tostring(opts.title or "")
-	if vim.trim(title) == "" then
-		vim.schedule(function()
-			on_done(nil, "Title is required")
-		end)
-		return nil
-	end
-
 	local args = {
 		"issue",
 		"create",
 		"--repo",
-		slug,
+		opts.repo_slug,
 		"--title",
-		title,
+		opts.title,
 		"--body",
-		tostring(opts.body or ""),
+		opts.body or "",
 	}
 
 	for _, label in ipairs(opts.labels or {}) do
@@ -722,11 +724,59 @@ function M.create_issue(opts, on_done)
 		on_done({ number = number, url = url }, nil)
 	end, {
 		action = "Create issue",
-		slug = slug,
+		slug = opts.repo_slug,
 		labels = opts.labels,
 		assignees = opts.assignees,
 		milestone = opts.milestone,
 	})
+end
+
+---@param key string
+---@param opts { title?: string, body?: string, labels?: string[], assignees?: string[], milestone?: integer|false }
+---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_issue(key, opts, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	local args = {
+		"api",
+		"-X",
+		"PATCH",
+		string.format("repos/%s/issues/%d", slug, number),
+	}
+	for _, field in ipairs({ "title", "body" }) do
+		if opts[field] ~= nil then
+			vim.list_extend(args, { "-f", field .. "=" .. opts[field] })
+		end
+	end
+	if opts.milestone ~= nil then
+		vim.list_extend(args, { "-F", "milestone=" .. (opts.milestone == false and "null" or opts.milestone) })
+	end
+	for _, field in ipairs({ "labels", "assignees" }) do
+		local values = opts[field]
+		if values ~= nil then
+			if #values == 0 then
+				vim.list_extend(args, { "-f", field .. "[]" })
+			else
+				for _, value in ipairs(values) do
+					vim.list_extend(args, { "-f", field .. "[]=" .. value })
+				end
+			end
+		end
+	end
+
+	return cli.gh(args, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		cache.invalidate(key)
+		on_done({ number = number, url = result.html_url }, nil)
+	end, { action = "Update issue", key = key })
 end
 
 return M

@@ -1,11 +1,23 @@
 local M = {}
 
-local highlights = require("atlas.ui.shared.highlights")
+local highlights = require("atlas.ui.highlights")
 
----@param _title string|nil
+---@param author AtlasUser|nil
 ---@return string
-function M.issue_title_hl(_title)
-	return "Normal"
+function M.person_name(author)
+	if author == nil then
+		return "Unknown"
+	end
+	if author.name and author.name ~= "" then
+		return author.name
+	end
+	if author.username and author.username ~= "" then
+		return author.username
+	end
+	if author.id and author.id ~= "" then
+		return author.id
+	end
+	return "Unknown"
 end
 
 ---@param key string|nil
@@ -28,20 +40,20 @@ function M.status_hl(status_id)
 	return highlights.dynamic_for_bg(status_id and ("jira-status:" .. status_id) or nil) or "AtlasTextMuted"
 end
 
----@param name string|IssueUser|nil
+---@param name string|AtlasUser|nil
 ---@return string
 function M.person_hl(name)
 	if type(name) == "table" then
-		name = name.display_name
+		name = name.name
 	end
 
 	if type(name) ~= "string" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 
 	local lower = vim.trim(name):lower()
 	if lower == "" or lower == "unassigned" or lower == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"

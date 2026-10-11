@@ -2,11 +2,11 @@ local M = {}
 
 local config = require("atlas.config")
 local json = require("atlas.core.json")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
-local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
+local repositories_api = require("atlas.providers.bitbucket.repositories")
 local url_encode = require("atlas.core.utils").url_encode
 
 local SUMMARY_FIELDS = {
@@ -46,14 +46,6 @@ local function build_query(pagelen, query)
 	return table.concat(parts, "&")
 end
 
----@param pr PullRequest
----@param action "merge"|"decline"
----@return boolean
-function M.has_action(pr, action)
-	---@cast pr BitbucketPullRequest
-	return tostring(pr.links[action] or "") ~= ""
-end
-
 ---@param repo_full_name string
 ---@param url string
 ---@param opts { force_refresh: boolean, pagelen: number }
@@ -61,7 +53,7 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_page(repo_full_name, url, opts, on_done)
 	local workspace, repo = repo_full_name:match("^([^/]+)/(.+)$")
-	local key = "bitbucket:prs:page:" .. url
+	local key = "bitbucket:prs:page:v2:" .. url
 	if not opts.force_refresh then
 		local cached, ok = service.get_persistent_cache(key)
 		if ok then
@@ -76,6 +68,7 @@ local function fetch_page(repo_full_name, url, opts, on_done)
 			return
 		end
 
+		---@cast result table
 		local next_url = result.next
 		if type(next_url) ~= "string" or next_url == "" then
 			next_url = nil
@@ -86,7 +79,7 @@ local function fetch_page(repo_full_name, url, opts, on_done)
 			next_url = next_url,
 			total_pages = size and math.max(1, math.ceil(size / opts.pagelen)) or nil,
 		}
-		service.set_persistent_cache(key, page, service.cache_ttl())
+		service.set_persistent_cache(key, page)
 		on_done(page, nil)
 	end, { action = "Fetch pull requests", workspace = workspace, repo = repo })
 end
@@ -154,7 +147,7 @@ end
 ---@param opts { force_refresh: boolean, pagelen: number, query: string }
 ---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_for_repositories(repos, opts, on_done)
+local function fetch_for_repositories(repos, opts, on_done)
 	local urls = {}
 	local query = build_query(opts.pagelen, opts.query)
 	for _, repo in ipairs(repos) do
@@ -178,7 +171,7 @@ function M.fetch_for_targets(targets, opts, on_done)
 		return repositories_api.resolve_targets(targets, opts, done)
 	end, function(repos, errors)
 		requests.run(function(done)
-			return M.fetch_for_repositories(repos, opts, done)
+			return fetch_for_repositories(repos, opts, done)
 		end, function(page, fetch_errors)
 			vim.list_extend(errors, fetch_errors or {})
 			on_done(page, #errors > 0 and errors or nil)
@@ -188,10 +181,10 @@ function M.fetch_for_targets(targets, opts, on_done)
 end
 
 ---@param refs PullRequestRef[]
----@param _opts PullsFetchOpts
+---@param _ PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, _opts, on_done)
+function M.fetch_by_refs(refs, _, on_done)
 	if #refs == 0 then
 		on_done({}, nil)
 		return nil
@@ -223,6 +216,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 					done(nil, err)
 					return
 				end
+				---@cast result table
 				local pull = mapper.to_pull_request(result, item.workspace, item.repo)
 				done(pull, nil)
 			end, { action = "Fetch pull request", repo = item.ref.repo_full_name, id = item.ref.id })
@@ -231,16 +225,14 @@ function M.fetch_by_refs(refs, _opts, on_done)
 
 	requests.all(starts, function(values, errors)
 		local pulls = {}
+		local err
 		for index = 1, #parsed do
-			if errors[index] then
-				on_done({}, errors[index])
-				return
-			end
+			err = err or errors[index]
 			if values[index] then
 				table.insert(pulls, values[index])
 			end
 		end
-		on_done(pulls, nil)
+		on_done(pulls, err)
 	end)
 	return requests
 end
@@ -278,22 +270,23 @@ function M.fetch_pullrequest(ref, opts, on_done)
 			return
 		end
 
+		---@cast result table
 		---@type BitbucketPullRequestDetails
 		local details = {
 			description = json.safe_str(result.description) or "",
 			close_source_branch = json.nilify(result.close_source_branch),
 		}
-		service.set_cache(key, details, service.cache_ttl())
+		service.set_cache(key, details)
 		on_done(details, nil)
 	end, { action = "Fetch pull request details", repo = ref.repo_full_name, id = ref.id })
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh?: boolean }|nil
+---@param _ { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_description(pr, _opts, on_done)
-	local workspace, repo = pr.workspace, pr.repo
+function M.fetch_description(pr, _, on_done)
+	local workspace, repo = pr.repo.owner, pr.repo.repo_name
 	if workspace == "" or repo == "" then
 		on_done(nil, "PR missing workspace/repo info")
 		return nil
@@ -306,6 +299,7 @@ function M.fetch_description(pr, _opts, on_done)
 			on_done(nil, err)
 			return
 		end
+		---@cast result table
 		on_done(json.safe_str(result.description) or "", nil)
 	end, { action = "Fetch PR description", repo = pr.repo_full_name, id = pr.id })
 end
@@ -357,36 +351,59 @@ function M.set_draft(pr, draft, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { message?: string, close_source_branch?: boolean, merge_strategy?: string }|nil
----@param on_done fun(result: table|nil, err: string|nil)
+---@param opts PullsUpdatePROpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_pr(pr, opts, on_done)
+	local payload = {
+		title = opts.title,
+		description = opts.body,
+		draft = opts.draft,
+	}
+
+	if opts.base then
+		payload.destination = { branch = { name = opts.base } }
+	end
+	if opts.reviewers then
+		payload.reviewers = {}
+		for _, reviewer in ipairs(opts.reviewers) do
+			payload.reviewers[#payload.reviewers + 1] = { uuid = reviewer.provider_id }
+		end
+	end
+
+	return update_pullrequest(pr, payload, on_done)
+end
+
+---@param pr PullRequest
+---@param opts PullsMergeOpts
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
 	---@cast pr BitbucketPullRequest
 	local merge_url = tostring(pr.links.merge or "")
 	if merge_url == "" then
-		on_done(nil, "No merge URL available")
+		on_done(false, "No merge URL available")
 		return nil
 	end
-	opts = opts or {}
-	local payload = {}
-	if opts.close_source_branch ~= nil then
-		payload.close_source_branch = opts.close_source_branch == true
-	end
-	if opts.merge_strategy and opts.merge_strategy ~= "" then
-		payload.merge_strategy = opts.merge_strategy
-	end
-	if opts.message and opts.message ~= "" then
-		payload.message = opts.message
+	local payload = {
+		close_source_branch = opts.delete_source_branch == true,
+		merge_strategy = opts.method == "merge" and "merge_commit" or opts.method,
+	}
+	if opts.subject ~= nil or opts.body ~= nil then
+		local message = opts.subject or ""
+		if opts.body and opts.body ~= "" then
+			message = message .. (message ~= "" and "\n\n" or "") .. opts.body
+		end
+		payload.message = message
 	end
 
-	local body = next(payload) == nil and nil or vim.json.encode(payload)
-	return service.request("POST", merge_url, nil, body, function(result, err)
+	return service.request("POST", merge_url, nil, vim.json.encode(payload), function(_, err)
 		if err then
-			on_done(nil, err)
+			on_done(false, err)
 			return
 		end
 		service.clear_cache()
-		on_done(result, nil)
+		on_done(true, nil)
 	end, { action = "Merge pull request", repo = pr.repo_full_name, id = pr.id })
 end
 
@@ -464,11 +481,11 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param selected PullsCreatePRReviewer[]
----@param _original PullsCreatePRReviewer[]
+---@param selected PullsReviewerCandidate[]
+---@param _ PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.update_reviewers(pr, selected, _original, on_done)
+function M.update_reviewers(pr, selected, _, on_done)
 	local reviewers = {}
 	for _, reviewer in ipairs(selected) do
 		table.insert(reviewers, { uuid = reviewer.provider_id })
@@ -501,11 +518,11 @@ function M.create_pr(opts, on_done)
 		description = opts.body or "",
 		source = { branch = { name = opts.head } },
 		destination = { branch = { name = opts.base } },
-		close_source_branch = config.options.pulls.default_delete_branch == true,
+		close_source_branch = config.options.pulls.default_delete_source_branch == true,
 		draft = opts.draft == true,
 	}
 
-	if opts.reviewers and #opts.reviewers > 0 then
+	if opts.reviewers then
 		local list = {}
 		for _, reviewer in ipairs(opts.reviewers) do
 			table.insert(list, { uuid = reviewer.provider_id })
@@ -521,6 +538,7 @@ function M.create_pr(opts, on_done)
 		end
 
 		service.clear_cache()
+		---@cast result table
 		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",
@@ -532,10 +550,10 @@ function M.create_pr(opts, on_done)
 	})
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	local workspace, repo = slug:match("^([^/]+)/(.+)$")
 	if workspace == nil or repo == nil then
@@ -549,7 +567,7 @@ function M.fetch_default_reviewers(opts, on_done)
 	local starts = {
 		defaults = function(done)
 			return service.request("GET", endpoint, nil, nil, done, {
-				action = "Fetch default reviewers",
+				action = "Fetch reviewer candidates",
 				repo = slug,
 			})
 		end,
@@ -592,7 +610,6 @@ function M.fetch_default_reviewers(opts, on_done)
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
 					provider_id = uuid,
 					selected = is_selected,
-					default = true,
 				})
 			end
 		end

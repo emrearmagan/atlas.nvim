@@ -1,18 +1,6 @@
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
 
-local function deep_copy(value)
-	if type(value) ~= "table" then
-		return value
-	end
-
-	local copy = {}
-	for k, v in pairs(value) do
-		copy[k] = deep_copy(v)
-	end
-	return copy
-end
-
 local default_keymaps = {
 	ui = {
 		toggle_panel = "p",
@@ -20,16 +8,16 @@ local default_keymaps = {
 	},
 }
 
-local shipped_keymaps = deep_copy(config.options.keymaps)
+local shipped_keymaps = vim.deepcopy(config.options.keymaps)
 
 describe("core.keymaps", function()
 	after_each(function()
-		config.options.keymaps = deep_copy(shipped_keymaps)
+		config.options.keymaps = vim.deepcopy(shipped_keymaps)
 	end)
 
 	describe("resolver", function()
 		before_each(function()
-			config.options.keymaps = deep_copy(default_keymaps)
+			config.options.keymaps = vim.deepcopy(default_keymaps)
 		end)
 
 		it("normalizes string and list mappings", function()
@@ -46,7 +34,7 @@ describe("core.keymaps", function()
 
 	describe("conflicts", function()
 		before_each(function()
-			config.options.keymaps = deep_copy(shipped_keymaps)
+			config.options.keymaps = vim.deepcopy(shipped_keymaps)
 		end)
 
 		it("reports no conflicts for the shipped defaults", function()
@@ -56,14 +44,15 @@ describe("core.keymaps", function()
 		end)
 
 		it("reports unexpected conflicts inside nested groups", function()
-			config.options.keymaps.pulls.checkout = "gr"
+			config.options.keymaps.pulls.review.request_changes = "<leader>gr"
+			local key = config.options.keymaps.pulls.review.request_changes
+			config.options.keymaps.pulls.checkout = key
 
 			local pulls_conflicts = keymaps.validate().pulls
 			assert.are.same({
 				"pulls.checkout",
 				"pulls.review.request_changes",
-				"ui.comments.react",
-			}, pulls_conflicts["gr"])
+			}, pulls_conflicts[key])
 		end)
 	end)
 end)

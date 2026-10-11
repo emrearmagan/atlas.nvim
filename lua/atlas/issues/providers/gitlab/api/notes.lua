@@ -55,7 +55,7 @@ local function fetch_discussions(issue, opts, on_done)
 	end
 
 	local cache_key = discussions_cache_key(path, iid)
-	if not opts.force_refresh then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -82,9 +82,9 @@ local function fetch_discussions(issue, opts, on_done)
 end
 
 ---@param discussions table[]
----@return IssueComment[], IssueActivityEntry[]
+---@return IssueConversationItem[]
 local function map_discussions(discussions)
-	local comments = {}
+	local items = {}
 	local events = {}
 	for _, discussion_value in ipairs(discussions) do
 		local discussion = json.safe_table(discussion_value)
@@ -94,23 +94,33 @@ local function map_discussions(discussions)
 			if raw.system == true then
 				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
-					table.insert(events, entry)
+					table.insert(events, {
+						id = table.concat({ "activity", entry.date or "", #events + 1 }, ":"),
+						kind = "activity",
+						created_at = entry.date or "",
+						entity = entry,
+					})
 				end
 			else
 				local comment = normalizer.to_comment_from_note(raw, first_id, discussion_id)
 				if comment then
 					first_id = first_id or comment.id
-					table.insert(comments, comment)
+					table.insert(items, {
+						id = "comment:" .. tostring(comment.id),
+						kind = "comment",
+						created_at = comment.created or "",
+						entity = comment,
+					})
 				end
 			end
 		end
 	end
-	return comments, events
+	return vim.list_extend(items, events)
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_conversation(issue, opts, on_done)
 	return fetch_discussions(issue, opts, function(discussions, err)
@@ -118,16 +128,16 @@ function M.list_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local comments, events = map_discussions(discussions)
-		on_done({ comments = comments, events = events }, nil)
+		on_done(map_discussions(discussions), nil)
 	end)
 end
 
 ---@param issue Issue
 ---@param body string
+---@param opts { parent?: IssueComment }|nil
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(issue, body, on_done)
+function M.add_comment(issue, body, opts, on_done)
 	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
@@ -138,16 +148,25 @@ function M.add_comment(issue, body, on_done)
 		return nil
 	end
 
+	local parent = opts and opts.parent
+	local discussion_id = parent and parent._raw and tostring(parent._raw.discussion_id or "") or ""
+	local is_reply = discussion_id ~= ""
 	local endpoint = string.format("/projects/%s/issues/%d/discussions", service.url_encode(path), iid)
+	if is_reply then
+		endpoint = endpoint .. "/" .. discussion_id .. "/notes"
+	end
 	return service.request("POST", endpoint, { body = body }, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		result = json.safe_table(result)
-		local discussion_id = tostring(result.id or "")
-		local notes = json.safe_table(result.notes)
-		local comment = normalizer.to_comment_from_note(notes[1], nil, discussion_id)
+		local note = result
+		if not is_reply then
+			result = json.safe_table(result)
+			discussion_id = tostring(result.id or "")
+			note = json.safe_table(result.notes)[1]
+		end
+		local comment = normalizer.to_comment_from_note(note, is_reply and parent.id or nil, discussion_id)
 		if comment == nil then
 			on_done(nil, "GitLab did not return the created comment")
 			return
@@ -155,47 +174,24 @@ function M.add_comment(issue, body, on_done)
 		service.delete_memory_cache(discussions_cache_key(path, iid))
 		on_done(comment, nil)
 	end, {
-		action = "Add discussion",
+		action = is_reply and "Reply in discussion" or "Add discussion",
 		path = path,
 		iid = iid,
+		discussion_id = is_reply and discussion_id or nil,
 	})
 end
 
----@param issue Issue
----@param parent IssueComment
----@param body string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent, body, on_done)
-	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid issue key")
-		return nil
+---@param path string
+---@param iid integer
+---@param note_id string
+---@param discussion_id string
+---@return string
+local function note_endpoint(path, iid, note_id, discussion_id)
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	if discussion_id ~= "" then
+		endpoint = endpoint .. "/discussions/" .. discussion_id
 	end
-	if vim.trim(body) == "" then
-		on_done(nil, "Comment cannot be empty")
-		return nil
-	end
-	local discussion_id = parent._raw and tostring(parent._raw.discussion_id or "") or ""
-	if discussion_id == "" then
-		return M.add_comment(issue, body, on_done)
-	end
-
-	local endpoint =
-		string.format("/projects/%s/issues/%d/discussions/%s/notes", service.url_encode(path), iid, discussion_id)
-	return service.request("POST", endpoint, { body = body }, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		service.delete_memory_cache(discussions_cache_key(path, iid))
-		on_done(normalizer.to_comment_from_note(result, parent.id, discussion_id), nil)
-	end, {
-		action = "Reply in discussion",
-		path = path,
-		iid = iid,
-		discussion_id = discussion_id,
-	})
+	return endpoint .. "/notes/" .. note_id
 end
 
 ---@param issue Issue
@@ -216,16 +212,7 @@ function M.edit_comment(issue, comment, body, on_done)
 
 	local note_id = tostring(comment.id)
 	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
-	if discussion_id ~= "" then
-		endpoint = string.format(
-			"/projects/%s/issues/%d/discussions/%s/notes/%s",
-			service.url_encode(path),
-			iid,
-			discussion_id,
-			note_id
-		)
-	end
+	local endpoint = note_endpoint(path, iid, note_id, discussion_id)
 	return service.request("PUT", endpoint, { body = body }, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -257,16 +244,7 @@ function M.delete_comment(issue, comment, on_done)
 
 	local note_id = tostring(comment.id)
 	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
-	if discussion_id ~= "" then
-		endpoint = string.format(
-			"/projects/%s/issues/%d/discussions/%s/notes/%s",
-			service.url_encode(path),
-			iid,
-			discussion_id,
-			note_id
-		)
-	end
+	local endpoint = note_endpoint(path, iid, note_id, discussion_id)
 	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)

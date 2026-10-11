@@ -2,6 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
+local picker = require("atlas.ui.picker")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -78,8 +79,7 @@ function M.open(request)
 	local picker_layout = layout()
 	local main_buf = vim.api.nvim_create_buf(false, true)
 	local preview_buf = has_preview and vim.api.nvim_create_buf(false, true) or nil
-	vim.bo[main_buf].filetype = "atlas.picker"
-	vim.bo[main_buf].syntax = "OFF"
+	vim.bo[main_buf].filetype = "atlas-ui.picker"
 	pcall(vim.treesitter.stop, main_buf)
 	vim.b[main_buf].completion = false
 	for _, buf in ipairs({ main_buf, preview_buf }) do
@@ -117,7 +117,11 @@ function M.open(request)
 	vim.api.nvim_set_option_value("signcolumn", "yes:1", { win = main_win })
 	if preview_win then
 		configure_window(preview_win, main_win)
-		vim.api.nvim_set_option_value("wrap", true, { win = preview_win })
+		vim.bo[preview_buf].filetype = "atlas-markdown"
+		vim.bo[preview_buf].syntax = "OFF"
+		vim.bo[preview_buf].modifiable = false
+		vim.wo[preview_win].wrap = true
+		vim.wo[preview_win].linebreak = true
 	end
 
 	local all_items = request.items
@@ -131,6 +135,7 @@ function M.open(request)
 		err = nil,
 		fetch_generation = 0,
 		preview_generation = 0,
+		preview_lines = {},
 		fetch = nil,
 		preview = nil,
 		spinner = nil,
@@ -186,17 +191,26 @@ function M.open(request)
 		return state.items[state.index]
 	end
 
+	---@param buf integer
+	---@param win integer
+	local function draw_preview(buf, win)
+		local result = picker.format_preview(state.preview_lines, win)
+		vim.bo[buf].modifiable = true
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+		vim.bo[buf].modifiable = false
+		picker.highlight_preview(buf, result.highlights)
+	end
+
 	local function render_preview()
-		if not preview_buf or not request.preview_item then
+		if not preview_buf or not preview_win or not request.preview_item then
 			return
 		end
 		cancel(state.preview)
 		state.preview_generation = state.preview_generation + 1
 		local generation = state.preview_generation
 		local item = current_item()
-		vim.api.nvim_set_option_value("modifiable", true, { buf = preview_buf })
-		vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, item and { "Loading..." } or {})
-		vim.api.nvim_set_option_value("modifiable", false, { buf = preview_buf })
+		state.preview_lines = item and { "Loading..." } or {}
+		draw_preview(preview_buf, preview_win)
 		if not item then
 			return
 		end
@@ -205,10 +219,8 @@ function M.open(request)
 				if state.closed or generation ~= state.preview_generation then
 					return
 				end
-				vim.api.nvim_set_option_value("modifiable", true, { buf = preview_buf })
-				vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, value.lines)
-				vim.api.nvim_set_option_value("modifiable", false, { buf = preview_buf })
-				vim.api.nvim_set_option_value("filetype", "markdown", { buf = preview_buf })
+				state.preview_lines = value.lines
+				draw_preview(preview_buf, preview_win)
 				if preview_win and vim.api.nvim_win_is_valid(preview_win) then
 					vim.api.nvim_set_option_value("number", false, { win = preview_win })
 					vim.api.nvim_set_option_value("relativenumber", false, { win = preview_win })
@@ -216,6 +228,54 @@ function M.open(request)
 				end
 			end)
 		end)
+	end
+
+	local function append_items(rows, highlights)
+		local first = math.max(1, state.index - picker_layout.item_height + 1)
+		first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
+		for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
+			local item = state.items[index]
+			local marker, marker_hl = "", nil
+			if request.multi then
+				if state.selected[request.key(item)] then
+					marker, marker_hl = icons.picker("selected")
+				else
+					marker, marker_hl = icons.picker("unselected")
+				end
+				marker = marker .. " "
+			end
+			local text, chunks = picker.format_item(request, item)
+			table.insert(rows, marker .. text)
+			local row = #rows
+			if marker_hl then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #marker,
+					hl_group = marker_hl,
+				})
+			end
+			local col = #marker
+			for _, chunk in ipairs(chunks) do
+				if chunk[2] then
+					table.insert(highlights, {
+						line = row,
+						start_col = col,
+						end_col = col + #chunk[1],
+						hl_group = chunk[2],
+					})
+				end
+				col = col + #chunk[1]
+			end
+			if index == state.index then
+				table.insert(highlights, {
+					line = row,
+					start_col = 0,
+					end_col = #rows[row],
+					line_hl_group = "CursorLine",
+				})
+			end
+		end
 	end
 
 	local function render(update_preview)
@@ -244,47 +304,7 @@ function M.open(request)
 				hl_group = "AtlasTextMuted",
 			})
 		else
-			local first = math.max(1, state.index - picker_layout.item_height + 1)
-			first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
-			for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
-				local item = state.items[index]
-				local marker, marker_hl = "", nil
-				if request.multi then
-					if state.selected[request.key(item)] then
-						marker, marker_hl = icons.picker("selected")
-					else
-						marker, marker_hl = icons.picker("unselected")
-					end
-					marker = marker .. " "
-				end
-				local text, hl = request.format_item(item)
-				table.insert(rows, marker .. tostring(text or ""))
-				local row = #rows
-				if marker_hl then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #marker,
-						hl_group = marker_hl,
-					})
-				end
-				if hl then
-					table.insert(highlights, {
-						line = row,
-						start_col = #marker,
-						end_col = #rows[row],
-						hl_group = hl,
-					})
-				end
-				if index == state.index then
-					table.insert(highlights, {
-						line = row,
-						start_col = 0,
-						end_col = #rows[row],
-						line_hl_group = "CursorLine",
-					})
-				end
-			end
+			append_items(rows, highlights)
 		end
 
 		local separator = string.rep("─", picker_layout.main_width)
@@ -445,6 +465,9 @@ function M.open(request)
 				picker_layout = layout()
 				resize(picker_layout)
 				render(false)
+				if preview_buf and preview_win then
+					draw_preview(preview_buf, preview_win)
+				end
 			end
 		end,
 	})

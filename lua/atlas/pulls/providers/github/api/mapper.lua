@@ -70,21 +70,7 @@ end
 ---@param right PullsReviewer
 ---@return boolean
 local function same_reviewer(left, right)
-	local left_provider = tostring(left.provider_id or "")
-	local right_provider = tostring(right.provider_id or "")
-	if left_provider ~= "" and right_provider ~= "" then
-		return left_provider:lower() == right_provider:lower()
-	end
-
-	local left_id = tostring(left.id or "")
-	local right_id = tostring(right.id or "")
-	if left_id ~= "" and right_id ~= "" then
-		return left_id == right_id
-	end
-
-	local left_username = tostring(left.username or "")
-	local right_username = tostring(right.username or "")
-	return left_username ~= "" and right_username ~= "" and left_username:lower() == right_username:lower()
+	return left.provider_id:lower() == right.provider_id:lower()
 end
 
 ---@param reviewers PullsReviewer[]
@@ -130,7 +116,7 @@ local function pull_reviewer(raw, decision, role)
 	if username == "" then
 		return nil
 	end
-	local name = user.name ~= "" and user.name or (json.safe_str(raw.name) or username)
+	local name = user.name ~= "" and user.name or (json.safe_str(raw.teamName) or username)
 
 	return {
 		id = user.id ~= "" and user.id or username,
@@ -157,7 +143,7 @@ function M.to_reviewers(raw)
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
 		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
 		if reviewer then
-			requested[tostring(reviewer.provider_id):lower()] = true
+			requested[reviewer.provider_id:lower()] = true
 		end
 	end
 
@@ -165,7 +151,7 @@ function M.to_reviewers(raw)
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequests)) do
 		local reviewer = pull_reviewer(node.requestedReviewer or node, "pending", "reviewer")
 		if reviewer then
-			requested[tostring(reviewer.provider_id):lower()] = true
+			requested[reviewer.provider_id:lower()] = true
 			table.insert(active, reviewer)
 		end
 	end
@@ -180,7 +166,7 @@ function M.to_reviewers(raw)
 			if state == "DISMISSED" then
 				remove_reviewer(reviewers, reviewer)
 			elseif decision then
-				if requested[tostring(reviewer.provider_id):lower()] then
+				if requested[reviewer.provider_id:lower()] then
 					reviewer.role = "reviewer"
 				end
 				upsert_reviewer(reviewers, reviewer)
@@ -211,10 +197,12 @@ function M.to_pull_request(raw)
 		state = "draft"
 	end
 
-	local owner, repo_name, repo_full_name = github_mapping.repository(raw.repository)
-	local repository_url = json.safe_str((raw.repository or {}).url)
-	if repository_url and repository_url ~= "" and not repository_url:match("%.git$") then
-		repository_url = repository_url .. ".git"
+	local raw_repository = json.safe_table(raw.repository)
+	local owner, repo_name, repo_full_name = github_mapping.repository(raw_repository)
+	local repository_url = json.safe_str(raw_repository.url)
+	local https_url = repository_url
+	if https_url and https_url ~= "" and not https_url:match("%.git$") then
+		https_url = https_url .. ".git"
 	end
 	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
 	local commit = json.safe_table(first_commit.commit)
@@ -233,20 +221,24 @@ function M.to_pull_request(raw)
 		destination = {
 			branch = tostring(raw.baseRefName or ""),
 			commit_hash = tostring(raw.baseRefOid or ""),
-			https_url = repository_url,
-			ssh_url = json.safe_str((raw.repository or {}).sshUrl),
+			https_url = https_url,
+			ssh_url = json.safe_str(raw_repository.sshUrl),
 		},
-		comments_count = tonumber(raw.totalCommentsCount) or tonumber(raw.commentsCount) or tonumber(
-			json.safe_table(raw.comments).totalCount
-		) or tonumber(raw.comments) or 0,
+		comments_count = tonumber(raw.totalCommentsCount) or 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
 		link = {
 			html = tostring(raw.url or ""),
 		},
 		provider = "github",
-		workspace = owner,
-		repo = repo_name,
+		repo = {
+			id = repo_full_name,
+			name = repo_name,
+			owner = owner,
+			repo_name = repo_name,
+			full_name = repo_full_name,
+			html_url = repository_url,
+		},
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
 		node_id = json.safe_str(raw.id),
@@ -273,17 +265,6 @@ function M.to_pull_request_details(raw)
 	return details
 end
 
----@param raw table
----@return PullsUser
-function M.to_user(raw)
-	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
-	return {
-		name = user.name,
-		id = user.id,
-		username = user.login,
-	}
-end
-
 ---@param nodes table[]
 ---@return PullRequest[]
 function M.to_search_results_from_graphql(nodes)
@@ -303,110 +284,79 @@ function M.to_activity(item)
 	local actor_login = json.safe_str(json.safe_table(item.actor).login)
 		or json.safe_str(json.safe_table(item.user).login)
 		or ""
-	local actor = actor_from_login(actor_login)
-	local date = tostring(item.created_at or item.submitted_at or "")
+	local entry = {
+		kind = event,
+		actor = actor_from_login(actor_login),
+		date = tostring(item.created_at or item.submitted_at or ""),
+	}
 
 	if event == "commented" then
 		local body = body_text(item.body)
-		return {
-			kind = "comment",
-			actor = actor,
-			date = date,
-			label = "commented",
-			body = body ~= "" and body or nil,
-		}
+		entry.kind = "comment"
+		entry.label = "commented"
+		entry.body = body ~= "" and body or nil
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
 		if state_label == "pending" then
 			return nil
 		end
-		local kind = state_label == "approved" and "approval"
+		entry.kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
 			or "review"
-		local verb = kind == "approval" and "approved"
-			or kind == "changes_requested" and "requested changes"
+		entry.label = entry.kind == "approval" and "approved"
+			or entry.kind == "changes_requested" and "requested changes"
 			or "left a review"
 		local body = body_text(item.body)
-		return {
-			kind = kind,
-			actor = actor,
-			date = date,
-			label = verb,
-			body = body ~= "" and body or nil,
-		}
+		entry.body = body ~= "" and body or nil
 	elseif event == "review_dismissed" then
-		return {
-			kind = "review_dismissed",
-			actor = actor,
-			date = date,
-			label = "dismissed their review",
-		}
+		entry.label = "dismissed their review"
 	elseif event == "closed" or event == "merged" or event == "reopened" then
-		return { kind = event, actor = actor, date = date, label = event }
+		entry.label = event
 	elseif event == "head_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "force pushed" }
+		entry.kind = "force_pushed"
+		entry.label = "force pushed"
 	elseif event == "committed" then
 		local author = json.safe_table(item.author)
 		local author_name = tostring(author.name or "")
 		local msg = tostring(item.message or ""):match("([^\n]+)") or ""
 		local sha = tostring(item.sha or ""):sub(1, 8)
-		return {
-			kind = "committed",
-			actor = actor_from_login(author_name),
-			date = tostring(author.date or date),
-			label = sha ~= "" and string.format("%s %s", sha, msg) or msg,
-		}
+		entry.actor = actor_from_login(author_name)
+		entry.date = tostring(author.date or entry.date)
+		entry.label = sha ~= "" and string.format("%s %s", sha, msg) or msg
 	elseif event == "base_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "base branch force pushed" }
+		entry.kind = "force_pushed"
+		entry.label = "base branch force pushed"
 	elseif event == "labeled" or event == "unlabeled" then
 		local label = json.safe_str(json.safe_table(item.label).name) or ""
 		if label == "" then
 			return nil
 		end
 		local verb = event == "labeled" and "added label" or "removed label"
-		return { kind = event, actor = actor, date = date, label = verb .. ": " .. label }
+		entry.label = verb .. ": " .. label
 	elseif event == "assigned" or event == "unassigned" then
 		local assignee = json.safe_str(json.safe_table(item.assignee).login) or ""
 		if assignee == "" then
 			return nil
 		end
 		local verb = event == "assigned" and "assigned" or "unassigned"
-		return { kind = event, actor = actor, date = date, label = verb .. " " .. assignee }
+		entry.label = verb .. " " .. assignee
 	elseif event == "review_requested" then
 		local reviewer = json.safe_str(json.safe_table(item.requested_reviewer).login) or ""
-		return {
-			kind = "review_requested",
-			actor = actor,
-			date = date,
-			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
-		}
+		entry.label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review"
 	elseif event == "renamed" then
 		local rename = item.rename or {}
-		return {
-			kind = "renamed",
-			actor = actor,
-			date = date,
-			label = "changed the title",
-			body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or "")),
-		}
+		entry.label = "changed the title"
+		entry.body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or ""))
 	elseif event == "comment_deleted" then
-		return {
-			kind = "comment_deleted",
-			actor = actor,
-			date = date,
-			label = "deleted a comment",
-		}
+		entry.label = "deleted a comment"
 	elseif event == "ready_for_review" then
-		return {
-			kind = "ready_for_review",
-			actor = actor,
-			date = date,
-			label = "marked as ready for review",
-		}
+		entry.label = "marked as ready for review"
 	elseif event == "convert_to_draft" then
-		return { kind = "convert_to_draft", actor = actor, date = date, label = "marked as draft" }
+		entry.label = "marked as draft"
+	else
+		return nil
 	end
-	return nil
+	return entry
 end
 
 ---@param raw table
@@ -415,12 +365,9 @@ end
 local function comment(raw, raw_user)
 	return {
 		id = raw.id,
-		parent_id = nil,
 		author = comment_author(raw_user),
 		content_raw = body_text(raw.body),
 		created_on = tostring(raw.created_at or raw.submitted_at or ""),
-		inline = nil,
-		url = nil,
 		html_url = tostring(raw.html_url or ""),
 		reactions = github_mapping.reaction_counts(raw.reactions),
 	}
@@ -430,10 +377,7 @@ end
 ---@return PullsComment
 function M.to_activity_comment(raw)
 	local raw_user = json.nilify(raw.user) or json.nilify(raw.actor)
-	local result = comment(raw, raw_user)
-	result.parent_id = nil
-	result.inline = nil
-	return result
+	return comment(raw, raw_user)
 end
 
 ---@param raw table
@@ -497,12 +441,10 @@ function M.to_comment(raw, thread_state)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
 	result.file = file
 	result.inline = inline
-	result.is_task = nil
 	if thread_state then
+		result.pending = thread_state.pending == true
 		result.outdated = thread_state.outdated == true
-		if thread_state.pending then
-			result.state = "PENDING"
-		elseif thread_state.resolved then
+		if thread_state.resolved then
 			result.state = "RESOLVED"
 		elseif thread_state.outdated then
 			result.state = "OUTDATED"
@@ -533,15 +475,14 @@ function M.to_review_comment(node, thread, fallback_parent)
 		original_start_line = thread.originalStartLine or node.originalStartLine,
 		side = thread.diffSide,
 		start_side = thread.startDiffSide,
-		url = node.url,
 		html_url = node.url,
 		created_at = node.createdAt,
-		reactions = github_mapping.reaction_groups(node.reactionGroups),
 	}, {
 		pending = review.state == "PENDING",
 		resolved = thread.isResolved == true,
 		outdated = thread.isOutdated == true,
 	})
+	result.reactions = github_mapping.reaction_groups(node.reactionGroups)
 	result.thread_id = json.safe_str(thread.id)
 	result._raw = {
 		comment_id = tostring(node.id or ""),

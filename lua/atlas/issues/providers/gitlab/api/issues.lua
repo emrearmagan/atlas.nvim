@@ -4,7 +4,7 @@ local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local request_scope = require("atlas.core.requests")
 local json = require("atlas.core.json")
-local LIST_CACHE_PREFIX = "gitlab:issues:list:v3:"
+local LIST_CACHE_PREFIX = "gitlab:issues:list:v4:"
 
 local ISSUE_LABELS_GQL = [[
 query($path: ID!, $iid: String!) {
@@ -30,10 +30,11 @@ local ISSUE_DETAILS_GQL = [[
 query($path: ID!, $iid: String!) {
   project(fullPath: $path) {
     issue(iid: $iid) {
+      title
       description
       assignees(first: 100) { nodes { id username name } }
       labels(first: 100) { nodes { title color } }
-      milestone { title }
+      milestone { id title }
     }
   }
 }
@@ -90,22 +91,12 @@ function M.list_issues(view, opts, on_done)
 		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
+		labels = view.labels or nil,
+		milestone = view.milestone or nil,
+		assignee_username = view.assignee_username or nil,
+		author_username = view.author_username or nil,
+		search = view.search or nil,
 	}
-	if view.labels then
-		params.labels = view.labels
-	end
-	if view.milestone then
-		params.milestone = view.milestone
-	end
-	if view.assignee_username then
-		params.assignee_username = view.assignee_username
-	end
-	if view.author_username then
-		params.author_username = view.author_username
-	end
-	if view.search and view.search ~= "" then
-		params.search = view.search
-	end
 	for k, v in pairs(view.extra_params or {}) do
 		if k ~= "page" and k ~= "per_page" then
 			params[k] = v
@@ -185,14 +176,12 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local requests = request_scope.new()
 	requests.all(starts, function(values, errors)
 		local issues = {}
+		local err
 		for path in pairs(iids_by_project) do
-			if errors[path] then
-				on_done({}, errors[path])
-				return
-			end
+			err = err or errors[path]
 			vim.list_extend(issues, values[path] or {})
 		end
-		on_done(issues, nil)
+		on_done(issues, err)
 	end)
 	return requests
 end
@@ -242,7 +231,7 @@ function M.fetch_issue(ref, opts, on_done)
 end
 
 ---@param key string
----@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
+---@param on_done fun(assignees: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignees(key, on_done)
 	local path, iid = normalizer.parse_key(key)
@@ -267,9 +256,7 @@ function M.get_assignees(key, on_done)
 		local assignees = {}
 		for _, raw in ipairs(json.safe_table(json.safe_table(issue.assignees).nodes)) do
 			local user = normalizer.to_user(raw)
-			local id = tonumber((json.safe_str(raw.id) or ""):match("(%d+)$"))
-			if user and id then
-				user.id = id
+			if user and tonumber(user.id) then
 				table.insert(assignees, user)
 			end
 		end
@@ -281,29 +268,28 @@ function M.get_assignees(key, on_done)
 	})
 end
 
----@param issue Issue
----@param description string
----@param on_done fun(ok: boolean, err: string|nil)
+---@param issue GitLabIssue
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_description(issue, description, on_done)
-	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
-	if path == "" or iid == nil then
-		on_done(false, "Invalid issue key")
-		return nil
-	end
-
-	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
-	return service.request("PUT", endpoint, { description = description }, function(_, err)
+function M.set_subscription(issue, subscribed, on_done)
+	local action = subscribed and "subscribe" or "unsubscribe"
+	local endpoint =
+		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
+	return service.request("POST", endpoint, nil, function(result, err)
 		if err then
-			on_done(false, err)
+			on_done(nil, err)
 			return
 		end
-		invalidate_issue(path, iid)
-		on_done(true, nil)
+		local value = type(result) == "table" and result.subscribed
+		if type(value) ~= "boolean" then
+			value = subscribed
+		end
+		on_done(value, nil)
 	end, {
-		action = "Update issue description",
-		path = path,
-		iid = iid,
+		action = subscribed and "Subscribe to issue" or "Unsubscribe from issue",
+		project_path = issue.project_path,
+		iid = issue.iid,
 	})
 end
 
@@ -445,7 +431,7 @@ function M.set_assignee_ids(key, ids, on_done)
 end
 
 ---@param opts { project_path: string, title: string, description: string|nil, assignee_ids: integer[]|nil, labels: string[]|nil, milestone_id: integer|nil, due_date: string|nil, confidential: boolean|nil }
----@param on_done fun(result: { key: string|nil, iid: integer|nil, url: string|nil }|nil, err: string|nil)
+---@param on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
 	local path = tostring(opts.project_path or "")
@@ -502,6 +488,40 @@ function M.create_issue(opts, on_done)
 		action = "Create issue",
 		path = path,
 		title = title,
+	})
+end
+
+---@param key string
+---@param fields { title: string, description: string, labels: string[], assignee_ids: integer[], milestone_id?: integer }
+---@param on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_issue(key, fields, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local payload = {
+		title = fields.title,
+		description = fields.description,
+		labels = table.concat(fields.labels, ","),
+		assignee_ids = #fields.assignee_ids > 0 and fields.assignee_ids or { 0 },
+		milestone_id = fields.milestone_id or 0,
+	}
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	return service.request("PUT", endpoint, payload, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		invalidate_issue(path, iid)
+		on_done({ key = key, iid = iid, url = json.safe_str(json.safe_table(result).web_url) }, nil)
+	end, {
+		action = "Update issue",
+		path = path,
+		iid = iid,
 	})
 end
 

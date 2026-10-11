@@ -17,7 +17,7 @@ function M.render(opts)
 	local display_col = margin
 
 	for _, item in ipairs(items) do
-		local label = nil
+		local label
 		if item.icon and item.icon ~= "" then
 			label = string.format(" %s  %s ", item.icon, item.label or "")
 		else

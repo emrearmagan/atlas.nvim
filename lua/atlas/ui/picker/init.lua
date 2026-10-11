@@ -1,6 +1,8 @@
 local M = {}
 
 local config = require("atlas.config")
+local markdown = require("atlas.formats.markdown")
+local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@alias AtlasPickerName "auto"|"default"|"snacks"|"fzf-lua"
 
@@ -8,7 +10,8 @@ local config = require("atlas.config")
 ---@field lines string[]
 ---@field title string|nil
 
----@alias AtlasPickerFormatItem fun(item: any): string, string|nil
+---@alias AtlasPickerChunk { [1]: string, [2]: string|nil }
+---@alias AtlasPickerFormatItem fun(item: any): string, string|AtlasPickerChunk[]|nil
 ---@alias AtlasPickerPreviewItem fun(item: any, done: fun(preview: AtlasPickerPreview)): { cancel: fun() }|nil
 ---@alias AtlasPickerFetch fun(query: string, done: fun(items: any[]|nil, err: string|nil)): { cancel: fun() }|nil
 
@@ -35,10 +38,42 @@ local picker_modules = {
 }
 
 local sizes = {
-	compact = { width = 0.5, height = 0.3 },
+	compact = { width = 0.3, height = 0.3 },
 	list = { width = 0.5, height = 0.5 },
 	preview = { width = 0.7, height = 0.7 },
 }
+
+---@param request AtlasPickerRequest
+---@param item any
+---@return string, AtlasPickerChunk[]
+function M.format_item(request, item)
+	local text, formatting = request.format_item(item)
+	text = tostring(text or "")
+	if type(formatting) == "table" then
+		return text, formatting
+	end
+	return text, { { text, formatting } }
+end
+
+---@param lines string[]
+---@param win integer
+---@return { lines: string[], highlights: AtlasMarkdownHighlight[] }
+function M.format_preview(lines, win)
+	local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
+	return markdown.parse(table.concat(lines, "\n"), { width = width })
+end
+
+---@param buf integer
+---@param highlights AtlasMarkdownHighlight[]
+function M.highlight_preview(buf, highlights)
+	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
+	for _, span in ipairs(highlights) do
+		vim.api.nvim_buf_set_extmark(buf, preview_namespace, span.line, span.start_col, {
+			end_col = span.end_col,
+			hl_group = span.hl_group,
+		})
+	end
+end
 
 ---@param name string
 local function load(name)
@@ -120,7 +155,7 @@ function M.multi_select(opts)
 		key = opts.key,
 		multi = true,
 		selected = opts.selected,
-		size = opts.size or sizes.list,
+		size = opts.size or sizes.compact,
 		on_done = function(selected)
 			local selected_keys = {}
 			for _, item in ipairs(selected) do
@@ -143,6 +178,7 @@ end
 ---@param opts {
 --- title: string,
 --- initial_items: any[]|nil,
+--- key: (fun(item: any): string)|nil,
 --- debounce_ms: integer|nil,
 --- fetch_on_open: boolean|nil,
 --- size: { width: number, height: number }|nil,
@@ -157,7 +193,7 @@ function M.search(opts)
 		title = opts.title,
 		items = opts.initial_items or {},
 		format_item = opts.format_item,
-		key = function(item)
+		key = opts.key or function(item)
 			return tostring(item.id)
 		end,
 		preview_item = opts.preview_item,

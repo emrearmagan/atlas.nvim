@@ -1,0 +1,535 @@
+local M = {}
+
+local utils = require("atlas.ui.shared.utils")
+local highlights = require("atlas.ui.highlights")
+local markdown = require("atlas.formats.markdown")
+
+---@alias AtlasThreadMode "tree" | "linked"
+
+---@class AtlasThreadFooterItem
+---@field text string
+---@field hl_group string|nil
+---@field highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
+
+---@class AtlasThreadItem
+---@field icon string|nil Icon string rendered before author
+---@field icon_hl string|nil Highlight group for the icon
+---@field author string|nil Display name of the author
+---@field author_hl string|nil Highlight group for the author
+---@field additional [string, string][]|nil Extra text and highlight chunks after the author
+---@field right_text [string, string][]|nil Right-aligned text and highlight chunks (e.g. timestamp, hash)
+---@field content string|nil Body text (may contain newlines)
+---@field markdown boolean|nil
+---@field language string|nil
+---@field file_path string|nil
+---@field language_aliases table<string, string>|nil
+---@field footer_items AtlasThreadFooterItem[]|nil
+---@field children AtlasThreadItem[]|nil Nested replies
+---@field meta table|nil Arbitrary metadata passed through
+---@field line_map table|nil Extra fields merged into every line-map entry
+
+---@class AtlasThreadRenderOpts
+---@field padding_x integer|nil Horizontal padding (default 2)
+---@field mode AtlasThreadMode|nil Rendering mode (default "tree")
+---@field show_connectors boolean|nil Show tree connectors (default true)
+---@field separator string|nil Character for root separators (default "─")
+---@field content_max_lines integer|fun(item: AtlasThreadItem): integer|nil Max visible content lines per item (nil = unlimited).
+---@field content_truncated_key string|nil Key shown when expandable content is truncated.
+---@field content_prefix string|nil Prefix placed before root content after padding
+---@field content_hl? fun(item: AtlasThreadItem, row: string, row_index: integer): table[]|nil Returns segments for content
+
+---@class AtlasThreadSpan
+---@field line integer 0-indexed line number
+---@field start_col integer
+---@field end_col integer
+---@field hl_group string
+
+---@class AtlasThreadLineMap
+---@field kind string
+---@field item AtlasThreadItem
+---@field [string] any
+
+---@param item AtlasThreadItem
+---@param part string
+---@param depth integer
+---@return AtlasThreadLineMap
+local function make_line_map(item, part, depth)
+	local kind = part
+	if depth > 0 then
+		kind = "thread_" .. part
+	end
+
+	---@type AtlasThreadLineMap
+	local map = { kind = kind, item = item }
+
+	if type(item.line_map) == "table" then
+		for k, v in pairs(item.line_map) do
+			if k ~= "kind" then
+				map[k] = v
+			end
+		end
+	end
+
+	return map
+end
+
+---@param spans AtlasThreadSpan[]
+---@param line integer 0-indexed
+---@param start_col integer
+---@param end_col integer
+---@param hl_group string
+local function span(spans, line, start_col, end_col, hl_group)
+	spans[#spans + 1] = {
+		line = line,
+		start_col = start_col,
+		end_col = end_col,
+		hl_group = hl_group,
+	}
+end
+
+---@param author string
+---@return string|nil
+local function default_author_hl(author)
+	local normalized = vim.trim(author):lower()
+	if normalized == "" or normalized == "unknown" or normalized == "none" or normalized == "unassigned" then
+		return "AtlasTextMuted"
+	end
+
+	return highlights.dynamic_for(normalized)
+end
+
+---@return nil
+local function noop_hl()
+	return nil
+end
+
+-- Prefix computation
+
+---@class AtlasThreadPrefixes
+---@field pad string Left padding
+---@field continuation string │  or "   " or ""
+---@field meta_prefix string Full prefix for the header line
+---@field body_prefix string Full prefix for content/footer lines
+
+---@param depth integer
+---@param branch_prefix string
+---@param is_last boolean
+---@param padding_x integer
+---@param show_connectors boolean
+---@return AtlasThreadPrefixes
+local function compute_prefixes(depth, branch_prefix, is_last, padding_x, show_connectors)
+	local pad = string.rep(" ", padding_x)
+	local connector = ""
+	local continuation = ""
+
+	if depth > 0 then
+		if show_connectors then
+			connector = is_last and "└─ " or "├─ "
+			continuation = is_last and "   " or "│  "
+		else
+			connector = "↳ "
+			continuation = "  "
+		end
+	end
+
+	local meta_prefix = pad .. branch_prefix .. connector
+	local body_prefix = depth == 0 and pad or (pad .. branch_prefix .. continuation)
+
+	return {
+		pad = pad,
+		continuation = continuation,
+		meta_prefix = meta_prefix,
+		body_prefix = body_prefix,
+	}
+end
+
+-- Header rendering
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param pfx AtlasThreadPrefixes
+---@param opts AtlasThreadRenderOpts
+---@param width integer
+local function render_header(lines, spans, line_map, item, depth, pfx, opts, width)
+	local header = pfx.meta_prefix
+	local col_markers = {} -- { {start, end, hl} }
+
+	local icon = item.icon or ""
+	if icon ~= "" then
+		local icon_start = #header
+		header = header .. icon .. " "
+		local hl = item.icon_hl
+		if hl then
+			col_markers[#col_markers + 1] = { icon_start, icon_start + #icon, hl }
+		end
+	end
+
+	local author = tostring(item.author or "")
+	if author == "" then
+		author = "Unknown"
+	end
+	local author_start = #header
+	header = header .. author
+	local author_hl = item.author_hl or default_author_hl(author)
+	if author_hl and author_hl ~= "" then
+		col_markers[#col_markers + 1] = { author_start, #header, author_hl }
+	end
+
+	local right_chunks = item.right_text or {}
+	local right_text = ""
+	for _, chunk in ipairs(right_chunks) do
+		right_text = right_text .. chunk[1]
+	end
+	local right_text_dw = right_text ~= "" and (2 + vim.api.nvim_strwidth(right_text)) or 0
+
+	local additional_chunks = item.additional or {}
+	local additional = ""
+	for _, chunk in ipairs(additional_chunks) do
+		additional = additional .. chunk[1]
+	end
+	if additional ~= "" then
+		local padding_x = opts.padding_x
+		local used_dw = vim.api.nvim_strwidth(header)
+		local available = width - padding_x - used_dw - 2 - right_text_dw
+		if available > 0 then
+			local add_dw = vim.api.nvim_strwidth(additional)
+			if add_dw > available then
+				additional = utils.truncate(additional, available)
+			end
+		end
+
+		local add_start = #header + 2
+		header = header .. "  " .. additional
+		local offset = 0
+		for _, chunk in ipairs(additional_chunks) do
+			local chunk_end = offset + #chunk[1]
+			local end_col = math.min(chunk_end, #additional)
+			if offset < end_col then
+				col_markers[#col_markers + 1] = { add_start + offset, add_start + end_col, chunk[2] }
+			end
+			offset = chunk_end
+		end
+	end
+
+	if right_text ~= "" then
+		-- Align by display columns; highlights still use byte offsets.
+		local display_so_far = vim.api.nvim_strwidth(header)
+		local display_rt = vim.api.nvim_strwidth(right_text)
+		local right_edge = width - opts.padding_x
+		local needed = math.max(2, right_edge - display_so_far - display_rt)
+		local rt_byte_start = #header + needed
+		header = header .. string.rep(" ", needed) .. right_text
+		for _, chunk in ipairs(right_chunks) do
+			local chunk_end = rt_byte_start + #chunk[1]
+			col_markers[#col_markers + 1] = { rt_byte_start, chunk_end, chunk[2] }
+			rt_byte_start = chunk_end
+		end
+	end
+
+	local full_line = utils.truncate(header, width - opts.padding_x)
+	lines[#lines + 1] = full_line
+	line_map[#lines] = make_line_map(item, "header", depth)
+
+	if #pfx.meta_prefix > 0 then
+		span(spans, #lines - 1, 0, math.min(#pfx.meta_prefix, #full_line), "AtlasTextMuted")
+	end
+
+	for _, m in ipairs(col_markers) do
+		local end_col = math.min(m[2], #full_line)
+		if m[1] < end_col then
+			span(spans, #lines - 1, m[1], end_col, m[3])
+		end
+	end
+end
+
+-- Content rendering
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param pfx AtlasThreadPrefixes
+---@param opts AtlasThreadRenderOpts
+---@param width integer
+local function render_content(lines, spans, line_map, item, depth, pfx, opts, width)
+	if item.content == nil then
+		return
+	end
+
+	local body_prefix = pfx.body_prefix
+	local prefix_width = vim.api.nvim_strwidth(body_prefix)
+	local content_width = math.max(10, width - prefix_width - opts.padding_x)
+
+	local content = item.markdown
+			and markdown.parse(item.content, {
+				width = content_width,
+				language = item.language,
+				file_path = item.file_path,
+				language_aliases = item.language_aliases,
+			})
+		or { lines = utils.sanitize_lines(item.content) }
+
+	local max = opts.content_max_lines
+	if type(max) == "function" then
+		max = max(item)
+	end
+	local truncated = type(max) == "number" and max > 0 and #content.lines > max
+	if truncated then
+		content.lines = vim.list_slice(content.lines, 1, max)
+	end
+
+	local rendered_content = utils.wrap_content(content, content_width, body_prefix)
+	local content_start = #lines + 1
+	utils.append_block(lines, spans, rendered_content)
+	for row_index, row in ipairs(rendered_content.lines) do
+		local line = content_start + row_index - 1
+		line_map[line] = make_line_map(item, "content", depth)
+
+		local segments = opts.content_hl(item, row:sub(#body_prefix + 1), row_index)
+		if segments then
+			for _, seg in ipairs(segments) do
+				span(spans, line - 1, #body_prefix + seg.start_col, #body_prefix + seg.end_col, seg.hl_group)
+			end
+		end
+	end
+
+	-- Indicator when content was truncated.
+	if truncated then
+		local key = opts.content_truncated_key
+		local prefix = key and "Press " or ""
+		local suffix = key and " to expand" or ""
+		local hint_text = key and (prefix .. key .. suffix) or ".."
+		local hint_padding = key and math.max(0, math.floor((content_width - vim.api.nvim_strwidth(hint_text)) / 2))
+			or 0
+		local hint_start = #body_prefix + hint_padding
+		local full_line = body_prefix .. string.rep(" ", hint_padding) .. hint_text
+		lines[#lines + 1] = full_line
+		line_map[#lines] = make_line_map(item, "content_truncated", depth)
+		if #body_prefix > 0 then
+			span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
+		end
+		if key then
+			local key_start = hint_start + #prefix
+			span(spans, #lines - 1, hint_start, key_start, "AtlasTextMuted")
+			span(spans, #lines - 1, key_start, key_start + #key, "Normal")
+			span(spans, #lines - 1, key_start + #key, #full_line, "AtlasTextMuted")
+		else
+			span(spans, #lines - 1, hint_start, #full_line, "AtlasTextMuted")
+		end
+	end
+end
+
+-- Footer rendering
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param pfx AtlasThreadPrefixes
+---@param has_children boolean
+---@param show_connectors boolean
+local function render_footer(lines, spans, line_map, item, depth, pfx, has_children, show_connectors)
+	local footer_items = item.footer_items or {}
+	if #footer_items == 0 then
+		return
+	end
+
+	local footer_prefix = pfx.body_prefix
+	if depth == 0 and has_children and show_connectors then
+		footer_prefix = pfx.pad .. "│ "
+	end
+
+	local line = footer_prefix
+	local row = #lines
+	if #footer_prefix > 0 then
+		span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+	end
+	for index, footer_item in ipairs(footer_items) do
+		if index > 1 then
+			line = line .. "   "
+		end
+		local start_col = #line
+		line = line .. footer_item.text
+		if footer_item.highlights and #footer_item.highlights > 0 then
+			for _, highlight in ipairs(footer_item.highlights) do
+				span(spans, row, start_col + highlight.start_col, start_col + highlight.end_col, highlight.hl_group)
+			end
+		else
+			span(spans, row, start_col, #line, footer_item.hl_group or "AtlasTextMuted")
+		end
+	end
+	lines[#lines + 1] = line
+	line_map[#lines] = make_line_map(item, "footer", depth)
+end
+
+-- Blank / separator lines
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param prefix string
+local function blank_line(lines, spans, prefix)
+	lines[#lines + 1] = prefix
+	if #prefix > 0 then
+		span(spans, #lines - 1, 0, #prefix, "AtlasTextMuted")
+	end
+end
+
+---@param width integer
+---@param padding_x integer
+---@param sep_char string
+---@return string
+local function separator_line(width, padding_x, sep_char)
+	local content_width = math.max(8, width - (padding_x * 2))
+	return string.rep(" ", padding_x) .. string.rep(sep_char, content_width)
+end
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param branch_prefix string
+---@param is_last boolean
+---@param opts AtlasThreadRenderOpts
+---@param width integer
+local function render_item(lines, spans, line_map, item, depth, branch_prefix, is_last, opts, width)
+	local linked = opts.mode == "linked"
+	local show_connectors = opts.show_connectors
+	---@cast show_connectors boolean
+	local pfx = compute_prefixes(depth, branch_prefix, is_last, opts.padding_x, show_connectors)
+
+	if depth == 0 then
+		if linked then
+			pfx.body_prefix = pfx.pad .. (show_connectors and not is_last and "│ " or "  ")
+		end
+		if opts.content_prefix then
+			pfx.body_prefix = pfx.pad .. opts.content_prefix
+		end
+	end
+
+	render_header(lines, spans, line_map, item, depth, pfx, opts, width)
+	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
+
+	local children = item.children or {}
+	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0, show_connectors)
+
+	for index, child in ipairs(children) do
+		local gap
+		if not show_connectors then
+			gap = pfx.pad .. branch_prefix .. (depth == 0 and " " or pfx.continuation)
+		elseif depth == 0 then
+			gap = pfx.pad .. "│"
+		else
+			gap = pfx.pad .. branch_prefix .. pfx.continuation
+		end
+		blank_line(lines, spans, gap)
+
+		local child_branch = branch_prefix .. pfx.continuation
+		-- Linked replies continue to the next root item.
+		local child_is_last = index == #children and (not linked or depth > 0)
+		render_item(lines, spans, line_map, child, depth + 1, child_branch, child_is_last, opts, width)
+	end
+
+	if linked and depth == 0 and #children > 0 then
+		blank_line(lines, spans, pfx.pad .. (show_connectors and "│" or " "))
+	end
+end
+
+---Render threads into lines, highlights and a line map.
+---@param items AtlasThreadItem[]|nil Root-level items to render
+---@param width integer Available buffer width (for right_text alignment and separators)
+---@param opts AtlasThreadRenderOpts|nil
+---@return string[] lines, AtlasThreadSpan[] spans, table<integer, AtlasThreadLineMap> line_map
+function M.render(items, width, opts)
+	---@type AtlasThreadRenderOpts
+	opts = vim.tbl_extend("force", {
+		padding_x = 2,
+		mode = "tree",
+		show_connectors = true,
+		separator = "─",
+		content_hl = noop_hl,
+	}, opts or {})
+
+	local lines = {} ---@type string[]
+	local spans = {} ---@type AtlasThreadSpan[]
+	local line_map = {} ---@type table<integer, AtlasThreadLineMap>
+	local list = items or {}
+
+	local is_linked = opts.mode == "linked"
+	local padding_x = opts.padding_x
+	---@cast padding_x integer
+	local pad = string.rep(" ", padding_x)
+
+	for idx, item in ipairs(list) do
+		local is_last_root = idx == #list
+
+		render_item(lines, spans, line_map, item, 0, "", is_last_root, opts, width)
+
+		if idx < #list then
+			if is_linked then
+				blank_line(lines, spans, pad .. (opts.show_connectors and "│" or " "))
+			else
+				local sep = separator_line(width, padding_x, opts.separator)
+				lines[#lines + 1] = sep
+				span(spans, #lines - 1, 0, #sep, "AtlasTextMuted")
+			end
+		end
+	end
+
+	return lines, spans, line_map
+end
+
+---@param items AtlasThreadItem[]
+---@param width integer
+---@param opts? AtlasThreadRenderOpts
+---@return string[], AtlasThreadSpan[], table<integer, AtlasThreadLineMap>
+function M.render_comments(items, width, opts)
+	local padding = string.rep(" ", opts and opts.padding_x or 1)
+	local inner_width = math.max(1, width - #padding * 2 - 4)
+	opts = vim.tbl_extend("force", opts or {}, { padding_x = 0, show_connectors = false })
+
+	local lines, spans, line_map = {}, {}, {}
+	local content_offset = #padding + #"│ "
+
+	for index, item in ipairs(items) do
+		if index > 1 then
+			lines[#lines + 1] = ""
+		end
+
+		local source, source_spans, source_map = M.render({ item }, inner_width, opts)
+		local offset = #lines
+
+		for row, text in ipairs(source) do
+			local title = row == 1
+			local leading = padding .. (title and "╭ " or "│ ")
+			local space = math.max(0, inner_width - vim.fn.strdisplaywidth(text))
+			local trailing = " " .. string.rep(title and "─" or " ", space) .. (title and "╮" or "│")
+			lines[#lines + 1] = leading .. text .. trailing
+			line_map[#lines] = source_map[row]
+
+			span(spans, #lines - 1, #padding, #padding + #"│", "AtlasBorder")
+			span(spans, #lines - 1, #leading + #text, #lines[#lines], "AtlasBorder")
+		end
+
+		lines[#lines + 1] = padding .. "╰" .. string.rep("─", inner_width + 2) .. "╯"
+		span(spans, #lines - 1, #padding, #lines[#lines], "AtlasBorder")
+
+		for _, highlight in ipairs(source_spans) do
+			spans[#spans + 1] = {
+				line = offset + highlight.line,
+				start_col = content_offset + highlight.start_col,
+				end_col = content_offset + highlight.end_col,
+				hl_group = highlight.hl_group,
+			}
+		end
+	end
+
+	return lines, spans, line_map
+end
+
+return M

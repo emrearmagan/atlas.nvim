@@ -12,6 +12,7 @@ local request_scope = require("atlas.core.requests")
 ---@field on_update fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil
 ---@field line_map table<integer, table>
 ---@field details_loading boolean
+---@field links AtlasDetailLinks|nil
 ---@field issue_loading boolean
 ---@field requests AtlasRequestScope
 ---@field spinner_timer uv.uv_timer_t|nil
@@ -32,6 +33,16 @@ local M = {
 	spinner_timer = nil,
 }
 
+---@param key string|nil
+---@return IssuesDetailTabModule|nil
+function M.tab_module(key)
+	for _, tab in ipairs(M.tabs) do
+		if tab.key == key then
+			return tab.mod
+		end
+	end
+end
+
 function M.reset()
 	M.win = nil
 	M.buf = nil
@@ -44,6 +55,7 @@ function M.reset()
 	M.on_update = nil
 	M.line_map = {}
 	M.details_loading = false
+	M.links = nil
 	M.issue_loading = false
 	M.requests.cancel()
 	M.requests = request_scope.new()

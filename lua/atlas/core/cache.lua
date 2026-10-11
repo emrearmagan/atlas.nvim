@@ -63,7 +63,7 @@ end
 ---@param key string
 local function delete_paths_for_key(key)
 	for _, path in ipairs(paths_for_hash(key_to_hash(key))) do
-		pcall(vim.fn.delete, path)
+		vim.fn.delete(path)
 	end
 end
 
@@ -93,12 +93,26 @@ local function cache_files()
 	return vim.fn.globpath(cache_root, "*.json", false, true)
 end
 
+local function prune_expired()
+	local now = os.time()
+	if last_prune_at > 0 and (now - last_prune_at) < PRUNE_INTERVAL_SEC then
+		return
+	end
+	last_prune_at = now
+	for _, path in ipairs(cache_files()) do
+		local expires_at = parse_expires_at(path)
+		if expires_at and expires_at > 0 and now > expires_at then
+			vim.fn.delete(path)
+		end
+	end
+end
+
 ---@param key string
 ---@param value any
 ---@param ttl number|nil
 function M.set(key, value, ttl)
 	ensure_cache_dir()
-	M.prune_expired()
+	prune_expired()
 
 	local expires_at = nil
 	if ttl ~= nil and ttl > 0 then
@@ -120,7 +134,7 @@ end
 ---@return CacheEntry|nil
 function M.get(key)
 	ensure_cache_dir()
-	M.prune_expired()
+	prune_expired()
 
 	local path = key_to_path(key)
 	if path == nil then
@@ -133,7 +147,7 @@ function M.get(key)
 	end
 
 	if entry.expires_at and os.time() > entry.expires_at then
-		pcall(vim.fn.delete, path)
+		vim.fn.delete(path)
 		return nil
 	end
 
@@ -150,7 +164,7 @@ function M.clear_prefix(prefix)
 	for _, path in ipairs(cache_files()) do
 		local entry = read_entry(path)
 		if entry and entry.key and entry.key:sub(1, #prefix) == prefix then
-			pcall(vim.fn.delete, path)
+			vim.fn.delete(path)
 		end
 	end
 end
@@ -159,38 +173,6 @@ function M.clear_all()
 	if vim.fn.isdirectory(atlas_cache_root) == 1 then
 		pcall(vim.fn.delete, atlas_cache_root, "rf")
 	end
-end
-
----@param opts? { remove_invalid?: boolean, force?: boolean }
----@return integer removed_count
-function M.prune_expired(opts)
-	opts = opts or {}
-	ensure_cache_dir()
-
-	local now = os.time()
-	if not opts.force and last_prune_at > 0 and (now - last_prune_at) < PRUNE_INTERVAL_SEC then
-		return 0
-	end
-
-	last_prune_at = now
-	local removed = 0
-
-	for _, path in ipairs(cache_files()) do
-		local should_delete = false
-		local expires_at = parse_expires_at(path)
-
-		if expires_at == nil then
-			should_delete = opts.remove_invalid == true
-		elseif expires_at > 0 and now > expires_at then
-			should_delete = true
-		end
-
-		if should_delete and pcall(vim.fn.delete, path) then
-			removed = removed + 1
-		end
-	end
-
-	return removed
 end
 
 return M

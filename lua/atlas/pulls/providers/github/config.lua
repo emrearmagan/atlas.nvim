@@ -3,14 +3,22 @@
 --     providers = {
 --       ---@type AtlasGitHubConfig
 --       github = {
---         cache_ttl = 300,
+--         -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
+--         cache_ttl = 300, -- Seconds; 0 disables caching.
+--         -- CI options: https://github.com/emrearmagan/atlas.nvim#pipeline-configuration
 --       },
 --     },
 --     pulls = {
 --       ---@type AtlasGitHubPullsConfig
 --       github = {
 --         views = {
---           { name = "Assigned",  key = "1", search = "is:pr assignee:@me archived:false" },
+--           {
+--             name = "Assigned",
+--             key = "1",
+--             layout = "compact", -- "compact" | "grouped" | "plain"
+--             -- current_repo = true, -- Restrict the search to the current Git repository.
+--             search = "is:pr assignee:@me archived:false",
+--           },
 --           { name = "Authored",  key = "2", search = "is:pr author:@me archived:false" },
 --           { name = "Reviewing", key = "3", search = "is:pr review-requested:@me archived:false" },
 --           { name = "Reviewed",  key = "4", search = "is:pr reviewed-by:@me archived:false" },
@@ -20,7 +28,10 @@
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["Drafts"]          = "is:pr is:draft author:@me",
+--             ["Drafts"] = {
+--               layout = "compact",
+--               search = "is:pr is:draft author:@me",
+--             },
 --             ["Recently merged"] = "is:pr is:merged author:@me sort:updated-desc",
 --           },
 --         },

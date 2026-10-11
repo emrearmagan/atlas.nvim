@@ -1,7 +1,7 @@
 local M = {}
 
 ---@param provider IssuesProvider
----@param opts? { initial_view?: IssuesViewConfig }
+---@param opts { initial_view: IssuesViewConfig|nil }|nil
 function M.init(provider, opts)
 	local dashboard = require("atlas.issues.ui.dashboard")
 	dashboard.init(provider, opts)

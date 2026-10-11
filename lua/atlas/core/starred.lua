@@ -1,11 +1,13 @@
 local M = {}
+local providers = require("atlas.providers")
 
-local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v3.json")
+local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v4.json")
 
 ---@class AtlasStarredItem
 ---@field ref string
 ---@field domain "pulls"|"issues"
 ---@field provider string
+---@field hostname string|nil
 ---@field item PullRequestRef|IssueRef
 
 ---@param value PullRequestRef|IssueRef
@@ -14,11 +16,14 @@ local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v3.json")
 local function to_item(value, provider)
 	local domain = value.key and "issues" or "pulls"
 	local id = value.key or (value.repo_full_name .. "#" .. tostring(value.id))
+	local hostname = providers[provider].hostname()
+	local namespace = hostname and (provider .. ":" .. hostname) or provider
 
 	return {
-		ref = string.format("%s:%s/%s", provider, domain, id),
+		ref = string.format("%s:%s/%s", namespace, domain, id),
 		domain = domain,
 		provider = provider,
+		hostname = hostname,
 		item = domain == "issues" and { key = value.key } or { id = value.id, repo_full_name = value.repo_full_name },
 	}
 end
@@ -97,7 +102,9 @@ function M.list(domain, provider)
 	local result = {}
 	for _, item in pairs(items) do
 		if (domain == nil or item.domain == domain) and (provider == nil or item.provider == provider) then
-			table.insert(result, item)
+			if item.hostname == providers[item.provider].hostname() then
+				table.insert(result, item)
+			end
 		end
 	end
 	table.sort(result, function(a, b)

@@ -18,6 +18,20 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert.equal(registered.name, provider.name)
 		assert_functions(provider, provider_functions, label)
 		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
+		assert_functions(provider.capabilities.users, { "fetch_user" }, label .. ".users")
+		if domain == "pulls" then
+			assert_functions(
+				provider.capabilities.write,
+				{ "create", "update", "fetch_reviewer_candidates" },
+				label .. ".write"
+			)
+			for _, name in ipairs({ "create_pr", "set_draft", "update_reviewers", "fetch_reviewer_candidates" }) do
+				assert.equal(nil, provider.capabilities.core[name], label .. ".core." .. name)
+			end
+			local pipelines = assert(provider.capabilities and provider.capabilities.pipelines)
+			assert_functions(pipelines, { "fetch" }, label .. ".pipelines")
+			assert.equal("table", type(pipelines.actions), label .. ".pipelines.actions")
+		end
 	end
 	table.sort(ids)
 	assert.same(expected_ids, ids)
@@ -30,27 +44,32 @@ describe("providers contracts", function()
 			{ "bitbucket", "github", "gitlab" },
 			{ "resolve_search", "view_for_target", "views" },
 			{
-				"fetch_user",
 				"fetch_pullrequests",
 				"fetch_by_refs",
 				"fetch_pullrequest",
-				"create_pr",
-				"update_title",
-				"set_draft",
 				"decline",
-				"fetch_default_reviewers",
+				"fetch_reviewers",
 				"fetch_description",
-				"update_reviewers",
 			}
 		)
+	end)
+
+	it("exposes editable labels and assignees for GitHub and GitLab", function()
+		for _, id in ipairs({ "github", "gitlab" }) do
+			local provider = assert(providers.load(id, "pulls"))
+			assert_functions(provider.capabilities.write, { "fetch_labels", "fetch_assignees" }, id .. ".pulls.write")
+		end
+		local bitbucket = assert(providers.load("bitbucket", "pulls"))
+		assert.is_nil(bitbucket.capabilities.write.fetch_labels)
+		assert.is_nil(bitbucket.capabilities.write.fetch_assignees)
 	end)
 
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
 			{ "github", "gitlab", "jira" },
-			{ "resolve_search", "view_for_target", "issue_ref", "views" },
-			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
+			{ "view_for_target", "issue_ref", "views" },
+			{ "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)
 	end)
 

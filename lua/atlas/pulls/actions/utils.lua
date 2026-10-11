@@ -1,13 +1,18 @@
 local M = {}
 
+local config = require("atlas.config")
 local git_checkout = require("atlas.core.git.checkout")
+local console = require("atlas.ui.console")
 local logger = require("atlas.core.logger")
 local core_notify = require("atlas.core.notify")
 
 ---@param context AtlasPullActionContext
----@return boolean
+---@return boolean, string|nil
 local function has_pr(context)
-	return context.pr ~= nil
+	if not context.pr then
+		return false, "No PR selected"
+	end
+	return true
 end
 
 ---@param context AtlasPullActionContext
@@ -29,11 +34,13 @@ local function custom_action(item)
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
-		custom = true,
+		confirmation = item.confirmation,
 		is_available = has_pr,
 		run = function(context, done)
 			notify(context, "loading", string.format("Running %s...", item.label))
 			local finished = false
+			---@type AtlasConsoleOutput|nil
+			local output
 			local function log_failure(err)
 				local pr = context.pr
 				logger.logerror("Custom pull request action failed", {
@@ -49,6 +56,12 @@ local function custom_action(item)
 					return
 				end
 				finished = true
+				if output then
+					if ok == false and message then
+						output:write(message .. "\n")
+					end
+					output:finish(ok == false and 1 or 0)
+				end
 				vim.schedule(function()
 					if ok == false then
 						local err = message or (item.label .. " failed")
@@ -64,14 +77,22 @@ local function custom_action(item)
 			end
 			local pr = assert(context.pr)
 			local repo_path = git_checkout.resolve_repo_path_for_pr(pr, {
-				require_git = false,
 				require_existing = false,
 			})
 			local ok, err = pcall(item.run, pr, {
 				repo_path = repo_path,
 				pr = pr,
 				user = context.current_user,
-				output = require("atlas.ui.popups.live").create,
+				write = function(text)
+					if finished then
+						return
+					end
+					if not output then
+						output = console.start(item.label, repo_path)
+						console.open()
+					end
+					output:write(text)
+				end,
 			}, complete_custom)
 			if not ok then
 				local message = "Custom action failed: " .. tostring(err)
@@ -85,14 +106,10 @@ local function custom_action(item)
 	}
 end
 
----@param context AtlasPullActionContext
 ---@return AtlasPullAction[]
-function M.custom_actions(context)
+function M.custom_actions()
 	local actions = {}
-	if not has_pr(context) then
-		return actions
-	end
-	for _, item in ipairs((require("atlas.config").options.pulls or {}).custom_actions or {}) do
+	for _, item in ipairs((config.options.pulls or {}).custom_actions or {}) do
 		if
 			type(item) == "table"
 			and type(item.id) == "string"
@@ -105,13 +122,14 @@ function M.custom_actions(context)
 	return actions
 end
 
----@return { method: "merge"|"squash", delete_branch: boolean }
-function M.merge_options()
-	local config = require("atlas.config").options.pulls or {}
-	return {
-		method = config.default_merge_method or "merge",
-		delete_branch = config.default_delete_branch == true,
-	}
+---@param id string
+---@return AtlasPullAction|nil
+function M.find_custom_action(id)
+	for _, action in ipairs(M.custom_actions()) do
+		if action.id == id then
+			return action
+		end
+	end
 end
 
 M.copy_id = {
@@ -134,8 +152,8 @@ M.copy_url = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local url = pr.link and pr.link.html
-		if not url or url == "" then
+		local url = pr.link.html
+		if url == "" then
 			notify(context, "warn", "No URL available")
 			done(nil, "No URL available")
 			return
@@ -153,8 +171,8 @@ M.open_in_browser = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local url = pr.link and pr.link.html
-		if not url or url == "" then
+		local url = pr.link.html
+		if url == "" then
 			notify(context, "warn", "No URL available")
 			done(nil, "No URL available")
 			return

@@ -20,12 +20,12 @@ function M.resolve(value, parsed)
 		return nil, nil
 	end
 	if parsed.host == "bitbucket.org" then
+		local path = parsed.path
 		if parsed.remote then
-			local path = parsed.path:gsub("%.git$", "")
-			local workspace, repo = path:match("^/([^/]+)/([^/]+)$")
-			if workspace == nil then
-				return nil, "Unsupported Bitbucket remote. Expected workspace/repository"
-			end
+			path = path:gsub("%.git$", "")
+		end
+		local workspace, repo = path:match("^/([^/]+)/([^/]+)$")
+		if workspace then
 			local full_name, web_url, repository_url = repository(parsed, workspace, repo)
 			return {
 				provider = "bitbucket",
@@ -40,18 +40,27 @@ function M.resolve(value, parsed)
 				repo_full_name = full_name,
 			}
 		end
+		if parsed.remote then
+			return nil, "Unsupported Bitbucket remote. Expected workspace/repository"
+		end
 
-		local workspace, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)(.*)$")
+		local number, tail
+		workspace, repo, number, tail = path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)(.*)$")
+		local entity = "pr"
+		if workspace == nil then
+			workspace, repo, number, tail = path:match("^/([^/]+)/([^/]+)/pipelines/results/(%d+)(.*)$")
+			entity = "pipeline"
+		end
 		if workspace then
 			if not url.valid_tail(tail) then
-				return nil, "Unsupported Bitbucket pull request URL"
+				return nil, "Unsupported Bitbucket URL"
 			end
 			local id = assert(tonumber(number))
 			local full_name, _, repository_url = repository(parsed, workspace, repo)
 			return {
 				provider = "bitbucket",
 				domain = "pulls",
-				entity = "pr",
+				entity = entity,
 				url = value,
 				repository_url = repository_url,
 				host = parsed.host,
@@ -64,24 +73,7 @@ function M.resolve(value, parsed)
 			}
 		end
 
-		workspace, repo = parsed.path:match("^/([^/]+)/([^/]+)$")
-		if workspace then
-			local full_name, web_url, repository_url = repository(parsed, workspace, repo)
-			return {
-				provider = "bitbucket",
-				domain = "pulls",
-				entity = "repo",
-				url = web_url,
-				repository_url = repository_url,
-				host = parsed.host,
-				workspace = workspace,
-				owner = workspace,
-				repo = repo,
-				repo_full_name = full_name,
-			}
-		end
-
-		return nil, "Unsupported Bitbucket URL. Expected a Cloud repository or pull request URL"
+		return nil, "Unsupported Bitbucket URL. Expected a Cloud repository, pull request, or pipeline URL"
 	end
 
 	local project, repo, number, tail = parsed.path:match("^/projects/([^/]+)/repos/([^/]+)/pull%-requests/(%d+)(.*)$")

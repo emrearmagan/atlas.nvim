@@ -153,12 +153,8 @@ end
 
 function M.move_cursor(direction)
 	local dashboard = require("atlas.ui.dashboard")
-	local win = dashboard.win()
-	local buf = dashboard.buf()
-	if win == nil then
-		return
-	end
-	if buf == nil then
+	local win, buf = dashboard.win(), dashboard.buf()
+	if win == nil or buf == nil then
 		return
 	end
 
@@ -196,12 +192,8 @@ end
 ---@return boolean
 function M.focus_item(predicate)
 	local dashboard = require("atlas.ui.dashboard")
-	local win = dashboard.win()
-	local buf = dashboard.buf()
-	if win == nil then
-		return false
-	end
-	if buf == nil then
+	local win, buf = dashboard.win(), dashboard.buf()
+	if win == nil or buf == nil then
 		return false
 	end
 
@@ -227,12 +219,8 @@ end
 
 function M.focus_last_item()
 	local dashboard = require("atlas.ui.dashboard")
-	local win = dashboard.win()
-	local buf = dashboard.buf()
-	if win == nil then
-		return
-	end
-	if buf == nil then
+	local win, buf = dashboard.win(), dashboard.buf()
+	if win == nil or buf == nil then
 		return
 	end
 

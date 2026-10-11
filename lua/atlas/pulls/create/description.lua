@@ -1,15 +1,3 @@
--- Builds the initial title and description for `:Atlas create pr`.
---
--- The newest commit supplies the title. For the description, Atlas first reads
--- the configured `pr_template`, or `.github/pull_request_template.md` by
--- default. A non-empty template is used as the description.
---
--- Without a template, Atlas creates a summary placeholder, groups conventional
--- commits into sections, accepts an optional leading `[JIRA-123]`, links commit
--- hashes and issue references, collects those references under Related, and
--- appends the diffstat. If none of the commits use a conventional prefix, Atlas
--- keeps a linked plain commit list and the same diffstat.
---
 -- Inspired by:
 -- https://github.com/mjveilleux/pr-description.nvim
 -- https://github.com/RemoteRabbit/pr-description.nvim
@@ -18,6 +6,7 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local requests = require("atlas.core.requests")
 
 local DEFAULT_PR_TEMPLATE = ".github/pull_request_template.md"
 
@@ -129,10 +118,9 @@ local function jira_url()
 	return base_url .. URL_PATHS.jira.issue:gsub("/+$", "")
 end
 
----@param root string
+---@param remote AtlasTarget|nil
 ---@return PullsCreateDescriptionLinks
-local function links(root)
-	local remote = git.local_repository(root)
+local function links(remote)
 	return {
 		provider = remote and remote.provider or nil,
 		repo_url = remote and remote.url or nil,
@@ -173,18 +161,14 @@ local function commit_link(hash, context)
 end
 
 ---@param commits { hash: string, subject: string }[]
----@param diffstat string[]
 ---@param context PullsCreateDescriptionLinks
----@return string
-local function plain_commits(commits, diffstat, context)
-	local lines = vim.tbl_map(function(commit)
-		return string.format("- %s %s", commit_link(commit.hash, context), add_links(commit.subject, context))
+---@param options AtlasPullsDescriptionConfig
+---@return string[]
+local function plain_commits(commits, context, options)
+	return vim.tbl_map(function(commit)
+		local hash = options.include_commit_hashes and (commit_link(commit.hash, context) .. " ") or ""
+		return "- " .. hash .. add_links(commit.subject, context)
 	end, commits)
-	if #lines > 0 and #diffstat > 0 then
-		table.insert(lines, "")
-	end
-	add_diffstat(lines, diffstat)
-	return table.concat(lines, "\n")
 end
 
 ---@param context PullsCreateDescriptionLinks
@@ -258,52 +242,57 @@ end
 ---@param head string
 ---@param commits { hash: string, subject: string }[]
 ---@param diffstat string[]
----@return string|nil
+---@return string
 local function generate(context, head, commits, diffstat)
-	if #commits == 0 then
-		return nil
-	end
-
+	local options = config.options.pulls.description
+	---@cast options AtlasPullsDescriptionConfig
 	local categories = {}
 	local conventional = false
 	for _, commit in ipairs(commits) do
 		local category, description, parsed = parse_commit(commit.subject)
 		conventional = conventional or parsed
 		categories[category] = categories[category] or {}
-		table.insert(
-			categories[category],
-			string.format("- %s (%s)", add_links(description, context), commit_link(commit.hash, context))
-		)
-	end
-	if not conventional then
-		return nil
+		local hash = options.include_commit_hashes and (" (" .. commit_link(commit.hash, context) .. ")") or ""
+		table.insert(categories[category], "- " .. add_links(description, context) .. hash)
 	end
 
-	local lines = { "## Summary", "", "<!-- TODO: Describe the change and why it is needed. -->", "", "## Changes", "" }
-	local used_sections = {}
-	for _, section in ipairs(SECTIONS) do
-		if categories[section.key] then
-			table.insert(used_sections, section)
-		end
+	local lines = {}
+	if options.include_summary and #commits > 0 then
+		vim.list_extend(lines, { "## Summary", "", "<!-- TODO: Describe the change and why it is needed. -->", "" })
 	end
-	for _, section in ipairs(used_sections) do
-		if #used_sections > 1 then
-			table.insert(lines, "**" .. section.title .. "**")
+	if conventional then
+		vim.list_extend(lines, { "## Changes", "" })
+		local used_sections = {}
+		for _, section in ipairs(SECTIONS) do
+			if categories[section.key] then
+				table.insert(used_sections, section)
+			end
+		end
+		for _, section in ipairs(used_sections) do
+			if #used_sections > 1 then
+				table.insert(lines, "**" .. section.title .. "**")
+			end
+			vim.list_extend(lines, categories[section.key])
 			table.insert(lines, "")
 		end
-		vim.list_extend(lines, categories[section.key])
+	else
+		vim.list_extend(lines, plain_commits(commits, context, options))
 		table.insert(lines, "")
 	end
 
-	local references = related(context, head, commits)
-	if #references > 0 then
-		table.insert(lines, "## Related")
-		table.insert(lines, "")
-		vim.list_extend(lines, references)
-		table.insert(lines, "")
+	if options.include_related then
+		local references = related(context, head, commits)
+		if #references > 0 then
+			table.insert(lines, "## Related")
+			table.insert(lines, "")
+			vim.list_extend(lines, references)
+			table.insert(lines, "")
+		end
 	end
 
-	add_diffstat(lines, diffstat)
+	if options.include_diffstat then
+		add_diffstat(lines, diffstat)
+	end
 
 	return vim.trim(table.concat(lines, "\n"))
 end
@@ -312,29 +301,44 @@ end
 ---@param repo_slug string
 ---@param base string
 ---@param head string
----@return PullsCreateDescription|nil
----@return string|nil err
-function M.build(root, repo_slug, base, head)
-	local range, range_err = git.commit_range(root, base, head)
-	if not range then
-		return nil, range_err
-	end
-	local commits = git.commits_for_range(root, range)
-	local diffstat = git.diff_stat(root, base, head) or {}
-	local latest_commit = commits[#commits]
-	local body = read_template(root, repo_slug)
-
-	if body == nil then
-		local context = links(root)
-		body = generate(context, head, commits, diffstat) or plain_commits(commits, diffstat, context)
-	end
-
-	return {
-		title = latest_commit and latest_commit.subject or "",
-		body = body,
-		commits = commits,
-		diffstat = diffstat,
-	}
+---@param repository AtlasTarget
+---@param on_done fun(description: PullsCreateDescription|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.build(root, repo_slug, base, head, repository, on_done)
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.diff_revisions(root, base, head, done)
+	end, function(base_revision, head_revision, err)
+		if not base_revision or not head_revision then
+			on_done(nil, err)
+			return
+		end
+		local template = read_template(root, repo_slug)
+		local loaders = {
+			commits = function(done)
+				return git.commits_for_range(root, base_revision .. ".." .. head_revision, done)
+			end,
+			diffstat = function(done)
+				return git.diff_stat(root, base_revision, head_revision, done)
+			end,
+		}
+		scope.all(loaders, function(values)
+			local commits, diffstat = values.commits or {}, values.diffstat or {}
+			local latest_commit = commits[#commits]
+			local body = template
+			if body == nil then
+				local context = links(repository)
+				body = generate(context, head, commits, diffstat)
+			end
+			on_done({
+				title = latest_commit and latest_commit.subject or "",
+				body = body,
+				commits = commits,
+				diffstat = diffstat,
+			}, nil)
+		end)
+	end)
+	return scope
 end
 
 return M

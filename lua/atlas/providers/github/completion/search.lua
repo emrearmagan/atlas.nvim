@@ -4,7 +4,8 @@
 
 local M = {}
 
-local prompt = require("atlas.commands.search.prompt")
+local prompt = require("atlas.ui.prompt")
+local utils = require("atlas.core.utils")
 
 ---@type string[]
 local QUALIFIERS = {
@@ -105,25 +106,7 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
 	local _, command_end = left:find("^[^%s]+%s*")
 	local query = command_end and left:sub(command_end + 1) or ""
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #query do
-		local char = query:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
+	local tokens = utils.split_tokens(query)
 
 	local partial = ""
 	if not query:match("%s$") and #tokens > 0 then

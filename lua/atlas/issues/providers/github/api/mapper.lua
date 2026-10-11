@@ -3,33 +3,13 @@ local M = {}
 local json = require("atlas.core.json")
 local github_mapping = require("atlas.providers.github.mapping")
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-function M.to_user(raw_user)
-	local user = github_mapping.identity(raw_user)
-	if user == nil or user.login == "" then
-		return nil
-	end
-	return { account_id = user.login, display_name = user.name }
-end
+M.to_user = require("atlas.providers.github.users").to_user
 
----@param raw_assignees table[]|nil
----@return IssueUser|nil
-local function first_assignee(raw_assignees)
-	for _, raw in ipairs(json.safe_table(raw_assignees)) do
-		local user = M.to_user(raw)
-		if user then
-			return user
-		end
-	end
-	return nil
-end
-
----@param raw_assignees table[]|nil
----@return IssueUser[]
-local function assignees(raw_assignees)
+---@param raw_users table[]|nil
+---@return AtlasUser[]
+function M.to_users(raw_users)
 	local users = {}
-	for _, raw in ipairs(json.safe_table(raw_assignees)) do
+	for _, raw in ipairs(json.safe_table(raw_users)) do
 		local user = M.to_user(raw)
 		if user then
 			table.insert(users, user)
@@ -64,6 +44,7 @@ local function milestone(raw)
 	end
 	return {
 		title = title,
+		number = tonumber(raw.number),
 		progress_percentage = tonumber(raw.progressPercentage),
 		open_issues = tonumber((raw.openIssues or {}).totalCount),
 		closed_issues = tonumber((raw.closedIssues or {}).totalCount),
@@ -95,11 +76,6 @@ local function issue_identity(raw, fallback_slug)
 	end
 
 	local _, _, slug = github_mapping.repository(raw.repository, fallback_slug)
-	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
-	if slug == "" then
-		slug = url:match("github%.com/([^/]+/[^/]+)/issues/") or ""
-	end
-
 	local key = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	return { key = key, title = json.safe_str(raw.title) }, slug, number
 end
@@ -113,7 +89,7 @@ function M.to_issue(raw, fallback_slug)
 	if ref == nil or number == nil then
 		return nil
 	end
-	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
+	local url = json.safe_str(raw.url) or ""
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 
@@ -121,15 +97,10 @@ function M.to_issue(raw, fallback_slug)
 	local parent = issue_identity(json.nilify(raw.parent), fallback_slug)
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
-	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
-	local updated_at = json.safe_str(raw.updatedAt) or json.safe_str(raw.updated_at) or ""
-	local closed_at = json.safe_str(raw.closedAt) or json.safe_str(raw.closed_at)
-
-	local comments_field = json.nilify(raw.comments)
-	local comment_count = tonumber(raw.commentsCount)
-		or tonumber(json.safe_table(comments_field).totalCount)
-		or tonumber(comments_field)
-		or 0
+	local created_at = json.safe_str(raw.createdAt) or ""
+	local updated_at = json.safe_str(raw.updatedAt) or ""
+	local closed_at = json.safe_str(raw.closedAt)
+	local comment_count = tonumber(json.safe_table(raw.comments).totalCount) or 0
 
 	---@type GitHubIssue
 	local issue = {
@@ -140,7 +111,7 @@ function M.to_issue(raw, fallback_slug)
 		status = status_name,
 		status_id = status_id,
 		type = nil,
-		assignee = first_assignee(issue_assignees),
+		assignee = M.to_users(issue_assignees)[1],
 		reporter = author,
 		story_points = nil,
 		duedate = nil,
@@ -168,8 +139,9 @@ function M.to_issue_details(raw, fallback_slug)
 
 	---@type GitHubIssueDetails
 	local details = {
+		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.body) or "",
-		assignees = assignees(github_mapping.connection_nodes(raw.assignees)),
+		assignees = M.to_users(github_mapping.connection_nodes(raw.assignees)),
 		labels = labels(github_mapping.connection_nodes(raw.labels)),
 		milestone = milestone(raw.milestone),
 		sub_issues = {},
@@ -243,8 +215,7 @@ local function to_comment(raw, raw_user)
 	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
 		return nil
 	end
-	local user = github_mapping.identity(raw_user)
-	local author = user and user.login ~= "" and { account_id = user.login, display_name = user.login } or nil
+	local author = M.to_user(raw_user)
 	return {
 		id = tostring(raw.id),
 		self = nil,
@@ -273,13 +244,6 @@ local EVENT_LABELS = {
 	unpinned = "unpinned this issue",
 	transferred = "transferred",
 	marked_as_duplicate = "marked as duplicate",
-	ready_for_review = "marked as ready for review",
-	convert_to_draft = "marked as draft",
-	head_ref_force_pushed = "force pushed",
-	base_ref_force_pushed = "base branch force pushed",
-	review_requested = "requested a review",
-	reviewed = "reviewed",
-	committed = "added a commit",
 	subscribed = "subscribed",
 	unsubscribed = "unsubscribed",
 	mentioned = "was mentioned",
@@ -315,11 +279,7 @@ function M.to_timeline_entry(raw)
 	---@type IssueActivityEntry
 	local entry = { kind = event, actor = actor, date = date }
 
-	if event == "commented" then
-		local body = json.safe_str(raw.body) or ""
-		entry.label = "commented"
-		entry.body = body ~= "" and body or nil
-	elseif event == "labeled" or event == "unlabeled" then
+	if event == "labeled" or event == "unlabeled" then
 		local name = json.safe_str(json.safe_table(raw.label).name) or ""
 		local verb = event == "labeled" and "added label" or "removed label"
 		entry.label = name ~= "" and (verb .. ": " .. name) or verb

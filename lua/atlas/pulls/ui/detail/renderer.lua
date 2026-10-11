@@ -4,17 +4,19 @@ local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
 local header = require("atlas.pulls.ui.components.header")
 local chips = require("atlas.pulls.ui.components.chips")
-local detail_tabs = require("atlas.pulls.ui.components.tabs")
+local tabs = require("atlas.ui.components.tabs")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
+local links = require("atlas.ui.links")
 
 local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 
 local PADDING_X = 1
 
 ---@param buf integer
+---@param lines string[]
 ---@param spans table[]
-local function apply_spans(buf, spans)
+local function apply_spans(buf, lines, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	for _, span in ipairs(spans) do
 		if span.line ~= nil and span.line_hl_group ~= nil then
@@ -22,7 +24,7 @@ local function apply_spans(buf, spans)
 				line_hl_group = span.line_hl_group,
 			})
 		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
-			local line_text = vim.api.nvim_buf_get_lines(buf, span.line, span.line + 1, false)[1] or ""
+			local line_text = lines[span.line + 1] or ""
 			local max_col = #line_text
 			local sc = math.min(span.start_col, max_col)
 			local ec = math.min(span.end_col, max_col)
@@ -38,8 +40,7 @@ local function apply_spans(buf, spans)
 end
 
 ---@param tab_items PullsDetailTab[]
----@param get_tab_module fun(key: string): PullsDetailTabModule|nil
-function M.render(tab_items, get_tab_module)
+function M.render(tab_items)
 	local buf = state.buf
 	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
@@ -100,6 +101,7 @@ function M.render(tab_items, get_tab_module)
 				and provider_detail.chips
 				and provider_detail.chips(pr, details, state.details_loading)
 			or {}
+		vim.list_extend(extra_chips, links.chips(state))
 
 		-- Header
 		local h_lines, h_spans = header.render(pr, width, extra_fields)
@@ -109,8 +111,7 @@ function M.render(tab_items, get_tab_module)
 		local chip_lines, chip_spans = chips.render(pr, {
 			width = width,
 			extra_chips = extra_chips,
-			pipelines = state.pipelines,
-			loading = state.details_loading or state.pipelines == "loading",
+			checks = state.merge_checks,
 		})
 		if #chip_lines > 0 then
 			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
@@ -119,14 +120,17 @@ function M.render(tab_items, get_tab_module)
 
 		-- Tab bar
 		if #tab_items > 1 then
-			local tab_lines, tab_spans =
-				detail_tabs.render(tab_items, state.current_tab, { width = width, padding_x = PADDING_X })
+			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
+				inactive_hl = "AtlasTextMuted",
+				gap = " ",
+				padding_x = PADDING_X,
+			})
 			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 			table.insert(lines, "")
 		end
 
 		-- Tab content
-		local tab_mod = get_tab_module(state.current_tab)
+		local tab_mod = state.tab_module(state.current_tab)
 		local content_offset = #lines
 		if tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(pr, details, width)
@@ -146,7 +150,7 @@ function M.render(tab_items, get_tab_module)
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	apply_spans(buf, spans)
+	apply_spans(buf, lines, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
 

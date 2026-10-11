@@ -6,7 +6,7 @@ local DEFAULT_INTERVAL_MS = 120
 
 ---@param interval_ns integer|nil
 ---@return string
-function M.frame(interval_ns)
+local function frame(interval_ns)
 	local interval = interval_ns or DEFAULT_INTERVAL_NS
 	if interval <= 0 then
 		interval = DEFAULT_INTERVAL_NS
@@ -20,7 +20,7 @@ end
 ---@return string
 function M.with_text(text, interval_ns)
 	local label = text or "Loading..."
-	return string.format("%s %s", M.frame(interval_ns), label)
+	return string.format("%s %s", frame(interval_ns), label)
 end
 
 ---@class SpinnerInstance

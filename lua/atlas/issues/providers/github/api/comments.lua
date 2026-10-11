@@ -6,9 +6,10 @@ local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param issue Issue
 ---@param body string
+---@param _opts { parent?: IssueComment }|nil
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add(issue, body, on_done)
+function M.add(issue, body, _opts, on_done)
 	---@cast issue GitHubIssue
 	local slug = issue.repo_full_name
 	local number = issue.number
@@ -108,6 +109,41 @@ function M.delete(issue, comment, on_done)
 			comment_id = comment.id,
 		}
 	)
+end
+
+---@param issue Issue
+---@param item IssueConversationItem
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(issue, item, key, on_done)
+	---@cast issue GitHubIssue
+	local slug = issue.repo_full_name
+	if slug == "" then
+		on_done(false, "Invalid issue")
+		return nil
+	end
+
+	if item.kind ~= "comment" then
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	local comment = item.entity
+	---@cast comment IssueComment
+	local endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
+
+	return cli.api("POST", endpoint, { content = key }, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		cache.invalidate(issue.key)
+		on_done(true, nil)
+	end, {
+		action = "Add issue reaction",
+		key = issue.key,
+		reaction = key,
+	})
 end
 
 return M

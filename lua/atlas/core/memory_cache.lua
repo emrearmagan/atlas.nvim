@@ -40,7 +40,6 @@ end
 ---@param value any
 ---@param ttl number|nil
 function M.set(key, value, ttl)
-	prune_expired()
 	local now = os.time()
 
 	local expires_at = nil
@@ -61,13 +60,7 @@ end
 ---@return MemoryCacheEntry|nil
 function M.get(key)
 	prune_expired()
-
-	local entry = store[key]
-	if entry == nil then
-		return nil
-	end
-
-	return entry
+	return store[key]
 end
 
 ---@param key string

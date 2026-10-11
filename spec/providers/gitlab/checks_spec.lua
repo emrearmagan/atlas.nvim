@@ -1,6 +1,6 @@
 local dependencies = {
 	"atlas.providers.gitlab.client",
-	"atlas.pulls.pipelines",
+	"atlas.pulls.pipelines.utils",
 	"atlas.pulls.providers.gitlab.api.pipelines",
 }
 
@@ -42,7 +42,7 @@ describe("GitLab merge checks", function()
 					return { cancel = function() end }
 				end,
 			},
-			["atlas.pulls.pipelines"] = {
+			["atlas.pulls.pipelines.utils"] = {
 				to_merge_check = function()
 					return nil
 				end,

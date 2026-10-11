@@ -2,13 +2,14 @@ local M = {}
 
 local detail_ui = require("atlas.ui.detail")
 local providers = require("atlas.providers")
+local pipelines = require("atlas.pulls.pipelines")
 local state = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.renderer")
 local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
-local overview_icon, overview_icon_hl = icons.general("overview")
+local links = require("atlas.ui.links")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -16,20 +17,10 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = { icon = overview_icon, hl_group = overview_icon_hl },
+		icon = { icon = icons.general("overview") },
 		mod = require("atlas.pulls.ui.detail.tabs.overview"),
 	},
 }
-
----@param tab_key string
----@return PullsDetailTabModule|nil
-local function tab_module(tab_key)
-	for _, tab in ipairs(state.tabs) do
-		if tab.key == tab_key then
-			return tab.mod
-		end
-	end
-end
 
 local function reset_tabs()
 	for _, tab in ipairs(state.tabs) do
@@ -40,7 +31,7 @@ local function reset_tabs()
 end
 
 local function render()
-	renderer.render(state.tabs, tab_module)
+	renderer.render(state.tabs)
 end
 
 -- Loading spinner
@@ -54,13 +45,20 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.pr_loading or state.details_loading or state.diffstat == "loading" or state.pipelines == "loading" then
+	if
+		state.pr_loading
+		or state.details_loading
+		or state.diffstat == "loading"
+		or state.merge_checks == "loading"
+		or state.pipelines == "loading"
+		or (state.links and state.links.loading)
+	then
 		return true
 	end
 	if state.current_pr == nil then
 		return false
 	end
-	local tab = tab_module(state.current_tab)
+	local tab = state.tab_module(state.current_tab)
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
@@ -113,7 +111,7 @@ local function set_tab(tab_key)
 	end
 
 	if old_key then
-		local old_tab = tab_module(old_key)
+		local old_tab = state.tab_module(old_key)
 		if old_tab and old_tab.deactivate then
 			old_tab.deactivate(buf)
 		end
@@ -121,7 +119,7 @@ local function set_tab(tab_key)
 
 	state.current_tab = tab_key
 	if tab_key then
-		local new_tab = tab_module(tab_key)
+		local new_tab = state.tab_module(tab_key)
 		if new_tab and new_tab.activate then
 			new_tab.activate(buf, render_if_open)
 		end
@@ -155,7 +153,7 @@ end
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_active_tab(pr, opts)
-	local tab_mod = tab_module(state.current_tab)
+	local tab_mod = state.tab_module(state.current_tab)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(pr, refresh_callback(pr), opts)
 	end
@@ -178,7 +176,7 @@ local function load_details(ref, force_refresh)
 	state.requests.run(function(done)
 		return core.fetch_pullrequest(ref, { force_refresh = force_refresh }, done)
 	end, function(details, err)
-		if not same_ref(state.current_pr or pending_ref, ref) then
+		if state.current_pr == nil and not same_ref(pending_ref, ref) then
 			return
 		end
 		state.current_details = details
@@ -201,7 +199,38 @@ local function load_pr(pr, force_refresh)
 
 	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
+	local backend = pipelines.get(provider)
+	state.merge_checks = core.fetch_merge_checks and "loading" or nil
+	state.pipelines = backend and "loading" or nil
 	load_active_tab(pr, { force_refresh = force_refresh })
+
+	if backend then
+		state.requests.run(function(done)
+			return backend.fetch(
+				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
+				{ force_refresh = force_refresh },
+				done
+			)
+		end, function(items, err)
+			if not same_ref(state.current_pr, pr) then
+				return
+			end
+			state.pipelines = err or items or {}
+			tab_refresh()
+		end)
+	end
+
+	if core.fetch_merge_checks then
+		state.requests.run(function(done)
+			return core.fetch_merge_checks(pr, { force_refresh = force_refresh }, done)
+		end, function(checks, err)
+			if not same_ref(state.current_pr, pr) then
+				return
+			end
+			state.merge_checks = err or checks or {}
+			tab_refresh()
+		end)
+	end
 
 	if core.fetch_diffstat then
 		state.diffstat = "loading"
@@ -211,21 +240,7 @@ local function load_pr(pr, force_refresh)
 			if not same_ref(state.current_pr, pr) then
 				return
 			end
-			state.diffstat = err and err or (entries or {})
-			tab_refresh()
-		end)
-	end
-
-	local pipelines = provider.capabilities.pipelines
-	if pipelines then
-		state.pipelines = "loading"
-		state.requests.run(function(done)
-			return pipelines.fetch(pr, { force_refresh = force_refresh }, done)
-		end, function(items, err)
-			if not same_ref(state.current_pr, pr) then
-				return
-			end
-			state.pipelines = err and err or (items or {})
+			state.diffstat = err or entries or {}
 			tab_refresh()
 		end)
 	end
@@ -239,10 +254,12 @@ local function clear_pr()
 	state.current_pr = nil
 	state.current_details = nil
 	state.diffstat = nil
+	state.merge_checks = nil
 	state.pipelines = nil
 	state.pr_loading = false
 	state.details_loading = false
 	state.line_map = {}
+	links.reset(state)
 end
 
 ---@param pr PullRequest
@@ -251,6 +268,7 @@ local function show_pr(pr, force_refresh)
 	state.current_pr = pr
 	pending_ref = nil
 	state.pr_loading = false
+	links.load(state, pr, force_refresh, refresh_callback(pr))
 	load_pr(pr, force_refresh)
 	update_spinner()
 	render()
@@ -289,6 +307,40 @@ local function cleanup()
 end
 
 -- Public API
+
+---@return PullsDetailTab[]
+function M.default_tabs()
+	local overview_icon = icons.general("overview")
+	local conversation_icon = icons.general("conversation")
+	local review_icon = icons.pulls("review")
+	local commit_icon = icons.pulls("commit")
+	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = { icon = overview_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.overview"),
+		},
+		{
+			key = "conversation",
+			label = "Conversation",
+			icon = { icon = conversation_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
+		},
+		{
+			key = "review",
+			label = "Review",
+			icon = { icon = review_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.review"),
+		},
+		{
+			key = "commits",
+			label = "Commits",
+			icon = { icon = commit_icon },
+			mod = require("atlas.pulls.ui.detail.tabs.commits"),
+		},
+	}
+end
 
 ---@return boolean
 function M.is_open()
@@ -336,8 +388,6 @@ function M.open(input, opts)
 	state.win, state.buf = detail_ui.open("pulls", cleanup, render)
 	set_provider(provider)
 	state.on_update = opts.on_update
-
-	require("atlas.pulls.ui.highlights").setup()
 
 	if pr then
 		M.select(pr, { force_refresh = opts.force_refresh })
@@ -390,9 +440,12 @@ function M.refresh(ref)
 		return
 	end
 
-	M.select(pr, { force_refresh = true })
+	clear_pr()
+	state.current_pr = pr
 	state.pr_loading = true
+	state.details_loading = true
 	update_spinner()
+	render()
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(pulls, err)
@@ -400,12 +453,13 @@ function M.refresh(ref)
 			return
 		end
 		state.pr_loading = false
+		state.details_loading = false
 		local refreshed_pr = pulls and pulls[1] or nil
 		if refreshed_pr then
-			state.current_pr = refreshed_pr
-		else
-			notify.error(tostring(err or "Failed to reload pull request"))
+			M.select(refreshed_pr, { force_refresh = true })
+			return
 		end
+		notify.error(tostring(err or "Failed to reload pull request"))
 		update_spinner()
 		render_if_open()
 	end)

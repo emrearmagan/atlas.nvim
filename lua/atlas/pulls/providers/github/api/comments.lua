@@ -140,7 +140,10 @@ local function publish_comment(pr, review, commit_oid, add_comment, on_done)
 			return add_comment(review_id, done)
 		end, function(created, create_err)
 			if create_err then
-				on_done(nil, create_err)
+				on_done(
+					nil,
+					"Comment failed; a pending review remains. Refresh and discard it before retrying: " .. create_err
+				)
 				return
 			end
 			requests.run(function(done)
@@ -155,7 +158,7 @@ local function publish_comment(pr, review, commit_oid, add_comment, on_done)
 					return
 				end
 				reviews.update(pending_review, nil)
-				created.state = created.outdated and "OUTDATED" or nil
+				created.pending = false
 				on_done(created, nil)
 			end)
 		end)
@@ -194,11 +197,9 @@ function M.add_comment(pr, content, opts, on_done)
 				return add_review_thread(pr, content, target, file_level, review_id, nil, done)
 			end, on_done)
 		end
-		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id)
-			return add_review_thread(pr, content, target, file_level, review_id, opts.review, on_done)
-		end, function(err)
-			on_done(nil, err)
-		end)
+		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id, done)
+			return add_review_thread(pr, content, target, file_level, review_id, opts.review, done)
+		end, on_done)
 	end
 
 	return cli.api(
@@ -315,7 +316,7 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
-	if comment.inline or comment.file or comment.state == "PENDING" then
+	if comment.inline or comment.file or comment.pending == true then
 		local node_id = tostring((comment._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(nil, "Missing review comment id")
@@ -355,7 +356,7 @@ function M.delete_comment(pr, target, on_done)
 		return nil
 	end
 
-	if target.inline or target.file or target.state == "PENDING" then
+	if target.inline or target.file or target.pending == true then
 		local node_id = tostring((target._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(false, "Missing review comment id")
@@ -503,21 +504,46 @@ reply_comment = function(pr, parent, content, opts, on_done)
 		end
 
 		if pending then
-			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, function(review_id)
-				return add_reply(review_id, on_done)
-			end, function(err)
-				on_done(nil, err)
-			end)
+			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
 		end
-		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, function(created, err)
-			if created and parent.state == "RESOLVED" then
-				created.state = "RESOLVED"
-			end
-			on_done(created, err)
-		end)
+		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
 	end
 
 	return M.add_comment(pr, content, nil, on_done)
+end
+
+---@param pr PullRequest
+---@param item PullsConversationItem
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(pr, item, key, on_done)
+	local repo_slug = pr.repo_full_name
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+
+	if item.kind ~= "comment" then
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	---@type PullsComment
+	local comment = item.entity
+	local endpoint
+	if comment.inline or comment.file then
+		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+	else
+		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+	end
+	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
+		on_done(err == nil, err)
+	end, {
+		action = "Add PR reaction",
+		repo = repo_slug,
+		number = pr.id,
+		reaction = key,
+	})
 end
 
 return M

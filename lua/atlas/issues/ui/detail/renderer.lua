@@ -3,9 +3,10 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local header = require("atlas.issues.ui.detail.components.header")
-local chips = require("atlas.issues.ui.detail.components.chips")
+local chips = require("atlas.ui.components.chips")
 local tabs = require("atlas.ui.components.tabs")
 local state = require("atlas.issues.ui.detail.state")
+local links = require("atlas.ui.links")
 
 local ns = vim.api.nvim_create_namespace("atlas.issues.provider_detail")
 
@@ -30,9 +31,7 @@ local function apply_spans(buf, spans)
 	end
 end
 
----@param tab_items IssuesDetailTabDefinition[]
----@param get_tab_module fun(key: string|nil): IssuesDetailTabModule|nil
-function M.render(tab_items, get_tab_module)
+function M.render()
 	local buf = state.buf
 	local win = state.win
 	if buf == nil or win == nil then
@@ -65,18 +64,19 @@ function M.render(tab_items, get_tab_module)
 				and provider_detail.chips
 				and provider_detail.chips(issue, details, state.details_loading)
 			or {}
+		vim.list_extend(extra_chips, links.chips(state))
 
 		local header_lines, header_spans = header.render(issue, width, extra_fields)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
-		local chip_lines, chip_spans = chips.render({ width = width, extra_chips = extra_chips })
+		local chip_lines, chip_spans = chips.render(extra_chips, { width = width })
 		if #chip_lines > 0 then
 			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
 			table.insert(lines, "")
 		end
 
-		if #tab_items > 1 then
-			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
+		if #state.tabs > 1 then
+			local tab_lines, tab_spans = tabs.render(state.tabs, state.current_tab, width, {
 				inactive_hl = "AtlasTextMuted",
 				gap = " ",
 				padding_x = PADDING_X,
@@ -85,7 +85,7 @@ function M.render(tab_items, get_tab_module)
 			table.insert(lines, "")
 		end
 
-		local tab_mod = get_tab_module(state.current_tab)
+		local tab_mod = state.tab_module(state.current_tab)
 
 		local content_offset = #lines
 		if tab_mod and tab_mod.render then

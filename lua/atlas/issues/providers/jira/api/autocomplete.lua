@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.issues.providers.jira.api.service")
+local service = require("atlas.providers.jira.client")
 
 local CACHE_KEY = "jira:jql:autocompletedata"
 

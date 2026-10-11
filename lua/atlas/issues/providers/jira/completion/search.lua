@@ -1,10 +1,9 @@
 local M = {}
 
-local prompt = require("atlas.commands.search.prompt")
+local prompt = require("atlas.ui.prompt")
 local autocomplete_api = require("atlas.issues.providers.jira.api.autocomplete")
 
 local MAX_COMPLETIONS = 10
-local autocomplete_fetch_started = false
 
 -- JQL completion for `:AtlasJqlSearch`.
 --
@@ -305,23 +304,6 @@ local function push_unique(out, seen, value)
 	table.insert(out, v)
 end
 
----@param values string[]
----@param prefix string
----@return string[]
-local function filter_by_prefix(values, prefix)
-	local p = lower_trim(prefix or "")
-	local out, seen = {}, {}
-	for _, value in ipairs(values) do
-		if p == "" or token_match(value, p) then
-			push_unique(out, seen, value)
-		end
-	end
-	table.sort(out, function(a, b)
-		return lower_trim(a) < lower_trim(b)
-	end)
-	return out
-end
-
 ---@param field_types table<string, boolean>
 ---@param function_types table<string, boolean>
 ---@return boolean
@@ -366,29 +348,112 @@ local function looks_like_complete_value(token)
 	return lower == "empty" or lower == "null" or lower == "true" or lower == "false"
 end
 
-local STATIC_FIELDS = {}
-local STATIC_FUNCTIONS = {}
-local STATIC_OPERATORS_BY_FIELD = {}
-local STATIC_FIELD_LOOKUP = {}
-do
-	local fields, _, functions = build_autocomplete_index(STATIC_AUTOCOMPLETE_DATA)
-	for _, field in ipairs(fields) do
-		local candidate = field_completion(field.value)
-		if candidate ~= "" then
-			table.insert(STATIC_FIELDS, candidate)
-		end
-		local field_key = normalize_field_token(field.value)
-		STATIC_FIELD_LOOKUP[field_key] = true
-		STATIC_OPERATORS_BY_FIELD[field_key] = {}
-		for _, operator in ipairs(field.operators) do
-			table.insert(STATIC_OPERATORS_BY_FIELD[field_key], operator .. " ")
+local function sorted(values)
+	table.sort(values, function(a, b)
+		return lower_trim(a) < lower_trim(b)
+	end)
+	return values
+end
+
+local function connector_tokens(prefix, reserved_words)
+	local p = lower_trim(prefix or "")
+	local out, seen = {}, {}
+
+	for _, word in ipairs(reserved_words or {}) do
+		if token_match(word, p) then
+			push_unique(out, seen, word .. " ")
 		end
 	end
-	for _, fn in ipairs(functions) do
-		if fn.insert ~= "" then
-			table.insert(STATIC_FUNCTIONS, fn.insert)
+
+	return sorted(out)
+end
+
+local function merge_suggestions(first, second)
+	local out, seen = {}, {}
+	for _, v in ipairs(first or {}) do
+		push_unique(out, seen, v)
+	end
+	for _, v in ipairs(second or {}) do
+		push_unique(out, seen, v)
+	end
+	return out
+end
+
+local function cap(values)
+	if #values <= MAX_COMPLETIONS then
+		return values
+	end
+	local out = {}
+	for i = 1, MAX_COMPLETIONS do
+		out[i] = values[i]
+	end
+	return out
+end
+
+local function parse_active_clause(parts)
+	local start_idx = 1
+	local i = 1
+	while i <= #parts do
+		local lt = lower_trim(parts[i])
+		if lt == "and" or lt == "or" then
+			start_idx = i + 1
+			i = i + 1
+		elseif lt == "order" and i < #parts and lower_trim(parts[i + 1]) == "by" then
+			start_idx = i + 2
+			i = i + 2
+		else
+			i = i + 1
 		end
 	end
+
+	local clause = {}
+	for j = start_idx, #parts do
+		table.insert(clause, parts[j])
+	end
+
+	local ended_with_connector = false
+	if #clause == 0 and #parts > 0 then
+		local last = lower_trim(parts[#parts])
+		local prev = lower_trim(parts[#parts - 1] or "")
+		ended_with_connector = last == "and" or last == "or" or (prev == "order" and last == "by")
+	end
+
+	return clause, ended_with_connector
+end
+
+local function parse_operator_match(ops, operator_words)
+	local matched_op = nil
+	local matched_words = 0
+	for _, op in ipairs(ops) do
+		local op_words, _ = tokenize_query(op)
+		if #op_words > 0 and #operator_words >= #op_words then
+			local ok = true
+			for idx = 1, #op_words do
+				if lower_trim(operator_words[idx]) ~= lower_trim(op_words[idx]) then
+					ok = false
+					break
+				end
+			end
+			if ok and #op_words > matched_words then
+				matched_op = op
+				matched_words = #op_words
+			end
+		end
+	end
+	return matched_op, matched_words
+end
+
+local function has_operator_prefix(ops, prefix)
+	local p = lower_trim(prefix)
+	if p == "" then
+		return true
+	end
+	for _, op in ipairs(ops) do
+		if lower_trim(op):sub(1, #p) == p then
+			return true
+		end
+	end
+	return false
 end
 
 ---@param arglead string
@@ -396,155 +461,15 @@ end
 ---@param cursorpos integer
 ---@return string[]
 local function complete_cmdline(arglead, cmdline, cursorpos)
-	if not autocomplete_fetch_started then
-		autocomplete_fetch_started = true
-		autocomplete_api.get_data(function() end)
-	end
-
 	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
 	local _, command_end = left:find("^[^%s]+%s*")
 	local query = command_end and left:sub(command_end + 1) or ""
 	local tokens, trailing_space = tokenize_query(query)
 	local partial = trailing_space and "" or table.remove(tokens) or ""
-	local committed = tokens
 
-	local function sorted(values)
-		table.sort(values, function(a, b)
-			return lower_trim(a) < lower_trim(b)
-		end)
-		return values
-	end
-
-	local function connector_tokens(prefix, reserved_words)
-		local p = lower_trim(prefix or "")
-		local out, seen = {}, {}
-
-		for _, word in ipairs(reserved_words or {}) do
-			if p == "" or token_match(word, p) then
-				push_unique(out, seen, word .. " ")
-			end
-		end
-
-		return sorted(out)
-	end
-
-	local function merge_suggestions(first, second)
-		local out, seen = {}, {}
-		for _, v in ipairs(first or {}) do
-			push_unique(out, seen, v)
-		end
-		for _, v in ipairs(second or {}) do
-			push_unique(out, seen, v)
-		end
-		return out
-	end
-
-	local function cap(values)
-		if #values <= MAX_COMPLETIONS then
-			return values
-		end
-		local out = {}
-		for i = 1, MAX_COMPLETIONS do
-			out[i] = values[i]
-		end
-		return out
-	end
-
-	local function parse_active_clause(parts)
-		local start_idx = 1
-		local i = 1
-		while i <= #parts do
-			local lt = lower_trim(parts[i])
-			if lt == "and" or lt == "or" then
-				start_idx = i + 1
-				i = i + 1
-			elseif lt == "order" and i < #parts and lower_trim(parts[i + 1]) == "by" then
-				start_idx = i + 2
-				i = i + 2
-			else
-				i = i + 1
-			end
-		end
-
-		local clause = {}
-		for j = start_idx, #parts do
-			table.insert(clause, parts[j])
-		end
-
-		local ended_with_connector = false
-		if #clause == 0 and #parts > 0 then
-			local last = lower_trim(parts[#parts])
-			local prev = lower_trim(parts[#parts - 1] or "")
-			ended_with_connector = last == "and" or last == "or" or (prev == "order" and last == "by")
-		end
-
-		return clause, ended_with_connector
-	end
-
-	local function parse_operator_match(ops, operator_words)
-		local matched_op = nil
-		local matched_words = 0
-		for _, op in ipairs(ops) do
-			local op_words, _ = tokenize_query(op)
-			if #op_words > 0 and #operator_words >= #op_words then
-				local ok = true
-				for idx = 1, #op_words do
-					if lower_trim(operator_words[idx]) ~= lower_trim(op_words[idx]) then
-						ok = false
-						break
-					end
-				end
-				if ok and #op_words > matched_words then
-					matched_op = op
-					matched_words = #op_words
-				end
-			end
-		end
-		return matched_op, matched_words
-	end
-
-	local function has_operator_prefix(ops, prefix)
-		local p = lower_trim(prefix)
-		if p == "" then
-			return true
-		end
-		for _, op in ipairs(ops) do
-			if lower_trim(op):sub(1, #p) == p then
-				return true
-			end
-		end
-		return false
-	end
-
-	local cached, ok = autocomplete_api.get_cached_data()
-	if not ok then
-		local clause_tokens = parse_active_clause(committed)
-		local prefix = partial ~= "" and partial or arglead
-
-		if #clause_tokens == 0 then
-			return cap(filter_by_prefix(STATIC_FIELDS, prefix))
-		end
-
-		if #clause_tokens == 1 then
-			local maybe_field = normalize_field_token(clause_tokens[1])
-			local looks_like_field = maybe_field ~= "" and STATIC_FIELD_LOOKUP[maybe_field] == true
-			if looks_like_field then
-				return cap(filter_by_prefix(STATIC_OPERATORS_BY_FIELD[maybe_field] or {}, prefix))
-			end
-		end
-
-		if #clause_tokens >= 2 then
-			local maybe_connector_prefix = partial ~= "" and partial or ""
-			if #clause_tokens >= 3 then
-				return cap(filter_by_prefix(STATIC_FIELDS, maybe_connector_prefix))
-			end
-			return cap(filter_by_prefix(STATIC_FUNCTIONS, prefix))
-		end
-
-		return cap(filter_by_prefix(STATIC_FIELDS, prefix))
-	end
-
-	local fields, fields_by_key, functions, reserved_words = build_autocomplete_index(cached)
+	local cached = autocomplete_api.get_cached_data()
+	local fields, fields_by_key, functions, reserved_words =
+		build_autocomplete_index(cached or STATIC_AUTOCOMPLETE_DATA)
 
 	local function suggest_fields(prefix)
 		local items, seen = {}, {}
@@ -552,7 +477,7 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 			local candidate = field_completion(field.value)
 			if candidate ~= "" then
 				local p = lower_trim(prefix or "")
-				if p == "" or token_match(field.value, p) or token_match(field.display, p) then
+				if token_match(field.value, p) or token_match(field.display, p) then
 					push_unique(items, seen, candidate)
 				end
 			end
@@ -560,7 +485,7 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 		return cap(sorted(items))
 	end
 
-	local clause_tokens, after_connector = parse_active_clause(committed)
+	local clause_tokens, after_connector = parse_active_clause(tokens)
 	local input_prefix = partial ~= "" and partial or arglead
 
 	if #clause_tokens == 0 then
@@ -581,10 +506,7 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 		table.insert(operator_words, clause_tokens[idx])
 	end
 
-	local operator_input_words = {}
-	for _, word in ipairs(operator_words) do
-		table.insert(operator_input_words, word)
-	end
+	local operator_input_words = vim.list_extend({}, operator_words)
 	if partial ~= "" then
 		table.insert(operator_input_words, partial)
 	end
@@ -614,15 +536,14 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 	local has_complete_value = #value_tokens > 0 or (partial ~= "" and looks_like_complete_value(partial))
 
 	if not has_complete_value then
-		local function_prefix = partial ~= "" and partial or ""
 		local fn_items, seen = {}, {}
 		for _, fn in ipairs(functions) do
 			local insert = vim.trim(fn.insert or "")
 			if insert ~= "" and function_matches_field_types(field_meta.types, fn.types) then
 				if
-					function_prefix == ""
-					or token_match(fn.value, lower_trim(function_prefix))
-					or token_match(insert, lower_trim(function_prefix))
+					partial == ""
+					or token_match(fn.value, lower_trim(partial))
+					or token_match(insert, lower_trim(partial))
 				then
 					push_unique(fn_items, seen, insert)
 				end
@@ -655,6 +576,7 @@ end
 ---@param default? string
 ---@param on_submit fun(query: string)
 function M.edit(default, on_submit)
+	autocomplete_api.get_data(function() end)
 	prompt.open({
 		name = "AtlasJqlSearch",
 		complete = complete_cmdline,

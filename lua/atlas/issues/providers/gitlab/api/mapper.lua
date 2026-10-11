@@ -2,26 +2,10 @@ local M = {}
 
 local json = require("atlas.core.json")
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-function M.to_user(raw_user)
-	raw_user = json.nilify(raw_user)
-	if type(raw_user) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw_user.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(raw_user.name) or ""
-	return {
-		account_id = username,
-		display_name = name ~= "" and name or username,
-	}
-end
+M.to_user = require("atlas.providers.gitlab.users").to_user
 
 ---@param raw_assignees table[]|nil
----@return IssueUser[]
+---@return AtlasUser[]
 local function assignees(raw_assignees)
 	local users = {}
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do
@@ -38,11 +22,12 @@ end
 local function labels(raw_labels)
 	local result = {}
 	for _, raw in ipairs(json.safe_table(raw_labels)) do
-		local name = type(raw) == "string" and raw or json.safe_str(raw.name) or json.safe_str(raw.title)
+		raw = json.safe_table(raw)
+		local name = json.safe_str(raw.title)
 		if name and name ~= "" then
 			table.insert(result, {
 				name = name,
-				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
+				color = json.safe_str(raw.color),
 			})
 		end
 	end
@@ -60,7 +45,8 @@ local function milestone(raw)
 	if title == nil then
 		return nil
 	end
-	return { title = title }
+	local id = json.safe_str(raw.id) or ""
+	return { id = tonumber(id:match("([^/]+)$")), title = title }
 end
 
 ---@param state string|nil
@@ -123,6 +109,7 @@ function M.to_issue(raw)
 		title = title,
 		status = status_name,
 		status_id = status_id,
+		confidential = json.nilify(raw.confidential),
 		type = to_issue_type(raw.issue_type),
 		assignee = issue_assignees[1],
 		reporter = M.to_user(raw.author),
@@ -149,9 +136,10 @@ function M.to_issue_details(raw)
 
 	---@type IssueDetails
 	return {
+		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.description) or "",
-		assignees = assignees(json.safe_table(raw.assignees).nodes or raw.assignees),
-		labels = labels(json.safe_table(raw.labels).nodes or raw.labels),
+		assignees = assignees(json.safe_table(raw.assignees).nodes),
+		labels = labels(json.safe_table(raw.labels).nodes),
 		milestone = milestone(raw.milestone),
 	}
 end

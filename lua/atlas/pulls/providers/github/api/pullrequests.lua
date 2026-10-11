@@ -6,6 +6,12 @@ local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 
+---@param repo string
+---@param number integer|string
+local function invalidate_details(repo, number)
+	cli.delete_mem(string.format("github:pr:%s:%s", repo, tostring(number)))
+end
+
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -76,12 +82,17 @@ query(
 ---@return { cancel: fun() }|nil
 function M.fetch_search(queries, opts, on_done)
 	local cursor_key = opts.cursor == nil and "first" or vim.json.encode(opts.cursor)
-	local cache_key =
-		string.format("github:pulls:search:%s:limit:%d:cursor:%s", vim.json.encode(queries), opts.pagelen, cursor_key)
+	local cache_key = string.format(
+		"github:pulls:search:v2:%s:limit:%d:cursor:%s",
+		vim.json.encode(queries),
+		opts.pagelen,
+		cursor_key
+	)
 
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
+			---@cast cached PullsPage
 			on_done(cached, nil)
 			return nil
 		end
@@ -146,10 +157,10 @@ function M.fetch_search(queries, opts, on_done)
 end
 
 ---@param refs PullRequestRef[]
----@param _opts PullsFetchOpts
+---@param _ PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, _opts, on_done)
+function M.fetch_by_refs(refs, _, on_done)
 	if #refs == 0 then
 		on_done({}, nil)
 		return nil
@@ -314,6 +325,99 @@ function M.get_description(pr, opts, on_done)
 	})
 end
 
+---@param pr GitHubPullRequest
+---@param subscribed boolean
+---@param on_done fun(subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_subscription(pr, subscribed, on_done)
+	local node_id = pr.node_id or ""
+	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done(subscribed, nil)
+		end,
+		{
+			action = subscribed and "Subscribe to PR" or "Unsubscribe from PR",
+			repo = pr.repo_full_name,
+			number = pr.id,
+		}
+	)
+end
+
+---@param pr PullRequest
+---@param opts PullsMergeOpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.merge(pr, opts, on_done)
+	local args = { "pr", "merge", tostring(pr.id), "--repo", pr.repo_full_name, "--" .. opts.method }
+	if opts.delete_source_branch then
+		table.insert(args, "--delete-branch")
+	end
+	if opts.subject ~= nil then
+		vim.list_extend(args, { "--subject", opts.subject })
+	end
+	if opts.body ~= nil then
+		vim.list_extend(args, { "--body", opts.body })
+	end
+	return cli.gh(args, function(_, err)
+		on_done(not err, err)
+	end, {
+		action = "Merge PR",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		method = opts.method,
+	})
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.reopen(pr, on_done)
+	return cli.gh({ "pr", "reopen", tostring(pr.id), "--repo", pr.repo_full_name }, function(_, err)
+		on_done(not err, err)
+	end, {
+		action = "Reopen PR",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param adds string[]
+---@param removes string[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_assignees(pr, adds, removes, on_done)
+	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
+	for _, login in ipairs(adds) do
+		table.insert(args, "--add-assignee")
+		table.insert(args, login)
+	end
+	for _, login in ipairs(removes) do
+		table.insert(args, "--remove-assignee")
+		table.insert(args, login)
+	end
+	return cli.gh(args, function(_, err)
+		if not err then
+			invalidate_details(pr.repo_full_name, pr.id)
+		end
+		on_done(not err, err)
+	end, {
+		action = "Update PR assignees",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		added = #adds,
+		removed = #removes,
+	})
+end
+
 ---@param pr PullRequest
 ---@param title string
 ---@param on_done fun(ok: boolean, err: string|nil)
@@ -340,7 +444,7 @@ function M.update_title(pr, title, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = "Update PR title",
@@ -378,7 +482,7 @@ function M.set_draft(pr, draft, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = draft and "Convert PR to draft" or "Mark PR ready for review",
@@ -413,7 +517,7 @@ function M.update_description(pr, description, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		cli.delete_mem(string.format("github:desc:%s:%s", repo_slug, tostring(pr.id)))
 		on_done(true, nil)
 	end, {
@@ -443,7 +547,7 @@ function M.decline(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = "Decline PR",
@@ -452,10 +556,10 @@ function M.decline(pr, on_done)
 	})
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_default_reviewers(opts, on_done)
+function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
 	if slug == "" then
 		vim.schedule(function()
@@ -475,7 +579,7 @@ function M.fetch_default_reviewers(opts, on_done)
 					end
 					done(result, nil)
 				end,
-				{ action = "Fetch default reviewers", repo = slug }
+				{ action = "Fetch reviewer candidates", repo = slug }
 			)
 		end,
 	}
@@ -503,7 +607,6 @@ function M.fetch_default_reviewers(opts, on_done)
 						label = "@" .. login,
 						provider_id = login,
 						selected = false,
-						default = false,
 					}
 					by_login[login] = reviewer
 					table.insert(reviewers, reviewer)
@@ -512,13 +615,17 @@ function M.fetch_default_reviewers(opts, on_done)
 		end
 
 		for _, item in ipairs(results.current or {}) do
-			local login = item.role == "reviewer" and tostring(item.nickname or item.username or item.name or "") or ""
+			local login = item.role == "reviewer" and item.username or ""
 			if login ~= "" then
 				local reviewer = by_login[login]
 				if reviewer then
 					reviewer.selected = true
 				else
-					table.insert(reviewers, { label = "@" .. login, provider_id = login, selected = true })
+					table.insert(reviewers, {
+						label = "@" .. login,
+						provider_id = login,
+						selected = true,
+					})
 				end
 			end
 		end
@@ -528,8 +635,8 @@ function M.fetch_default_reviewers(opts, on_done)
 end
 
 ---@param pr PullRequest
----@param selected PullsCreatePRReviewer[]
----@param original PullsCreatePRReviewer[]
+---@param selected PullsReviewerCandidate[]
+---@param original PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_reviewers(pr, selected, original, on_done)
@@ -585,7 +692,7 @@ function M.update_reviewers(pr, selected, original, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		invalidate_details(repo_slug, pr.id)
 		cli.delete_mem(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
 		cli.delete_mem(string.format("github:review-details:%s:%s", repo_slug, tostring(pr.id)))
 		cli.delete_mem(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
@@ -598,6 +705,120 @@ function M.update_reviewers(pr, selected, original, on_done)
 		added = #added,
 		removed = #removed,
 	})
+end
+
+---@param pr PullRequest
+---@param selected PullsReviewerCandidate[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return AtlasRequestScope
+local function replace_reviewers(pr, selected, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return reviews_api.fetch_reviewers(pr, { force_refresh = true }, done)
+	end, function(reviewers, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+
+		local original = {}
+		for _, reviewer in ipairs(reviewers) do
+			if reviewer.role == "reviewer" then
+				original[#original + 1] = { label = reviewer.name, provider_id = reviewer.username }
+			end
+		end
+		requests.run(function(done)
+			return M.update_reviewers(pr, selected, original, done)
+		end, on_done)
+	end)
+	return requests
+end
+
+---@param pr PullRequest
+---@param opts PullsUpdatePROpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return AtlasRequestScope
+function M.update_pr(pr, opts, on_done)
+	local requests = request_scope.new()
+	local updates = {}
+	local context = { action = "Update PR", repo = pr.repo_full_name, number = pr.id }
+	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
+	for _, field in ipairs({ "title", "body", "base" }) do
+		if opts[field] ~= nil then
+			args[#args + 1] = "--" .. field
+			args[#args + 1] = opts[field]
+		end
+	end
+	if #args > 5 then
+		updates[#updates + 1] = function(done)
+			return cli.gh(args, function(_, err)
+				if not err then
+					invalidate_details(pr.repo_full_name, pr.id)
+					if opts.body ~= nil then
+						cli.delete_mem(string.format("github:desc:%s:%s", pr.repo_full_name, tostring(pr.id)))
+					end
+				end
+				done(not err, err)
+			end, context)
+		end
+	end
+
+	if opts.labels ~= nil or opts.assignees ~= nil then
+		local fields = { "api", "-X", "PATCH", string.format("repos/%s/issues/%s", pr.repo_full_name, pr.id) }
+		for _, field in ipairs({ "labels", "assignees" }) do
+			local values = opts[field]
+			if field == "assignees" and values then
+				values = vim.tbl_map(function(user)
+					return user.username
+				end, values)
+			end
+			if values then
+				if #values == 0 then
+					fields[#fields + 1] = "-f"
+					fields[#fields + 1] = field .. "[]"
+				end
+				for _, value in ipairs(values) do
+					fields[#fields + 1] = "-f"
+					fields[#fields + 1] = field .. "[]=" .. value
+				end
+			end
+		end
+		updates[#updates + 1] = function(done)
+			return cli.gh(fields, function(_, err)
+				if not err then
+					invalidate_details(pr.repo_full_name, pr.id)
+				end
+				done(not err, err)
+			end, context)
+		end
+	end
+
+	if opts.draft ~= nil and opts.draft ~= (pr.state == "draft") then
+		updates[#updates + 1] = function(done)
+			return M.set_draft(pr, opts.draft, done)
+		end
+	end
+	if opts.reviewers ~= nil then
+		updates[#updates + 1] = function(done)
+			return replace_reviewers(pr, opts.reviewers, done)
+		end
+	end
+
+	local function update_next(index)
+		if not updates[index] then
+			on_done(true, nil)
+			return
+		end
+		requests.run(updates[index], function(ok, err)
+			if not ok then
+				on_done(false, err)
+				return
+			end
+			update_next(index + 1)
+		end)
+	end
+	update_next(1)
+	return requests
 end
 
 ---@param opts PullsCreatePROpts
@@ -730,7 +951,7 @@ function M.update_labels(slug, number, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:pr:%s:%s", slug, tostring(number)))
+		invalidate_details(slug, number)
 		on_done(true, nil)
 	end, {
 		action = "Update PR labels",

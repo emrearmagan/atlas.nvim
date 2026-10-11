@@ -47,8 +47,11 @@ describe("Bitbucket Git remote mapping", function()
 		end
 	end)
 
-	it("does not attach source URLs to a same-repository ref", function()
-		local pr = pull("acme/repo", clone_links())
+	it("recognizes same-repository refs when requested by UUID", function()
+		local pr = mapper.to_pull_request({
+			source = { repository = repository("acme/repo", {}) },
+			destination = { repository = repository("acme/repo", {}) },
+		}, "{workspace-id}", "{repo-id}")
 
 		assert.is_nil(pr.source.https_url)
 		assert.is_nil(pr.source.ssh_url)
@@ -59,5 +62,50 @@ describe("Bitbucket Git remote mapping", function()
 
 		assert.equal("", pr.source.https_url)
 		assert.equal("", pr.source.ssh_url)
+	end)
+end)
+
+describe("Bitbucket comment display", function()
+	it("uses rendered mention names while preserving raw Markdown", function()
+		local content = {
+			raw = "**Please** @{557057:build-agent} and @{alice} review [this](https://example.com), @{unknown}.",
+			html = '<p><strong>Please</strong> <span class="ap-mention" data-atlassian-id="557057:build-agent">@Build Agent</span>'
+				.. ' and <span class="ap-mention" data-atlassian-id="alice">@Alice &amp; Bob [CI]</span>'
+				.. ' review <a href="https://example.com">this</a>, @{unknown}.</p>',
+		}
+		local comment = assert(mapper.to_comment({ id = 1, content = content }))
+
+		assert.equal(content.raw, comment.content_raw)
+		assert.equal(
+			"**Please** @Build Agent and @Alice & Bob \\[CI\\] review [this](https://example.com), @{unknown}.",
+			comment.content_display
+		)
+	end)
+
+	it("keeps raw text when the response has no rendered mention", function()
+		for _, content in ipairs({
+			{ raw = "@{unknown}" },
+			{ raw = "@{unknown}", html = "<p>@{unknown}</p>" },
+			{ raw = "`@{example}`", html = "<p><code>@{example}</code></p>" },
+		}) do
+			local comment = assert(mapper.to_comment({ id = 1, content = content }))
+
+			assert.equal(content.raw, comment.content_raw)
+			assert.is_nil(comment.content_display)
+		end
+	end)
+
+	it("uses the same display conversion for tasks and activity", function()
+		local content = {
+			raw = "Review @{alice}",
+			html = '<p>Review <span class="ap-mention" data-atlassian-id="alice">@Alice</span></p>',
+		}
+		local task = mapper.to_tasks_list({ values = { { id = 1, content = content } } })[1]
+		local activity = mapper.to_activities_list({ values = { { comment = { content = content } } } })[1]
+
+		assert.equal("Review @{alice}", task.content_raw)
+		assert.equal("Review @Alice", task.content_display)
+		assert.equal("Review @Alice", activity.body)
+		assert.equal("Review @{alice}", content.raw)
 	end)
 end)

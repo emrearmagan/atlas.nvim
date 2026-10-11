@@ -20,7 +20,7 @@ local ORDER = { "+1", "-1", "laugh", "hooray", "confused", "heart", "rocket", "e
 
 ---@param key string
 ---@return string
-function M.glyph(key)
+local function glyph(key)
 	return GLYPH[key] or GLYPH.fallback
 end
 
@@ -39,7 +39,7 @@ function M.format(reactions, options)
 	end
 	for key in pairs(reactions) do
 		if emoji_by_key[key] == nil then
-			emoji_by_key[key] = M.glyph(key)
+			emoji_by_key[key] = glyph(key)
 			table.insert(order, key)
 		end
 	end
@@ -72,7 +72,7 @@ local function build(key_for)
 	local out = {}
 	for _, k in ipairs(ORDER) do
 		local key = key_for(k)
-		table.insert(out, { key = key, emoji = GLYPH[k] or GLYPH.fallback, label = key })
+		table.insert(out, { key = key, emoji = glyph(k), label = key })
 	end
 	return out
 end

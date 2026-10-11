@@ -3,6 +3,7 @@ local fzf_actions = require("fzf-lua.actions")
 local fzf_utils = require("fzf-lua.utils")
 
 local M = {}
+local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 
 ---@param handle { cancel: fun() }|nil
@@ -67,11 +68,12 @@ function M.open(request)
 		local key = request.key(item)
 		item_by_id[id] = item
 		local marker = request.multi and (selected[key] and "✓ " or "  ") or ""
-		local text, hl_group = request.format_item(item)
-		if hl_group then
-			text = fzf_utils.ansi_from_hl(hl_group, text)
+		local _, chunks = picker.format_item(request, item)
+		local parts = {}
+		for _, chunk in ipairs(chunks) do
+			parts[#parts + 1] = chunk[2] and fzf_utils.ansi_from_hl(chunk[2], chunk[1]) or chunk[1]
 		end
-		return id .. "\t" .. marker .. tostring(text):gsub("[\r\n\t]", " ")
+		return id .. "\t" .. marker .. table.concat(parts):gsub("[\r\n\t]", " ")
 	end
 
 	local function item_for(value)
@@ -157,13 +159,24 @@ function M.open(request)
 					self:set_preview_buf(buf)
 					preview_handle = request.preview_item(item, function(preview)
 						vim.schedule(function()
-							if not active or generation ~= preview_generation or not vim.api.nvim_buf_is_valid(buf) then
+							if
+								not active
+								or generation ~= preview_generation
+								or not vim.api.nvim_buf_is_valid(buf)
+								or not self.win:validate_preview()
+							then
 								return
 							end
+							local preview_win = self.win.preview_winid
+							local result = picker.format_preview(preview.lines, preview_win)
 							vim.bo[buf].modifiable = true
-							vim.api.nvim_buf_set_lines(buf, 0, -1, false, preview.lines)
+							vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
 							vim.bo[buf].modifiable = false
-							vim.bo[buf].filetype = "markdown"
+							vim.bo[buf].filetype = "atlas-markdown"
+							vim.bo[buf].syntax = "OFF"
+							vim.wo[preview_win].wrap = true
+							vim.wo[preview_win].linebreak = true
+							picker.highlight_preview(buf, result.highlights)
 							self.win:update_preview_title(preview.title or request.title)
 						end)
 					end)

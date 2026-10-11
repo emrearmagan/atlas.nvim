@@ -1,7 +1,8 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
-local prompt = require("atlas.commands.search.prompt")
+local utils = require("atlas.core.utils")
+local prompt = require("atlas.ui.prompt")
 local query = require("atlas.providers.bitbucket.query")
 
 local FIELDS = {
@@ -93,25 +94,7 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
 	local _, command_end = left:find("^[^%s]+%s*")
 	local value = command_end and left:sub(command_end + 1) or ""
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #value do
-		local char = value:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
+	local tokens = utils.split_tokens(value)
 
 	local partial = value:match("%s$") and "" or table.remove(tokens) or ""
 	local opening = partial:match("^(%(*).*$") or ""

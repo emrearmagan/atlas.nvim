@@ -1,10 +1,39 @@
 local M = {}
 
+-- Lots of views can throw a curl party so here is that
+local MAX_CONCURRENT_REQUESTS = 10
+local running = 0
+local queue = {}
+
+local function drain()
+	while running < MAX_CONCURRENT_REQUESTS and #queue > 0 do
+		table.remove(queue, 1)()
+	end
+end
+
+local function release_slot()
+	running = running - 1
+	vim.schedule(drain)
+end
+
 ---@param value any
 ---@return string
 local function one_line(value)
 	local s = tostring(value or ""):gsub("[\r\n]+", " | ")
 	return s
+end
+
+---@param value string
+---@return string
+local function curl_config_value(value)
+	local escaped = value
+		:gsub("\\", "\\\\")
+		:gsub('"', '\\"')
+		:gsub("\t", "\\t")
+		:gsub("\n", "\\n")
+		:gsub("\r", "\\r")
+		:gsub("\v", "\\v")
+	return '"' .. escaped .. '"'
 end
 
 ---@param method string
@@ -15,29 +44,36 @@ end
 ---@param follow_redirects? boolean
 ---@return { job_id: integer, cancel: fun() }
 local function curl_fetch(method, url, headers, data, callback, follow_redirects)
-	local args = { "curl", "-sS" }
+	local config = {
+		"silent",
+		"show-error",
+		"globoff",
+		"connect-timeout = 10",
+		"max-time = 60",
+		"request = " .. curl_config_value(method),
+	}
 	if follow_redirects then
-		table.insert(args, "-L")
+		table.insert(config, "location")
 	end
-	vim.list_extend(args, { "-X", method })
 
 	for key, value in pairs(headers or {}) do
-		table.insert(args, "-H")
-		table.insert(args, string.format("%s: %s", key, value))
+		table.insert(config, "header = " .. curl_config_value(string.format("%s: %s", key, value)))
 	end
 
 	if data then
-		table.insert(args, "--data-raw")
-		table.insert(args, data)
+		table.insert(config, "data-raw = " .. curl_config_value(data))
 	end
 
-	table.insert(args, "-w")
-	table.insert(args, "__ATLAS_HTTP_CODE:%{http_code}")
-	table.insert(args, url)
+	table.insert(config, "write-out = " .. curl_config_value("__ATLAS_HTTP_CODE:%{http_code}"))
+	table.insert(config, "url = " .. curl_config_value(url))
+	local config_input = table.concat(config, "\n") .. "\n"
+	local args = { "curl", "--config", "-" }
 
 	local out = {}
 	local err_out = {}
 	local cancelled = false
+	local input_error
+	local handle = { job_id = -1 }
 
 	local job_opts = {
 		stdout_buffered = true,
@@ -53,8 +89,9 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 			end
 		end,
 		on_exit = function(_, code)
+			release_slot()
 			vim.schedule(function()
-				if cancelled then
+				if cancelled or input_error then
 					return
 				end
 
@@ -87,57 +124,80 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 			end)
 		end,
 	}
-	local started, result = pcall(vim.fn.jobstart, args, job_opts)
-	local job_id = started and result or -1
-	if job_id <= 0 then
-		local err = started and "Failed to start curl" or one_line(result)
-		vim.schedule(function()
-			if cancelled then
-				return
+	local function start()
+		if cancelled then
+			return
+		end
+		running = running + 1
+		local started, result = pcall(vim.fn.jobstart, args, job_opts)
+		local job_id = started and result or -1
+		handle.job_id = job_id
+		if job_id <= 0 then
+			release_slot()
+			local err = started and "Failed to start curl" or one_line(result)
+			vim.schedule(function()
+				if cancelled then
+					return
+				end
+				callback(nil, nil, err)
+			end)
+		else
+			local sent, err = pcall(function()
+				assert(vim.fn.chansend(job_id, config_input) > 0, "Failed to send curl configuration")
+				vim.fn.chanclose(job_id, "stdin")
+			end)
+			if not sent then
+				input_error = one_line(err)
+				pcall(vim.fn.jobstop, job_id)
+				vim.schedule(function()
+					if not cancelled then
+						callback(nil, nil, input_error)
+					end
+				end)
 			end
-			callback(nil, nil, err)
-		end)
+		end
 	end
 
-	return {
-		job_id = job_id,
-		cancel = function()
-			cancelled = true
-			if job_id and job_id > 0 then
-				pcall(vim.fn.jobstop, job_id)
-			end
-		end,
-	}
+	function handle.cancel()
+		cancelled = true
+		if handle.job_id > 0 then
+			pcall(vim.fn.jobstop, handle.job_id)
+		end
+	end
+
+	table.insert(queue, start)
+	drain()
+	return handle
 end
 
 ---@param method string HTTP method (GET, POST, PUT, DELETE)
 ---@param url string Full URL
 ---@param headers table<string, string> HTTP headers
 ---@param data? string JSON data for POST/PUT
----@param callback fun(result?: table, err?: string)
+---@param callback fun(result?: table, err?: string, status?: integer)
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_request(method, url, headers, data, callback)
 	return curl_fetch(method, url, headers, data, function(body, http_status, err)
 		if err ~= nil then
-			callback(nil, err)
+			callback(nil, err, http_status)
 			return
 		end
 
 		if body == nil or body == "" then
 			if http_status ~= nil and http_status >= 200 and http_status < 300 then
-				callback({ __http_status = http_status }, nil)
+				callback({}, nil, http_status)
 				return
 			end
-			callback(nil, string.format("HTTP %s", tostring(http_status or "?")))
+			callback(nil, string.format("HTTP %s", tostring(http_status or "?")), http_status)
 			return
 		end
 
 		if http_status ~= nil and (http_status < 200 or http_status >= 300) then
 			local response_text = one_line(body)
 			if response_text == "" then
-				callback(nil, string.format("HTTP %d", http_status))
+				callback(nil, string.format("HTTP %d", http_status), http_status)
 			else
-				callback(nil, string.format("HTTP %d: %s", http_status, response_text))
+				callback(nil, string.format("HTTP %d: %s", http_status, response_text), http_status)
 			end
 			return
 		end
@@ -150,38 +210,35 @@ function M.curl_request(method, url, headers, data, callback)
 					"Failed to parse JSON response (HTTP %s): %s",
 					tostring(http_status or "?"),
 					one_line(result)
-				)
+				),
+				http_status
 			)
 			return
 		end
 
-		if type(result) == "table" then
-			result.__http_status = http_status
-		end
-
-		callback(result, nil)
-	end)
+		callback(result, nil, http_status)
+	end, method == "GET")
 end
 
 ---@param method string
 ---@param url string
 ---@param headers table<string, string>
 ---@param data? string
----@param callback fun(result?: string, err?: string)
+---@param callback fun(result?: string, err?: string, status?: integer)
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_text_request(method, url, headers, data, callback)
 	return curl_fetch(method, url, headers, data, function(body, http_status, err)
 		if err ~= nil then
-			callback(nil, err)
+			callback(nil, err, http_status)
 			return
 		end
 
 		if http_status ~= nil and (http_status < 200 or http_status >= 300) then
-			callback(nil, string.format("HTTP %d", http_status))
+			callback(nil, string.format("HTTP %d", http_status), http_status)
 			return
 		end
 
-		callback(body or "", nil)
+		callback(body or "", nil, http_status)
 	end, true)
 end
 
