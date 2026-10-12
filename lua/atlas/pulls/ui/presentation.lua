@@ -105,24 +105,4 @@ function M.gitlab_merge_status(pr)
 	end
 end
 
----@param reviewers PullsReviewer[]|nil
----@return string|nil, string|nil
-function M.review_progress(reviewers)
-	local approved, changes_requested, total = 0, 0, 0
-	for _, reviewer in ipairs(reviewers or {}) do
-		total = total + 1
-		if reviewer.decision == "approved" then
-			approved = approved + 1
-		elseif reviewer.decision == "changes_requested" then
-			changes_requested = changes_requested + 1
-		end
-	end
-	if total == 0 then
-		return nil, nil
-	end
-	local kind = changes_requested > 0 and "failed" or (approved == total and "successful" or "inprogress")
-	local label = changes_requested > 0 and "Changes requested" or string.format("%d/%d approved", approved, total)
-	return kind, label
-end
-
 return M

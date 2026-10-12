@@ -1,306 +1,137 @@
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.pulls.ui.presentation")
-local shared = require("atlas.pulls.ui.layouts.shared")
+local utils = require("atlas.pulls.ui.layouts.utils")
 
 local M = {}
 
-local STAR_ICON = icons.get("star")
-
-local function diff_stats(additions, deletions)
-	if additions + deletions == 0 then
-		return "", {}
-	end
-
-	local added = "+" .. tostring(additions)
-	local removed = "-" .. tostring(deletions)
-	local text = added .. " " .. removed
-
-	return text,
-		{
-			{ start_col = 0, end_col = #added, hl_group = "AtlasTextPositive" },
-			{ start_col = #added + 1, end_col = #text, hl_group = "AtlasLogError" },
-		}
-end
-
-local function render(opts, pulls, columns, values, highlights, reference)
+local function render(opts, pulls, reference, columns, values, highlights)
 	local rows = {}
 
-	for _, pull in ipairs(shared.starred_first(pulls)) do
+	for _, pr in ipairs(utils.starred_first(pulls)) do
 		if #rows > 0 then
 			table.insert(rows, { kind = "spacer" })
 		end
 
-		local row = shared.pull_row(pull, pull.repo, opts)
-		row.name = row._pr_icon_str
-			.. " "
-			.. (pull.is_starred and STAR_ICON .. " " or "")
-			.. reference
-			.. tostring(pull.id)
-			.. " "
-			.. pull.title
-
-		for key, value in pairs(values(pull)) do
-			row[key] = value
-		end
-
+		local row = utils.pull_row(pr, opts, values)
+		row.name = row._pr_icon_str .. " " .. utils.title(pr, reference)
 		table.insert(rows, row)
 	end
 
-	return shared.render(opts, rows, columns, highlights, reference)
+	return utils.render(opts, rows, columns, highlights, reference)
 end
 
+---@param opts table
+---@param pulls GitHubPullRequest[]
+---@return string[], table<integer, table>, table[]
 function M.github(opts, pulls)
 	local columns = {
 		{ key = "name", name = "Title", min_width = 42 },
-
-		{
-			key = "conversation",
-			name = icons.get("conversation"),
-			min_width = 2,
-			can_grow = false,
-		},
-
-		{
-			key = "review",
-			name = icons.get("success"),
-			min_width = 1,
-			can_grow = false,
-		},
-
-		{
-			key = "ci",
-			name = icons.get("tasks"),
-			min_width = 1,
-			can_grow = false,
-		},
-
-		{
-			key = "author",
-			name = string.format("%s Author", icons.get("user")),
-			min_width = 10,
-			can_grow = false,
-		},
-
-		{
-			key = "diff",
-			name = icons.get("changes"),
-			min_width = 5,
-			max_width = 15,
-			can_grow = false,
-		},
-
-		{
-			key = "created",
-			name = icons.get("created"),
-			min_width = 4,
-			can_grow = false,
-		},
-
-		{
-			key = "updated",
-			name = icons.get("updated"),
-			min_width = 4,
-			can_grow = false,
-		},
+		{ key = "conversation", name = icons.get("conversation"), min_width = 2, can_grow = false },
+		{ key = "review", name = icons.get("success"), min_width = 1, can_grow = false },
+		{ key = "ci", name = icons.get("tasks"), min_width = 1, can_grow = false },
+		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
+		{ key = "diff", name = icons.get("changes"), min_width = 5, max_width = 15, can_grow = false },
+		{ key = "created", name = icons.get("created"), min_width = 4, can_grow = false },
+		{ key = "updated", name = icons.get("updated"), min_width = 4, can_grow = false },
 	}
 
-	local ci_icons = {
-		SUCCESS = { icons.get("successful", "status") },
-		FAILURE = { icons.get("failed", "status") },
-		ERROR = { icons.get("failed", "status") },
-		PENDING = { icons.get("inprogress", "status") },
-		EXPECTED = { icons.get("inprogress", "status") },
+	local checks = {
+		SUCCESS = "successful",
+		FAILURE = "failed",
+		ERROR = "failed",
+		PENDING = "inprogress",
+		EXPECTED = "inprogress",
 	}
+	local reviews = { APPROVED = "successful", CHANGES_REQUESTED = "failed" }
 
-	local review_icons = {
-		APPROVED = { icons.get("successful", "status") },
-		CHANGES_REQUESTED = { icons.get("failed", "status") },
-		REVIEW_REQUIRED = { icons.get("inprogress", "status"), "AtlasTextMuted" },
-	}
+	local function values(pr)
+		---@cast pr GitHubPullRequest
+		local ci, ci_hl = utils.status_icon(checks[(pr.check_status or ""):upper()])
+		local review, review_hl = utils.status_icon(reviews[pr.review_decision])
+		local diff, diff_hl = utils.diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 
-	local function values(pull)
-		---@cast pull GitHubPullRequest
-		local ci = { icons.get("inprogress", "status"), "AtlasTextMuted" }
-
-		if pull.check_status then
-			ci = ci_icons[pull.check_status:upper()] or ci
-		end
-
-		local review = review_icons[pull.review_decision] or review_icons.REVIEW_REQUIRED
-		local diff, diff_highlights = diff_stats(pull.lines_added or 0, pull.lines_removed or 0)
-
-		return {
-			ci = ci[1],
-			ci_hl = ci[2],
-			review = review[1],
-			review_hl = review[2],
-			diff = diff,
-			diff_hl = diff_highlights,
-		}
+		return { ci = ci, ci_hl = ci_hl, review = review, review_hl = review_hl, diff = diff, diff_hl = diff_hl }
 	end
 
-	local function highlights(row, column, context)
+	local function highlights(row, column)
 		if column.key == "ci" then
-			local highlight = row.ci_hl or "AtlasTextMuted"
-
-			return { { start_col = 0, end_col = #context.padded, hl_group = highlight } }
-		end
-
-		if column.key == "review" then
-			local highlight = row.review_hl or "AtlasTextMuted"
-
-			return { { start_col = 0, end_col = #context.padded, hl_group = highlight } }
-		end
-
-		if column.key == "diff" then
+			return row.ci_hl
+		elseif column.key == "review" then
+			return row.review_hl
+		elseif column.key == "diff" then
 			return row.diff_hl
 		end
 	end
 
-	return render(opts, pulls, columns, values, highlights, "#")
+	return render(opts, pulls, "#", columns, values, highlights)
 end
 
+---@param opts table
+---@param pulls GitLabPullRequest[]
+---@return string[], table<integer, table>, table[]
 function M.gitlab(opts, pulls)
 	local columns = {
 		{ key = "name", name = "Title", min_width = 42 },
-
-		{
-			key = "conversation",
-			name = icons.get("comment"),
-			min_width = 2,
-			can_grow = false,
-		},
-
-		{
-			key = "ci",
-			name = icons.get("pipeline"),
-			min_width = 1,
-			can_grow = false,
-		},
-
-		{
-			key = "author",
-			name = string.format("%s Author", icons.get("user")),
-			min_width = 10,
-			can_grow = false,
-		},
-
-		{
-			key = "created",
-			name = icons.get("created"),
-			min_width = 4,
-			can_grow = false,
-		},
-
-		{
-			key = "updated",
-			name = icons.get("updated"),
-			min_width = 4,
-			can_grow = false,
-		},
+		{ key = "conversation", name = icons.get("comment"), min_width = 2, can_grow = false },
+		{ key = "ci", name = icons.get("pipeline"), min_width = 1, can_grow = false },
+		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
+		{ key = "created", name = icons.get("created"), min_width = 4, can_grow = false },
+		{ key = "updated", name = icons.get("updated"), min_width = 4, can_grow = false },
 	}
 
-	local function values(pull)
-		---@cast pull GitLabPullRequest
-		local status = presentation.gitlab_merge_status(pull)
-
+	local function values(pr)
+		---@cast pr GitLabPullRequest
+		local status = presentation.gitlab_merge_status(pr)
 		if not status then
 			return { ci = "", ci_hl = "AtlasTextMuted" }
 		end
 
-		local icon, highlight = icons.get(status, "status")
-
-		return { ci = icon, ci_hl = highlight }
+		local ci, ci_hl = icons.get(status, "status")
+		return { ci = ci, ci_hl = ci_hl }
 	end
 
-	local function highlights(row, column, context)
+	local function highlights(row, column)
 		if column.key == "ci" then
-			local highlight = row.ci_hl or "AtlasTextMuted"
-
-			return { { start_col = 0, end_col = #context.padded, hl_group = highlight } }
+			return row.ci_hl
 		end
 	end
 
-	return render(opts, pulls, columns, values, highlights, "!")
+	return render(opts, pulls, "!", columns, values, highlights)
 end
 
+---@param opts table
+---@param pulls BitbucketPullRequest[]
+---@return string[], table<integer, table>, table[]
 function M.bitbucket(opts, pulls)
 	local columns = {
 		{ key = "name", name = "Title", min_width = 42 },
-
-		{
-			key = "conversation",
-			name = icons.get("comment"),
-			min_width = 2,
-			can_grow = false,
-		},
-
-		{
-			key = "tasks",
-			name = icons.get("tasks"),
-			min_width = 2,
-			can_grow = false,
-		},
-
-		{
-			key = "author",
-			name = string.format("%s Author", icons.get("user")),
-			min_width = 10,
-			can_grow = false,
-		},
-
-		{
-			key = "review",
-			name = icons.get("success"),
-			min_width = 1,
-			can_grow = false,
-		},
-
-		{
-			key = "created",
-			name = icons.get("created"),
-			min_width = 4,
-			can_grow = false,
-		},
-
-		{
-			key = "updated",
-			name = icons.get("updated"),
-			min_width = 4,
-			can_grow = false,
-		},
+		{ key = "conversation", name = icons.get("comment"), min_width = 2, can_grow = false },
+		{ key = "tasks", name = icons.get("tasks"), min_width = 2, can_grow = false },
+		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
+		{ key = "review", name = icons.get("success"), min_width = 1, can_grow = false },
+		{ key = "created", name = icons.get("created"), min_width = 4, can_grow = false },
+		{ key = "updated", name = icons.get("updated"), min_width = 4, can_grow = false },
 	}
 
-	local function approvals(reviewers)
-		local approved, changes_requested = 0, 0
-
-		for _, reviewer in ipairs(reviewers or {}) do
-			if reviewer.decision == "approved" then
-				approved = approved + 1
-			elseif reviewer.decision == "changes_requested" then
-				changes_requested = changes_requested + 1
+	local function values(pr)
+		---@cast pr BitbucketPullRequest
+		local status
+		for _, reviewer in ipairs(pr.reviewers or {}) do
+			if reviewer.decision == "changes_requested" then
+				status = "failed"
+				break
+			elseif reviewer.decision == "approved" then
+				-- The list response does not include the required approval count.
+				status = "successful"
 			end
 		end
 
-		if changes_requested > 0 then
-			return icons.get("failed", "status")
-		elseif approved > 0 then
-			-- The list response does not include the required approval count.
-			return icons.get("successful", "status")
-		end
-
-		return icons.get("inprogress", "status"), "AtlasTextMuted"
-	end
-
-	local function values(pull)
-		---@cast pull BitbucketPullRequest
-		local review, review_highlight = approvals(pull.reviewers)
-
+		local review, review_hl = utils.status_icon(status)
 		return {
-			conversation = tostring(pull.comments_count or 0),
-			tasks = tostring(pull.tasks_count or 0),
+			conversation = tostring(pr.comments_count or 0),
+			tasks = tostring(pr.tasks_count or 0),
 			review = review,
-			review_hl = review_highlight,
+			review_hl = review_hl,
 		}
 	end
 
@@ -314,51 +145,22 @@ function M.bitbucket(opts, pulls)
 		end
 	end
 
-	return render(opts, pulls, columns, values, highlights, "#")
+	return render(opts, pulls, "#", columns, values, highlights)
 end
 
+---@param opts table
+---@param pulls PullRequest[]
+---@return string[], table<integer, table>, table[]
 function M.default(opts, pulls)
 	local columns = {
 		{ key = "name", name = "Title", min_width = 42 },
-
-		{
-			key = "conversation",
-			name = icons.get("conversation"),
-			min_width = 2,
-			can_grow = false,
-		},
-
-		{
-			key = "author",
-			name = string.format("%s Author", icons.get("user")),
-			min_width = 10,
-			can_grow = false,
-		},
-
-		{
-			key = "created",
-			name = icons.get("created"),
-			min_width = 4,
-			can_grow = false,
-		},
-
-		{
-			key = "updated",
-			name = icons.get("updated"),
-			min_width = 4,
-			can_grow = false,
-		},
+		{ key = "conversation", name = icons.get("conversation"), min_width = 2, can_grow = false },
+		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
+		{ key = "created", name = icons.get("created"), min_width = 4, can_grow = false },
+		{ key = "updated", name = icons.get("updated"), min_width = 4, can_grow = false },
 	}
 
-	local function values()
-		return {}
-	end
-
-	local function highlights()
-		return nil
-	end
-
-	return render(opts, pulls, columns, values, highlights, "#")
+	return render(opts, pulls, "#", columns)
 end
 
 return M

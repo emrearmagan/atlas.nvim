@@ -88,9 +88,24 @@ end
 local function bitbucket_rows(pr)
 	---@cast pr BitbucketPullRequest
 	local rows = {}
-	local kind, label = presentation.review_progress(pr.reviewers)
-	if kind then
-		local value, hl_group = status_value(kind, label)
+	local reviewers = pr.reviewers or {}
+	if #reviewers > 0 then
+		local approved, changes_requested = 0, 0
+		for _, reviewer in ipairs(reviewers) do
+			if reviewer.decision == "approved" then
+				approved = approved + 1
+			elseif reviewer.decision == "changes_requested" then
+				changes_requested = changes_requested + 1
+			end
+		end
+
+		local value, hl_group
+		if changes_requested > 0 then
+			value, hl_group = status_value("failed", "Changes requested")
+		else
+			local kind = approved == #reviewers and "successful" or "inprogress"
+			value, hl_group = status_value(kind, string.format("%d/%d approved", approved, #reviewers))
+		end
 		add(rows, "Review", value, hl_group)
 	end
 	add(rows, "Tasks", tostring(pr.tasks_count or 0), "AtlasTextMuted")
