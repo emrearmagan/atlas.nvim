@@ -164,6 +164,59 @@ M.jira = {
 	end,
 }
 
+M.shortcut = {
+	columns = {
+		{ key = "icon", name = "", can_grow = false, align = "center" },
+		{ key = "name", name = "Issue", min_width = 42 },
+		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
+		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
+		{ key = "status", name = " Status", can_grow = false },
+	},
+	values = function(issue, opts, is_child)
+		---@cast issue ShortcutIssue
+		local icon = utils.type_icon(issue)
+		local label = "#" .. issue.key
+		local points = issue.story_points ~= nil and (tostring(issue.story_points) .. " pts") or ""
+		local name = utils.join({ label .. " " .. issue.title, points, utils.due_text(issue) })
+
+		local assignee = utils.person_value(issue.assignee, "Unassigned")
+		if #issue.owner_ids > 1 then
+			assignee = string.format("%s +%d", assignee, #issue.owner_ids - 1)
+		end
+
+		return {
+			icon = is_child and "" or icon,
+			name = (is_child and "  " .. icon .. "  " or "") .. name,
+			_key_label = label,
+			assignee = assignee,
+			reporter = utils.person_value(issue.reporter, "Unknown"),
+			status = utils.status_value(issue, opts),
+		}
+	end,
+	highlights = function(row, column, context, opts)
+		local issue = row._issue
+		if issue == nil then
+			return nil
+		end
+		---@cast issue ShortcutIssue
+
+		local icon, icon_hl = utils.type_icon(issue)
+		if column.key == "icon" then
+			return utils.highlight_match({}, context.text, icon, icon_hl)
+		elseif column.key == "name" then
+			local spans = utils.highlight_match({}, context.text, row._key_label, "AtlasTextMuted")
+			if row._is_child then
+				utils.highlight_match(spans, context.text, icon, icon_hl)
+			end
+			return spans
+		elseif column.key == "status" then
+			return utils.status_hl(issue, opts, presentation.status_hl(issue.status_id))
+		end
+
+		return utils.person_hl(issue, column.key)
+	end,
+}
+
 M.default = {
 	columns = {
 		{ key = "icon", name = "", can_grow = false, align = "center" },

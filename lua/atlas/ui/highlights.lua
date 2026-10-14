@@ -75,6 +75,7 @@ local function default_groups()
 		AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
 		AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
 		AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
+		AtlasShortcutTheme = { fg = "#FFFFFF", bg = "#494BCB", bold = true },
 		AtlasJiraTheme = chip_defaults("#1e3a8a"),
 
 		-- Chips
@@ -90,6 +91,7 @@ local function default_groups()
 		AtlasJiraEpic = { link = "AtlasLogWarn" },
 		AtlasJiraChipStoryPoints = chip_defaults("#f38ba8"),
 		AtlasJiraChipDueDate = chip_defaults("#313244"),
+		AtlasShortcutChipParent = { link = "AtlasShortcutTheme" },
 		AtlasJiraChipParent = { link = "AtlasJiraTheme" },
 
 		-- Pull requests

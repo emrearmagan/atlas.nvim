@@ -1,5 +1,6 @@
 local config = require("atlas.config")
 local url = require("atlas.providers.url")
+local shortcut = require("atlas.providers.shortcut")
 local jira = require("atlas.providers.jira")
 local github = require("atlas.providers.github")
 local bitbucket = require("atlas.providers.bitbucket")
@@ -8,7 +9,7 @@ local gitlab = require("atlas.providers.gitlab")
 local M = {}
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"shortcut"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"|"pipeline"
@@ -150,6 +151,7 @@ function M.configured(domain)
 	return result
 end
 
+add(shortcut)
 add(jira)
 add(github)
 add(bitbucket)

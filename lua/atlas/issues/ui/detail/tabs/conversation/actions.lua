@@ -8,6 +8,7 @@ local notify = require("atlas.core.notify")
 local reactions = require("atlas.ui.shared.reactions")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 local detail = require("atlas.issues.ui.detail.state")
+local activity = require("atlas.issues.ui.detail.tabs.activity")
 
 ---@param issue Issue
 ---@param amount integer
@@ -47,6 +48,7 @@ function M.add(issue, refresh)
 					notify.error("Add comment failed: " .. err)
 					return
 				end
+				activity.reset()
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
@@ -99,6 +101,7 @@ function M.reply(issue, entry, refresh)
 					notify.error("Reply failed: " .. err)
 					return
 				end
+				activity.reset()
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
@@ -156,6 +159,7 @@ function M.edit(issue, entry, refresh)
 					notify.error("Edit failed: " .. err)
 					return
 				end
+				activity.reset()
 				if updated then
 					state.upsert_comment(updated)
 				else
@@ -194,6 +198,7 @@ function M.delete(issue, entry, refresh)
 				notify.error("Delete failed: " .. err)
 				return
 			end
+			activity.reset()
 			state.remove_comment(comment)
 			adjust_comment_count(issue, -1)
 			notify.success("Comment deleted", { timeout = 1200 })
@@ -218,7 +223,10 @@ function M.react(issue, entry, refresh)
 	-- TODO: Reacting to the description doesn't update the overview's reactions until the details are reloaded.
 	reactions.pick(detail.provider.capabilities.comments.reactions, issue, comment, function()
 		return state.is_current(issue)
-	end, refresh)
+	end, function()
+		activity.reset()
+		refresh()
+	end)
 end
 
 return M

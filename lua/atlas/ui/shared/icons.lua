@@ -1,7 +1,5 @@
 local M = {}
 
-local providers = require("atlas.providers")
-
 ---@class AtlasIconStyle
 ---@field icon string
 ---@field hl_group string|nil
@@ -36,6 +34,11 @@ local ICONS = {
 	lsp = { icon = "", hl_group = "AtlasTextMuted" },
 	issue = { icon = "", hl_group = "AtlasTextPositive" },
 	tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
+	epic = { icon = "", hl_group = "AtlasJiraEpic" },
+	story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
+	task = { icon = "", hl_group = "AtlasLogInfo" },
+	bug = { icon = "", hl_group = "AtlasLogError" },
+	subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
 
 	user = { icon = "", hl_group = "AtlasTextMuted" },
 	comment = { icon = "", hl_group = "AtlasTextMuted" },
@@ -147,7 +150,7 @@ end
 ---@param domain AtlasDomain
 ---@return string, string
 function M.provider_icon(provider_id, domain)
-	local provider_domain = providers.domain(provider_id, domain)
+	local provider_domain = require("atlas.providers").domain(provider_id, domain)
 	local style = provider_domain and provider_domain.icon or ICONS.fallback
 	return style.icon, style.hl_group
 end

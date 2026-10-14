@@ -1,0 +1,2 @@
+---@class AtlasShortcutConfig : AtlasProviderConfig
+---@field token string

@@ -145,6 +145,7 @@ local config = require("atlas.config")
 ---@field change_reporter? AtlasKeymapValue
 ---@field edit_issue? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
+---@field toggle_task? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
@@ -249,6 +250,7 @@ local config = require("atlas.config")
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
 ---| "issues.create_issue"
+---| "issues.toggle_task"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil

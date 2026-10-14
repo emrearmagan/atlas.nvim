@@ -100,6 +100,7 @@
 ---@field github AtlasGitHubConfig|nil
 ---@field gitlab AtlasGitLabConfig|nil
 ---@field jira AtlasJiraConfig|nil
+---@field shortcut AtlasShortcutConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
@@ -133,6 +134,7 @@
 ---@field github AtlasGitHubIssuesConfig|nil
 ---@field gitlab AtlasGitLabIssuesConfig|nil
 ---@field jira AtlasJiraIssuesConfig|nil
+---@field shortcut AtlasShortcutIssuesConfig|nil
 
 -- Config
 
@@ -152,7 +154,15 @@
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
 
+local icons = require("atlas.ui.shared.icons")
+
 local M = {}
+
+local issue_type_icons = {}
+for _, name in ipairs({ "epic", "story", "task", "bug", "subtask" }) do
+	local icon, hl_group = icons.get(name)
+	issue_type_icons[name] = { icon = icon, hl_group = hl_group }
+end
 
 ---@type AtlasConfig
 local defaults = {
@@ -218,13 +228,7 @@ local defaults = {
 		jira = {
 			project_config = {
 				story_points_field = "customfield_10016",
-				issue_types = {
-					epic = { icon = "", hl_group = "AtlasJiraEpic" },
-					story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
-					task = { icon = "", hl_group = "AtlasLogInfo" },
-					bug = { icon = "", hl_group = "AtlasLogError" },
-					subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
-				},
+				issue_types = issue_type_icons,
 				status_icons = {
 					new = "●",
 					indeterminate = "",
@@ -354,6 +358,7 @@ local defaults = {
 			change_reporter = "gr",
 			edit_issue = "ge",
 			create_issue = "c",
+			toggle_task = "x",
 		},
 	},
 }
