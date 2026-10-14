@@ -521,7 +521,7 @@ M.open_actions = {
 		local pending = review.data.review.pending
 		local reviewable = review.pr.state == "open" or review.pr.state == "draft"
 		if reviewable then
-			add(pending and "submit_review" or "start_review")
+			add((pending or not reviews.start_review) and "submit_review" or "start_review")
 		end
 		if pending then
 			add("discard_review")

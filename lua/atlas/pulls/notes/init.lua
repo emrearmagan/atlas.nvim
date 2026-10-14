@@ -274,9 +274,10 @@ end
 ---@return AtlasNoteTarget|nil, string|nil
 function M.target_for_pull_request(pr)
 	local url = pr.link.html
+	local target = providers.resolve(url)
 	return normalize_target({
 		provider = pr.provider,
-		host = url:match("^https?://([^/?#]+)"),
+		host = target and target.host or nil,
 		repository = pr.repo_full_name,
 		id = pr.id,
 		url = url,

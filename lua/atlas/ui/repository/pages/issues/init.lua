@@ -171,6 +171,14 @@ local function load(state, force_refresh)
 			order_by = "created_at",
 			sort = "desc",
 		}
+	elseif state.provider.id == "gitea" or state.provider.id == "forgejo" then
+		view = {
+			name = "Issues",
+			layout = "compact",
+			repo = state.repo.full_name,
+			scope = "all",
+			state = state.filter,
+		}
 	end
 	if not fetch or not view then
 		state.issues = "Issues are not available for this provider"

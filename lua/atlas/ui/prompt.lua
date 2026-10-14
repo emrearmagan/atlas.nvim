@@ -2,7 +2,7 @@ local M = {}
 
 -- I couldn not get completion to work without a real user command, but I also didn not want every providers prompt command showing up under `:Atlas<Tab>`.
 -- This registers the command, feeds the cmdline to it, and deletes it once the cmdline closes.
----@param opts { name: string, complete: (fun(arglead: string, cmdline: string, cursorpos: integer): string[]), on_submit: (fun(query: string)), default: string|nil }
+---@param opts { name: string, complete: (fun(arglead: string, cmdline: string, cursorpos: integer): string[])|nil, on_submit: (fun(query: string)), default: string|nil }
 function M.open(opts)
 	local cmd_name = opts.name
 	pcall(vim.api.nvim_del_user_command, cmd_name)

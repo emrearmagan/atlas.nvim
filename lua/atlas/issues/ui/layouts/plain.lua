@@ -67,6 +67,9 @@ M.github = {
 	end,
 }
 
+M.gitea = M.github
+M.forgejo = M.github
+
 M.gitlab = {
 	columns = {
 		{ key = "icon", name = "", can_grow = false, align = "center" },
