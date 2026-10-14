@@ -10,7 +10,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@return AtlasThreadItem
 local function comment_item(comment)
 	local deleted = comment.deleted == true
-	local content = deleted and "(deleted comment)" or (comment.body or "")
+	local content = deleted and "(deleted comment)" or (comment.body_display or comment.body or "")
 	if content == "" then
 		content = "(empty comment)"
 	end

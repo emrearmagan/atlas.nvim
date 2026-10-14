@@ -13,6 +13,14 @@ local github_checks = {
 	EXPECTED = "inprogress",
 }
 local github_reviews = { APPROVED = "successful", CHANGES_REQUESTED = "failed" }
+local azure_merge_states = {
+	notSet = "unknown",
+	queued = "inprogress",
+	conflicts = "failed",
+	succeeded = "successful",
+	rejectedByPolicy = "failed",
+	failure = "failed",
+}
 
 local function group_by_repo(pulls)
 	local groups, by_repo = {}, {}
@@ -155,6 +163,49 @@ M.bitbucket = {
 
 		if (column.key == "conversation" or column.key == "tasks") and row[column.key] == "0" then
 			return "AtlasTextMuted"
+		end
+	end,
+}
+
+M.azure = {
+	reference = "!",
+	columns = {
+		{ key = "name", name = "Title", min_width = 42 },
+		{ key = "merge", name = icons.get("merge", "actions"), min_width = 1, can_grow = false },
+		{ key = "review", name = icons.get("success"), min_width = 1, can_grow = false },
+		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
+		{ key = "created", name = icons.get("created"), min_width = 4, can_grow = false },
+	},
+	values = function(pr, opts)
+		---@cast pr AzurePullRequest
+		local icon = utils.pull_icon(pr, opts)
+		local merge, merge_hl = icons.get(azure_merge_states[pr.merge_status] or "unknown", "status")
+		local status
+		for _, reviewer in ipairs(pr.reviewers or {}) do
+			if reviewer.decision == "changes_requested" then
+				status = "failed"
+				break
+			elseif reviewer.decision == "approved" then
+				status = "successful"
+			end
+		end
+		local review, review_hl = utils.status_icon(status)
+
+		return {
+			name = icon .. " " .. utils.title(pr, "!"),
+			merge = merge,
+			merge_hl = merge_hl or "AtlasTextMuted",
+			review = review,
+			review_hl = review_hl or "AtlasTextMuted",
+			author = utils.author(pr),
+			created = ui_utils.relative_time(pr.created_on),
+		}
+	end,
+	highlights = function(row, column)
+		if column.key == "merge" then
+			return row.merge_hl
+		elseif column.key == "review" then
+			return row.review_hl
 		end
 	end,
 }

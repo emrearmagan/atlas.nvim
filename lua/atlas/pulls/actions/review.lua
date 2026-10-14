@@ -186,6 +186,13 @@ M.add_comment = {
 			return false
 		end
 		local pending = opts.pending == true or (parent ~= nil and parent.pending == true)
+		local reviews = context.provider.capabilities.reviews
+		if pending and not (reviews and reviews.submit_review) then
+			local message = "Provider does not support pending review comments"
+			notify(context, "error", message)
+			on_done(nil, message)
+			return false
+		end
 		local suggestion = opts.kind == "suggestion"
 
 		local title = " Add Comment "

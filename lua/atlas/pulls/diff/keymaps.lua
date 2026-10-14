@@ -1,6 +1,7 @@
 local resolver = require("atlas.core.keymaps")
 local commits = require("atlas.pulls.diff.ui.commits")
 local help = require("atlas.ui.popups.help")
+local providers = require("atlas.providers")
 
 local M = {}
 
@@ -113,6 +114,9 @@ end
 ---@param actions AtlasDiffKeymapActions
 function M.setup(session, actions)
 	local result = session.data
+	local provider = result.pr and providers.load(result.pr.provider, "pulls")
+	local reviews = provider and provider.capabilities.reviews
+	local pending_reviews = reviews and reviews.submit_review ~= nil
 
 	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
@@ -149,9 +153,11 @@ function M.setup(session, actions)
 		add(review_items, "pulls.review.request_changes", "Request changes", 61, function()
 			actions.dispatch("request_changes")
 		end)
-		add(review_items, "pulls.review.submit_review", "Submit review", 62, function()
-			actions.dispatch("submit_review")
-		end)
+		if pending_reviews then
+			add(review_items, "pulls.review.submit_review", "Submit review", 62, function()
+				actions.dispatch("submit_review")
+			end)
+		end
 		add(review_items, "pulls.review.prev_comment", "Previous comment", 90, function()
 			actions.navigate_annotation(-1, "comment")
 		end)
@@ -186,9 +192,11 @@ function M.setup(session, actions)
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
 	if result.pr then
-		add(explorer_review_items, "pulls.review.add_comment", "Add pending file comment", 30, function()
-			actions.add_comment(true)
-		end)
+		if pending_reviews then
+			add(explorer_review_items, "pulls.review.add_comment", "Add pending file comment", 30, function()
+				actions.add_comment(true)
+			end)
+		end
 		add(explorer_review_items, "pulls.review.submit_comment", "Post file comment", 31, function()
 			actions.add_comment(false)
 		end)
@@ -197,15 +205,19 @@ function M.setup(session, actions)
 	local diff_review_items = vim.list_extend({}, review_items)
 	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, session.view.callbacks.show_details)
 	if result.pr then
-		add(diff_review_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
-			actions.add_comment(true)
-		end, { "n", "x" })
+		if pending_reviews then
+			add(diff_review_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
+				actions.add_comment(true)
+			end, { "n", "x" })
+		end
 		add(diff_review_items, "pulls.review.submit_comment", "Post line/selection comment", 31, function()
 			actions.add_comment(false)
 		end, { "n", "x" })
-		add(diff_review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
-			actions.add_comment(true, true)
-		end, { "n", "x" })
+		if pending_reviews then
+			add(diff_review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
+				actions.add_comment(true, true)
+			end, { "n", "x" })
+		end
 		add(diff_review_items, "pulls.review.submit_suggestion", "Post suggestion", 33, function()
 			actions.add_comment(false, true)
 		end, { "n", "x" })

@@ -41,7 +41,7 @@ describe("providers contracts", function()
 	it("loads pull request providers", function()
 		assert_contract(
 			"pulls",
-			{ "bitbucket", "github", "gitlab" },
+			{ "azure", "bitbucket", "github", "gitlab" },
 			{ "resolve_search", "view_for_target", "views" },
 			{
 				"fetch_pullrequests",
@@ -67,7 +67,7 @@ describe("providers contracts", function()
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
-			{ "github", "gitlab", "jira" },
+			{ "azure", "github", "gitlab", "jira" },
 			{ "view_for_target", "issue_ref", "views" },
 			{ "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)

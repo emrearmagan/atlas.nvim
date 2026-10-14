@@ -108,6 +108,7 @@ function M.selection(view, file, side, lines, position)
 	end
 
 	local inline = position(last)
+	inline.end_column = vim.fn.strutf16len(lines[last], true) + 1
 	if first ~= last then
 		local start = position(first)
 		if (start.to ~= nil) ~= (inline.to ~= nil) then
@@ -366,6 +367,8 @@ function M.open(owner, result, path, items, on_action)
 	---@cast provider PullsProvider|nil
 	local tasks = provider and provider.capabilities.tasks
 	local can_add_task = tasks and tasks.add_task ~= nil
+	local reviews = provider and provider.capabilities.reviews
+	local pending_reviews = reviews and reviews.submit_review ~= nil
 
 	local keys = {
 		close = keymaps.resolve("ui.close"),
@@ -491,7 +494,11 @@ function M.open(owner, result, path, items, on_action)
 					selected_action = target.is_task and "toggle_task" or "toggle_resolved"
 					target = target.is_task and target or entry.thread_root
 				end
-				on_action(selected_action, { comment = target, pending = name == "add_comment" or nil }, close)
+				on_action(
+					selected_action,
+					{ comment = target, pending = name == "add_comment" and pending_reviews or nil },
+					close
+				)
 			end
 		end
 	end

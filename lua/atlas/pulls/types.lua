@@ -133,6 +133,7 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field end_column integer|nil -- Exclusive end column (1-based UTF-16) of the selected range.
 ---@field start_from integer|nil
 ---@field start_to integer|nil
 ---@field commit_hash string|nil
