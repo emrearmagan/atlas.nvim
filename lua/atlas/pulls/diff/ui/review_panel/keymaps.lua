@@ -26,8 +26,7 @@ end
 ---@param state AtlasDiffReviewPanel
 ---@return AtlasDiffReviewPanelRow|nil
 local function current(state)
-	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
-	return state.line_map[row]
+	return state.line_map[vim.api.nvim_win_get_cursor(0)[1]]
 end
 
 ---@param state AtlasDiffReviewPanel
