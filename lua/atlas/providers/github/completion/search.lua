@@ -126,18 +126,16 @@ end
 ---@param default string
 ---@param on_submit fun(query: string)
 function M.edit(default, on_submit)
-	prompt.open({
-		name = "AtlasGitHubSearch",
-		complete = complete_cmdline,
-		on_submit = function(query)
-			query = vim.trim(tostring(query or ""))
-			if query == "" then
-				return
-			end
+	local Snacks = require("snacks")
+	Snacks.input({
+		prompt = "GitHub search: ",
+		default = default or "",
+	}, function(query)
+		query = vim.trim(tostring(query or ""))
+		if query ~= "" then
 			on_submit(query)
-		end,
-		default = default,
-	})
+		end
+	end)
 end
 
 ---@param default? string
