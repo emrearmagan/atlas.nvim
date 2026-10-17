@@ -1,5 +1,6 @@
 local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
+local review_actions = require("atlas.pulls.actions.review")
 
 local M = {}
 local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥" }
@@ -44,9 +45,13 @@ function M.update(session)
 	local comments = vim.tbl_filter(function(comment)
 		return not comment.deleted
 	end, review_data and review_data.comments or {})
-	if #comments > 0 then
+	local threads = review_data and review_actions.group_comments(review_data.comments) or {}
+	if #threads > 0 then
+		local unresolved = #vim.tbl_filter(function(thread)
+			return thread.comment.state ~= "RESOLVED"
+		end, threads)
 		items[#items + 1] = {
-			text = string.format("%s %d", icons.get("comment"), #comments),
+			text = string.format("%s %d/%d", icons.get("comment"), unresolved, #threads),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 30,

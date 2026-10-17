@@ -88,6 +88,8 @@ local config = require("atlas.config")
 ---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field prev_comment? AtlasKeymapValue
+---@field next_unresolved? AtlasKeymapValue
+---@field prev_unresolved? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
 ---@field prev_note? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
@@ -233,6 +235,8 @@ local config = require("atlas.config")
 ---| "pulls.review.toggle_file_reviewed"
 ---| "pulls.review.next_comment"
 ---| "pulls.review.prev_comment"
+---| "pulls.review.next_unresolved"
+---| "pulls.review.prev_unresolved"
 ---| "pulls.review.next_note"
 ---| "pulls.review.prev_note"
 ---| "pulls.review.add_comment"

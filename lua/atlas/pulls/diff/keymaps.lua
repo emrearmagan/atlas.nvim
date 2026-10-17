@@ -12,6 +12,8 @@ local shared_actions = {
 	"pulls.review.toggle_file_reviewed",
 	"pulls.review.next_comment",
 	"pulls.review.prev_comment",
+	"pulls.review.next_unresolved",
+	"pulls.review.prev_unresolved",
 	"pulls.review.next_note",
 	"pulls.review.prev_note",
 	"pulls.review.add_comment",
@@ -64,7 +66,7 @@ M.action_ids = {
 ---@field open_commit fun()
 ---@field add_comment fun(pending: boolean, suggestion?: boolean)
 ---@field add_note fun()
----@field navigate_annotation fun(direction: 1|-1, kind: "comment"|"note")
+---@field navigate_annotation fun(direction: 1|-1, kind: AtlasDiffAnnotationKind)
 ---@field dispatch fun(id: AtlasReviewActionId)
 ---@field run_custom fun(callback: fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any): any
 
@@ -157,6 +159,12 @@ function M.setup(session, actions)
 		end)
 		add(review_items, "pulls.review.next_comment", "Next comment", 91, function()
 			actions.navigate_annotation(1, "comment")
+		end)
+		add(review_items, "pulls.review.prev_unresolved", "Previous unresolved thread", 94, function()
+			actions.navigate_annotation(-1, "unresolved")
+		end)
+		add(review_items, "pulls.review.next_unresolved", "Next unresolved thread", 95, function()
+			actions.navigate_annotation(1, "unresolved")
 		end)
 	end
 	if result.notes then

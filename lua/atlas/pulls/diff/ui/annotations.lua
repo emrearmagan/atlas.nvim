@@ -13,6 +13,8 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.annotations.popup")
 local popup
 
+---@alias AtlasDiffAnnotationKind "comment"|"note"|"unresolved"
+
 ---@class AtlasDiffAnnotation
 ---@field side "LEFT"|"RIGHT"
 ---@field start_line integer|nil
@@ -301,20 +303,32 @@ function M.render_virtual_lines(items, width, options)
 	return result
 end
 
+---@param item AtlasDiffAnnotation
+---@param kind AtlasDiffAnnotationKind
+---@return boolean
+function M.is_kind(item, kind)
+	if kind == "note" then
+		return item.note ~= nil
+	end
+	if kind == "unresolved" then
+		return item.thread ~= nil and item.thread.comment.state ~= "RESOLVED"
+	end
+	return item.thread ~= nil
+end
+
 ---@param view AtlasDiffView
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@param display_line fun(pane: integer, line: integer): integer
 ---@return boolean moved
 function M.navigate(view, direction, kind, from_edge, display_line)
 	local locations = {}
-	local field = kind == "comment" and "thread" or "note"
 	for index, pane in ipairs({ view.left, view.right }) do
 		if pane.win then
 			for line, items in pairs(view.annotations[pane.buf] or {}) do
 				if vim.iter(items):any(function(item)
-					return item[field] ~= nil
+					return M.is_kind(item, kind)
 				end) then
 					locations[#locations + 1] = {
 						pane = index,

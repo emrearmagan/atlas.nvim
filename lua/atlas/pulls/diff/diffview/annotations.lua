@@ -136,7 +136,7 @@ end
 
 ---@param view AtlasDiffDiffviewView
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@return boolean moved
 function M.navigate(view, direction, kind, from_edge)

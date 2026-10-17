@@ -51,7 +51,7 @@ local renderers = {
 ---@field show_file fun(view: AtlasDiffView, file: AtlasDiffFile, on_done: fun(err?: string))
 ---@field redraw fun(view: AtlasDiffView)
 ---@field get_selection fun(view: AtlasDiffView): AtlasDiffSelection|nil, string|nil
----@field navigate_annotation fun(view: AtlasDiffView, direction: 1|-1, kind: "comment"|"note", from_edge?: boolean): boolean
+---@field navigate_annotation fun(view: AtlasDiffView, direction: 1|-1, kind: AtlasDiffAnnotationKind, from_edge?: boolean): boolean
 ---@field resize fun(view: AtlasDiffView)
 ---@field setup_keymaps fun(session: AtlasDiffSession, actions: AtlasDiffKeymapActions, groups: AtlasDiffKeymapGroup[])
 ---@field dispose fun(view: AtlasDiffView)
@@ -312,7 +312,7 @@ end
 
 ---@param session AtlasDiffSession
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 local function navigate_annotation(session, direction, kind)
 	if session.renderer.navigate_annotation(session.view, direction, kind) then
 		return
@@ -327,12 +327,11 @@ local function navigate_annotation(session, direction, kind)
 		end
 	end
 
-	local field = kind == "comment" and "thread" or "note"
 	for offset = 1, #files do
 		local file = files[((index - 1 + direction * offset) % #files) + 1]
 		local items = annotations.for_file(session.data, file)
 		if vim.iter(items):any(function(item)
-			return item[field] ~= nil
+			return annotations.is_kind(item, kind)
 		end) then
 			select_file(session, file, nil, function()
 				session.renderer.navigate_annotation(session.view, direction, kind, true)

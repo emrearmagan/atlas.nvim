@@ -793,6 +793,8 @@ These `User` events fire after setup or cleanup completes:
           toggle_resolved = "x",
           next_comment = "]c",
           prev_comment = "[c",
+          next_unresolved = "]x",
+          prev_unresolved = "[x",
           next_note = "]n",
           prev_note = "[n",
           add_comment = "c",
