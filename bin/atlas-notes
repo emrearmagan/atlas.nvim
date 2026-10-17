@@ -59,7 +59,7 @@ local function required(options, name)
 end
 
 ---@param value string
----@return AtlasNoteTarget
+---@return AtlasStorageTarget
 local function target(value)
 	local result, err = notes.resolve_target(value)
 	if not result then

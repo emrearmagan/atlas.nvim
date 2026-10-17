@@ -26,7 +26,7 @@ function M.open(target)
 			ui.open()
 			return
 		end
-		ui.open({ provider = repository.provider, host = repository.host, repository = repository.repo_full_name })
+		ui.open({ host = repository.host, repository = repository.repo_full_name })
 	end)
 end
 

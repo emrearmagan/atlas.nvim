@@ -50,7 +50,7 @@ local function open_body_editor(note_type, file_path, line, initial_text, key, c
 	})
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param input AtlasNoteInput
 ---@param on_done fun(note: AtlasNote|nil, err: string|nil)
 function M.create(target, input, on_done)
@@ -69,7 +69,7 @@ function M.create(target, input, on_done)
 	)
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param note AtlasNote
 ---@param on_done fun(note: AtlasNote|nil, err: string|nil)
 function M.edit(target, note, on_done)
@@ -90,7 +90,7 @@ function M.edit(target, note, on_done)
 end
 
 ---@param note AtlasNote
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param source_buf integer
 function M.details(note, target, source_buf)
 	local lines, highlights = renderer.render_details(note, target, math.max(10, vim.o.columns - 4))

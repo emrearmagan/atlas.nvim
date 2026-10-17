@@ -2,11 +2,9 @@ local M = {}
 
 ---@class AtlasStorageTarget
 ---@field ref string
----@field provider string
 ---@field host string
 ---@field repository string
 ---@field id string
----@field url string|nil
 
 ---@param value any
 ---@return string
@@ -19,18 +17,17 @@ function M.root()
 	return vim.fs.joinpath(vim.fn.stdpath("data"), "atlas")
 end
 
----@param value { provider: string, host: string, repository: string, id: string|integer, url: string|nil }
+---@param value { host: string, repository: string, id: string|integer }
 ---@return AtlasStorageTarget|nil, string|nil
 function M.target(value)
 	if type(value) ~= "table" then
 		return nil, "A pull request target is required"
 	end
 
-	local provider = text(value.provider):lower()
 	local host = text(value.host):lower()
 	local repository = text(value.repository):lower()
 	local id = text(value.id)
-	if provider == "" or host == "" or repository == "" or not id:match("^%d+$") then
+	if host == "" or repository == "" or not id:match("^%d+$") then
 		return nil, "Invalid pull request target"
 	end
 
@@ -38,29 +35,32 @@ function M.target(value)
 		return nil, "Invalid pull request target"
 	end
 
-	local url = text(value.url)
 	return {
 		ref = string.format("%s/%s/pr-%s", host, repository, id),
-		provider = provider,
 		host = host,
 		repository = repository,
 		id = id,
-		url = url ~= "" and url or nil,
 	},
 		nil
+end
+
+---@param ref string
+---@return AtlasStorageTarget|nil, string|nil
+function M.parse(ref)
+	local host, repository, id = text(ref):match("^([^/]+)/(.+)/pr%-(%d+)$")
+	if not host then
+		return nil, "Invalid pull request target"
+	end
+	return M.target({ host = host, repository = repository, id = id })
 end
 
 ---@param pr PullRequest
 ---@return AtlasStorageTarget|nil, string|nil
 function M.target_for_pull_request(pr)
-	local url = pr.link.html
-
 	return M.target({
-		provider = pr.provider,
-		host = url:match("^https?://([^/?#]+)"),
+		host = pr.link.html:match("^https?://([^/?#]+)"),
 		repository = pr.repo_full_name,
 		id = pr.id,
-		url = url,
 	})
 end
 

@@ -14,7 +14,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.notes")
 ---@class AtlasNotesUIState
 ---@field buf integer|nil
 ---@field win integer|nil
----@field filter { provider: string, host: string, repository: string, id: string|nil }|nil
+---@field filter { host: string, repository: string, id: string|nil }|nil
 ---@field documents AtlasNotesUIManagerDocument[]
 ---@field line_map table<integer, AtlasNotesUIItem>
 ---@field expanded table<string, boolean>
@@ -133,9 +133,8 @@ local function refresh()
 	if filter then
 		documents = vim.tbl_filter(function(document)
 			local target = document.target
-			return target.provider == filter.provider
-				and target.host == filter.host:lower()
-				and target.repository:lower() == filter.repository:lower()
+			return target.host == filter.host:lower()
+				and target.repository == filter.repository:lower()
 				and (filter.id == nil or target.id == filter.id)
 		end, documents)
 	end
@@ -173,7 +172,7 @@ local function ensure_buffer()
 	return buf
 end
 
----@param filter { provider: string, host: string, repository: string, id: string|nil }|nil Only notes of one pull request, or of a whole repository without `id`.
+---@param filter { host: string, repository: string, id: string|nil }|nil Only notes of one pull request, or of a whole repository without `id`.
 function M.open(filter)
 	state.filter = filter
 

@@ -1,20 +1,13 @@
+local file = require("atlas.pulls.notes.file")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
-local storage = require("atlas.pulls.notes.storage")
+local storage = require("atlas.core.storage")
 
 local M = {}
 
 M.types = { "issue", "suggestion", "note", "praise" }
 
 ---@alias AtlasNoteType "issue"|"suggestion"|"note"|"praise"
-
----@class AtlasNoteTarget
----@field ref string
----@field provider string
----@field host string
----@field repository string
----@field id string
----@field url string|nil
 
 ---@class AtlasNoteContext
 ---@field start_line integer
@@ -44,7 +37,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field resolved boolean|nil
 
 ---@class AtlasNotesDocument
----@field target AtlasNoteTarget
+---@field target AtlasStorageTarget
 ---@field notes AtlasNote[]
 
 ---@param value any
@@ -62,42 +55,6 @@ function M.is_outdated(note, line)
 	end
 	local anchor = note.context.lines[note.line - note.context.start_line + 1]
 	return anchor ~= line
-end
-
----@param value table
----@return AtlasNoteTarget|nil, string|nil
-local function normalize_target(value)
-	if type(value) ~= "table" then
-		return nil, "A pull request target is required"
-	end
-	local provider = text(value.provider):lower()
-	local host = text(value.host):lower()
-	local repository = text(value.repository):gsub("^/+", ""):gsub("/+$", ""):gsub("%.git$", "")
-	local id = text(value.id)
-	if provider == "" or host == "" or repository == "" or id == "" then
-		return nil, "Invalid pull request target"
-	end
-	if provider ~= "gitlab" then
-		repository = repository:lower()
-	end
-	local url = text(value.url)
-	return {
-		ref = string.format("%s:%s/%s/pr/%s", provider, host, repository, id),
-		provider = provider,
-		host = host,
-		repository = repository,
-		id = id,
-		url = url ~= "" and url or nil,
-	},
-		nil
-end
-
----@param target AtlasNoteTarget
----@param current AtlasNoteTarget
----@return AtlasNoteTarget
-local function merge_target(target, current)
-	target.url = current.url or target.url
-	return target
 end
 
 ---@param value any
@@ -189,13 +146,13 @@ local function now()
 end
 
 ---@param value any
----@param expected AtlasNoteTarget|nil
+---@param expected AtlasStorageTarget|nil
 ---@return AtlasNotesDocument|nil, string|nil
 local function normalize_document(value, expected)
 	if type(value) ~= "table" or type(value.notes) ~= "table" or not vim.islist(value.notes) then
 		return nil, "Invalid notes document"
 	end
-	local target, target_error = normalize_target(value.target)
+	local target, target_error = storage.target(value.target)
 	if not target then
 		return nil, target_error
 	end
@@ -211,15 +168,15 @@ local function normalize_document(value, expected)
 		table.insert(items, note)
 	end
 	return {
-		target = expected and merge_target(target, expected) or target,
+		target = target,
 		notes = items,
 	}, nil
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@return AtlasNotesDocument|nil, string|nil
 local function load_document(target)
-	local value, read_error = storage.read(storage.path(target.ref))
+	local value, read_error = file.read(file.path(target))
 	if read_error then
 		return nil, read_error
 	end
@@ -229,7 +186,7 @@ local function load_document(target)
 	return normalize_document(value, target)
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param mutate fun(document: AtlasNotesDocument): any, string|nil
 ---@return any, string|nil
 local function change(target, mutate)
@@ -241,7 +198,7 @@ local function change(target, mutate)
 	if mutation_error then
 		return nil, mutation_error
 	end
-	local write_error = storage.write(storage.path(target.ref), document)
+	local write_error = file.write(file.path(target), document)
 	if write_error then
 		return nil, write_error
 	end
@@ -249,41 +206,21 @@ local function change(target, mutate)
 end
 
 ---@param value string
----@return AtlasNoteTarget|nil, string|nil
+---@return AtlasStorageTarget|nil, string|nil
 function M.resolve_target(value)
-	value = text(value)
-	local provider, host, repository, id = value:match("^([%w_-]+):([^/]+)/(.+)/pr/(%d+)$")
-	if provider then
-		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
+	local parsed = storage.parse(value)
+	if parsed then
+		return parsed
 	end
 
 	local target, err = providers.resolve(value)
 	if not target or target.entity ~= "pr" then
 		return nil, err or "Expected a pull request URL or canonical reference"
 	end
-	return normalize_target({
-		provider = target.provider,
-		host = target.host,
-		repository = target.repo_full_name,
-		id = target.id,
-		url = value,
-	})
+	return storage.target({ host = target.host, repository = target.repo_full_name, id = target.id })
 end
 
----@param pr PullRequest
----@return AtlasNoteTarget|nil, string|nil
-function M.target_for_pull_request(pr)
-	local url = pr.link.html
-	return normalize_target({
-		provider = pr.provider,
-		host = url:match("^https?://([^/?#]+)"),
-		repository = pr.repo_full_name,
-		id = pr.id,
-		url = url,
-	})
-end
-
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@return string
 function M.target_label(target)
 	return string.format("%s#%s", target.repository, target.id)
@@ -292,8 +229,8 @@ end
 ---@return AtlasNotesDocument[]|nil, string|nil
 function M.documents()
 	local documents = {}
-	for _, path in ipairs(storage.files()) do
-		local value, read_error = storage.read(path)
+	for _, path in ipairs(file.paths()) do
+		local value, read_error = file.read(path)
 		if read_error then
 			return nil, read_error
 		end
@@ -326,14 +263,28 @@ function M.complete(arglead, args)
 	return options
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@return AtlasNote[]|nil, string|nil
 function M.list(target)
 	local document, read_error = load_document(target)
 	return document and document.notes or nil, read_error
 end
 
----@param target AtlasNoteTarget
+---@param pr PullRequest
+---@return { target: AtlasStorageTarget, items: AtlasNote[] }|nil, string|nil
+function M.for_pull_request(pr)
+	local target, target_error = storage.target_for_pull_request(pr)
+	if not target then
+		return nil, target_error
+	end
+	local items, read_error = M.list(target)
+	if not items then
+		return nil, read_error
+	end
+	return { target = target, items = items }, nil
+end
+
+---@param target AtlasStorageTarget
 ---@param input AtlasNoteInput
 ---@return AtlasNote|nil, string|nil
 function M.add(target, input)
@@ -351,7 +302,7 @@ function M.add(target, input)
 	end)
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param id string
 ---@param patch AtlasNotePatch
 ---@return AtlasNote|nil, string|nil
@@ -385,7 +336,7 @@ function M.update(target, id, patch)
 	end)
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param id string
 ---@return boolean, string|nil
 function M.delete(target, id)
@@ -401,17 +352,11 @@ function M.delete(target, id)
 	return deleted == true, err
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@return boolean, string|nil
 function M.clear(target)
-	local path = storage.path(target.ref)
-	if vim.fn.filereadable(path) == 0 then
-		return true, nil
-	end
-	if vim.fn.delete(path) ~= 0 then
-		return false, "Unable to delete notes: " .. path
-	end
-	return true, nil
+	local err = file.delete(file.path(target))
+	return err == nil, err
 end
 
 ---@param pr PullRequest
@@ -419,7 +364,7 @@ function M.clear_for_pull_request(pr)
 	if (require("atlas.config").options.pulls or {}).delete_notes ~= true then
 		return
 	end
-	local target, target_err = M.target_for_pull_request(pr)
+	local target, target_err = storage.target_for_pull_request(pr)
 	if not target then
 		notify.warn(target_err or "Unable to find notes", { vim_notify = true })
 		return
@@ -437,9 +382,10 @@ end
 
 ---@return boolean, string|nil
 function M.clear_all()
-	for _, path in ipairs(storage.files()) do
-		if vim.fn.delete(path) ~= 0 then
-			return false, "Unable to delete notes: " .. path
+	for _, path in ipairs(file.paths()) do
+		local err = file.delete(path)
+		if err then
+			return false, err
 		end
 	end
 	return true, nil

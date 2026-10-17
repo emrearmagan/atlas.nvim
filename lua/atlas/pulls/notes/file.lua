@@ -1,16 +1,11 @@
+local storage = require("atlas.core.storage")
+
 local M = {}
 
+---@param target AtlasStorageTarget
 ---@return string
-function M.root()
-	local configured = vim.trim(tostring(vim.env.ATLAS_NOTES_DIR or ""))
-	return configured ~= "" and vim.fs.normalize(configured)
-		or vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "notes")
-end
-
----@param target_ref string
----@return string
-function M.path(target_ref)
-	return vim.fs.joinpath(M.root(), vim.fn.sha256(target_ref) .. ".json")
+function M.path(target)
+	return vim.fs.joinpath(storage.dir(target), "notes.json")
 end
 
 ---@param path string
@@ -29,14 +24,21 @@ function M.read(path)
 end
 
 ---@param path string
+---@return string|nil
+function M.delete(path)
+	if vim.fn.filereadable(path) == 1 and vim.fn.delete(path) ~= 0 then
+		return "Unable to delete notes: " .. path
+	end
+	vim.fn.delete(vim.fs.dirname(path), "d")
+	return nil
+end
+
+---@param path string
 ---@param document AtlasNotesDocument
 ---@return string|nil
 function M.write(path, document)
 	if #document.notes == 0 then
-		if vim.fn.delete(path) ~= 0 then
-			return "Unable to delete notes: " .. path
-		end
-		return nil
+		return M.delete(path)
 	end
 	local directory = vim.fs.dirname(path)
 	if vim.fn.mkdir(directory, "p") == 0 and vim.fn.isdirectory(directory) == 0 then
@@ -59,8 +61,8 @@ function M.write(path, document)
 end
 
 ---@return string[]
-function M.files()
-	return vim.fn.globpath(M.root(), "*.json", false, true)
+function M.paths()
+	return vim.fn.globpath(storage.root(), "**/pr-*/notes.json", false, true)
 end
 
 return M

@@ -10,7 +10,7 @@ local progress_icon = icons.get("progress")
 local resolved_icon, resolved_icon_hl = icons.get("success")
 
 ---@class AtlasNotesUIItem
----@field target AtlasNoteTarget|nil
+---@field target AtlasStorageTarget|nil
 ---@field note AtlasNote|nil
 ---@field tree_key string|nil
 
@@ -27,7 +27,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field location (fun(note: AtlasNote): string)|nil
 
 ---@class AtlasNotesUIListItem
----@field target AtlasNoteTarget
+---@field target AtlasStorageTarget
 ---@field note AtlasNote
 ---@field expanded boolean
 
@@ -43,7 +43,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field action_keys AtlasNotesUIActionKeys|nil
 
 ---@class AtlasNotesUIManagerDocument
----@field target AtlasNoteTarget
+---@field target AtlasStorageTarget
 ---@field notes AtlasNote[]
 
 ---@param value AtlasNoteType
@@ -52,7 +52,7 @@ local function type_label(value)
 	return value:upper()
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param note AtlasNote
 ---@return string
 function M.note_key(target, note)
@@ -83,7 +83,7 @@ function M.note_title(note_type, file_path, line)
 end
 
 ---@param note AtlasNote
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param width integer|nil
 ---@return string[], AtlasUIHighlight[]
 function M.render_details(note, target, width)
