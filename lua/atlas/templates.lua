@@ -4,7 +4,8 @@ local icons = require("atlas.ui.shared.icons")
 local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
-local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
+local storage = require("atlas.core.storage")
+local templates_root = vim.fs.joinpath(storage.root(), "issues", "templates")
 
 ---@class AtlasTemplateInfo
 ---@field name string

@@ -1,7 +1,8 @@
 local M = {}
 local providers = require("atlas.providers")
+local storage = require("atlas.core.storage")
 
-local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v4.json")
+local path = vim.fs.joinpath(storage.root(), "starred-v4.json")
 
 ---@class AtlasStarredItem
 ---@field ref string
