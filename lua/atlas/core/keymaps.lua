@@ -68,6 +68,9 @@ local config = require("atlas.config")
 ---@field prev_unreviewed_file? AtlasKeymapValue
 ---@field find_file? AtlasKeymapValue
 
+---@class AtlasPullsReviewPanelKeymaps
+---@field cycle_filter? AtlasKeymapValue
+
 ---@class AtlasPullsReviewAtlasKeymaps
 ---@field next_file? AtlasKeymapValue
 ---@field prev_file? AtlasKeymapValue
@@ -100,6 +103,7 @@ local config = require("atlas.config")
 ---@field comment_templates? AtlasKeymapValue
 ---@field view? AtlasPullsReviewViewKeymaps
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
+---@field panel? AtlasPullsReviewPanelKeymaps
 ---@field atlas? AtlasPullsReviewAtlasKeymaps
 
 ---@class AtlasPullsFilterKeymaps
@@ -214,6 +218,7 @@ local config = require("atlas.config")
 ---| "pulls.review.explorer.next_unreviewed_file"
 ---| "pulls.review.explorer.prev_unreviewed_file"
 ---| "pulls.review.explorer.find_file"
+---| "pulls.review.panel.cycle_filter"
 ---| "pulls.review.atlas.next_file"
 ---| "pulls.review.atlas.prev_file"
 ---| "pulls.review.atlas.toggle_explorer"

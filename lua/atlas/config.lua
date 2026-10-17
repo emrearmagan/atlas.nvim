@@ -328,6 +328,9 @@ local defaults = {
 					prev_unreviewed_file = "[u",
 					find_file = "<leader>f",
 				},
+				panel = {
+					cycle_filter = "f",
+				},
 				-- Built-in navigation; external viewers use their own keys.
 				atlas = {
 					next_file = { "]f", "<Tab>" },

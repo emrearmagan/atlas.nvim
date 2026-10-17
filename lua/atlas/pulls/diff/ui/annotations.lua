@@ -482,7 +482,11 @@ function M.open(owner, result, path, items, on_action)
 
 	local title = path
 	if same_line and first.end_line then
-		title = string.format("%s:%d (%s)", path, first.end_line, first.side)
+		local range = tostring(first.end_line)
+		if #items == 1 and first.start_line and first.start_line ~= first.end_line then
+			range = first.start_line .. "-" .. first.end_line
+		end
+		title = string.format("%s:%s (%s)", path, range, first.side)
 	end
 
 	local height = math.max(1, math.min(#lines, vim.o.lines - 6))

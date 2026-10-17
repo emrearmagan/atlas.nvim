@@ -27,6 +27,8 @@ local review_states = {
 ---@field note AtlasNote|nil
 ---@field review_entry PullsReviewHistoryEntry|nil
 
+---@alias AtlasDiffReviewPanelFilter "all"|"unresolved"|"mine"
+
 ---@class AtlasDiffReviewPanel
 ---@field data AtlasDiffResult
 ---@field buf integer
@@ -35,6 +37,9 @@ local review_states = {
 ---@field cursor_row integer
 ---@field expanded table<string, boolean>
 ---@field line_map table<integer, AtlasDiffReviewPanelRow>
+---@field filter AtlasDiffReviewPanelFilter
+
+local filter_labels = { all = "All", unresolved = "Unresolved", mine = "Mine" }
 
 ---@param action AtlasKeymapActionId
 ---@return string|nil
@@ -57,6 +62,41 @@ local function has_pending(node)
 	return false
 end
 
+---@param node AtlasCommentThreadNode
+---@param username string
+---@return boolean
+local function has_author(node, username)
+	if node.comment.author and node.comment.author.username == username then
+		return true
+	end
+	for _, child in ipairs(node.children) do
+		if has_author(child, username) then
+			return true
+		end
+	end
+	return false
+end
+
+---@param item { thread?: AtlasCommentThreadNode, note?: AtlasNote }
+---@param filter AtlasDiffReviewPanelFilter
+---@param user AtlasUser|nil
+---@return boolean
+function M.matches(item, filter, user)
+	if filter == "all" then
+		return true
+	end
+	if item.thread then
+		if filter == "unresolved" then
+			return item.thread.comment.state ~= "RESOLVED"
+		end
+		return user ~= nil and user.username ~= nil and has_author(item.thread, user.username)
+	end
+	if item.note then
+		return filter == "mine" or not item.note.resolved
+	end
+	return false
+end
+
 ---@param comment PullsComment
 ---@return string
 local function comment_location(comment)
@@ -75,8 +115,9 @@ local function comment_location(comment)
 end
 
 ---@param result AtlasDiffResult
+---@param filter AtlasDiffReviewPanelFilter
 ---@return table[]
-local function sections(result)
+local function sections(result, filter)
 	local pending, reviews, tasks, comments, notes = {}, {}, {}, {}, {}
 	local data = result.review and result.review.data
 	if data then
@@ -136,13 +177,20 @@ local function sections(result)
 			return a.key < b.key
 		end)
 	end
-	return {
+	local result_sections = {
 		{ id = "pending", title = "Pending", item_name = "comment", items = pending },
 		{ id = "reviews", title = "Reviews", item_name = "reviewer", items = reviews },
 		{ id = "tasks", title = "Tasks", item_name = "task", items = tasks },
 		{ id = "comments", title = "Comments", item_name = "comment", items = comments },
 		{ id = "notes", title = "Notes", item_name = "note", items = notes },
 	}
+	for _, section in ipairs(result_sections) do
+		section.total = #section.items
+		section.items = vim.tbl_filter(function(item)
+			return M.matches(item, filter, result.current_user)
+		end, section.items)
+	end
+	return result_sections
 end
 
 local function render_review(item, width, expanded, history_expanded, head_revision, edit_key)
@@ -298,7 +346,13 @@ function M.render(state)
 		return value
 	end
 
-	for _, section in ipairs(sections(state.data)) do
+	local filter_key = key_label("pulls.review.panel.cycle_filter")
+	vim.wo[state.win].winbar = " Review%="
+		.. filter_labels[state.filter]
+		.. (filter_key and "  %#AtlasTextMuted#" .. filter_key:gsub("%%", "%%%%") .. " filter" or "")
+		.. " "
+
+	for _, section in ipairs(sections(state.data, state.filter)) do
 		if #section.items > 0 then
 			local key = "section:" .. section.id
 			local section_open = expanded(key, section.id ~= "notes")
@@ -308,8 +362,10 @@ function M.render(state)
 			local icon, hl = icons.get(section_open and "fold_open" or "fold_closed")
 			local header = icon .. " " .. section.title
 			local count = #section.items
-			local name = count == 1 and section.item_name or section.item_name .. "s"
-			lines[#lines + 1] = string.format("%s  %d %s", header, count, name)
+			local name = section.total == 1 and section.item_name or section.item_name .. "s"
+			local summary = count == section.total and string.format("%d %s", count, name)
+				or string.format("%d of %d %s", count, section.total, name)
+			lines[#lines + 1] = header .. "  " .. summary
 			spans[#spans + 1] = { line = #lines - 1, start_col = 0, end_col = #icon, hl_group = hl }
 			spans[#spans + 1] = {
 				line = #lines - 1,
@@ -417,6 +473,7 @@ function M.create(result, callbacks)
 		cursor_row = 1,
 		expanded = {},
 		line_map = {},
+		filter = "all",
 	}
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].filetype = "atlas-ui.review"
@@ -496,7 +553,6 @@ function M.open(state)
 	options.relativenumber = false
 	options.signcolumn = "no"
 	options.statuscolumn = ""
-	options.winbar = " Review"
 	options.winhighlight = ""
 	options.foldcolumn = "0"
 	options.fillchars = "eob: "
