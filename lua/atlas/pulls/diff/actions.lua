@@ -72,11 +72,17 @@ local function shared_action(id, context)
 end
 
 ---@param selection AtlasDiffSelection
----@return AtlasNoteContext
-local function selection_context(selection)
+---@return AtlasEditorPreview
+local function selection_preview(selection)
 	local first = math.max(1, selection.first - 2)
 	local last = math.min(#selection.source_lines, selection.last + 2)
-	return { start_line = first, lines = vim.list_slice(selection.source_lines, first, last) }
+	return code_preview.render({
+		file_path = selection.file.path,
+		lines = vim.list_slice(selection.source_lines, first, last),
+		start_line = first,
+		anchor_start = selection.first,
+		anchor_line = selection.last,
+	})
 end
 
 ---@param context AtlasDiffActionContext
@@ -102,15 +108,8 @@ local function comment_draft(context, provider)
 		return nil, "Suggestions are only available on the new side of the diff"
 	end
 
-	local preview = selection_context(selection)
 	draft.inline = selection.inline
-	draft.preview = code_preview.render({
-		file_path = selection.file.path,
-		lines = preview.lines,
-		start_line = preview.start_line,
-		anchor_start = selection.first,
-		anchor_line = selection.last,
-	})
+	draft.preview = selection_preview(selection)
 
 	if context.suggestion then
 		local lines = vim.list_slice(selection.source_lines, selection.first, selection.last)
@@ -193,21 +192,28 @@ M.add_note = {
 			return false
 		end
 
-		note_editor.create(data.target, {
-			file_path = selection.file.path,
-			line = selection.last,
-			body = "",
-			context = selection_context(selection),
-		}, function(note, err)
-			if not note then
-				notify.error(err)
-				return
-			end
+		note_editor.create(
+			data.target,
+			{
+				file_path = selection.file.path,
+				commit = context.session.data.head_revision,
+				start_line = selection.first,
+				end_line = selection.last,
+				body = "",
+			},
+			selection_preview(selection),
+			function(note, err)
+				if not note then
+					notify.error(err)
+					return
+				end
 
-			data.items[#data.items + 1] = note
-			notify.success("Note added", { timeout = 1200 })
-			on_done({ changed_pr = false, message = "Note added" }, nil)
-		end)
+				data.items[#data.items + 1] = note
+				data.positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
+				notify.success("Note added", { timeout = 1200 })
+				on_done({ changed_pr = false, message = "Note added" }, nil)
+			end
+		)
 		return true
 	end,
 }
@@ -315,15 +321,24 @@ M.toggle_note_resolved = {
 ---@param session AtlasDiffSession
 ---@param on_done fun(ok: boolean)
 local function reload_review(session, on_done)
-	local success = true
+	if session.requests.review then
+		session.requests.review.cancel()
+	end
+	local requests = request_scope.new()
+	session.requests.review = requests
+	local starts = {}
+
 	local note_data = session.data.notes
 	if note_data then
-		local items, err = notes.list(note_data.target)
-		if items then
-			note_data.items = items
-		else
-			success = false
-			notify.error(err)
+		starts.notes = function(done)
+			local items, err = notes.list(note_data.target)
+			if not items then
+				done(nil, err)
+				return nil
+			end
+			return notes.locate(session.data.root, session.data.head_revision, items, function(positions)
+				done({ items = items, positions = positions })
+			end)
 		end
 	end
 
@@ -331,29 +346,23 @@ local function reload_review(session, on_done)
 	local provider = pr and providers.load(pr.provider, "pulls")
 	---@cast provider PullsProvider|nil
 	local reviews = provider and provider.capabilities.reviews
-	if not pr or not reviews then
-		on_done(success)
-		return
-	end
-
-	if session.requests.review then
-		session.requests.review.cancel()
-	end
-	local requests = request_scope.new()
-	session.requests.review = requests
-	local starts = {
-		review = function(done)
+	if pr and reviews then
+		starts.review = function(done)
 			return reviews.fetch(pr, { force_refresh = true }, done)
-		end,
-	}
-	if reviews.fetch_review_context then
-		starts.context = function(done)
-			return reviews.fetch_review_context(pr, { force_refresh = true }, done)
+		end
+		if reviews.fetch_review_context then
+			starts.context = function(done)
+				return reviews.fetch_review_context(pr, { force_refresh = true }, done)
+			end
 		end
 	end
 
 	requests.all(starts, function(values, errors)
 		session.requests.review = nil
+		if note_data and values.notes then
+			note_data.items = values.notes.items
+			note_data.positions = values.notes.positions
+		end
 		if values.review or values.context then
 			local review = session.data.review or {}
 			if values.review then
@@ -371,10 +380,9 @@ local function reload_review(session, on_done)
 			session.data.review = review
 		end
 		for _, err in pairs(errors) do
-			success = false
 			notify.error("Unable to refresh review\n\n" .. err)
 		end
-		on_done(success)
+		on_done(next(errors) == nil)
 	end)
 end
 

@@ -1,6 +1,5 @@
 local highlights = require("codediff.ui.highlights")
 local ui = require("atlas.pulls.diff.ui.annotations")
-local notes = require("atlas.pulls.notes")
 local has_scroll, scroll = pcall(require, "codediff.ui.scroll")
 
 local M = {}
@@ -112,9 +111,6 @@ function M.render(view, file, session)
 	for _, item in ipairs(ui.for_file(view.result, file)) do
 		if item.thread and (file.binary or (item.line and (item.line < 1 or item.line > counts[item.side]))) then
 			item.line = nil
-		elseif item.note then
-			local text = vim.api.nvim_buf_get_lines(view.right.buf, item.note.line - 1, item.note.line, false)[1]
-			item.outdated = notes.is_outdated(item.note, text)
 		end
 
 		local pane = item.side == "LEFT" and view.left.win and view.left or view.right

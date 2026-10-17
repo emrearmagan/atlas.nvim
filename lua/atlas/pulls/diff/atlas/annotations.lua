@@ -1,7 +1,6 @@
 local diff = require("atlas.pulls.diff.diff")
 local render = require("atlas.pulls.diff.atlas.render")
 local ui = require("atlas.pulls.diff.ui.annotations")
-local notes = require("atlas.pulls.notes")
 
 local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.annotations")
@@ -124,8 +123,6 @@ function M.render(view, document)
 		local count = #contents[item.side]
 		if item.thread and (document.binary or (item.line and (item.line < 1 or item.line > count))) then
 			item.line = nil
-		elseif item.note then
-			item.outdated = notes.is_outdated(item.note, contents.RIGHT[item.note.line])
 		end
 	end
 

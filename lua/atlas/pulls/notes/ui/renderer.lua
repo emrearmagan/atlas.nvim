@@ -74,12 +74,20 @@ local function type_highlight(note_type)
 	return "AtlasLogInfo"
 end
 
----@param note_type AtlasNoteType
----@param file_path string
----@param line integer
+---@param value { start_line: integer, end_line: integer }
 ---@return string
-function M.note_title(note_type, file_path, line)
-	return string.format("Note [%s] %s:%d", type_label(note_type), file_path, line)
+function M.line_range(value)
+	if value.start_line == value.end_line then
+		return tostring(value.start_line)
+	end
+	return string.format("%d-%d", value.start_line, value.end_line)
+end
+
+---@param note_type AtlasNoteType
+---@param value { file_path: string, start_line: integer, end_line: integer }
+---@return string
+function M.note_title(note_type, value)
+	return string.format("Note [%s] %s:%s", type_label(note_type), value.file_path, M.line_range(value))
 end
 
 ---@param note AtlasNote
@@ -89,7 +97,7 @@ end
 function M.render_details(note, target, width)
 	local label = notes.target_label(target)
 	local note_type = type_label(note.type)
-	local location = string.format("%s:%d", note.file_path, note.line)
+	local location = note.file_path .. ":" .. M.line_range(note)
 	local lines = { string.format("%s  %s  %s", note_type, location, label), "", "Target: " .. target.ref }
 	local spans = {
 		{ line = 0, start_col = 0, end_col = #note_type, hl_group = type_highlight(note.type) },
@@ -105,25 +113,6 @@ function M.render_details(note, target, width)
 			end_col = #lines[1],
 			hl_group = resolved_icon_hl,
 		})
-	end
-	if note.context then
-		local source = table.concat(note.context.lines, "\n")
-		local fence = "```"
-		for ticks in source:gmatch("`+") do
-			if #ticks >= #fence then
-				fence = ticks .. "`"
-			end
-		end
-
-		table.insert(lines, "")
-		utils.append_block(
-			lines,
-			spans,
-			markdown.parse(fence .. "\n" .. source .. "\n" .. fence, {
-				width = width,
-				file_path = note.file_path,
-			})
-		)
 	end
 	table.insert(lines, "")
 	utils.append_block(lines, spans, markdown.parse(note.body, { width = width }))
@@ -225,7 +214,7 @@ end
 local function list_item(item, opts)
 	local note = item.note
 	local path = note.file_path:match("([^/\\]+)$") or note.file_path
-	local metadata = { { string.format("%s:%d", path, note.line), "Normal" } }
+	local metadata = { { path .. ":" .. M.line_range(note), "Normal" } }
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
 	if timestamp ~= "" then
 		metadata[#metadata + 1] = { "  " .. timestamp, "AtlasTextMuted" }

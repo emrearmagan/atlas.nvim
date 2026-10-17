@@ -112,11 +112,12 @@ local function sections(result)
 	end
 	if result.notes then
 		for _, note in ipairs(result.notes.items) do
+			local position = result.notes.positions[note.id]
 			notes[#notes + 1] = {
 				key = note_renderer.note_key(result.notes.target, note),
-				note = note,
+				note = vim.tbl_extend("force", note, position),
 				path = note.file_path,
-				line = note.line,
+				line = position.end_line,
 				timestamp = note.updated_at or note.created_at,
 			}
 		end

@@ -1,5 +1,4 @@
 local diff = require("atlas.pulls.diff.diff")
-local notes = require("atlas.pulls.notes")
 local ui = require("atlas.pulls.diff.ui.annotations")
 
 local M = {}
@@ -53,9 +52,6 @@ function M.render(view)
 			local count = vim.api.nvim_buf_line_count(pane.buf)
 			if item.thread and item.line and (item.line < 1 or item.line > count) then
 				item.line = nil
-			elseif item.note then
-				local text = vim.api.nvim_buf_get_lines(pane.buf, item.note.line - 1, item.note.line, false)[1]
-				item.outdated = notes.is_outdated(item.note, text)
 			end
 
 			local line = math.max(1, math.min(item.line or 1, count))

@@ -72,7 +72,13 @@ function M.for_file(result, file)
 	if result.notes and not file.binary and file.status ~= "deleted" then
 		for _, note in ipairs(result.notes.items) do
 			if note.file_path == file.path or (file.status == "renamed" and note.file_path == file.old_path) then
-				items[#items + 1] = { side = "RIGHT", line = note.line, note = note }
+				local position = result.notes.positions[note.id]
+				items[#items + 1] = {
+					side = "RIGHT",
+					line = position.end_line,
+					note = vim.tbl_extend("force", note, position),
+					outdated = position.outdated,
+				}
 			end
 		end
 	end
@@ -183,7 +189,7 @@ end
 ---@param note AtlasNote
 ---@return string
 local function note_location(note)
-	return "R" .. note.line
+	return "R" .. note_renderer.line_range(note)
 end
 
 ---@param items AtlasDiffAnnotation[]
@@ -323,7 +329,7 @@ function M.jump(view, target, focus)
 		if pane.win then
 			for line, items in pairs(view.annotations[pane.buf] or {}) do
 				local found = vim.iter(items):any(function(item)
-					return target.note and item.note == target.note
+					return target.note and item.note and item.note.id == target.note.id
 						or target.comment and item.thread and item.thread.comment == target.comment
 				end)
 

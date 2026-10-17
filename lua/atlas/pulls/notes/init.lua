@@ -1,6 +1,9 @@
+local diff = require("atlas.pulls.diff.diff")
+local diff_git = require("atlas.pulls.diff.git")
 local file = require("atlas.pulls.notes.file")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
+local request_scope = require("atlas.core.requests")
 local storage = require("atlas.core.storage")
 
 local M = {}
@@ -9,25 +12,23 @@ M.types = { "issue", "suggestion", "note", "praise" }
 
 ---@alias AtlasNoteType "issue"|"suggestion"|"note"|"praise"
 
----@class AtlasNoteContext
----@field start_line integer
----@field lines string[]
-
 ---@class AtlasNoteInput
 ---@field file_path string
----@field line integer
+---@field commit string
+---@field start_line integer
+---@field end_line integer
 ---@field body string
 ---@field type AtlasNoteType|nil
----@field context AtlasNoteContext|nil
 
 ---@class AtlasNote
 ---@field id string
 ---@field file_path string
----@field line integer
+---@field commit string
+---@field start_line integer
+---@field end_line integer
 ---@field body string
 ---@field type AtlasNoteType
 ---@field resolved boolean
----@field context AtlasNoteContext|nil
 ---@field created_at string
 ---@field updated_at string|nil
 
@@ -40,6 +41,11 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field target AtlasStorageTarget
 ---@field notes AtlasNote[]
 
+---@class AtlasNotePosition
+---@field start_line integer
+---@field end_line integer
+---@field outdated boolean
+
 ---@param value any
 ---@return string
 local function text(value)
@@ -47,14 +53,71 @@ local function text(value)
 end
 
 ---@param note AtlasNote
----@param line string|nil
----@return boolean
-function M.is_outdated(note, line)
-	if not note.context then
-		return true
+---@param hunks integer[][] Changes from the note's commit to the current file.
+---@return AtlasNotePosition
+function M.position(note, hunks)
+	for _, hunk in ipairs(hunks) do
+		local start, count = hunk[1], hunk[2]
+		local changed = count > 0 and start <= note.end_line and start + count > note.start_line
+		local inserted = count == 0 and start >= note.start_line and start < note.end_line
+		if changed or inserted then
+			local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
+			return { start_line = line, end_line = line, outdated = true }
+		end
 	end
-	local anchor = note.context.lines[note.line - note.context.start_line + 1]
-	return anchor ~= line
+	return {
+		start_line = (diff.map_line(hunks, "LEFT", note.start_line)),
+		end_line = (diff.map_line(hunks, "LEFT", note.end_line)),
+		outdated = false,
+	}
+end
+
+---@param root string
+---@param head string
+---@param items AtlasNote[]
+---@param on_done fun(positions: table<string, AtlasNotePosition>)
+---@return { cancel: fun() }
+function M.locate(root, head, items, on_done)
+	local requests = request_scope.new()
+	local starts = {}
+	for _, note in ipairs(items) do
+		local key = note.commit .. ":" .. note.file_path
+		if note.commit ~= head and not starts[key] then
+			starts[key] = function(done)
+				local reads = request_scope.new()
+				reads.all({
+					old = function(read_done)
+						return diff_git.read(root, note.commit, note.file_path, read_done)
+					end,
+					new = function(read_done)
+						return diff_git.read(root, head, note.file_path, read_done)
+					end,
+				}, function(contents, errors)
+					if errors.old or errors.new then
+						done(nil)
+						return
+					end
+					done((diff.compute(contents.old, contents.new)))
+				end)
+				return { cancel = reads.cancel }
+			end
+		end
+	end
+
+	requests.all(starts, function(hunks)
+		local positions = {}
+		for _, note in ipairs(items) do
+			if note.commit == head then
+				positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
+			else
+				local changes = hunks[note.commit .. ":" .. note.file_path]
+				positions[note.id] = changes and M.position(note, changes)
+					or { start_line = note.start_line, end_line = note.end_line, outdated = true }
+			end
+		end
+		on_done(positions)
+	end)
+	return { cancel = requests.cancel }
 end
 
 ---@param value any
@@ -97,9 +160,17 @@ local function normalize_note(value)
 	if not file_path then
 		return nil, path_error
 	end
-	local line = tonumber(value.line)
-	if not line or line < 1 or line % 1 ~= 0 then
-		return nil, "Line must be a positive integer"
+	local commit = text(value.commit)
+	if not commit:match("^%x+$") then
+		return nil, "Note commit must be a commit hash"
+	end
+	local start_line = tonumber(value.start_line)
+	if not start_line or start_line < 1 or start_line % 1 ~= 0 then
+		return nil, "Start line must be a positive integer"
+	end
+	local end_line = tonumber(value.end_line)
+	if not end_line or end_line < start_line or end_line % 1 ~= 0 then
+		return nil, "End line must be an integer from the start line on"
 	end
 	if type(value.body) ~= "string" or text(value.body) == "" then
 		return nil, "Note body cannot be empty"
@@ -107,18 +178,6 @@ local function normalize_note(value)
 	local note_type, type_error = normalize_type(value.type)
 	if not note_type then
 		return nil, type_error
-	end
-	local context = value.context
-	if context ~= nil then
-		if type(context) ~= "table" then
-			return nil, "Invalid note context"
-		end
-		local start_line = tonumber(context.start_line)
-		local lines = context.lines
-		if not start_line or type(lines) ~= "table" or type(lines[line - start_line + 1]) ~= "string" then
-			return nil, "Invalid note context"
-		end
-		context = { start_line = start_line, lines = lines }
 	end
 	local id = text(value.id)
 	local created_at = text(value.created_at)
@@ -129,11 +188,12 @@ local function normalize_note(value)
 	return {
 		id = id,
 		file_path = file_path,
-		line = line,
+		commit = commit,
+		start_line = start_line,
+		end_line = end_line,
 		body = value.body,
 		type = note_type,
 		resolved = value.resolved == true,
-		context = context,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
 	},
@@ -313,11 +373,12 @@ function M.update(target, id, patch)
 				local candidate = {
 					id = note.id,
 					file_path = note.file_path,
-					line = note.line,
+					commit = note.commit,
+					start_line = note.start_line,
+					end_line = note.end_line,
 					body = patch.body or note.body,
 					type = patch.type or note.type,
 					resolved = note.resolved,
-					context = note.context,
 					created_at = note.created_at,
 					updated_at = now(),
 				}
