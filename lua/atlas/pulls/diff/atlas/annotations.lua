@@ -117,7 +117,7 @@ function M.render(view, document)
 		RIGHT = document.contents.new.lines,
 	}
 
-	local items = ui.for_file(view.result, document.file)
+	local items = ui.for_file(view.session, document.file)
 	local comment_options = ui.comment_options(view.expanded_threads)
 	for _, item in ipairs(items) do
 		local count = #contents[item.side]
@@ -126,7 +126,7 @@ function M.render(view, document)
 		end
 	end
 
-	local expanded = view.result.options.comment_display == "virtual_lines"
+	local expanded = view.options.comment_display == "virtual_lines"
 	local lookup, placed, deleted = place_annotations(view, document, items, expanded)
 
 	local deleted_topfill = 0

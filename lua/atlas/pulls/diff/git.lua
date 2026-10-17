@@ -3,6 +3,19 @@ local request_scope = require("atlas.core.requests")
 
 local M = {}
 
+---@class AtlasDiffRange
+---@field root string
+---@field base_revision string
+---@field head_revision string
+
+---@class AtlasDiffFile
+---@field path string
+---@field old_path string|nil
+---@field status "added"|"deleted"|"modified"|"renamed"|"copied"|"type_changed"
+---@field additions integer|nil
+---@field deletions integer|nil
+---@field binary boolean
+
 local statuses = {
 	A = "added",
 	D = "deleted",
@@ -33,14 +46,16 @@ function M.read(root, revision, path, on_done)
 	return run(root, { "cat-file", "blob", revision .. ":" .. path }, on_done)
 end
 
----@param source { root: string, base_revision: string, head_revision: string }
----@param on_done fun(result: { base_revision: string, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@param root string
+---@param base string
+---@param head string
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.load(source, on_done)
+function M.load(root, base, head, on_done)
 	local requests = request_scope.new()
 
 	requests.run(function(done)
-		return run(source.root, { "merge-base", source.base_revision, source.head_revision }, done)
+		return run(root, { "merge-base", base, head }, done)
 	end, function(output, err)
 		if not output then
 			on_done(nil, err)
@@ -49,7 +64,7 @@ function M.load(source, on_done)
 
 		local merge_base = vim.trim(output)
 		local function diff(format, done)
-			return run(source.root, {
+			return run(root, {
 				"diff",
 				format,
 				"-z",
@@ -58,7 +73,7 @@ function M.load(source, on_done)
 				"--no-ext-diff",
 				"--no-textconv",
 				merge_base,
-				source.head_revision,
+				head,
 				"--",
 			}, done)
 		end
@@ -126,7 +141,7 @@ function M.load(source, on_done)
 				file.binary = additions == "-"
 			end
 
-			on_done({ base_revision = merge_base, files = files }, nil)
+			on_done({ range = { root = root, base_revision = merge_base, head_revision = head }, files = files }, nil)
 		end)
 	end)
 

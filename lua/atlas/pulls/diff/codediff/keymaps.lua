@@ -64,13 +64,13 @@ local function bind_panel(buf, items)
 	end
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param commands AtlasDiffKeymapActions
 ---@param groups AtlasDiffKeymapGroup[]
 ---@param renderer_actions { toggle_layout: fun() }
-function M.setup(session, commands, groups, renderer_actions)
-	local view = session.view
-	local state = session.explorer
+function M.setup(ui, commands, groups, renderer_actions)
+	local view = ui.view
+	local state = ui.explorer
 	local view_keys = codediff_keys.keymaps_for("view")
 	local explorer_keys = codediff_keys.keymaps_for("explorer")
 	local help_items = {}
@@ -133,7 +133,7 @@ function M.setup(session, commands, groups, renderer_actions)
 	end)
 
 	local threads = {}
-	if session.data.pr then
+	if ui.session.source.kind == "pr" then
 		add(threads, explorer_keys.fold_toggle, "Toggle review thread / fold", function()
 			if not commands.toggle_threads() and vim.fn.foldlevel(".") > 0 then
 				vim.cmd("normal! za")
@@ -147,7 +147,7 @@ function M.setup(session, commands, groups, renderer_actions)
 	end
 
 	-- Atlas owns these panels; CodeDiff's buffer cleanup must not remove their keys.
-	for _, buf in ipairs({ state.buf, session.commits.buf }) do
+	for _, buf in ipairs({ state.buf, ui.commits.buf }) do
 		bind_panel(buf, shared)
 		bind_panel(buf, panels)
 	end

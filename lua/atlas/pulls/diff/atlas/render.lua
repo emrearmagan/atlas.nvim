@@ -165,7 +165,7 @@ end
 ---@param document AtlasDiffDocument
 function M.compact(view, document)
 	local hunks = view.left.win and document.split_hunks or document.hunks
-	local compact = view.result.options.compact and #hunks > 0
+	local compact = view.options.compact and #hunks > 0
 
 	for _, pane in ipairs({ view.left, view.right }) do
 		if pane.win then

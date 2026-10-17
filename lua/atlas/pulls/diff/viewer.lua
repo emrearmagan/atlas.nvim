@@ -1,11 +1,10 @@
 local events = require("atlas.core.events")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
-local request_scope = require("atlas.core.requests")
-local providers = require("atlas.providers")
 local actions = require("atlas.pulls.diff.actions")
 local atlas = require("atlas.pulls.diff.atlas")
 local keymaps = require("atlas.pulls.diff.keymaps")
+local diff_session = require("atlas.pulls.diff.session")
 local annotations = require("atlas.pulls.diff.ui.annotations")
 local commits = require("atlas.pulls.diff.ui.commits")
 local diff_statusline = require("atlas.pulls.diff.ui.statusline")
@@ -26,7 +25,8 @@ local renderers = {
 
 ---@class AtlasDiffView
 ---@field tabpage integer
----@field result AtlasDiffResult
+---@field session AtlasDiffSession
+---@field options AtlasPullsDiffConfig
 ---@field callbacks AtlasDiffCallbacks
 ---@field current_file AtlasDiffFile|nil
 ---@field left { buf: integer, win?: integer }
@@ -47,42 +47,40 @@ local renderers = {
 ---@field show_details fun()
 
 ---@class AtlasDiffRenderer
----@field open fun(result: AtlasDiffResult, callbacks: AtlasDiffCallbacks): AtlasDiffView
+---@field open fun(session: AtlasDiffSession, options: AtlasPullsDiffConfig, callbacks: AtlasDiffCallbacks): AtlasDiffView
 ---@field show_file fun(view: AtlasDiffView, file: AtlasDiffFile, on_done: fun(err?: string))
 ---@field redraw fun(view: AtlasDiffView)
 ---@field get_selection fun(view: AtlasDiffView): AtlasDiffSelection|nil, string|nil
 ---@field navigate_annotation fun(view: AtlasDiffView, direction: 1|-1, kind: AtlasDiffAnnotationKind, from_edge?: boolean): boolean
 ---@field resize fun(view: AtlasDiffView)
----@field setup_keymaps fun(session: AtlasDiffSession, actions: AtlasDiffKeymapActions, groups: AtlasDiffKeymapGroup[])
+---@field setup_keymaps fun(ui: AtlasDiffUI, actions: AtlasDiffKeymapActions, groups: AtlasDiffKeymapGroup[])
 ---@field dispose fun(view: AtlasDiffView)
 
----@class AtlasDiffSession
+---@class AtlasDiffUI
 ---@field id string|nil
----@field data AtlasDiffResult
+---@field session AtlasDiffSession
+---@field options AtlasPullsDiffConfig
 ---@field renderer AtlasDiffRenderer
 ---@field view AtlasDiffView
 ---@field explorer AtlasDiffExplorer
 ---@field commits { buf: integer, win?: integer, shown: boolean, items: PullsCommit[], cursor_row: integer, group: integer }
 ---@field review_panel AtlasDiffReviewPanel
----@field reviewed_files table<string, boolean>
----@field requests table<string, AtlasRequestScope>
 ---@field statusline AtlasStatusline
 ---@field group integer|nil
----@field closed boolean
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param name string
 ---@param reason string|nil
-local function emit_event(session, name, reason)
-	local result = session.data
-	local file = session.view.current_file
+local function emit_event(ui, name, reason)
+	local session = ui.session
+	local file = ui.view.current_file
 	events.emit(name, {
-		session_id = session.id,
-		viewer = renderers[result.options.open_cmd]:match("[^.]+$"),
-		tabpage = session.view.tabpage,
-		root = result.root,
-		base_revision = result.base_revision,
-		head_revision = result.head_revision,
+		session_id = ui.id,
+		viewer = renderers[ui.options.open_cmd]:match("[^.]+$"),
+		tabpage = ui.view.tabpage,
+		root = session.range.root,
+		base_revision = session.range.base_revision,
+		head_revision = session.range.head_revision,
 		path = file and file.path,
 		status = file and file.status,
 		reason = reason,
@@ -100,9 +98,10 @@ local function close_tab(tabpage)
 	vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(tabpage) } })
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param command string
 ---@return boolean, string|nil
-local function open_command(result)
+local function open_command(session, command)
 	vim.cmd.tabnew()
 	local tabpage = vim.api.nvim_get_current_tabpage()
 
@@ -115,10 +114,10 @@ local function open_command(result)
 		vim.wo.statuscolumn = vim.go.statuscolumn
 		vim.wo.winbar = vim.go.winbar
 
-		vim.cmd.tcd(vim.fn.fnameescape(result.root))
+		vim.cmd.tcd(vim.fn.fnameescape(session.range.root))
 		vim.api.nvim_cmd({
-			cmd = result.options.open_cmd,
-			args = { result.base_revision .. "..." .. result.head_revision },
+			cmd = command,
+			args = { session.range.base_revision .. "..." .. session.range.head_revision },
 		}, {})
 	end)
 
@@ -132,79 +131,75 @@ local function open_command(result)
 		return false, err
 	end
 
-	result.release()
+	diff_session.close(session)
 	return true
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param reason string|nil
-local function close(session, reason)
-	if session.closed then
+local function close(ui, reason)
+	if ui.session.closed then
 		return
 	end
 
-	session.closed = true
-	for _, pending in pairs(session.requests) do
-		pending.cancel()
+	if ui.group then
+		vim.api.nvim_del_augroup_by_id(ui.group)
 	end
 
-	if session.group then
-		vim.api.nvim_del_augroup_by_id(session.group)
+	annotations.close(ui.view.tabpage)
+	ui.statusline:dispose()
+	if vim.api.nvim_tabpage_is_valid(ui.view.tabpage) then
+		close_tab(ui.view.tabpage)
+	end
+	ui.renderer.dispose(ui.view)
+
+	if ui.commits then
+		commits.dispose(ui.commits)
+	end
+	if ui.review_panel then
+		review_panel.dispose(ui.review_panel)
+	end
+	if ui.explorer then
+		explorer.dispose(ui.explorer)
 	end
 
-	annotations.close(session.view.tabpage)
-	session.statusline:dispose()
-	if vim.api.nvim_tabpage_is_valid(session.view.tabpage) then
-		close_tab(session.view.tabpage)
-	end
-	session.renderer.dispose(session.view)
+	diff_session.close(ui.session)
 
-	if session.commits then
-		commits.dispose(session.commits)
-	end
-	if session.review_panel then
-		review_panel.dispose(session.review_panel)
-	end
-	if session.explorer then
-		explorer.dispose(session.explorer)
-	end
-
-	session.data.release()
-
-	if not session.id then
+	if not ui.id then
 		return
 	end
 
-	emit_event(session, "AtlasDiffClosed", reason or "viewer_closed")
+	emit_event(ui, "AtlasDiffClosed", reason or "viewer_closed")
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param file AtlasDiffFile
 ---@param focus boolean|nil
 ---@param on_done (fun())|nil
-local function select_file(session, file, focus, on_done)
+local function select_file(ui, file, focus, on_done)
+	local session = ui.session
 	if session.closed then
 		return
 	end
 
-	explorer.reveal(session.explorer, file)
-	session.renderer.show_file(session.view, file, function(err)
+	explorer.reveal(ui.explorer, file)
+	ui.renderer.show_file(ui.view, file, function(err)
 		if err then
 			logger.logerror("diff.show_file failed", {
-				command = session.data.options.open_cmd,
-				root = session.data.root,
-				base = session.data.base_revision,
-				head = session.data.head_revision,
+				command = ui.options.open_cmd,
+				root = session.range.root,
+				base = session.range.base_revision,
+				head = session.range.head_revision,
 				path = file.path,
 				error = err,
 			})
 			notify.error("Unable to open " .. file.path .. "\n\n" .. err, { vim_notify = true })
-			explorer.reveal(session.explorer, session.view.current_file)
+			explorer.reveal(ui.explorer, ui.view.current_file)
 			return
 		end
 
-		if focus and vim.api.nvim_get_current_win() == session.explorer.win then
-			vim.api.nvim_set_current_win(session.view.right.win)
+		if focus and vim.api.nvim_get_current_win() == ui.explorer.win then
+			vim.api.nvim_set_current_win(ui.view.right.win)
 		end
 		if on_done then
 			on_done()
@@ -212,64 +207,59 @@ local function select_file(session, file, focus, on_done)
 	end)
 end
 
----@param session AtlasDiffSession
-local function update_panels(session)
-	local result = session.data
-	explorer.update(
-		session.explorer,
-		result.review and session.reviewed_files,
-		result.review and result.review.data,
-		result.notes and result.notes.items
-	)
-	review_panel.render(session.review_panel)
-	diff_statusline.update(session)
+---@param ui AtlasDiffUI
+local function update_panels(ui)
+	local session = ui.session
+	explorer.update(ui.explorer, session.reviewed_files, session.review, session.notes and session.notes.items)
+	review_panel.render(ui.review_panel)
+	diff_statusline.update(ui)
 end
 
----@param session AtlasDiffSession
-local function update_review(session)
-	session.renderer.redraw(session.view)
-	update_panels(session)
+---@param ui AtlasDiffUI
+local function update_review(ui)
+	ui.renderer.redraw(ui.view)
+	update_panels(ui)
 end
 
----@param session AtlasDiffSession
-local function show_details(session)
-	local file = session.view.current_file
-	local items = annotations.at_cursor(session.view)
+---@param ui AtlasDiffUI
+local function show_details(ui)
+	local file = ui.view.current_file
+	local items = annotations.at_cursor(ui.view)
 	if not file or not items then
 		vim.lsp.buf.hover()
 		return
 	end
 
-	annotations.open(session.view.tabpage, session.data, file.path, items, function(action, target, on_submit)
+	annotations.open(ui.view.tabpage, ui.session.source.pr, file.path, items, function(action, target, on_submit)
 		---@type AtlasDiffActionContext
 		local context = {
-			session = session,
+			session = ui.session,
 			comment = target.comment,
 			note = target.note,
 			pending = target.pending,
 			on_submit = on_submit,
 		}
 		actions.dispatch(action, context, function()
-			update_review(session)
+			update_review(ui)
 		end)
 	end)
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param action "delete_comment"|"toggle_resolved"
-local function dispatch_annotation(session, action)
-	local items = annotations.at_cursor(session.view)
+local function dispatch_annotation(ui, action)
+	local items = annotations.at_cursor(ui.view)
 	if not items or #items == 0 then
 		return
 	end
 	if #items > 1 then
-		show_details(session)
+		show_details(ui)
 		return
 	end
 
 	local item = items[1]
 	---@type AtlasDiffActionContext
-	local context = { session = session }
+	local context = { session = ui.session }
 	---@type AtlasReviewActionId
 	local selected_action = action
 	if item.note then
@@ -283,26 +273,27 @@ local function dispatch_annotation(session, action)
 	end
 
 	actions.dispatch(selected_action, context, function()
-		update_review(session)
+		update_review(ui)
 	end)
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param direction 1|-1
 ---@param unreviewed_only boolean|nil
-local function navigate_file(session, direction, unreviewed_only)
-	local files = session.explorer.files
+local function navigate_file(ui, direction, unreviewed_only)
+	local files = ui.explorer.files
 	if #files == 0 then
 		return
 	end
 
-	local position = explorer.current_index(session.explorer) or 1
+	local position = explorer.current_index(ui.explorer) or 1
 	local steps = unreviewed_only and #files - 1 or 1
+	local reviewed_files = ui.session.reviewed_files or {}
 
 	for offset = 1, steps do
 		local file = files[((position - 1 + direction * offset) % #files) + 1]
-		if not unreviewed_only or not session.reviewed_files[file.path] then
-			select_file(session, file)
+		if not unreviewed_only or not reviewed_files[file.path] then
+			select_file(ui, file)
 			return
 		end
 	end
@@ -310,18 +301,18 @@ local function navigate_file(session, direction, unreviewed_only)
 	notify.info("No other unreviewed files")
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param direction 1|-1
 ---@param kind AtlasDiffAnnotationKind
-local function navigate_annotation(session, direction, kind)
-	if session.renderer.navigate_annotation(session.view, direction, kind) then
+local function navigate_annotation(ui, direction, kind)
+	if ui.renderer.navigate_annotation(ui.view, direction, kind) then
 		return
 	end
 
-	local files = session.explorer.files
+	local files = ui.explorer.files
 	local index = direction == 1 and 0 or 1
 	for position, file in ipairs(files) do
-		if file == session.view.current_file then
+		if file == ui.view.current_file then
 			index = position
 			break
 		end
@@ -329,95 +320,52 @@ local function navigate_annotation(session, direction, kind)
 
 	for offset = 1, #files do
 		local file = files[((index - 1 + direction * offset) % #files) + 1]
-		local items = annotations.for_file(session.data, file)
+		local items = annotations.for_file(ui.session, file)
 		if vim.iter(items):any(function(item)
 			return annotations.is_kind(item, kind)
 		end) then
-			select_file(session, file, nil, function()
-				session.renderer.navigate_annotation(session.view, direction, kind, true)
+			select_file(ui, file, nil, function()
+				ui.renderer.navigate_annotation(ui.view, direction, kind, true)
 			end)
 			return
 		end
 	end
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@return AtlasDiffFile|nil
-local function current_file(session)
-	if vim.api.nvim_get_current_buf() == session.explorer.buf then
-		return explorer.current_file(session.explorer)
+local function current_file(ui)
+	if vim.api.nvim_get_current_buf() == ui.explorer.buf then
+		return explorer.current_file(ui.explorer)
 	end
-	return session.view.current_file
+	return ui.view.current_file
 end
 
----@param session AtlasDiffSession
----@param files AtlasDiffFile[]
----@param reviewed boolean
-local function save_reviewed(session, files, reviewed)
-	local paths = {}
-	for _, file in ipairs(files) do
-		session.reviewed_files[file.path] = reviewed or nil
-		paths[#paths + 1] = file.path
-	end
-
-	local pr = session.data.pr
-	---@cast pr PullRequest
-	local provider = providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider
-	local reviews = provider.capabilities.reviews
-	if not reviews or not reviews.set_files_reviewed then
+---@param ui AtlasDiffUI
+local function toggle_file_reviewed(ui)
+	local session = ui.session
+	local reviewed_files = session.reviewed_files
+	if not reviewed_files then
 		return
 	end
 
-	local pending = request_scope.new()
-	for _, path in ipairs(paths) do
-		session.requests[path] = pending
-	end
-	pending.run(function(done)
-		return reviews.set_files_reviewed(pr, paths, reviewed, done)
-	end, function(ok, err)
-		for _, path in ipairs(paths) do
-			session.requests[path] = nil
-		end
-		if ok then
-			return
-		end
-
-		logger.logerror("diff.set_files_reviewed failed", {
-			provider = pr.provider,
-			repo = pr.repo_full_name,
-			pr_id = pr.id,
-			paths = paths,
-			error = err,
-		})
-		local message = "Unable to update reviewed files" .. (err and "\n\n" .. err or "")
-		notify.error(message, { vim_notify = true })
-	end)
-end
-
----@param session AtlasDiffSession
-local function toggle_file_reviewed(session)
-	if not session.data.review then
-		return
-	end
-
-	if vim.api.nvim_get_current_buf() == session.explorer.buf then
+	if vim.api.nvim_get_current_buf() == ui.explorer.buf then
 		local files = vim.tbl_filter(function(file)
-			return not session.requests[file.path]
-		end, explorer.files_under_cursor(session.explorer))
+			return not session.reviewed_requests[file.path]
+		end, explorer.files_under_cursor(ui.explorer))
 		if #files > 0 then
-			save_reviewed(session, files, not session.reviewed_files[files[1].path])
-			update_panels(session)
+			diff_session.set_reviewed(session, files, not reviewed_files[files[1].path])
+			update_panels(ui)
 			return
 		end
 	end
 
-	local file = current_file(session)
-	if not file or session.requests[file.path] then
+	local file = current_file(ui)
+	if not file or session.reviewed_requests[file.path] then
 		return
 	end
 
-	local files = session.explorer.files
+	local files = ui.explorer.files
 	local next_file
 	for index, item in ipairs(files) do
 		if item == file then
@@ -426,116 +374,116 @@ local function toggle_file_reviewed(session)
 		end
 	end
 
-	save_reviewed(session, { file }, not session.reviewed_files[file.path])
-	update_panels(session)
+	diff_session.set_reviewed(session, { file }, not reviewed_files[file.path])
+	update_panels(ui)
 
 	if next_file and next_file ~= file then
-		select_file(session, next_file)
+		select_file(ui, next_file)
 	else
-		explorer.reveal(session.explorer, file)
+		explorer.reveal(ui.explorer, file)
 	end
 end
 
----@param session AtlasDiffSession
-local function find_file(session)
+---@param ui AtlasDiffUI
+local function find_file(ui)
 	picker.select({
 		title = "Changed files",
-		items = session.explorer.files,
-		initial_index = explorer.current_index(session.explorer),
+		items = ui.explorer.files,
+		initial_index = explorer.current_index(ui.explorer),
 		format_item = function(file)
 			return file.path
 		end,
 		on_select = function(file)
 			if file then
-				select_file(session, file)
+				select_file(ui, file)
 			end
 		end,
 	})
 end
 
----@param session AtlasDiffSession
-local function resize(session)
+---@param ui AtlasDiffUI
+local function resize(ui)
 	-- Closing the whole tab also queues the review panel's resize callback.
-	if not vim.api.nvim_win_is_valid(session.view.right.win) then
+	if not vim.api.nvim_win_is_valid(ui.view.right.win) then
 		return
 	end
 
-	explorer.resize(session.explorer)
-	commits.resize(session.commits, session.explorer.win)
-	session.renderer.resize(session.view)
+	explorer.resize(ui.explorer)
+	commits.resize(ui.commits, ui.explorer.win)
+	ui.renderer.resize(ui.view)
 end
 
----@param session AtlasDiffSession
-local function focus_explorer(session)
-	if not session.explorer.win then
-		local win = explorer.toggle(session.explorer)
-		session.statusline:attach(win)
-		resize(session)
+---@param ui AtlasDiffUI
+local function focus_explorer(ui)
+	if not ui.explorer.win then
+		local win = explorer.toggle(ui.explorer)
+		ui.statusline:attach(win)
+		resize(ui)
 	end
 
-	vim.api.nvim_set_current_win(session.explorer.win)
+	vim.api.nvim_set_current_win(ui.explorer.win)
 end
 
----@param session AtlasDiffSession
-local function toggle_explorer(session)
-	if session.explorer.win then
-		commits.close(session.commits)
+---@param ui AtlasDiffUI
+local function toggle_explorer(ui)
+	if ui.explorer.win then
+		commits.close(ui.commits)
 	end
 
-	local win = explorer.toggle(session.explorer)
+	local win = explorer.toggle(ui.explorer)
 	if win then
-		session.statusline:attach(win)
-		if session.commits.shown then
-			local commits_win = commits.open(session.commits, win)
-			session.statusline:attach(commits_win)
+		ui.statusline:attach(win)
+		if ui.commits.shown then
+			local commits_win = commits.open(ui.commits, win)
+			ui.statusline:attach(commits_win)
 		end
 	end
-	resize(session)
+	resize(ui)
 end
 
----@param session AtlasDiffSession
-local function toggle_commits(session)
-	if session.commits.win then
-		session.commits.shown = false
-		commits.close(session.commits)
+---@param ui AtlasDiffUI
+local function toggle_commits(ui)
+	if ui.commits.win then
+		ui.commits.shown = false
+		commits.close(ui.commits)
 		return
 	end
 
-	if not session.explorer.win and #session.commits.items > 0 then
-		local win = explorer.toggle(session.explorer)
-		session.statusline:attach(win)
-		resize(session)
+	if not ui.explorer.win and #ui.commits.items > 0 then
+		local win = explorer.toggle(ui.explorer)
+		ui.statusline:attach(win)
+		resize(ui)
 	end
 
-	local win, err = commits.open(session.commits, session.explorer.win)
+	local win, err = commits.open(ui.commits, ui.explorer.win)
 	if not win then
 		---@cast err string
 		notify.info(err)
 		return
 	end
 
-	session.commits.shown = true
-	session.statusline:attach(win)
+	ui.commits.shown = true
+	ui.statusline:attach(win)
 	vim.api.nvim_set_current_win(win)
 end
 
----@param session AtlasDiffSession
-local function toggle_review_panel(session)
-	local panel = session.review_panel
+---@param ui AtlasDiffUI
+local function toggle_review_panel(ui)
+	local panel = ui.review_panel
 	if panel.win then
 		review_panel.close(panel)
 		return
 	end
 
 	local win = review_panel.open(panel)
-	session.statusline:attach(win)
+	ui.statusline:attach(win)
 	vim.api.nvim_set_current_win(win)
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param entry AtlasDiffReviewPanelRow
 ---@param focus boolean
-local function open_review_item(session, entry, focus)
+local function open_review_item(ui, entry, focus)
 	local comment = entry.thread_root or entry.comment
 	local position = comment and (comment.file or comment.inline)
 	local path = entry.note and entry.note.file_path or position and position.path
@@ -543,7 +491,7 @@ local function open_review_item(session, entry, focus)
 		return
 	end
 
-	local file = vim.iter(session.data.files):find(function(item)
+	local file = vim.iter(ui.session.files):find(function(item)
 		return item.path == path or item.old_path == path
 	end)
 	if not file then
@@ -551,124 +499,111 @@ local function open_review_item(session, entry, focus)
 		return
 	end
 
-	select_file(session, file, false, function()
+	select_file(ui, file, false, function()
 		if focus then
-			vim.api.nvim_set_current_win(session.view.right.win)
+			vim.api.nvim_set_current_win(ui.view.right.win)
 		end
-		annotations.jump(session.view, { comment = comment, note = entry.note }, focus)
+		annotations.jump(ui.view, { comment = comment, note = entry.note }, focus)
 	end)
 end
 
----@param session AtlasDiffSession
-local function setup_autocmds(session)
-	local view = session.view
-	session.group = vim.api.nvim_create_augroup("AtlasDiff" .. view.tabpage, { clear = true })
+---@param ui AtlasDiffUI
+local function setup_autocmds(ui)
+	local view = ui.view
+	ui.group = vim.api.nvim_create_augroup("AtlasDiff" .. view.tabpage, { clear = true })
 
 	vim.api.nvim_create_autocmd({ "LspAttach", "LspDetach" }, {
-		group = session.group,
+		group = ui.group,
 		-- Let Neovim finish updating the buffer's attached clients.
 		callback = vim.schedule_wrap(function(event)
-			if not session.closed and event.buf == view.right.buf then
-				diff_statusline.update(session)
+			if not ui.session.closed and event.buf == view.right.buf then
+				diff_statusline.update(ui)
 			end
 		end),
 	})
 
 	vim.api.nvim_create_autocmd("VimResized", {
-		group = session.group,
+		group = ui.group,
 		callback = function()
-			review_panel.resize(session.review_panel)
-			resize(session)
+			review_panel.resize(ui.review_panel)
+			resize(ui)
 		end,
 	})
 
 	vim.api.nvim_create_autocmd("TabClosed", {
-		group = session.group,
+		group = ui.group,
 		callback = function()
 			if not vim.api.nvim_tabpage_is_valid(view.tabpage) then
-				close(session, "tab_closed")
+				close(ui, "tab_closed")
 			end
 		end,
 	})
 
 	vim.api.nvim_create_autocmd("WinClosed", {
-		group = session.group,
+		group = ui.group,
 		callback = vim.schedule_wrap(function(event)
 			local win = tonumber(event.match)
 			if win == view.right.win or win == view.left.win then
-				close(session, "window_closed")
+				close(ui, "window_closed")
 				return
 			end
-			if not session.explorer.win and session.commits.win then
-				commits.close(session.commits)
+			if not ui.explorer.win and ui.commits.win then
+				commits.close(ui.commits)
 			end
 		end),
 	})
 end
 
----@param session AtlasDiffSession
-local function setup_keymaps(session)
-	local result = session.data
-	local view = session.view
+---@param ui AtlasDiffUI
+local function setup_keymaps(ui)
+	local session = ui.session
+	local view = ui.view
 	local function on_review_updated()
-		update_review(session)
+		update_review(ui)
 	end
 
-	keymaps.setup(session, {
+	keymaps.setup(ui, {
 		close = function()
-			close(session, "user_close")
+			close(ui, "user_close")
 		end,
 		reload = function()
-			local diff = require("atlas.pulls.diff")
-			if result.pr then
-				diff.open_pr({
-					provider = result.pr.provider,
-					repo_full_name = result.pr.repo_full_name,
-					id = result.pr.id,
-					root = result.root,
-				})
-			elseif result.kind == "commit" then
-				diff.open_commit({ commit = result.head_ref, root = result.root })
-			else
-				diff.open_range({ base = result.base_ref, head = result.head_ref, root = result.root })
-			end
-
-			close(session, "refresh")
+			require("atlas.pulls.diff").reopen(session)
+			close(ui, "refresh")
 		end,
 		toggle_explorer = function()
-			toggle_explorer(session)
+			toggle_explorer(ui)
 		end,
 		toggle_commits = function()
-			toggle_commits(session)
+			toggle_commits(ui)
 		end,
 		toggle_review_panel = function()
-			toggle_review_panel(session)
+			toggle_review_panel(ui)
 		end,
 		toggle_file_reviewed = function()
-			toggle_file_reviewed(session)
+			toggle_file_reviewed(ui)
 		end,
 		toggle_resolved = function()
-			dispatch_annotation(session, "toggle_resolved")
+			dispatch_annotation(ui, "toggle_resolved")
 		end,
 		delete_annotation = function()
-			dispatch_annotation(session, "delete_comment")
+			dispatch_annotation(ui, "delete_comment")
 		end,
 		toggle_comments = function()
-			local options = result.options
+			local options = ui.options
 			options.comment_display = options.comment_display == "virtual_lines" and "virtual_text" or "virtual_lines"
-			session.renderer.redraw(view)
+			ui.renderer.redraw(view)
 		end,
 		toggle_threads = function(all)
 			if not annotations.toggle_threads(view, all) then
 				return false
 			end
 
-			session.renderer.redraw(view)
+			ui.renderer.redraw(view)
 			return true
 		end,
 		add_comment = function(pending, suggestion)
-			if vim.api.nvim_get_current_buf() == session.explorer.buf then
-				local file = explorer.current_file(session.explorer)
+			if vim.api.nvim_get_current_buf() == ui.explorer.buf then
+				local file = explorer.current_file(ui.explorer)
 				if file then
 					actions.dispatch("add_comment", {
 						session = session,
@@ -679,7 +614,7 @@ local function setup_keymaps(session)
 				return
 			end
 
-			local selection, err = session.renderer.get_selection(view)
+			local selection, err = ui.renderer.get_selection(view)
 			if not selection then
 				if err then
 					notify.info(err)
@@ -695,7 +630,7 @@ local function setup_keymaps(session)
 			}, on_review_updated)
 		end,
 		add_note = function()
-			local selection, err = session.renderer.get_selection(view)
+			local selection, err = ui.renderer.get_selection(view)
 			if not selection then
 				if err then
 					notify.info(err)
@@ -706,7 +641,7 @@ local function setup_keymaps(session)
 			actions.dispatch("add_note", { session = session, selection = selection }, on_review_updated)
 		end,
 		navigate_annotation = function(direction, kind)
-			navigate_annotation(session, direction, kind)
+			navigate_annotation(ui, direction, kind)
 		end,
 		dispatch = function(id)
 			actions.dispatch(id, { session = session }, on_review_updated)
@@ -714,19 +649,29 @@ local function setup_keymaps(session)
 		run_custom = function(callback)
 			return actions.run_custom(callback, { session = session }, on_review_updated)
 		end,
+		open_in_browser = function()
+			local annotation = vim.iter(annotations.at_cursor(view) or {}):find(function(item)
+				local url = item.thread and item.thread.comment.url
+				return url ~= nil and url ~= ""
+			end)
+			actions.dispatch(
+				"open_in_browser",
+				{ session = session, comment = annotation and annotation.thread.comment }
+			)
+		end,
 		navigate_file = function(direction, unreviewed_only)
-			navigate_file(session, direction, unreviewed_only)
+			navigate_file(ui, direction, unreviewed_only)
 		end,
 		find_file = function()
-			find_file(session)
+			find_file(ui)
 		end,
 		open_file = function()
-			local file = current_file(session)
+			local file = current_file(ui)
 			if not file then
 				return
 			end
 
-			local path = vim.fs.joinpath(result.root, file.path)
+			local path = vim.fs.joinpath(session.range.root, file.path)
 			if vim.fn.filereadable(path) ~= 1 then
 				notify.warn("File not found")
 				return
@@ -741,63 +686,65 @@ local function setup_keymaps(session)
 			options.winhighlight = vim.go.winhighlight
 		end,
 		open_commit = function()
-			local commit = commits.current(session.commits)
+			local commit = commits.current(ui.commits)
 			if not commit then
 				return
 			end
 
-			require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = result.root })
+			require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = session.range.root })
 		end,
 		focus_explorer = function()
-			focus_explorer(session)
+			focus_explorer(ui)
 		end,
 	})
-end
-
----@param result AtlasDiffResult
----@param err any
-local function fallback(result, err)
-	local command = result.options.open_cmd
-	logger.logwarn("diff.open fallback", {
-		command = command,
-		kind = result.kind,
-		provider = result.pr and result.pr.provider,
-		repo = result.pr and result.pr.repo_full_name,
-		pr_id = result.pr and result.pr.id,
-		root = result.root,
-		base = result.base_revision,
-		head = result.head_revision,
-		error = tostring(err),
-	})
-	notify.warn(command .. " failed to open. Opening Atlas instead.", { vim_notify = true })
-	result.options.open_cmd = "AtlasDiff"
 end
 
 ---@param session AtlasDiffSession
+---@param options AtlasPullsDiffConfig
+---@param err any
+local function fallback(session, options, err)
+	local command = options.open_cmd
+	local pr = session.source.pr
+	logger.logwarn("diff.open fallback", {
+		command = command,
+		provider = pr and pr.provider,
+		repo = pr and pr.repo_full_name,
+		pr_id = pr and pr.id,
+		root = session.range.root,
+		base = session.range.base_revision,
+		head = session.range.head_revision,
+		error = tostring(err),
+	})
+	notify.warn(command .. " failed to open. Opening Atlas instead.", { vim_notify = true })
+	options.open_cmd = "AtlasDiff"
+end
+
+---@param ui AtlasDiffUI
 ---@param module string
-local function open_view(session, module)
-	local result = session.data
+local function open_view(ui, module)
+	local session = ui.session
+	local options = ui.options
 	local callbacks = {
 		on_file = function(file)
-			local changed = session.view.current_file ~= file
-			session.view.current_file = file
-			winbar.update(session.view)
-			diff_statusline.update(session)
-			if session.explorer.selected ~= file then
-				explorer.reveal(session.explorer, file)
+			local changed = ui.view.current_file ~= file
+			ui.view.current_file = file
+			winbar.update(ui.view)
+			diff_statusline.update(ui)
+			if ui.explorer.selected ~= file then
+				explorer.reveal(ui.explorer, file)
 			end
 
-			setup_keymaps(session)
-			for _, pane in pairs({ session.view.left, session.view.right }) do
-				session.statusline:attach(pane.win)
+			setup_keymaps(ui)
+			for _, pane in pairs({ ui.view.left, ui.view.right }) do
+				ui.statusline:attach(pane.win)
 			end
 
-			if changed and session.id then
-				emit_event(session, "AtlasDiffFileChanged")
+			if changed and ui.id then
+				emit_event(ui, "AtlasDiffFileChanged")
 			end
 		end,
 		show_details = function()
-			show_details(session)
+			show_details(ui)
 		end,
 	}
 
@@ -805,39 +752,40 @@ local function open_view(session, module)
 	local renderer
 	local view_opened, view = pcall(function()
 		renderer = require(module)
-		return renderer.open(result, callbacks)
+		return renderer.open(session, options, callbacks)
 	end)
 
 	if not view_opened then
-		if result.options.open_cmd == "AtlasDiff" then
+		if options.open_cmd == "AtlasDiff" then
 			error(view, 0)
 		end
 
-		fallback(result, view)
+		fallback(session, options, view)
 		renderer = atlas
-		view = renderer.open(result, callbacks)
+		view = renderer.open(session, options, callbacks)
 	end
 
-	session.renderer = renderer
-	session.view = view
+	ui.renderer = renderer
+	ui.view = view
 end
 
----@param session AtlasDiffSession
-local function setup_ui(session)
-	local result = session.data
-	local view = session.view
-	local explorer_options = result.options.explorer
+---@param ui AtlasDiffUI
+local function setup_ui(ui)
+	local session = ui.session
+	local options = ui.options
+	local view = ui.view
+	local explorer_options = options.explorer
 	---@cast explorer_options AtlasPullsDiffExplorerConfig
 
-	vim.cmd.tcd(vim.fn.fnameescape(result.root))
+	vim.cmd.tcd(vim.fn.fnameescape(session.range.root))
 
-	session.commits = commits.create(result.commits, explorer_options.show_commits)
-	session.review_panel = review_panel.create(result, {
+	ui.commits = commits.create(session.commits, explorer_options.show_commits)
+	ui.review_panel = review_panel.create(session, options.review_panel, {
 		on_resize = function()
-			resize(session)
+			resize(ui)
 		end,
 		on_select = function(entry, focus)
-			open_review_item(session, entry, focus)
+			open_review_item(ui, entry, focus)
 		end,
 		on_action = function(id, target)
 			actions.dispatch(id, {
@@ -847,87 +795,84 @@ local function setup_ui(session)
 				review_entry = target.review_entry,
 				pending = target.pending,
 			}, function()
-				update_review(session)
+				update_review(ui)
 			end)
 		end,
 	})
-	session.explorer = explorer.create({
-		files = result.files,
+	ui.explorer = explorer.create({
+		files = session.files,
 		options = explorer_options,
-		reviewed_files = result.review and session.reviewed_files,
-		review_data = result.review and result.review.data,
-		notes = result.notes and result.notes.items,
+		reviewed_files = session.reviewed_files,
+		review_data = session.review,
+		notes = session.notes and session.notes.items,
 		on_select = function(file, focus)
-			select_file(session, file, focus)
+			select_file(ui, file, focus)
 		end,
 	})
 
-	if result.pr and not result.options.review_panel.hidden then
-		review_panel.open(session.review_panel)
+	if session.source.kind == "pr" and not options.review_panel.hidden then
+		review_panel.open(ui.review_panel)
 	end
-	if session.commits.shown and session.explorer.win then
-		commits.open(session.commits, session.explorer.win)
+	if ui.commits.shown and ui.explorer.win then
+		commits.open(ui.commits, ui.explorer.win)
 	end
-	resize(session)
+	resize(ui)
 
-	setup_autocmds(session)
-	setup_keymaps(session)
+	setup_autocmds(ui)
+	setup_keymaps(ui)
 
-	diff_statusline.update(session)
-	for _, pane in pairs({ view.left, view.right, session.explorer, session.commits, session.review_panel }) do
-		session.statusline:attach(pane.win)
+	diff_statusline.update(ui)
+	for _, pane in pairs({ view.left, view.right, ui.explorer, ui.commits, ui.review_panel }) do
+		ui.statusline:attach(pane.win)
 	end
 
-	local focus_win = explorer_options.initial_focus == "explorer" and session.explorer.win or view.right.win
+	local focus_win = explorer_options.initial_focus == "explorer" and ui.explorer.win or view.right.win
 	vim.api.nvim_set_current_win(focus_win)
 
-	local first = session.explorer.files[1]
+	local first = ui.explorer.files[1]
 	if first then
-		select_file(session, first)
+		select_file(ui, first)
 	end
 end
 
----@param result AtlasDiffResult
----@return AtlasDiffSession|nil
-function M.open(result)
-	local module = renderers[result.options.open_cmd]
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffConfig
+---@return AtlasDiffUI|nil
+function M.open(session, options)
+	local module = renderers[options.open_cmd]
 	if not module then
-		local opened, err = open_command(result)
+		local opened, err = open_command(session, options.open_cmd)
 		if opened then
 			return
 		end
 
-		fallback(result, err)
+		fallback(session, options, err)
 		module = renderers.AtlasDiff
 	end
 
-	local review_context = result.review and result.review.context
-	local session = {
-		data = result,
+	local ui = {
+		session = session,
+		options = options,
 		statusline = statusline.new({ context = "diff" }),
-		reviewed_files = vim.deepcopy(review_context and review_context.reviewed_files or {}),
-		requests = {},
-		closed = false,
 	}
-	---@cast session AtlasDiffSession
+	---@cast ui AtlasDiffUI
 
-	open_view(session, module)
+	open_view(ui, module)
 
-	local opened, err = pcall(setup_ui, session)
+	local opened, err = pcall(setup_ui, ui)
 	if not opened then
-		close(session)
+		close(ui)
 		error(err, 0)
 	end
 
-	local viewer = renderers[result.options.open_cmd]:match("[^.]+$")
-	session.id = events.new_id(viewer)
-	emit_event(session, "AtlasDiffOpened")
+	ui.id = events.new_id(renderers[options.open_cmd]:match("[^.]+$"))
+	emit_event(ui, "AtlasDiffOpened")
 	-- The first file may already be loaded during setup.
-	if session.view.current_file then
-		emit_event(session, "AtlasDiffFileChanged")
+	if ui.view.current_file then
+		emit_event(ui, "AtlasDiffFileChanged")
 	end
 
-	return session
+	return ui
 end
 
 return M

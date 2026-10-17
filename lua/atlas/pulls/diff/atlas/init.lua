@@ -147,7 +147,7 @@ end
 local function owns_buffer(view, buf)
 	return buf == view.left.buf
 		or buf == view.revision_buf
-		or worktree.relative_path(view.result.worktree_root, vim.api.nvim_buf_get_name(buf)) ~= nil
+		or worktree.relative_path(view.session.worktree_root, vim.api.nvim_buf_get_name(buf)) ~= nil
 end
 
 local function set_right_buffer(view, buf)
@@ -181,14 +181,14 @@ local function display(view, document)
 	local old, new = document.contents.old, document.contents.new
 	local binary = document.binary
 	local right_content = new
-	local right_revision = view.result.head_revision
+	local right_revision = view.session.range.head_revision
 	if file.status == "deleted" and not binary then
 		right_content = old
-		right_revision = view.result.base_revision
+		right_revision = view.session.range.base_revision
 	end
 
 	local right_buf = view.revision_buf
-	local root = view.result.worktree_root
+	local root = view.session.worktree_root
 	if root and not binary and file.status ~= "deleted" then
 		right_buf = worktree.load(root, file.path) or right_buf
 	end
@@ -199,7 +199,7 @@ local function display(view, document)
 
 	if view.left.win then
 		local old_path = file.old_path or file.path
-		set_content(view, view.left.buf, old, old_path, view.result.base_revision, binary)
+		set_content(view, view.left.buf, old, old_path, view.session.range.base_revision, binary)
 	end
 
 	render.render(view, document)
@@ -210,7 +210,7 @@ end
 ---@param file AtlasDiffFile
 ---@param on_done fun(err?: string)
 local function show_file(view, file, on_done)
-	local result = view.result
+	local session = view.session
 	annotation_ui.close(view.tabpage)
 	view.requests.cancel()
 	view.requests = requests.new()
@@ -221,13 +221,13 @@ local function show_file(view, file, on_done)
 				done("", nil)
 				return
 			end
-			return git.read(result.root, revision, path, done)
+			return git.read(session.range.root, revision, path, done)
 		end
 	end
 
 	view.requests.all({
-		old = read(result.base_revision, file.old_path or file.path, file.status == "added"),
-		new = read(result.head_revision, file.path, file.status == "deleted"),
+		old = read(session.range.base_revision, file.old_path or file.path, file.status == "added"),
+		new = read(session.range.head_revision, file.path, file.status == "deleted"),
 	}, function(contents, errors)
 		local err = errors.old or errors.new
 		if err then
@@ -336,7 +336,7 @@ end
 
 ---@param view AtlasDiffNativeView
 local function toggle_compact(view)
-	view.result.options.compact = not view.result.options.compact
+	view.options.compact = not view.options.compact
 	if view.document then
 		render.compact(view, view.document)
 	end
@@ -416,7 +416,7 @@ local function setup_autocmds(view)
 		group = view.group,
 		callback = function(event)
 			local buf = event.buf
-			local path = worktree.relative_path(view.result.worktree_root, vim.api.nvim_buf_get_name(buf))
+			local path = worktree.relative_path(view.session.worktree_root, vim.api.nvim_buf_get_name(buf))
 			if path and not vim.bo[buf].modified then
 				worktree.protect(buf)
 			end
@@ -434,7 +434,7 @@ local function setup_autocmds(view)
 				end
 
 				local file
-				for _, item in ipairs(view.result.files) do
+				for _, item in ipairs(view.session.files) do
 					if item.path == path then
 						file = item
 						break
@@ -454,7 +454,7 @@ local function setup_autocmds(view)
 					if err then
 						show_plain_file(buf, path)
 						logger.logerror("diff.show_file failed", {
-							root = view.result.root,
+							root = view.session.range.root,
 							path = file.path,
 							error = err,
 						})
@@ -472,10 +472,11 @@ local function setup_autocmds(view)
 	})
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffConfig
 ---@param callbacks AtlasDiffCallbacks
 ---@return AtlasDiffNativeView
-local function open(result, callbacks)
+local function open(session, options, callbacks)
 	vim.cmd.tabnew()
 	local tabpage = vim.api.nvim_get_current_tabpage()
 	local buf = vim.api.nvim_get_current_buf()
@@ -484,9 +485,10 @@ local function open(result, callbacks)
 	---@type AtlasDiffNativeView
 	local view = {
 		tabpage = tabpage,
-		result = result,
+		session = session,
+		options = options,
 		requests = requests.new(),
-		preferred_layout = result.options.layout == "side-by-side" and "side-by-side" or "inline",
+		preferred_layout = options.layout == "side-by-side" and "side-by-side" or "inline",
 		inline_hunk_lines = {},
 		annotations = {},
 		expanded_threads = {},
@@ -525,10 +527,10 @@ local M = {
 		resize(view)
 		redraw(view)
 	end,
-	setup_keymaps = function(session, actions, groups)
-		local view = session.view
+	setup_keymaps = function(ui, actions, groups)
+		local view = ui.view
 		---@cast view AtlasDiffNativeView
-		keymaps.setup(session, actions, groups, {
+		keymaps.setup(ui, actions, groups, {
 			navigate_hunk = function(direction)
 				navigate_hunk(view, direction)
 			end,

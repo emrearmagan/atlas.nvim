@@ -7,7 +7,8 @@ local namespace = vim.api.nvim_create_namespace("atlas.diff.review_panel")
 local filter_labels = { all = "All", unresolved = "Unresolved", mine = "Mine" }
 
 ---@class AtlasDiffReviewPanel
----@field data AtlasDiffResult
+---@field session AtlasDiffSession
+---@field options AtlasPullsDiffReviewPanelConfig
 ---@field buf integer
 ---@field win integer|nil
 ---@field group integer
@@ -34,7 +35,7 @@ function M.render(state)
 		return state.expanded[key]
 	end
 
-	local lines, spans, line_map = renderer.render(state.data, state.filter, vim.api.nvim_win_get_width(state.win), {
+	local lines, spans, line_map = renderer.render(state.session, state.filter, vim.api.nvim_win_get_width(state.win), {
 		reply = key_label("pulls.review.add_comment"),
 		add_task = key_label("pulls.review.add_task"),
 		edit = key_label("ui.comments.edit"),
@@ -61,15 +62,17 @@ function M.render(state)
 	end
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffReviewPanelConfig
 ---@param callbacks { on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: { comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean }), on_resize: fun() }
 ---@return AtlasDiffReviewPanel
-function M.create(result, callbacks)
+function M.create(session, options, callbacks)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Review [%d]", vim.api.nvim_get_current_tabpage()))
 	---@type AtlasDiffReviewPanel
 	local state = {
-		data = result,
+		session = session,
+		options = options,
 		buf = buf,
 		group = vim.api.nvim_create_augroup("AtlasDiffReviewPanel" .. buf, { clear = true }),
 		expanded = {},
@@ -115,7 +118,7 @@ end
 ---@param state AtlasDiffReviewPanel
 ---@return integer
 local function height(state)
-	local configured = math.max(4, math.floor(state.data.options.review_panel.height))
+	local configured = math.max(4, math.floor(state.options.height))
 	return math.min(configured, math.max(4, vim.o.lines - 8))
 end
 

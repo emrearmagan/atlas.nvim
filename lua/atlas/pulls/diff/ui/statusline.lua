@@ -5,26 +5,27 @@ local review_actions = require("atlas.pulls.actions.review")
 local M = {}
 local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥" }
 
----@param session AtlasDiffSession
-function M.update(session)
-	local result = session.data
-	local review_data = result.review and result.review.data
-	local files = session.explorer.files
-	local count = 0
+---@param ui AtlasDiffUI
+function M.update(ui)
+	local session = ui.session
+	local review_data = session.review
+	local reviewed_files = session.reviewed_files
+	local files = ui.explorer.files
 
-	for _, file in ipairs(files) do
-		if session.reviewed_files[file.path] then
-			count = count + 1
-		end
-	end
-
-	local identity = result.pr and string.format("#%s %s", result.pr.id, result.pr.title)
-		or string.format("%s...%s", result.base_revision:sub(1, 8), result.head_revision:sub(1, 8))
+	local pr = session.source.pr
+	local identity = pr and string.format("#%s %s", pr.id, pr.title)
+		or string.format("%s...%s", session.range.base_revision:sub(1, 8), session.range.head_revision:sub(1, 8))
 	local items = {
 		{ text = identity, hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
 	}
 
-	if (result.review or next(session.reviewed_files)) and #files > 0 then
+	if reviewed_files and #files > 0 then
+		local count = 0
+		for _, file in ipairs(files) do
+			if reviewed_files[file.path] then
+				count = count + 1
+			end
+		end
 		items[#items + 1] = {
 			text = string.format("%s %d/%d", review_progress[math.ceil(count / #files * 8) + 1], count, #files),
 			hl_group = count == #files and "AtlasFooterSuccess" or "AtlasFooterInfo",
@@ -32,7 +33,7 @@ function M.update(session)
 		}
 	end
 
-	local client = vim.lsp.get_clients({ bufnr = session.view.right.buf })[1]
+	local client = vim.lsp.get_clients({ bufnr = ui.view.right.buf })[1]
 	if client then
 		items[#items + 1] = {
 			text = string.format("%s %s", icons.get("lsp"), client.name),
@@ -58,7 +59,7 @@ function M.update(session)
 		}
 	end
 
-	local notes = result.notes and result.notes.items or {}
+	local notes = session.notes and session.notes.items or {}
 	if #notes > 0 then
 		items[#items + 1] = {
 			text = string.format("%s %d", icons.get("pin"), #notes),
@@ -87,8 +88,8 @@ function M.update(session)
 	end
 
 	local help_keys = keymaps.resolve("ui.help")
-	session.statusline.options.help_key = help_keys and help_keys[1] or nil
-	session.statusline:set_items(items)
+	ui.statusline.options.help_key = help_keys and help_keys[1] or nil
+	ui.statusline:set_items(items)
 end
 
 return M

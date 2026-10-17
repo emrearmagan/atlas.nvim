@@ -34,12 +34,13 @@ local function update_panes(view)
 		or { buf = view.right.buf }
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffConfig
 ---@param callbacks AtlasDiffCallbacks
 ---@return AtlasDiffDiffviewView
-local function open(result, callbacks)
+local function open(session, options, callbacks)
 	local files = { working = {} }
-	for _, file in ipairs(result.files) do
+	for _, file in ipairs(session.files) do
 		files.working[#files.working + 1] = {
 			path = file.path,
 			oldpath = file.old_path,
@@ -48,9 +49,9 @@ local function open(result, callbacks)
 	end
 
 	local diffview = CDiffView({
-		git_root = result.root,
-		left = GitRev(RevType.COMMIT, result.base_revision),
-		right = GitRev(RevType.COMMIT, result.head_revision),
+		git_root = session.range.root,
+		left = GitRev(RevType.COMMIT, session.range.base_revision),
+		right = GitRev(RevType.COMMIT, session.range.head_revision),
 		files = files,
 		update_files = function()
 			return files
@@ -84,7 +85,8 @@ local function open(result, callbacks)
 	---@type AtlasDiffDiffviewView
 	local view = {
 		tabpage = diffview.tabpage,
-		result = result,
+		session = session,
+		options = options,
 		callbacks = callbacks,
 		diffview = diffview,
 		group = vim.api.nvim_create_augroup("AtlasDiffDiffview" .. diffview.tabpage, { clear = true }),
@@ -115,7 +117,7 @@ local function open(result, callbacks)
 			view.pending_file = nil
 
 			update_panes(view)
-			local file = vim.iter(result.files):find(function(item)
+			local file = vim.iter(session.files):find(function(item)
 				return item.path == entry.path
 			end)
 			local old = table.concat(vim.api.nvim_buf_get_lines(view.left.buf, 0, -1, false), "\n")

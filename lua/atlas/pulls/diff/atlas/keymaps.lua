@@ -22,12 +22,12 @@ local function add(items, action, desc, index, callback)
 	end
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param commands AtlasDiffKeymapActions
 ---@param groups AtlasDiffKeymapGroup[]
 ---@param actions { navigate_hunk: fun(direction: 1|-1), toggle_layout: fun(), toggle_compact: fun() }
-function M.setup(session, commands, groups, actions)
-	local view = session.view
+function M.setup(ui, commands, groups, actions)
+	local view = ui.view
 
 	local navigation_items = {}
 	add(navigation_items, "pulls.review.atlas.prev_file", "Previous file", 10, function()
@@ -54,19 +54,19 @@ function M.setup(session, commands, groups, actions)
 	end)
 	local explorer_items = {}
 	add(explorer_items, "ui.select", "Select file / toggle folder", 1, function()
-		explorer.activate(session.explorer)
+		explorer.activate(ui.explorer)
 	end)
 	add(explorer_items, "pulls.review.show_details", "Show file details", 2, function()
-		explorer.show_details(session.explorer)
+		explorer.show_details(ui.explorer)
 	end)
 	add(explorer_items, "pulls.review.atlas.toggle_view_mode", "Toggle explorer mode", 50, function()
-		explorer.toggle_view_mode(session.explorer)
+		explorer.toggle_view_mode(ui.explorer)
 	end)
 	add(explorer_items, "ui.toggle_fold", "Toggle folder", 51, function()
-		explorer.toggle_folder(session.explorer)
+		explorer.toggle_folder(ui.explorer)
 	end)
 	add(explorer_items, "ui.toggle_all_folds", "Toggle all folders", 52, function()
-		explorer.toggle_all_folders(session.explorer)
+		explorer.toggle_all_folders(ui.explorer)
 	end)
 	local hunk_items = {}
 	add(hunk_items, "pulls.review.atlas.prev_hunk", "Previous hunk", 12, function()
@@ -77,7 +77,7 @@ function M.setup(session, commands, groups, actions)
 	end)
 
 	local thread_items = {}
-	if session.data.pr then
+	if ui.session.source.kind == "pr" then
 		add(thread_items, "ui.toggle_fold", "Toggle review thread / fold", 42, function()
 			if not commands.toggle_threads() and vim.fn.foldlevel(".") > 0 then
 				vim.cmd("normal! za")
@@ -91,20 +91,20 @@ function M.setup(session, commands, groups, actions)
 	end
 
 	for buf, name in pairs({
-		[session.explorer.buf] = "Explorer",
-		[session.commits.buf] = "Commits",
+		[ui.explorer.buf] = "Explorer",
+		[ui.commits.buf] = "Commits",
 		[view.left.buf] = "View",
 		[view.right.buf] = "View",
 	}) do
 		help.register(name, navigation_items, { buffer = buf, index = 1 })
 		help.register(name, layout_items, { buffer = buf })
-		if buf ~= session.commits.buf then
+		if buf ~= ui.commits.buf then
 			help.register(name, file_items, { buffer = buf })
 			help.register(name, close_items, { buffer = buf })
 		end
 	end
 
-	help.register("Explorer", explorer_items, { buffer = session.explorer.buf })
+	help.register("Explorer", explorer_items, { buffer = ui.explorer.buf })
 	for _, pane in pairs({ view.left, view.right }) do
 		help.register("View", hunk_items, { buffer = pane.buf })
 		help.register("Review", thread_items, { buffer = pane.buf, index = 2 })

@@ -23,13 +23,13 @@ local function bind_native(buf, mappings, callbacks)
 	end
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param commands AtlasDiffKeymapActions
 ---@param groups AtlasDiffKeymapGroup[]
-function M.setup(session, commands, groups)
-	local view = session.view
+function M.setup(ui, commands, groups)
+	local view = ui.view
 	---@cast view AtlasDiffDiffviewView
-	local state = session.explorer
+	local state = ui.explorer
 	local native_keys = config.get_config().keymaps
 	local external_help_keys = resolver.resolve("pulls.review.view.external_help")
 
@@ -80,7 +80,7 @@ function M.setup(session, commands, groups)
 		end,
 	})
 
-	if session.data.pr then
+	if ui.session.source.kind == "pr" then
 		for _, mapping in ipairs(diffview_actions.compat.fold_cmds) do
 			local _, command, fold = unpack(mapping)
 			if command == "za" or command == "zA" then
@@ -164,8 +164,8 @@ function M.setup(session, commands, groups)
 		local _, _, action = unpack(mapping)
 		return navigation[action] ~= nil
 	end, native_keys.view)
-	bind_native(session.commits.buf, refresh_keys, navigation)
-	bind_native(session.commits.buf, commits_keys, navigation)
+	bind_native(ui.commits.buf, refresh_keys, navigation)
+	bind_native(ui.commits.buf, commits_keys, navigation)
 
 	for _, pane in pairs({ view.left, view.right }) do
 		if pane.win then

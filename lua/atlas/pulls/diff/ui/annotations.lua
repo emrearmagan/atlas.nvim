@@ -61,12 +61,12 @@ function M.comment_options(expanded_threads)
 	return options
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
-function M.for_file(result, file)
+function M.for_file(session, file)
 	local items = {}
-	local review = result.review and result.review.data
+	local review = session.review
 	if review then
 		for _, thread in ipairs(review_actions.group_comments(review.comments, review.tasks)) do
 			local comment = thread.comment
@@ -86,10 +86,10 @@ function M.for_file(result, file)
 		end
 	end
 
-	if result.notes and not file.binary and file.status ~= "deleted" then
-		for _, note in ipairs(result.notes.items) do
+	if session.notes and not file.binary and file.status ~= "deleted" then
+		for _, note in ipairs(session.notes.items) do
 			if note.file_path == file.path or (file.status == "renamed" and note.file_path == file.old_path) then
-				local position = result.notes.positions[note.id]
+				local position = session.notes.positions[note.id]
 				items[#items + 1] = {
 					side = "RIGHT",
 					start_line = position.start_line,
@@ -166,7 +166,7 @@ function M.selection(view, file, side, lines, position)
 			to = stop.to,
 			start_from = start and start.from,
 			start_to = start and start.to,
-			commit_hash = view.result.head_revision,
+			commit_hash = view.session.range.head_revision,
 		},
 	}
 end
@@ -175,13 +175,13 @@ end
 ---@param all boolean|nil
 ---@return boolean toggled
 function M.toggle_threads(view, all)
-	if view.result.options.comment_display ~= "virtual_lines" then
+	if view.options.comment_display ~= "virtual_lines" then
 		return false
 	end
 
 	local items
 	if all and view.current_file then
-		items = M.for_file(view.result, view.current_file)
+		items = M.for_file(view.session, view.current_file)
 	else
 		items = M.at_cursor(view) or {}
 	end
@@ -413,15 +413,14 @@ function M.close(owner)
 end
 
 ---@param owner integer
----@param result AtlasDiffResult
+---@param pr PullRequest|nil
 ---@param path string
 ---@param items AtlasDiffAnnotation[]
 ---@param on_action fun(action: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, pending?: boolean}, on_submit: fun())
-function M.open(owner, result, path, items, on_action)
+function M.open(owner, pr, path, items, on_action)
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
 
-	local pr = result.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	---@cast provider PullsProvider|nil
 	local tasks = provider and provider.capabilities.tasks

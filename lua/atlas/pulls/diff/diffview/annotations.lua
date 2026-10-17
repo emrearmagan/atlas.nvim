@@ -23,7 +23,7 @@ function M.render(view)
 		return
 	end
 
-	local items = ui.for_file(view.result, file)
+	local items = ui.for_file(view.session, file)
 	if #items == 0 then
 		return
 	end
@@ -38,7 +38,7 @@ function M.render(view)
 		panes.RIGHT = view.right
 	end
 
-	local expanded = view.result.options.comment_display == "virtual_lines"
+	local expanded = view.options.comment_display == "virtual_lines"
 	local options = ui.comment_options(view.expanded_threads)
 	local placed = {}
 	for _, pane in pairs(panes) do

@@ -92,7 +92,7 @@ function M.render(view, file, session)
 		table.insert(panes, 1, view.left)
 	end
 
-	local expanded = view.result.options.comment_display == "virtual_lines"
+	local expanded = view.options.comment_display == "virtual_lines"
 	local placed, fillers = {}, {}
 	for _, pane in ipairs(panes) do
 		view.annotations[pane.buf] = {}
@@ -108,7 +108,7 @@ function M.render(view, file, session)
 	}
 	local options = ui.comment_options(view.expanded_threads)
 
-	for _, item in ipairs(ui.for_file(view.result, file)) do
+	for _, item in ipairs(ui.for_file(view.session, file)) do
 		if
 			item.thread
 			and (file.binary or (item.end_line and (item.end_line < 1 or item.end_line > counts[item.side])))

@@ -116,7 +116,7 @@ function M.setup(state, callbacks)
 		end
 	end)
 
-	if state.data.pr then
+	if state.session.source.kind == "pr" then
 		add(items, "ui.open_actions", "Review actions", 0, function()
 			callbacks.on_action("open_actions", {})
 		end)

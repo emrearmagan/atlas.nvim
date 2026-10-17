@@ -68,6 +68,7 @@ M.action_ids = {
 ---@field add_note fun()
 ---@field navigate_annotation fun(direction: 1|-1, kind: AtlasDiffAnnotationKind)
 ---@field dispatch fun(id: AtlasReviewActionId)
+---@field open_in_browser fun()
 ---@field run_custom fun(callback: fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any): any
 
 ---@param items AtlasHelpKeyItem[]
@@ -111,10 +112,10 @@ local function groups(name, items, review_items, custom_items)
 	}
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param actions AtlasDiffKeymapActions
-function M.setup(session, actions)
-	local result = session.data
+function M.setup(ui, actions)
+	local session = ui.session
 
 	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
@@ -125,7 +126,7 @@ function M.setup(session, actions)
 	end)
 	add(shared_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
 	add(shared_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
-	if result.pr then
+	if session.source.kind == "pr" then
 		add(
 			shared_items,
 			"pulls.review.view.toggle_review_panel",
@@ -140,7 +141,7 @@ function M.setup(session, actions)
 	add(shared_items, "pulls.review.view.toggle_comments", "Toggle comment display", 45, actions.toggle_comments)
 
 	local review_items = {}
-	if result.pr then
+	if session.source.kind == "pr" then
 		add(review_items, "ui.open_actions", "Review actions", 1, function()
 			actions.dispatch("open_actions")
 		end)
@@ -167,7 +168,7 @@ function M.setup(session, actions)
 			actions.navigate_annotation(1, "unresolved")
 		end)
 	end
-	if result.notes then
+	if session.notes then
 		add(review_items, "pulls.review.prev_note", "Previous note", 92, function()
 			actions.navigate_annotation(-1, "note")
 		end)
@@ -175,7 +176,7 @@ function M.setup(session, actions)
 			actions.navigate_annotation(1, "note")
 		end)
 	end
-	if result.pr or result.notes then
+	if session.source.kind == "pr" then
 		add(review_items, "ui.refresh", "Refresh review", 80, function()
 			actions.dispatch("refresh_review")
 		end)
@@ -184,16 +185,14 @@ function M.setup(session, actions)
 	local commits_items = vim.list_extend({}, shared_items)
 	add(commits_items, "ui.help", "Toggle help", 100, help.toggle)
 
-	if result.pr then
-		add(shared_items, "ui.open_in_browser", "Open in browser", 90, function()
-			actions.dispatch("open_in_browser")
-		end)
+	if session.source.kind == "pr" then
+		add(shared_items, "ui.open_in_browser", "Open in browser", 90, actions.open_in_browser)
 	end
 	add(shared_items, "ui.help", "Toggle Atlas help", 100, help.toggle)
 
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
-	if result.pr then
+	if session.source.kind == "pr" then
 		add(explorer_review_items, "pulls.review.add_comment", "Add pending file comment", 30, function()
 			actions.add_comment(true)
 		end)
@@ -203,8 +202,8 @@ function M.setup(session, actions)
 	end
 
 	local diff_review_items = vim.list_extend({}, review_items)
-	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, session.view.callbacks.show_details)
-	if result.pr then
+	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, ui.view.callbacks.show_details)
+	if session.source.kind == "pr" then
 		add(diff_review_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
 			actions.add_comment(true)
 		end, { "n", "x" })
@@ -218,23 +217,23 @@ function M.setup(session, actions)
 			actions.add_comment(false, true)
 		end, { "n", "x" })
 	end
-	if result.notes then
+	if session.notes then
 		add(diff_review_items, "pulls.review.add_note", "Add note", 34, actions.add_note, { "n", "x" })
 	end
-	if result.pr or result.notes then
+	if session.source.kind == "pr" then
 		add(diff_review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, actions.toggle_resolved)
 		add(diff_review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
 	end
 
 	add(commits_items, "pulls.open_diff", "Open commit diff", 1, actions.open_commit)
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
-		commits.show_details(session.commits)
+		commits.show_details(ui.commits)
 	end)
 	add(commits_items, "ui.copy_id", "Copy commit hash", 3, function()
-		commits.copy_hash(session.commits)
+		commits.copy_hash(ui.commits)
 	end)
 	add(commits_items, "ui.open_in_browser", "Open commit in browser", 4, function()
-		commits.open_in_browser(session.commits)
+		commits.open_in_browser(ui.commits)
 	end)
 	add(commits_items, "ui.close", "Close commits", 101, function()
 		if not help.is_open() then
@@ -242,10 +241,10 @@ function M.setup(session, actions)
 		end
 	end)
 
-	local custom_items = result.pr and resolver.custom_items("pulls", actions.run_custom) or {}
-	session.renderer.setup_keymaps(session, actions, groups("View", shared_items, diff_review_items, custom_items))
-	register(session.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
-	register(session.commits.buf, groups("Commits", commits_items, review_items, custom_items))
+	local custom_items = session.source.kind == "pr" and resolver.custom_items("pulls", actions.run_custom) or {}
+	ui.renderer.setup_keymaps(ui, actions, groups("View", shared_items, diff_review_items, custom_items))
+	register(ui.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
+	register(ui.commits.buf, groups("Commits", commits_items, review_items, custom_items))
 end
 
 return M

@@ -126,11 +126,10 @@ local function show_file(view, file, on_done)
 	annotation_ui.close(view.tabpage)
 	annotations.clear(view)
 
-	local result = view.result
-	local root = result.worktree_root or result.root
+	local root = view.session.worktree_root or view.session.range.root
 	local head_buf
-	if result.worktree_root and not file.binary and file.status ~= "deleted" then
-		head_buf = worktree.load(result.worktree_root, file.path)
+	if view.session.worktree_root and not file.binary and file.status ~= "deleted" then
+		head_buf = worktree.load(view.session.worktree_root, file.path)
 		if head_buf then
 			-- Our own file switches should not be handled as LSP jumps.
 			view.right.buf = head_buf
@@ -145,7 +144,7 @@ local function show_file(view, file, on_done)
 
 		local deleted = file.status == "deleted"
 		---@type string|nil
-		local revision = deleted and result.base_revision or result.head_revision
+		local revision = deleted and view.session.range.base_revision or view.session.range.head_revision
 		if head_buf then
 			view.loading_buf = nil
 			revision = nil
@@ -179,8 +178,8 @@ local function show_file(view, file, on_done)
 			git_root = root,
 			original = path.make_ref(file.old_path or file.path, root),
 			modified = path.make_ref(file.path, root),
-			original_revision = result.base_revision,
-			modified_revision = head_buf and "WORKING" or result.head_revision,
+			original_revision = view.session.range.base_revision,
+			modified_revision = head_buf and "WORKING" or view.session.range.head_revision,
 		}, config.options.diff.jump_to_first_change)
 
 		if not updated then
@@ -198,7 +197,7 @@ end
 
 ---@param view AtlasDiffCodeDiffView
 local function setup_worktree(view)
-	local root = view.result.worktree_root
+	local root = view.session.worktree_root
 	if not root then
 		return
 	end
@@ -234,7 +233,7 @@ local function setup_worktree(view)
 				end
 
 				local file
-				for _, item in ipairs(view.result.files) do
+				for _, item in ipairs(view.session.files) do
 					if item.path == relative then
 						file = item
 						break
@@ -260,7 +259,7 @@ local function setup_worktree(view)
 					if err then
 						logger.logerror(
 							"diff.show_file failed",
-							{ root = view.result.root, path = file.path, error = err }
+							{ root = view.session.range.root, path = file.path, error = err }
 						)
 						notify.error("Unable to open " .. file.path .. "\n\n" .. err, { vim_notify = true })
 						return
@@ -276,22 +275,23 @@ local function setup_worktree(view)
 	})
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffConfig
 ---@param callbacks AtlasDiffCallbacks
 ---@return AtlasDiffCodeDiffView
-local function open(result, callbacks)
-	local options = {
+local function open(session, options, callbacks)
+	local codediff_options = {
 		panel = { name = "explorer" },
-		git_root = result.worktree_root or result.root,
+		git_root = session.worktree_root or session.range.root,
 		original = path.empty(),
 		modified = path.empty(),
-		original_revision = result.base_revision,
-		modified_revision = result.head_revision,
+		original_revision = session.range.base_revision,
+		modified_revision = session.range.head_revision,
 	}
 
 	local previous_tab = vim.api.nvim_get_current_tabpage()
 	local ok, state = pcall(function()
-		local opened = codediff.create(options, "")
+		local opened = codediff.create(codediff_options, "")
 		---@cast opened table
 		local tabpage = vim.api.nvim_win_get_tabpage(opened.modified_win)
 
@@ -305,7 +305,8 @@ local function open(result, callbacks)
 		---@type AtlasDiffCodeDiffView
 		local view = {
 			tabpage = tabpage,
-			result = result,
+			session = session,
+			options = options,
 			callbacks = callbacks,
 			annotations = {},
 			expanded_threads = {},
@@ -339,8 +340,8 @@ local function open(result, callbacks)
 	-- because otherwise the broken tab would stay open
 	local tabpage = vim.api.nvim_get_current_tabpage()
 	if tabpage ~= previous_tab then
-		local session = lifecycle.get_session(tabpage)
-		local buffers = session and { session.original_bufnr, session.modified_bufnr } or {}
+		local codediff_session = lifecycle.get_session(tabpage)
+		local buffers = codediff_session and { codediff_session.original_bufnr, codediff_session.modified_bufnr } or {}
 
 		vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(tabpage) } })
 		lifecycle.cleanup(tabpage)
@@ -410,15 +411,15 @@ local function get_selection(view)
 	return annotation_ui.selection(view, file, side, lines, position)
 end
 
----@param session AtlasDiffSession
+---@param ui AtlasDiffUI
 ---@param actions AtlasDiffKeymapActions
 ---@param groups AtlasDiffKeymapGroup[]
-local function setup_keymaps(session, actions, groups)
-	local view = session.view
+local function setup_keymaps(ui, actions, groups)
+	local view = ui.view
 	---@cast view AtlasDiffCodeDiffView
-	keymaps.setup(session, actions, groups, {
+	keymaps.setup(ui, actions, groups, {
 		toggle_layout = function()
-			local file = session.explorer.selected
+			local file = ui.explorer.selected
 			if file and (file.status == "added" or file.status == "deleted") then
 				return
 			end
@@ -426,7 +427,7 @@ local function setup_keymaps(session, actions, groups)
 			annotations.clear(view)
 			codediff.toggle_layout(view.tabpage)
 			update_panes(view)
-			view.callbacks.on_file(session.explorer.selected)
+			view.callbacks.on_file(ui.explorer.selected)
 		end,
 	})
 end

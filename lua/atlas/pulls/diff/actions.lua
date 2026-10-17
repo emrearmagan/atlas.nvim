@@ -1,11 +1,11 @@
 local action_runner = require("atlas.core.actions")
-local annotations = require("atlas.pulls.diff.ui.annotations")
 local review_actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
 local commits = require("atlas.pulls.diff.ui.commits")
 local detail_window = require("atlas.pulls.ui.detail.window")
 local diff = require("atlas.pulls.diff.diff")
 local diff_git = require("atlas.pulls.diff.git")
+local diff_session = require("atlas.pulls.diff.session")
 local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
@@ -106,7 +106,7 @@ local function comment_draft(context, provider)
 	local draft = { pending = context.pending }
 	local file = context.file
 	if file then
-		draft.file = { path = file.path, old_path = file.old_path, commit_hash = context.session.data.head_revision }
+		draft.file = { path = file.path, old_path = file.old_path, commit_hash = context.session.range.head_revision }
 		return draft
 	end
 
@@ -137,10 +137,10 @@ end
 ---@param context AtlasDiffActionContext
 ---@return AtlasReviewActionContext|nil
 local function review_context(context)
-	local result = context.session.data
-	local review = result.review
-	local pr = result.pr
-	if not pr or not review or not review.data then
+	local session = context.session
+	local data = session.review
+	local pr = session.source.pr
+	if not pr or not data then
 		notify.warn("Review data is unavailable")
 		return nil
 	end
@@ -161,24 +161,13 @@ local function review_context(context)
 	return {
 		provider = provider,
 		pr = pr,
-		current_user = result.current_user,
-		data = review.data,
+		current_user = session.current_user,
+		data = data,
 		comment = context.comment,
 		review_entry = context.review_entry,
 		draft = draft,
 		on_submit = context.on_submit,
 	}
-end
-
----@param items AtlasNote[]
----@param note AtlasNote
-local function replace_note(items, note)
-	for index, existing in ipairs(items) do
-		if existing.id == note.id then
-			items[index] = note
-			return
-		end
-	end
 end
 
 ---@type AtlasDiffAction
@@ -187,7 +176,8 @@ M.add_note = {
 	label = "Add note",
 	icon = icons.get("pin"),
 	run = function(context, on_done)
-		local data = context.session.data.notes
+		local session = context.session
+		local data = session.notes
 		if not data then
 			notify.warn("Notes are unavailable")
 			return false
@@ -204,7 +194,7 @@ M.add_note = {
 
 		note_editor.create(data.target, {
 			file_path = selection.file.path,
-			commit = context.session.data.head_revision,
+			commit = session.range.head_revision,
 			start_line = selection.first,
 			end_line = selection.last,
 			body = "",
@@ -215,8 +205,7 @@ M.add_note = {
 				return
 			end
 
-			data.items[#data.items + 1] = note
-			data.positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
+			diff_session.put_note(session, note)
 			notify.success("Note added", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note added" }, nil)
 		end)
@@ -231,8 +220,7 @@ M.note_to_comment = {
 	icon = icons.get("comment"),
 	run = function(context, on_done)
 		local session = context.session
-		local result = session.data
-		local data = result.notes
+		local data = session.notes
 		local note = context.note
 		if not data or not note then
 			return false
@@ -244,7 +232,7 @@ M.note_to_comment = {
 			return false
 		end
 
-		local file = vim.iter(result.files):find(function(item)
+		local file = vim.iter(session.files):find(function(item)
 			return item.path == note.file_path or item.old_path == note.file_path
 		end)
 		if not file then
@@ -258,10 +246,10 @@ M.note_to_comment = {
 					done("")
 					return nil
 				end
-				return diff_git.read(result.root, result.base_revision, file.old_path or file.path, done)
+				return diff_git.read(session.range.root, session.range.base_revision, file.old_path or file.path, done)
 			end,
 			new = function(done)
-				return diff_git.read(result.root, result.head_revision, file.path, done)
+				return diff_git.read(session.range.root, session.range.head_revision, file.path, done)
 			end,
 		}, function(contents, errors)
 			local err = errors.old or errors.new
@@ -296,7 +284,7 @@ M.note_to_comment = {
 					to = last,
 					start_from = first ~= last and old_line(first) or nil,
 					start_to = first ~= last and first or nil,
-					commit_hash = result.head_revision,
+					commit_hash = session.range.head_revision,
 				},
 			}
 			local shared = review_context(context)
@@ -314,13 +302,7 @@ M.note_to_comment = {
 				if not deleted then
 					notify.error(delete_err)
 				else
-					for index, existing in ipairs(data.items) do
-						if existing.id == note.id then
-							table.remove(data.items, index)
-							break
-						end
-					end
-					data.positions[note.id] = nil
+					diff_session.remove_note(session, note)
 				end
 				on_done(comment, nil)
 			end)
@@ -335,7 +317,7 @@ M.edit_note = {
 	label = "Edit note",
 	icon = icons.get("edit", "actions"),
 	run = function(context, on_done)
-		local data = context.session.data.notes
+		local data = context.session.notes
 		local note = context.note
 		if not data or not note then
 			return false
@@ -350,7 +332,7 @@ M.edit_note = {
 				return
 			end
 
-			replace_note(data.items, updated)
+			diff_session.put_note(context.session, updated)
 			notify.success("Note updated", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note updated" }, nil)
 		end)
@@ -364,7 +346,7 @@ M.delete_note = {
 	label = "Delete note",
 	icon = icons.get("delete", "actions"),
 	run = function(context, on_done)
-		local data = context.session.data.notes
+		local data = context.session.notes
 		local note = context.note
 		if not data or not note then
 			return false
@@ -385,13 +367,7 @@ M.delete_note = {
 				return
 			end
 
-			for index, existing in ipairs(data.items) do
-				if existing.id == note.id then
-					table.remove(data.items, index)
-					break
-				end
-			end
-
+			diff_session.remove_note(context.session, note)
 			notify.success("Note deleted", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note deleted" }, nil)
 		end)
@@ -405,7 +381,7 @@ M.toggle_note_resolved = {
 	label = "Toggle note resolved",
 	icon = icons.get("success", "actions"),
 	run = function(context, on_done)
-		local data = context.session.data.notes
+		local data = context.session.notes
 		local note = context.note
 		if not data or not note then
 			return false
@@ -421,81 +397,13 @@ M.toggle_note_resolved = {
 			return false
 		end
 
-		replace_note(data.items, updated)
+		diff_session.put_note(context.session, updated)
 		local message = resolved and "Note resolved" or "Note reopened"
 		notify.success(message, { timeout = 1200 })
 		on_done({ changed_pr = false, message = message }, nil)
 		return true
 	end,
 }
-
----@param session AtlasDiffSession
----@param on_done fun(ok: boolean)
-local function reload_review(session, on_done)
-	if session.requests.review then
-		session.requests.review.cancel()
-	end
-	local requests = request_scope.new()
-	session.requests.review = requests
-	local starts = {}
-
-	local note_data = session.data.notes
-	if note_data then
-		starts.notes = function(done)
-			local items, err = notes.list(note_data.target)
-			if not items then
-				done(nil, err)
-				return nil
-			end
-			return notes.locate(session.data.root, session.data.head_revision, items, function(positions)
-				done({ items = items, positions = positions })
-			end)
-		end
-	end
-
-	local pr = session.data.pr
-	local provider = pr and providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider|nil
-	local reviews = provider and provider.capabilities.reviews
-	if pr and reviews then
-		starts.review = function(done)
-			return reviews.fetch(pr, { force_refresh = true }, done)
-		end
-		if reviews.fetch_review_context then
-			starts.context = function(done)
-				return reviews.fetch_review_context(pr, { force_refresh = true }, done)
-			end
-		end
-	end
-
-	requests.all(starts, function(values, errors)
-		session.requests.review = nil
-		if note_data and values.notes then
-			note_data.items = values.notes.items
-			note_data.positions = values.notes.positions
-		end
-		if values.review or values.context then
-			local review = session.data.review or {}
-			if values.review then
-				review.data = review.data or {}
-				for key, value in pairs(values.review) do
-					review.data[key] = value
-				end
-			end
-			if values.context then
-				review.context = values.context
-				if values.context.reviewed_files then
-					session.reviewed_files = vim.deepcopy(values.context.reviewed_files)
-				end
-			end
-			session.data.review = review
-		end
-		for _, err in pairs(errors) do
-			notify.error("Unable to refresh review\n\n" .. err)
-		end
-		on_done(next(errors) == nil)
-	end)
-end
 
 ---@type AtlasDiffAction
 M.refresh_review = {
@@ -504,7 +412,7 @@ M.refresh_review = {
 	icon = icons.get("retry", "actions"),
 	run = function(context, on_done)
 		notify.loading("Refreshing review...")
-		reload_review(context.session, function(ok)
+		diff_session.reload(context.session, function(ok)
 			if ok then
 				notify.success("Review refreshed", { timeout = 1200 })
 			end
@@ -521,13 +429,15 @@ M.toggle_detail_panel = {
 	icon = icons.get("details", "actions"),
 	run = function(context, on_done)
 		local session = context.session
-		local pr = session.data.pr
-		if not pr then
+		local source = session.source
+		if source.kind ~= "pr" then
 			return false
 		end
+		local pr = source.pr
 
-		if detail_window.is_open(session.view.tabpage) then
-			detail_window.close(session.view.tabpage)
+		local tabpage = vim.api.nvim_get_current_tabpage()
+		if detail_window.is_open(tabpage) then
+			detail_window.close(tabpage)
 			return true
 		end
 
@@ -540,8 +450,8 @@ M.toggle_detail_panel = {
 				end
 
 				detail.refresh(updated_pr)
-				session.data.pr = updated_pr
-				reload_review(session, function()
+				source.pr = updated_pr
+				diff_session.reload(session, function()
 					on_done(result, nil)
 				end)
 			end,
@@ -556,23 +466,12 @@ M.open_in_browser = {
 	label = "Open in browser",
 	icon = icons.get("open_in_browser", "actions"),
 	run = function(context)
-		local session = context.session
-		local pr = session.data.pr
-		if not pr then
+		local source = context.session.source
+		if source.kind ~= "pr" then
 			return false
 		end
 
-		local items = annotations.at_cursor(session.view)
-		for _, item in ipairs(items or {}) do
-			local comment = item.thread and item.thread.comment
-			local url = comment and comment.url
-			if url and url ~= "" then
-				vim.ui.open(url)
-				return true
-			end
-		end
-
-		vim.ui.open(pr.link.html)
+		vim.ui.open(context.comment and context.comment.url or source.pr.link.html)
 		return true
 	end,
 }
@@ -583,13 +482,13 @@ M.view_commits = {
 	label = "View commits",
 	icon = icons.get("commit"),
 	is_available = function(context)
-		return #context.session.data.commits > 0, "No commits available"
+		return #context.session.commits > 0, "No commits available"
 	end,
 	run = function(context)
-		local result = context.session.data
+		local session = context.session
 		picker.select_with_preview({
 			title = "Commits",
-			items = result.commits,
+			items = session.commits,
 			key = function(commit)
 				return commit.hash
 			end,
@@ -607,7 +506,7 @@ M.view_commits = {
 				end
 
 				-- Opening a diff imports these actions, so load it when a commit is picked.
-				require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = result.root })
+				require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = session.range.root })
 			end,
 		})
 		return true
@@ -689,7 +588,7 @@ function M.run_custom(callback, context, on_done)
 		end
 
 		if result.changed_pr then
-			reload_review(session, function()
+			diff_session.reload(session, function()
 				on_done(result, nil)
 			end)
 			return
@@ -725,7 +624,7 @@ function M.dispatch(id, context, on_done)
 
 	return action_runner.run(shared_action(id, shared), shared, function(result, err)
 		if result and not err and not session.closed and review_updates[id] then
-			reload_review(session, function()
+			diff_session.reload(session, function()
 				complete(result, nil)
 			end)
 			return

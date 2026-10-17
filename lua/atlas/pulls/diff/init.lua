@@ -1,43 +1,15 @@
 local checkout = require("atlas.core.git.checkout")
 local config = require("atlas.config")
-local diff_git = require("atlas.pulls.diff.git")
-local diff_worktree = require("atlas.pulls.diff.worktree")
+local diff_session = require("atlas.pulls.diff.session")
 local git = require("atlas.core.git")
 local loading = require("atlas.ui.loading")
 local logger = require("atlas.core.logger")
-local notes = require("atlas.pulls.notes")
-local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
 local viewer = require("atlas.pulls.diff.viewer")
 local worktree = require("atlas.core.git.worktree")
 
 local M = {}
-
----@class AtlasDiffFile
----@field path string
----@field old_path string|nil
----@field status "added"|"deleted"|"modified"|"renamed"|"copied"|"type_changed"
----@field additions integer|nil
----@field deletions integer|nil
----@field binary boolean
-
----@class AtlasDiffResult
----@field kind "pr"|"commit"|"range"
----@field root string
----@field base_revision string
----@field head_revision string
----@field base_ref string|nil
----@field head_ref string|nil
----@field files AtlasDiffFile[]
----@field options AtlasPullsDiffConfig
----@field pr PullRequest|nil
----@field commits PullsCommit[]
----@field review { data?: PullsReviewData, context?: PullsReviewContext }|nil
----@field current_user AtlasUser|nil
----@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
----@field worktree_root string|nil
----@field release fun() Call when closing the review to clean up its worktree.
 
 vim.api.nvim_create_autocmd("VimLeavePre", {
 	group = vim.api.nvim_create_augroup("AtlasDiffWorktrees", { clear = true }),
@@ -67,7 +39,7 @@ end
 ---@param base string|nil
 ---@param head string
 ---@param requests AtlasRequestScope
----@param on_prepared fun(kind: string, source: table)
+---@param on_prepared fun(root: string, base: string, head: string, source: AtlasDiffSource)
 ---@param fail fun(title: string, description?: string)
 local function prepare_commits(root, base, head, requests, on_prepared, fail)
 	requests.run(function(done)
@@ -86,13 +58,7 @@ local function prepare_commits(root, base, head, requests, on_prepared, fail)
 				return
 			end
 
-			on_prepared(base and "range" or "commit", {
-				root = root,
-				base_revision = base_hash,
-				head_revision = head_hash,
-				base_ref = base,
-				head_ref = head,
-			})
+			on_prepared(root, base_hash, head_hash, { kind = "refs", base = base or head .. "^", head = head })
 		end)
 	end)
 end
@@ -104,33 +70,10 @@ local function start_loading(message, context, on_done)
 	options.open_cmd = config.diff_command()
 	context.command = options.open_cmd
 
-	---@type AtlasDiffResult|nil
-	local result
-	local pending_worktree
-
-	local function release_worktree()
-		if pending_worktree then
-			worktree.discard(pending_worktree.repo_root, pending_worktree.root)
-			pending_worktree = nil
-		end
-
-		if result and result.worktree_root then
-			diff_worktree.cleanup(result.worktree_root)
-			worktree.discard(result.root, result.worktree_root)
-		end
-
-		result = nil
-	end
-
-	local function cancel()
-		requests.cancel()
-		release_worktree()
-	end
-
-	local view = loading.open(message, cancel, "diff")
+	local view = loading.open(message, requests.cancel, "diff")
 
 	local function fail(title, description)
-		cancel()
+		requests.cancel()
 
 		local err = title
 		if description and description ~= "" then
@@ -146,91 +89,42 @@ local function start_loading(message, context, on_done)
 		end
 	end
 
-	local function on_prepared(kind, source, pr_data)
-		pr_data = pr_data or {}
-		context.root = source.root
-		context.base = source.base_revision
-		context.head = source.head_revision
+	---@param root string
+	---@param base string
+	---@param head string
+	---@param source AtlasDiffSource
+	local function on_prepared(root, base, head, source)
+		context.root = root
+		context.base = base
+		context.head = head
 
-		view:update("Loading changed files...")
+		-- Diffview uses revision buffers, so it doesn't need an LSP worktree.
+		local lsp = options.lsp.enabled and options.open_cmd ~= "DiffviewOpen" and options.lsp or nil
 		requests.run(function(done)
-			return diff_git.load(source, done)
-		end, function(diff, load_err)
-			if not diff then
-				fail("Unable to load changed files", load_err)
+			return diff_session.prepare(root, base, head, {
+				source = source,
+				lsp = lsp,
+				on_progress = function(update)
+					view:update(update)
+				end,
+			}, done)
+		end, function(session, err)
+			if not session then
+				fail("Unable to load changed files", err)
 				return
 			end
 
-			local function complete(worktree_root)
-				result = {
-					kind = kind,
-					root = source.root,
-					base_revision = diff.base_revision,
-					head_revision = source.head_revision,
-					base_ref = source.base_ref,
-					head_ref = source.head_ref,
-					files = diff.files,
-					options = options,
-					pr = pr_data.pr,
-					commits = pr_data.commits or {},
-					review = pr_data.review,
-					current_user = pr_data.current_user,
-					notes = pr_data.notes,
-					worktree_root = worktree_root,
-					release = release_worktree,
-				}
-				pending_worktree = nil
-
-				local opened, open_err = pcall(viewer.open, result)
-				if not opened then
-					fail("Unable to open diff", open_err)
-					return
-				end
-
-				view:finish()
-				if on_done then
-					on_done(nil)
-				end
-			end
-
-			-- Diffview uses revision buffers, so it doesn't need an LSP worktree.
-			if not options.lsp.enabled or options.open_cmd == "DiffviewOpen" or #diff.files == 0 then
-				complete()
+			local opened, open_err = pcall(viewer.open, session, options)
+			if not opened then
+				diff_session.close(session)
+				fail("Unable to open diff", open_err)
 				return
 			end
 
-			view:update("Preparing worktree...")
-			local pr = pr_data.pr
-			local dir, claim_err = worktree.claim({
-				repo_root = source.root,
-				head_sha = source.head_revision,
-				repo_full_name = pr and pr.repo_full_name,
-				pr_id = pr and pr.id,
-			}, options.lsp)
-			if not dir then
-				notify.warn("LSP worktree unavailable: " .. claim_err)
-				complete()
-				return
+			view:finish()
+			if on_done then
+				on_done(nil)
 			end
-
-			pending_worktree = { repo_root = source.root, root = dir }
-			worktree.prune(source.root)
-
-			requests.run(function(done)
-				return worktree.ensure({
-					repo_root = source.root,
-					head_sha = source.head_revision,
-					dir = dir,
-					link = options.lsp.link,
-				}, done)
-			end, function(path, prepare_err)
-				if not path then
-					release_worktree()
-					notify.warn("LSP worktree unavailable: " .. prepare_err)
-				end
-
-				complete(path)
-			end)
 		end)
 	end
 
@@ -270,75 +164,18 @@ function M.open_pr(ref, on_done)
 			return
 		end
 
-		local capabilities = provider.capabilities
-		local starts = {
-			repository = function(done)
-				return checkout.prepare_diff(pr, cwd, function(message)
-					view:update(message)
-				end, function(source, prepare_err)
-					if not source then
-						fail("Unable to prepare repository", prepare_err)
-						return
-					end
-
-					done(source, nil)
-				end)
-			end,
-		}
-
-		if capabilities.core.fetch_commits then
-			starts.commits = function(done)
-				return capabilities.core.fetch_commits(pr, { force_refresh = true }, done)
-			end
-		end
-
-		if capabilities.reviews then
-			starts.review = function(done)
-				return capabilities.reviews.fetch(pr, { force_refresh = true }, done)
+		view:update("Preparing repository...")
+		requests.run(function(done)
+			return checkout.prepare_diff(pr, cwd, function(message)
+				view:update(message)
+			end, done)
+		end, function(prepared, prepare_err)
+			if not prepared then
+				fail("Unable to prepare repository", prepare_err)
+				return
 			end
 
-			if capabilities.reviews.fetch_review_context then
-				starts.review_context = function(done)
-					return capabilities.reviews.fetch_review_context(pr, { force_refresh = true }, done)
-				end
-			end
-		end
-
-		if capabilities.users then
-			starts.current_user = capabilities.users.fetch_user
-		end
-
-		view:update("Preparing repository and review data...")
-		requests.all(starts, function(values, errors)
-			for _, item in ipairs({
-				{ "commits", "commits" },
-				{ "review", "review data" },
-				{ "review_context", "review context" },
-				{ "current_user", "current user" },
-			}) do
-				if errors[item[1]] then
-					notify.warn("Unable to load " .. item[2] .. ": " .. errors[item[1]])
-				end
-			end
-
-			local note_data, notes_err = notes.for_pull_request(pr)
-			if notes_err then
-				notify.warn("Unable to load notes: " .. notes_err)
-			end
-
-			local source = values.repository
-			requests.run(function(done)
-				return notes.locate(source.root, source.head_revision, note_data and note_data.items or {}, done)
-			end, function(positions)
-				on_prepared("pr", source, {
-					pr = pr,
-					commits = values.commits,
-					review = (values.review or values.review_context)
-						and { data = values.review, context = values.review_context },
-					current_user = values.current_user,
-					notes = note_data and { target = note_data.target, items = note_data.items, positions = positions },
-				})
-			end)
+			on_prepared(prepared.root, prepared.base_revision, prepared.head_revision, { kind = "pr", pr = pr })
 		end)
 	end)
 end
@@ -388,6 +225,19 @@ function M.open_range(opts, on_done)
 
 		prepare_commits(root, opts.base, opts.head, requests, on_prepared, fail)
 	end)
+end
+
+---@param session AtlasDiffSession
+function M.reopen(session)
+	local source = session.source
+	local root = session.range.root
+	if source.kind == "pr" then
+		local pr = source.pr
+		M.open_pr({ provider = pr.provider, repo_full_name = pr.repo_full_name, id = pr.id, root = root })
+		return
+	end
+
+	M.open_range({ base = source.base, head = source.head, root = root })
 end
 
 return M
