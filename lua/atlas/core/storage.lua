@@ -70,4 +70,14 @@ function M.dir(target)
 	return vim.fs.joinpath(M.root(), target.ref)
 end
 
+function M.prune()
+	local dirs = vim.fn.globpath(M.root(), "**/", false, true)
+	table.sort(dirs, function(left, right)
+		return #left > #right
+	end)
+	for _, dir in ipairs(dirs) do
+		vim.fn.delete(dir, "d")
+	end
+end
+
 return M

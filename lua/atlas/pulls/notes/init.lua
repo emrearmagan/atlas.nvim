@@ -449,6 +449,9 @@ function M.clear_all()
 			return false, err
 		end
 	end
+	-- TODO: Drop this at some point. It only cleans up the old notes folder.
+	vim.fn.delete(vim.fs.joinpath(storage.root(), "notes"), "rf")
+	storage.prune()
 	return true, nil
 end
 

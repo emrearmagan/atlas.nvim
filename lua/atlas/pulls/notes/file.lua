@@ -29,7 +29,7 @@ function M.delete(path)
 	if vim.fn.filereadable(path) == 1 and vim.fn.delete(path) ~= 0 then
 		return "Unable to delete notes: " .. path
 	end
-	vim.fn.delete(vim.fs.dirname(path), "d")
+	storage.prune()
 	return nil
 end
 

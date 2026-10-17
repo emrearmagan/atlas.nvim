@@ -151,6 +151,10 @@ end
 
 ---@return boolean, string|nil
 function M.clear_all()
+	-- TODO: Drop this at some point. It only cleans up the old starred versions.
+	for _, name in ipairs({ "starred.json", "starred-v2.json", "starred-v3.json" }) do
+		vim.fn.delete(vim.fs.joinpath(storage.root(), name))
+	end
 	if vim.fn.filereadable(path) == 0 or vim.fn.delete(path) == 0 then
 		return true, nil
 	end
