@@ -127,7 +127,9 @@ function M.setup(state, callbacks)
 
 		local function reply(pending)
 			local entry = current(state)
-			if entry and entry.comment and not entry.comment.is_task then
+			if entry and entry.note then
+				dispatch("note_to_comment", entry, pending)
+			elseif entry and entry.comment and not entry.comment.is_task then
 				dispatch("add_comment", entry, pending)
 			end
 		end

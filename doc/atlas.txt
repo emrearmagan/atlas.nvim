@@ -360,9 +360,8 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
 NOTES                                                          *atlas-notes*
 
 Notes let you leave something on a diff without posting it to the pull request.
-Each note is attached to a file and one or more lines and can be an ISSUE,
-SUGGESTION, NOTE, or PRAISE. When the pull request changes, notes move with
-their code, and a note is marked outdated once its own lines change.
+Each note is attached to a file and line and can be an ISSUE, SUGGESTION, NOTE,
+or PRAISE.
 
 For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff,
 CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:

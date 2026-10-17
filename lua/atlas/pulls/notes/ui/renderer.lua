@@ -18,6 +18,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
+---@field reply? string
 
 ---@class AtlasNotesUIRenderOptions
 ---@field action_keys AtlasNotesUIActionKeys|nil
@@ -146,6 +147,10 @@ local function note_footer(note, action_keys)
 			text = string.format("%s %s", toggle_key, note.resolved and "reopen" or "resolve"),
 			hl_group = "AtlasTextMuted",
 		})
+	end
+	local reply_key = action_keys and action_keys.reply
+	if reply_key then
+		table.insert(footer_items, { text = reply_key .. " comment", hl_group = "AtlasTextMuted" })
 	end
 	return footer_items
 end

@@ -13,20 +13,20 @@ local function place_annotations(view, document, items, expanded)
 
 	for _, item in ipairs(items) do
 		local buf = view.right.buf
-		local line = item.line or 1
+		local line = item.end_line or 1
 		local removed = false
 
 		if item.side == "LEFT" then
 			if view.left.win then
 				buf = view.left.buf
-			elseif document.file.status ~= "deleted" and item.line then
+			elseif document.file.status ~= "deleted" and item.end_line then
 				local hunk
-				line, hunk = diff.map_line(document.hunks, "LEFT", item.line)
+				line, hunk = diff.map_line(document.hunks, "LEFT", item.end_line)
 				if hunk then
 					removed = true
 					line = hunk[4] > 0 and hunk[3] or hunk[3] + 1
-					deleted[item.line] = deleted[item.line] or {}
-					table.insert(deleted[item.line], item)
+					deleted[item.end_line] = deleted[item.end_line] or {}
+					table.insert(deleted[item.end_line], item)
 				end
 			end
 		end
@@ -39,7 +39,7 @@ local function place_annotations(view, document, items, expanded)
 
 		if not removed then
 			-- Row zero keeps file-level cards above the first buffer line.
-			local row = expanded and not item.line and 0 or line
+			local row = expanded and not item.end_line and 0 or line
 			placed[buf] = placed[buf] or {}
 			placed[buf][row] = placed[buf][row] or {}
 			table.insert(placed[buf][row], item)
@@ -121,8 +121,8 @@ function M.render(view, document)
 	local comment_options = ui.comment_options(view.expanded_threads)
 	for _, item in ipairs(items) do
 		local count = #contents[item.side]
-		if item.thread and (document.binary or (item.line and (item.line < 1 or item.line > count))) then
-			item.line = nil
+		if item.thread and (document.binary or (item.end_line and (item.end_line < 1 or item.end_line > count))) then
+			item.end_line = nil
 		end
 	end
 

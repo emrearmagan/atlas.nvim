@@ -97,7 +97,7 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 
 ### Notes
 
-Notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and one or more lines and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. When the pull request changes, notes move with their code, and a note is marked outdated once its own lines change.
+Notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
 
 <img alt="notes" src="https://github.com/user-attachments/assets/ab7b054f-5c41-4b37-bb9b-a6a36ca8a86e" />
 

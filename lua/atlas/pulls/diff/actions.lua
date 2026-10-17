@@ -4,6 +4,8 @@ local review_actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
 local commits = require("atlas.pulls.diff.ui.commits")
 local detail_window = require("atlas.pulls.ui.detail.window")
+local diff = require("atlas.pulls.diff.diff")
+local diff_git = require("atlas.pulls.diff.git")
 local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
@@ -31,6 +33,7 @@ local M = {}
 ---| "edit_note"
 ---| "delete_note"
 ---| "toggle_note_resolved"
+---| "note_to_comment"
 ---| "toggle_detail_panel"
 ---| "view_commits"
 ---| "open_in_browser"
@@ -214,6 +217,111 @@ M.add_note = {
 				on_done({ changed_pr = false, message = "Note added" }, nil)
 			end
 		)
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.note_to_comment = {
+	id = "note_to_comment",
+	label = "Comment from note",
+	icon = icons.get("comment"),
+	run = function(context, on_done)
+		local session = context.session
+		local result = session.data
+		local data = result.notes
+		local note = context.note
+		if not data or not note then
+			return false
+		end
+
+		local position = data.positions[note.id]
+		if position.outdated then
+			notify.info("Note is outdated, edit or delete it")
+			return false
+		end
+
+		local file = vim.iter(result.files):find(function(item)
+			return item.path == note.file_path or item.old_path == note.file_path
+		end)
+		if not file then
+			notify.info("File is not in this diff")
+			return false
+		end
+
+		request_scope.new().all({
+			old = function(done)
+				if file.status == "added" then
+					done("")
+					return nil
+				end
+				return diff_git.read(result.root, result.base_revision, file.old_path or file.path, done)
+			end,
+			new = function(done)
+				return diff_git.read(result.root, result.head_revision, file.path, done)
+			end,
+		}, function(contents, errors)
+			local err = errors.old or errors.new
+			if err then
+				notify.error(err)
+				return
+			end
+			if session.closed then
+				return
+			end
+
+			local hunks = diff.compute(contents.old, contents.new)
+			local function old_line(line)
+				if file.status == "added" then
+					return nil
+				end
+				local opposite, hunk = diff.map_line(hunks, "RIGHT", line)
+				return not hunk and opposite or nil
+			end
+
+			local first, last = position.start_line, position.end_line
+			context.selection = {
+				file = file,
+				side = "RIGHT",
+				first = first,
+				last = last,
+				source_lines = vim.split(contents.new, "\n", { plain = true }),
+				inline = {
+					path = file.path,
+					old_path = file.old_path,
+					from = old_line(last),
+					to = last,
+					start_from = first ~= last and old_line(first) or nil,
+					start_to = first ~= last and first or nil,
+					commit_hash = result.head_revision,
+				},
+			}
+			local shared = review_context(context)
+			if not shared then
+				return
+			end
+			shared.draft.initial_text = note.body
+
+			action_runner.run(shared_action("add_comment", shared), shared, function(comment, comment_err)
+				if not comment or comment_err or session.closed then
+					return
+				end
+
+				local deleted, delete_err = notes.delete(data.target, note.id)
+				if not deleted then
+					notify.error(delete_err)
+				else
+					for index, existing in ipairs(data.items) do
+						if existing.id == note.id then
+							table.remove(data.items, index)
+							break
+						end
+					end
+					data.positions[note.id] = nil
+				end
+				on_done(comment, nil)
+			end)
+		end)
 		return true
 	end,
 }

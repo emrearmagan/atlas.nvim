@@ -15,7 +15,8 @@ local popup
 
 ---@class AtlasDiffAnnotation
 ---@field side "LEFT"|"RIGHT"
----@field line integer|nil
+---@field start_line integer|nil
+---@field end_line integer|nil
 ---@field thread AtlasCommentThreadNode|nil
 ---@field note AtlasNote|nil
 ---@field outdated boolean|nil
@@ -24,7 +25,19 @@ local popup
 ---@param buf integer
 ---@param lookup table<integer, AtlasDiffAnnotation[]>
 function M.draw_signs(ns, buf, lookup)
-	for line in pairs(lookup) do
+	local lines = {}
+	for line, items in pairs(lookup) do
+		lines[line] = true
+		for _, item in ipairs(items) do
+			if item.start_line and item.end_line == line then
+				for range_line = item.start_line, line - 1 do
+					lines[range_line] = true
+				end
+			end
+		end
+	end
+
+	for line in pairs(lines) do
 		vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
 			sign_text = "┃",
 			sign_hl_group = "AtlasLogInfo",
@@ -58,13 +71,15 @@ function M.for_file(result, file)
 			local target = comment.file or comment.inline
 			if target and (target.path == file.path or target.path == file.old_path) then
 				local side = file.status == "deleted" and "LEFT" or "RIGHT"
-				local line
-				if comment.inline then
-					side = comment.inline.to and "RIGHT" or "LEFT"
-					line = comment.inline.to or comment.inline.from
+				local start_line, end_line
+				local inline = comment.inline
+				if inline then
+					side = inline.to and "RIGHT" or "LEFT"
+					end_line = inline.to or inline.from
+					start_line = inline.to and inline.start_to or inline.start_from
 				end
 
-				items[#items + 1] = { side = side, line = line, thread = thread }
+				items[#items + 1] = { side = side, start_line = start_line, end_line = end_line, thread = thread }
 			end
 		end
 	end
@@ -75,7 +90,8 @@ function M.for_file(result, file)
 				local position = result.notes.positions[note.id]
 				items[#items + 1] = {
 					side = "RIGHT",
-					line = position.end_line,
+					start_line = position.start_line,
+					end_line = position.end_line,
 					note = vim.tbl_extend("force", note, position),
 					outdated = position.outdated,
 				}
@@ -90,7 +106,23 @@ end
 ---@return AtlasDiffAnnotation[]|nil
 function M.at_cursor(view)
 	local by_line = view.annotations[vim.api.nvim_get_current_buf()]
-	return by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+	if not by_line then
+		return nil
+	end
+
+	local cursor = vim.api.nvim_win_get_cursor(0)[1]
+	local lines = vim.tbl_keys(by_line)
+	table.sort(lines)
+	local items = {}
+	for _, line in ipairs(lines) do
+		for _, item in ipairs(by_line[line]) do
+			local covers = item.start_line and item.end_line == line and item.start_line <= cursor and cursor <= line
+			if line == cursor or covers then
+				items[#items + 1] = item
+			end
+		end
+	end
+	return #items > 0 and items or nil
 end
 
 ---@param view AtlasDiffView
@@ -442,15 +474,15 @@ function M.open(owner, result, path, items, on_action)
 	local first = items[1]
 	local same_line = true
 	for _, item in ipairs(items) do
-		if item.side ~= first.side or item.line ~= first.line then
+		if item.side ~= first.side or item.end_line ~= first.end_line then
 			same_line = false
 			break
 		end
 	end
 
 	local title = path
-	if same_line and first.line then
-		title = string.format("%s:%d (%s)", path, first.line, first.side)
+	if same_line and first.end_line then
+		title = string.format("%s:%d (%s)", path, first.end_line, first.side)
 	end
 
 	local height = math.max(1, math.min(#lines, vim.o.lines - 6))
@@ -497,6 +529,8 @@ function M.open(owner, result, path, items, on_action)
 				elseif name == "edit_comment" or name == "delete_comment" then
 					local note_action = name == "edit_comment" and "edit_note" or "delete_note"
 					on_action(note_action, { note = entry.note }, close)
+				elseif name == "add_comment" then
+					on_action("note_to_comment", { note = entry.note, pending = true }, close)
 				end
 			elseif entry.comment then
 				local target = entry.comment

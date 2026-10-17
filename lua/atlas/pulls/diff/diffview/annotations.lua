@@ -50,16 +50,16 @@ function M.render(view)
 		local pane = panes[item.side]
 		if pane then
 			local count = vim.api.nvim_buf_line_count(pane.buf)
-			if item.thread and item.line and (item.line < 1 or item.line > count) then
-				item.line = nil
+			if item.thread and item.end_line and (item.end_line < 1 or item.end_line > count) then
+				item.end_line = nil
 			end
 
-			local line = math.max(1, math.min(item.line or 1, count))
+			local line = math.max(1, math.min(item.end_line or 1, count))
 			local lookup = view.annotations[pane.buf]
 			lookup[line] = lookup[line] or {}
 			table.insert(lookup[line], item)
 
-			local row = expanded and not item.line and 0 or line
+			local row = expanded and not item.end_line and 0 or line
 			placed[pane.buf][row] = placed[pane.buf][row] or {}
 			table.insert(placed[pane.buf][row], item)
 		end
