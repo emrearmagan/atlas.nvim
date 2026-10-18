@@ -3,19 +3,6 @@ local info = require("atlas.ui.popups.info")
 local utils = require("atlas.ui.shared.utils")
 local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 
-local M = {}
-local namespace = vim.api.nvim_create_namespace("atlas.diff.explorer")
-local selection_namespace = vim.api.nvim_create_namespace("atlas.diff.explorer.selection")
-
-local statuses = {
-	added = { "A", "DiagnosticOk" },
-	modified = { "M", "DiagnosticWarn" },
-	deleted = { "D", "DiagnosticError" },
-	renamed = { "R", "DiagnosticInfo" },
-	copied = { "C", "DiagnosticInfo" },
-	type_changed = { "T", "DiagnosticWarn" },
-}
-
 ---@class AtlasDiffExplorer
 ---@field buf integer
 ---@field win integer|nil
@@ -31,6 +18,20 @@ local statuses = {
 ---@field selected AtlasDiffFile|nil
 ---@field cursor_row integer|nil
 ---@field on_select fun(file: AtlasDiffFile, focus?: boolean)
+local Explorer = {}
+Explorer.__index = Explorer
+
+local namespace = vim.api.nvim_create_namespace("atlas.diff.explorer")
+local selection_namespace = vim.api.nvim_create_namespace("atlas.diff.explorer.selection")
+
+local statuses = {
+	added = { "A", "DiagnosticOk" },
+	modified = { "M", "DiagnosticWarn" },
+	deleted = { "D", "DiagnosticError" },
+	renamed = { "R", "DiagnosticInfo" },
+	copied = { "C", "DiagnosticInfo" },
+	type_changed = { "T", "DiagnosticWarn" },
+}
 
 ---@param files AtlasDiffFile[]
 ---@param ignore_patterns string[]|nil
@@ -367,57 +368,53 @@ local function collect_annotations(review_data, notes)
 	return annotations
 end
 
----@param state AtlasDiffExplorer
 ---@param reviewed_files table<string, boolean>|nil
 ---@param review_data PullsReviewData|nil
 ---@param notes AtlasNote[]|nil
-function M.update(state, reviewed_files, review_data, notes)
-	state.reviewed_files = reviewed_files
-	state.annotated_paths = collect_annotations(review_data, notes)
-	render(state)
+function Explorer:update(reviewed_files, review_data, notes)
+	self.reviewed_files = reviewed_files
+	self.annotated_paths = collect_annotations(review_data, notes)
+	render(self)
 end
 
----@param state AtlasDiffExplorer
 ---@return AtlasDiffFile|nil
-function M.current_file(state)
-	local row = state.rows[current_row(state)]
+function Explorer:current_file()
+	local row = self.rows[current_row(self)]
 	return row and row.file
 end
 
----@param state AtlasDiffExplorer
 ---@return integer|nil
-function M.current_index(state)
-	local current = state.selected
-	if vim.api.nvim_get_current_win() == state.win then
-		current = M.current_file(state) or current
+function Explorer:current_index()
+	local current = self.selected
+	if vim.api.nvim_get_current_win() == self.win then
+		current = self:current_file() or current
 	end
 
-	for index, file in ipairs(state.files) do
+	for index, file in ipairs(self.files) do
 		if file == current then
 			return index
 		end
 	end
 end
 
----@param state AtlasDiffExplorer
 ---@param file AtlasDiffFile|nil
-function M.reveal(state, file)
-	file = vim.tbl_contains(state.files, file) and file or nil
-	state.selected = file
-	local row = highlight_selection(state)
+function Explorer:reveal(file)
+	file = vim.tbl_contains(self.files, file) and file or nil
+	self.selected = file
+	local row = highlight_selection(self)
 	if not file then
 		return
 	end
 
 	if not row then
-		expand_parents(state, file)
-		render(state, { file = file })
+		expand_parents(self, file)
+		render(self, { file = file })
 		return
 	end
 
-	state.cursor_row = row
-	if state.win then
-		vim.api.nvim_win_call(state.win, function()
+	self.cursor_row = row
+	if self.win then
+		vim.api.nvim_win_call(self.win, function()
 			local view = vim.fn.winsaveview()
 			view.lnum = row
 			vim.fn.winrestview(view)
@@ -425,12 +422,11 @@ function M.reveal(state, file)
 	end
 end
 
----@param state AtlasDiffExplorer
-function M.show_details(state)
+function Explorer:show_details()
 	info.toggle({
-		source_win = state.win,
+		source_win = self.win,
 		content = function(line)
-			local row = state.rows[line]
+			local row = self.rows[line]
 			local path = row and (row.path or row.file and row.file.path)
 			if not path then
 				return
@@ -461,54 +457,50 @@ local function current_folder(state)
 	return row and row.path and row
 end
 
----@param state AtlasDiffExplorer
 ---@return AtlasDiffFile[]
-function M.files_under_cursor(state)
-	local row = state.rows[current_row(state)]
+function Explorer:files_under_cursor()
+	local row = self.rows[current_row(self)]
 	if not row or not (row.path or row.header) then
 		return {}
 	end
 
 	local prefix = row.path or ""
 	return vim.tbl_filter(function(file)
-		local section = state.reviewed_files and state.reviewed_files[file.path] and "reviewed" or "files"
+		local section = self.reviewed_files and self.reviewed_files[file.path] and "reviewed" or "files"
 		return section == row.section and file.path:sub(1, #prefix) == prefix
-	end, state.source)
+	end, self.source)
 end
 
----@param state AtlasDiffExplorer
 ---@param collapsed boolean
-function M.set_folder_collapsed(state, collapsed)
-	local row = current_folder(state)
+function Explorer:set_folder_collapsed(collapsed)
+	local row = current_folder(self)
 	if row then
-		state.collapsed[row.section][row.path] = collapsed or nil
-		render(state, row)
+		self.collapsed[row.section][row.path] = collapsed or nil
+		render(self, row)
 	end
 end
 
----@param state AtlasDiffExplorer
-function M.toggle_folder(state)
-	local row = current_folder(state)
+function Explorer:toggle_folder()
+	local row = current_folder(self)
 	if row then
-		M.set_folder_collapsed(state, not state.collapsed[row.section][row.path])
+		self:set_folder_collapsed(not self.collapsed[row.section][row.path])
 	end
 end
 
----@param state AtlasDiffExplorer
 ---@param collapsed boolean
-function M.set_all_folders_collapsed(state, collapsed)
-	if not state.options.grouped then
+function Explorer:set_all_folders_collapsed(collapsed)
+	if not self.options.grouped then
 		return
 	end
 
-	local before = state.rows[current_row(state)]
-	state.collapsed = { files = {}, reviewed = {} }
+	local before = self.rows[current_row(self)]
+	self.collapsed = { files = {}, reviewed = {} }
 	if collapsed then
 		local path = before and (before.path or before.file and before.file.path)
-		local rows = build_rows(state)
+		local rows = build_rows(self)
 		for _, row in ipairs(rows) do
 			if row.path then
-				state.collapsed[row.section][row.path] = true
+				self.collapsed[row.section][row.path] = true
 				if path and row.section == before.section and path:sub(1, #row.path) == row.path then
 					before = row
 					path = nil
@@ -517,60 +509,57 @@ function M.set_all_folders_collapsed(state, collapsed)
 		end
 	end
 
-	render(state, before)
+	render(self, before)
 end
 
----@param state AtlasDiffExplorer
-function M.toggle_all_folders(state)
-	local collapse = vim.iter(state.rows):any(function(row)
-		return row.path ~= nil and not state.collapsed[row.section][row.path]
+function Explorer:toggle_all_folders()
+	local collapse = vim.iter(self.rows):any(function(row)
+		return row.path ~= nil and not self.collapsed[row.section][row.path]
 	end)
-	M.set_all_folders_collapsed(state, collapse)
+	self:set_all_folders_collapsed(collapse)
 end
 
----@param state AtlasDiffExplorer
-function M.toggle_flatten_dirs(state)
-	state.flatten_dirs = not state.flatten_dirs
-	render(state)
+function Explorer:toggle_flatten_dirs()
+	self.flatten_dirs = not self.flatten_dirs
+	render(self)
 end
 
-function M.activate(state)
-	local row = state.rows[current_row(state)]
+function Explorer:activate()
+	local row = self.rows[current_row(self)]
 	if row and row.file then
-		state.on_select(row.file, state.options.focus_on_select)
+		self.on_select(row.file, self.options.focus_on_select)
 	else
-		M.toggle_folder(state)
+		self:toggle_folder()
 	end
 end
 
-function M.toggle_view_mode(state)
-	local file = M.current_file(state) or state.selected
-	state.options.grouped = not state.options.grouped
+function Explorer:toggle_view_mode()
+	local file = self:current_file() or self.selected
+	self.options.grouped = not self.options.grouped
 
 	if file then
-		expand_parents(state, file)
+		expand_parents(self, file)
 	end
 
-	render(state, file and { file = file })
+	render(self, file and { file = file })
 end
 
----@param state AtlasDiffExplorer
 ---@return integer|nil
-function M.toggle(state)
-	if state.win then
-		state.cursor_row = current_row(state)
-		vim.api.nvim_win_close(state.win, true)
+function Explorer:toggle()
+	if self.win then
+		self.cursor_row = current_row(self)
+		vim.api.nvim_win_close(self.win, true)
 		return
 	end
 
-	local selected_row = state.rows[state.cursor_row]
-	state.win = vim.api.nvim_open_win(state.buf, false, {
+	local selected_row = self.rows[self.cursor_row]
+	self.win = vim.api.nvim_open_win(self.buf, false, {
 		split = "left",
 		win = -1,
-		width = width(state),
+		width = width(self),
 	})
 
-	local options = vim.wo[state.win][0]
+	local options = vim.wo[self.win][0]
 	options.winfixwidth = true
 	options.number = false
 	options.relativenumber = false
@@ -591,14 +580,13 @@ function M.toggle(state)
 	options.list = false
 	options.spell = false
 
-	render(state, selected_row)
-	return state.win
+	render(self, selected_row)
+	return self.win
 end
 
----@param state AtlasDiffExplorer
-function M.resize(state)
-	if state.win then
-		vim.api.nvim_win_set_width(state.win, width(state))
+function Explorer:resize()
+	if self.win then
+		vim.api.nvim_win_set_width(self.win, width(self))
 	end
 end
 
@@ -611,7 +599,7 @@ end
 --- on_select: fun(file: AtlasDiffFile, focus?: boolean),
 ---}
 ---@return AtlasDiffExplorer
-function M.create(opts)
+function Explorer.new(opts)
 	local options = opts.options
 	local source = filter(opts.files, options.ignore)
 	table.sort(source, function(a, b)
@@ -621,7 +609,7 @@ function M.create(opts)
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Explorer [%d]", vim.api.nvim_get_current_tabpage()))
-	local state = {
+	local state = setmetatable({
 		buf = buf,
 		source = source,
 		files = source,
@@ -633,7 +621,7 @@ function M.create(opts)
 		annotated_paths = annotations,
 		on_select = opts.on_select,
 		group = vim.api.nvim_create_augroup("AtlasDiffExplorer" .. buf, { clear = true }),
-	}
+	}, Explorer)
 
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].filetype = "atlas-ui.diff-files"
@@ -652,7 +640,7 @@ function M.create(opts)
 			end
 
 			state.cursor_row = row
-			local file = M.current_file(state)
+			local file = state:current_file()
 			if state.options.preview and file and file ~= state.selected then
 				state.on_select(file)
 			end
@@ -682,27 +670,27 @@ function M.create(opts)
 		if options.hidden then
 			render(state)
 		else
-			M.toggle(state)
+			state:toggle()
 		end
 	end)
 	if not opened then
-		M.dispose(state)
+		state:dispose()
 		error(err, 0)
 	end
 
 	return state
 end
 
-function M.dispose(state)
-	if state.win then
-		info.close(state.win)
+function Explorer:dispose()
+	if self.win then
+		info.close(self.win)
 	end
 
-	vim.api.nvim_del_augroup_by_id(state.group)
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
+	vim.api.nvim_del_augroup_by_id(self.group)
+	if vim.api.nvim_buf_is_valid(self.buf) then
+		vim.api.nvim_buf_delete(self.buf, { force = true })
 	end
-	state.win = nil
+	self.win = nil
 end
 
-return M
+return Explorer

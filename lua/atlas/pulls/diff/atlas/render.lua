@@ -41,26 +41,26 @@ local function fold_inline(win, hunks, line_count)
 	end)
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param document AtlasDiffDocument
-local function render_inline(view, document)
-	local buf = view.right.buf
+local function render_inline(renderer, document)
+	local buf = renderer.right.buf
 	local file = document.file
 
-	vim.api.nvim_win_call(view.right.win, function()
+	vim.api.nvim_win_call(renderer.right.win, function()
 		local options = vim.wo[0][0]
 		options.foldmethod = "manual"
 		options.foldenable = false
 		vim.cmd("normal! zE")
 	end)
-	vim.api.nvim_win_set_cursor(view.right.win, { 1, 0 })
+	vim.api.nvim_win_set_cursor(renderer.right.win, { 1, 0 })
 
 	if document.binary then
 		return
 	end
 
 	if file.status == "added" or file.status == "deleted" then
-		view.inline_hunk_lines = { 1 }
+		renderer.inline_hunk_lines = { 1 }
 		local group = file.status == "added" and "DiffAdd" or "DiffDelete"
 		highlight(buf, 1, vim.api.nvim_buf_line_count(buf), group)
 		return
@@ -70,27 +70,27 @@ local function render_inline(view, document)
 	for _, hunk in ipairs(document.hunks) do
 		local new_start, new_count = hunk[3], hunk[4]
 		local target = new_count > 0 and new_start or new_start + 1
-		view.inline_hunk_lines[#view.inline_hunk_lines + 1] = math.min(target, line_count)
+		renderer.inline_hunk_lines[#renderer.inline_hunk_lines + 1] = math.min(target, line_count)
 		highlight(buf, new_start, new_count, "DiffAdd")
 	end
 
 	if #document.hunks > 0 then
-		fold_inline(view.right.win, document.hunks, line_count)
+		fold_inline(renderer.right.win, document.hunks, line_count)
 	end
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param old_lines string[]
 ---@param hunks integer[][]
 ---@param cards table<integer, [string, string|string[]][][]>
 ---@param previews table<integer, [string, string][]>
 ---@return integer
-function M.deleted_lines(view, old_lines, hunks, cards, previews)
-	local buf = view.right.buf
+function M.deleted_lines(renderer, old_lines, hunks, cards, previews)
+	local buf = renderer.right.buf
 	vim.api.nvim_buf_clear_namespace(buf, deleted_namespace, 0, -1)
 
 	local line_count = vim.api.nvim_buf_line_count(buf)
-	local width = vim.api.nvim_win_get_width(view.right.win) - vim.fn.getwininfo(view.right.win)[1].textoff
+	local width = vim.api.nvim_win_get_width(renderer.right.win) - vim.fn.getwininfo(renderer.right.win)[1].textoff
 	local topfill = 0
 
 	for _, hunk in ipairs(hunks) do
@@ -134,9 +134,9 @@ function M.deleted_lines(view, old_lines, hunks, cards, previews)
 	return topfill
 end
 
----@param view AtlasDiffNativeView
-local function render_side_by_side(view, binary)
-	for _, pane in ipairs({ view.left, view.right }) do
+---@param renderer AtlasDiffNativeRenderer
+local function render_side_by_side(renderer, binary)
+	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		vim.api.nvim_win_call(pane.win, function()
 			vim.cmd(binary and "diffoff" or "diffthis")
 			local options = vim.wo[0][0]
@@ -146,7 +146,7 @@ local function render_side_by_side(view, binary)
 
 			options.winhighlight = vim.go.winhighlight
 			vim.opt_local.winhighlight:append("DiffDelete:Comment")
-			if pane == view.left then
+			if pane == renderer.left then
 				vim.opt_local.winhighlight:append("DiffAdd:DiffDelete")
 			end
 			vim.api.nvim_win_set_cursor(pane.win, { 1, 0 })
@@ -154,20 +154,20 @@ local function render_side_by_side(view, binary)
 	end
 
 	if not binary then
-		vim.api.nvim_win_call(view.right.win, function()
+		vim.api.nvim_win_call(renderer.right.win, function()
 			vim.cmd.diffupdate()
 			vim.cmd.syncbind()
 		end)
 	end
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param document AtlasDiffDocument
-function M.compact(view, document)
-	local hunks = view.left.win and document.split_hunks or document.hunks
-	local compact = view.options.compact and #hunks > 0
+function M.compact(renderer, document)
+	local hunks = renderer.left.win and document.split_hunks or document.hunks
+	local compact = renderer.options.compact and #hunks > 0
 
-	for _, pane in ipairs({ view.left, view.right }) do
+	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
 			vim.api.nvim_win_call(pane.win, function()
 				vim.wo.foldenable = compact
@@ -179,26 +179,26 @@ function M.compact(view, document)
 	end
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param document AtlasDiffDocument
-function M.render(view, document)
-	view.inline_hunk_lines = {}
-	M.clear(view.left.buf)
-	M.clear(view.right.buf)
+function M.render(renderer, document)
+	renderer.inline_hunk_lines = {}
+	M.clear(renderer.left.buf)
+	M.clear(renderer.right.buf)
 
-	if view.left.win then
-		render_side_by_side(view, document.binary)
+	if renderer.left.win then
+		render_side_by_side(renderer, document.binary)
 	else
-		render_inline(view, document)
+		render_inline(renderer, document)
 	end
 
-	M.compact(view, document)
+	M.compact(renderer, document)
 
 	-- Start at the first change in both layouts.
 	local first = document.split_hunks[1]
-	if view.left.win and first then
-		for _, pane in ipairs({ view.left, view.right }) do
-			local side = pane == view.left and 1 or 3
+	if renderer.left.win and first then
+		for _, pane in ipairs({ renderer.left, renderer.right }) do
+			local side = pane == renderer.left and 1 or 3
 			local line = first[side]
 			if first[side + 1] == 0 then
 				line = line + 1
@@ -206,8 +206,8 @@ function M.render(view, document)
 			line = math.min(line, vim.api.nvim_buf_line_count(pane.buf))
 			vim.api.nvim_win_set_cursor(pane.win, { line, 0 })
 		end
-	elseif view.inline_hunk_lines[1] then
-		vim.api.nvim_win_set_cursor(view.right.win, { view.inline_hunk_lines[1], 0 })
+	elseif renderer.inline_hunk_lines[1] then
+		vim.api.nvim_win_set_cursor(renderer.right.win, { renderer.inline_hunk_lines[1], 0 })
 	end
 end
 

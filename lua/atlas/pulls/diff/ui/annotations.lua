@@ -104,10 +104,10 @@ function M.for_file(session, file)
 	return items
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@return AtlasDiffAnnotation[]|nil
-function M.at_cursor(view)
-	local by_line = view.annotations[vim.api.nvim_get_current_buf()]
+function M.at_cursor(renderer)
+	local by_line = renderer.annotations[vim.api.nvim_get_current_buf()]
 	if not by_line then
 		return nil
 	end
@@ -127,13 +127,13 @@ function M.at_cursor(view)
 	return #items > 0 and items or nil
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param file AtlasDiffFile
 ---@param side "LEFT"|"RIGHT"
 ---@param lines string[]
 ---@param position fun(line: integer): { from: integer|nil, to: integer|nil }
 ---@return AtlasDiffSelection|nil, string|nil
-function M.selection(view, file, side, lines, position)
+function M.selection(renderer, file, side, lines, position)
 	local first = vim.api.nvim_win_get_cursor(0)[1]
 	local last = first
 	local mode = vim.fn.mode()
@@ -166,24 +166,24 @@ function M.selection(view, file, side, lines, position)
 			to = stop.to,
 			start_from = start and start.from,
 			start_to = start and start.to,
-			commit_hash = view.session.range.head_revision,
+			commit_hash = renderer.session.range.head_revision,
 		},
 	}
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param all boolean|nil
 ---@return boolean toggled
-function M.toggle_threads(view, all)
-	if view.options.comment_display ~= "virtual_lines" then
+function M.toggle_threads(renderer, all)
+	if renderer.options.comment_display ~= "virtual_lines" then
 		return false
 	end
 
 	local items
-	if all and view.current_file then
-		items = M.for_file(view.session, view.current_file)
+	if all and renderer.current_file then
+		items = M.for_file(renderer.session, renderer.current_file)
 	else
-		items = M.at_cursor(view) or {}
+		items = M.at_cursor(renderer) or {}
 	end
 
 	local threads = vim.iter(items)
@@ -191,7 +191,7 @@ function M.toggle_threads(view, all)
 			return item.thread
 		end)
 		:totable()
-	return (thread_ui.toggle_all_threads(threads, view.expanded_threads))
+	return (thread_ui.toggle_all_threads(threads, renderer.expanded_threads))
 end
 
 ---@param comment PullsComment
@@ -316,17 +316,17 @@ function M.is_kind(item, kind)
 	return item.thread ~= nil
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param direction 1|-1
 ---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@param display_line fun(pane: integer, line: integer): integer
 ---@return boolean moved
-function M.navigate(view, direction, kind, from_edge, display_line)
+function M.navigate(renderer, direction, kind, from_edge, display_line)
 	local locations = {}
-	for index, pane in ipairs({ view.left, view.right }) do
+	for index, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			for line, items in pairs(view.annotations[pane.buf] or {}) do
+			for line, items in pairs(renderer.annotations[pane.buf] or {}) do
 				if vim.iter(items):any(function(item)
 					return M.is_kind(item, kind)
 				end) then
@@ -347,8 +347,8 @@ function M.navigate(view, direction, kind, from_edge, display_line)
 	table.sort(locations, function(a, b)
 		return a.row == b.row and a.pane < b.pane or a.row < b.row
 	end)
-	local pane = vim.api.nvim_get_current_win() == view.left.win and 1 or 2
-	local win = pane == 1 and view.left.win or view.right.win
+	local pane = vim.api.nvim_get_current_win() == renderer.left.win and 1 or 2
+	local win = pane == 1 and renderer.left.win or renderer.right.win
 	local cursor = display_line(pane, vim.api.nvim_win_get_cursor(win)[1])
 	local first = direction == 1 and 1 or #locations
 	local last = direction == 1 and #locations or 1
@@ -367,13 +367,13 @@ function M.navigate(view, direction, kind, from_edge, display_line)
 	return false
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param target { comment?: PullsComment, note?: AtlasNote }
 ---@param focus boolean
-function M.jump(view, target, focus)
-	for _, pane in ipairs({ view.left, view.right }) do
+function M.jump(renderer, target, focus)
+	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			for line, items in pairs(view.annotations[pane.buf] or {}) do
+			for line, items in pairs(renderer.annotations[pane.buf] or {}) do
 				local found = vim.iter(items):any(function(item)
 					return target.note and item.note and item.note.id == target.note.id
 						or target.comment and item.thread and item.thread.comment == target.comment

@@ -1,48 +1,48 @@
 local diff = require("atlas.pulls.diff.diff")
-local ui = require("atlas.pulls.diff.ui.annotations")
+local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 
 local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.diffview.annotations")
 
----@param view AtlasDiffDiffviewView
-function M.clear(view)
-	for buf in pairs(view.annotations) do
+---@param renderer AtlasDiffDiffviewRenderer
+function M.clear(renderer)
+	for buf in pairs(renderer.annotations) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
 		end
 	end
-	view.annotations = {}
+	renderer.annotations = {}
 end
 
----@param view AtlasDiffDiffviewView
-function M.render(view)
-	M.clear(view)
+---@param renderer AtlasDiffDiffviewRenderer
+function M.render(renderer)
+	M.clear(renderer)
 
-	local file = view.current_file
+	local file = renderer.current_file
 	if not file then
 		return
 	end
 
-	local items = ui.for_file(view.session, file)
+	local items = annotation_ui.for_file(renderer.session, file)
 	if #items == 0 then
 		return
 	end
 
-	local layout = view.diffview.cur_layout
+	local layout = renderer.diffview.cur_layout
 	local panes = {}
 	-- Diffview shares its empty buffer, so don't put cards on missing or binary sides.
 	if layout.a and not layout.a.file.nulled and not layout.a.file.binary then
-		panes.LEFT = view.left
+		panes.LEFT = renderer.left
 	end
 	if not layout.b.file.nulled and not layout.b.file.binary then
-		panes.RIGHT = view.right
+		panes.RIGHT = renderer.right
 	end
 
-	local expanded = view.options.comment_display == "virtual_lines"
-	local options = ui.comment_options(view.expanded_threads)
+	local expanded = renderer.options.comment_display == "virtual_lines"
+	local options = annotation_ui.comment_options(renderer.expanded_threads)
 	local placed = {}
 	for _, pane in pairs(panes) do
-		view.annotations[pane.buf] = {}
+		renderer.annotations[pane.buf] = {}
 		placed[pane.buf] = {}
 	end
 
@@ -55,7 +55,7 @@ function M.render(view)
 			end
 
 			local line = math.max(1, math.min(item.end_line or 1, count))
-			local lookup = view.annotations[pane.buf]
+			local lookup = renderer.annotations[pane.buf]
 			lookup[line] = lookup[line] or {}
 			table.insert(lookup[line], item)
 
@@ -81,19 +81,19 @@ function M.render(view)
 	end
 
 	for side, pane in pairs(panes) do
-		ui.draw_signs(namespace, pane.buf, view.annotations[pane.buf])
+		annotation_ui.draw_signs(namespace, pane.buf, renderer.annotations[pane.buf])
 
 		for line, entries in pairs(placed[pane.buf]) do
 			if expanded then
 				local rows = vim.api.nvim_win_call(pane.win, function()
-					return ui.render_virtual_lines(entries, vim.api.nvim_win_get_width(pane.win), options)
+					return annotation_ui.render_virtual_lines(entries, vim.api.nvim_win_get_width(pane.win), options)
 				end)
 				put_lines(pane, line, rows, false)
 
 				local other = panes[side == "LEFT" and "RIGHT" or "LEFT"]
 				if other then
 					-- Keep the diff lines below each card aligned across the panes.
-					local target = line == 0 and 0 or diff.map_line(view.split_hunks, side, line)
+					local target = line == 0 and 0 or diff.map_line(renderer.split_hunks, side, line)
 					local padding = {}
 					for _ = 1, #rows do
 						padding[#padding + 1] = { { "", "Normal" } }
@@ -102,7 +102,7 @@ function M.render(view)
 				end
 			else
 				vim.api.nvim_buf_set_extmark(pane.buf, namespace, line - 1, 0, {
-					virt_text = ui.render_virtual_text(entries),
+					virt_text = annotation_ui.render_virtual_text(entries),
 					virt_text_pos = "eol",
 					priority = 1100,
 				})
@@ -134,18 +134,18 @@ function M.render(view)
 	end
 end
 
----@param view AtlasDiffDiffviewView
+---@param renderer AtlasDiffDiffviewRenderer
 ---@param direction 1|-1
 ---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@return boolean moved
-function M.navigate(view, direction, kind, from_edge)
-	if view.pending_file then
+function M.navigate(renderer, direction, kind, from_edge)
+	if renderer.pending_file then
 		return false
 	end
 
-	return ui.navigate(view, direction, kind, from_edge, function(pane, line)
-		return diff.display_line(view.split_hunks, pane, line)
+	return annotation_ui.navigate(renderer, direction, kind, from_edge, function(pane, line)
+		return diff.display_line(renderer.split_hunks, pane, line)
 	end)
 end
 

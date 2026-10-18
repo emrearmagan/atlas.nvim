@@ -10,12 +10,14 @@ local annotations = require("atlas.pulls.diff.diffview.annotations")
 local diff = require("atlas.pulls.diff.diff")
 local keymaps = require("atlas.pulls.diff.diffview.keymaps")
 
----@class AtlasDiffDiffviewView: AtlasDiffView
+---@class AtlasDiffDiffviewRenderer: AtlasDiffRenderer
 ---@field diffview CDiffView
 ---@field group integer
 ---@field pending_file { file: AtlasDiffFile, on_done: fun(err?: string) }|nil
 ---@field hunks integer[][]
 ---@field split_hunks integer[][]
+local Renderer = {}
+Renderer.__index = Renderer
 
 local statuses = {
 	added = "A",
@@ -26,19 +28,19 @@ local statuses = {
 	type_changed = "T",
 }
 
----@param view AtlasDiffDiffviewView
-local function update_panes(view)
-	local layout = view.diffview.cur_layout
-	view.right = { buf = vim.api.nvim_win_get_buf(layout.b.id), win = layout.b.id }
-	view.left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id }
-		or { buf = view.right.buf }
+---@param renderer AtlasDiffDiffviewRenderer
+local function update_panes(renderer)
+	local layout = renderer.diffview.cur_layout
+	renderer.right = { buf = vim.api.nvim_win_get_buf(layout.b.id), win = layout.b.id }
+	renderer.left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id }
+		or { buf = renderer.right.buf }
 end
 
 ---@param session AtlasDiffSession
 ---@param options AtlasPullsDiffConfig
----@param callbacks AtlasDiffCallbacks
----@return AtlasDiffDiffviewView
-local function open(session, options, callbacks)
+---@param on_file fun(file: AtlasDiffFile|nil)
+---@return AtlasDiffDiffviewRenderer
+function Renderer.new(session, options, on_file)
 	local files = { working = {} }
 	for _, file in ipairs(session.files) do
 		files.working[#files.working + 1] = {
@@ -82,49 +84,48 @@ local function open(session, options, callbacks)
 		error(err, 0)
 	end
 
-	---@type AtlasDiffDiffviewView
-	local view = {
+	local renderer = setmetatable({
 		tabpage = diffview.tabpage,
 		session = session,
 		options = options,
-		callbacks = callbacks,
+		on_file = on_file,
 		diffview = diffview,
 		group = vim.api.nvim_create_augroup("AtlasDiffDiffview" .. diffview.tabpage, { clear = true }),
 		annotations = {},
 		expanded_threads = {},
 		hunks = {},
 		split_hunks = {},
-	}
-	update_panes(view)
+	}, Renderer)
+	update_panes(renderer)
 
 	diffview.emitter:on("file_open_pre", function()
-		annotation_ui.close(view.tabpage)
-		annotations.clear(view)
+		annotation_ui.close(renderer.tabpage)
+		annotations.clear(renderer)
 	end)
 	-- Diffview adjusts scrolling after this event on a file's first open.
 	diffview.emitter:on(
 		"file_open_post",
 		vim.schedule_wrap(function(_, entry)
-			if entry ~= diffview.cur_entry or not vim.api.nvim_tabpage_is_valid(view.tabpage) then
+			if entry ~= diffview.cur_entry or not vim.api.nvim_tabpage_is_valid(renderer.tabpage) then
 				return
 			end
 
-			local pending = view.pending_file
+			local pending = renderer.pending_file
 			if pending and pending.file.path ~= entry.path then
 				diffview:set_file_by_path(pending.file.path, false)
 				return
 			end
-			view.pending_file = nil
+			renderer.pending_file = nil
 
-			update_panes(view)
+			update_panes(renderer)
 			local file = vim.iter(session.files):find(function(item)
 				return item.path == entry.path
 			end)
-			local old = table.concat(vim.api.nvim_buf_get_lines(view.left.buf, 0, -1, false), "\n")
-			local new = table.concat(vim.api.nvim_buf_get_lines(view.right.buf, 0, -1, false), "\n")
-			view.hunks, view.split_hunks = diff.compute(old, new)
-			callbacks.on_file(file)
-			annotations.render(view)
+			local old = table.concat(vim.api.nvim_buf_get_lines(renderer.left.buf, 0, -1, false), "\n")
+			local new = table.concat(vim.api.nvim_buf_get_lines(renderer.right.buf, 0, -1, false), "\n")
+			renderer.hunks, renderer.split_hunks = diff.compute(old, new)
+			renderer.on_file(file)
+			annotations.render(renderer)
 
 			if pending then
 				pending.on_done()
@@ -133,48 +134,46 @@ local function open(session, options, callbacks)
 	)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
-		group = view.group,
+		group = renderer.group,
 		callback = function()
 			-- Diffview replaces panes before file_open_post. Track them before Atlas handles the close.
 			if diffview.cur_layout:is_valid() then
-				update_panes(view)
+				update_panes(renderer)
 			end
 		end,
 	})
 
-	return view
+	return renderer
 end
 
----@param view AtlasDiffDiffviewView
 ---@param file AtlasDiffFile
 ---@param on_done fun(err?: string)
-local function show_file(view, file, on_done)
-	local loading = view.pending_file ~= nil
-	view.pending_file = { file = file, on_done = on_done }
+function Renderer:show_file(file, on_done)
+	local loading = self.pending_file ~= nil
+	self.pending_file = { file = file, on_done = on_done }
 	-- Let Diffview finish loading before opening the latest selected file.
 	if loading then
 		return
 	end
 
-	view.diffview:set_file_by_path(file.path, false)
+	self.diffview:set_file_by_path(file.path, false)
 end
 
----@param view AtlasDiffDiffviewView
 ---@return AtlasDiffSelection|nil, string|nil
-local function get_selection(view)
-	local file = view.current_file
+function Renderer:get_selection()
+	local file = self.current_file
 	local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
-	local left = win == view.left.win and buf == view.left.buf
-	local right = win == view.right.win and buf == view.right.buf
+	local left = win == self.left.win and buf == self.left.buf
+	local right = win == self.right.win and buf == self.right.buf
 
 	if not file or not (left or right) then
 		return nil, "Select a line in the diff"
 	end
-	if view.pending_file then
+	if self.pending_file then
 		return nil, "The diff is still loading"
 	end
 
-	local layout = view.diffview.cur_layout
+	local layout = self.diffview.cur_layout
 	local native_file = left and layout.a.file or layout.b.file
 	if file.binary or native_file.binary then
 		return nil, "Binary files do not have review lines"
@@ -190,7 +189,7 @@ local function get_selection(view)
 		local from = side == "LEFT" and line or nil
 		local to = side == "RIGHT" and line or nil
 		if file.status ~= "added" and file.status ~= "deleted" then
-			local opposite, hunk = diff.map_line(view.hunks, side, line)
+			local opposite, hunk = diff.map_line(self.hunks, side, line)
 			-- GitLab needs both positions for unchanged lines.
 			if not hunk then
 				if side == "LEFT" then
@@ -203,27 +202,19 @@ local function get_selection(view)
 		return { from = from, to = to }
 	end
 
-	return annotation_ui.selection(view, file, side, lines, position)
+	return annotation_ui.selection(self, file, side, lines, position)
 end
 
----@param view AtlasDiffDiffviewView
-local function dispose(view)
-	vim.api.nvim_del_augroup_by_id(view.group)
-	annotations.clear(view)
-	view.diffview:close()
-	lib.dispose_view(view.diffview)
+function Renderer:dispose()
+	vim.api.nvim_del_augroup_by_id(self.group)
+	annotations.clear(self)
+	self.diffview:close()
+	lib.dispose_view(self.diffview)
 end
 
----@type AtlasDiffRenderer
-local M = {
-	open = open,
-	show_file = show_file,
-	redraw = annotations.render,
-	get_selection = get_selection,
-	navigate_annotation = annotations.navigate,
-	resize = annotations.render,
-	setup_keymaps = keymaps.setup,
-	dispose = dispose,
-}
+Renderer.redraw = annotations.render
+Renderer.navigate_annotation = annotations.navigate
+Renderer.resize = annotations.render
+Renderer.setup_keymaps = keymaps.setup
 
-return M
+return Renderer

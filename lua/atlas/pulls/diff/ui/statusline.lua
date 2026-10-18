@@ -5,12 +5,13 @@ local review_actions = require("atlas.pulls.actions.review")
 local M = {}
 local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥" }
 
----@param ui AtlasDiffUI
-function M.update(ui)
-	local session = ui.session
+---@param statusline AtlasStatusline
+---@param session AtlasDiffSession
+---@param files AtlasDiffFile[]
+---@param buf integer
+function M.update(statusline, session, files, buf)
 	local review_data = session.review
 	local reviewed_files = session.reviewed_files
-	local files = ui.explorer.files
 
 	local pr = session.source.pr
 	local identity = pr and string.format("#%s %s", pr.id, pr.title)
@@ -33,7 +34,7 @@ function M.update(ui)
 		}
 	end
 
-	local client = vim.lsp.get_clients({ bufnr = ui.view.right.buf })[1]
+	local client = vim.lsp.get_clients({ bufnr = buf })[1]
 	if client then
 		items[#items + 1] = {
 			text = string.format("%s %s", icons.get("lsp"), client.name),
@@ -88,8 +89,8 @@ function M.update(ui)
 	end
 
 	local help_keys = keymaps.resolve("ui.help")
-	ui.statusline.options.help_key = help_keys and help_keys[1] or nil
-	ui.statusline:set_items(items)
+	statusline.options.help_key = help_keys and help_keys[1] or nil
+	statusline:set_items(items)
 end
 
 return M

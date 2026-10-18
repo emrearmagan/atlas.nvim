@@ -1,5 +1,4 @@
 local resolver = require("atlas.core.keymaps")
-local commits = require("atlas.pulls.diff.ui.commits")
 local help = require("atlas.ui.popups.help")
 
 local M = {}
@@ -48,29 +47,6 @@ M.action_ids = {
 ---@field items AtlasHelpKeyItem[]
 ---@field index integer
 
----@class AtlasDiffKeymapActions
----@field close fun()
----@field reload fun()
----@field toggle_explorer fun()
----@field toggle_commits fun()
----@field toggle_review_panel fun()
----@field toggle_file_reviewed fun()
----@field toggle_resolved fun()
----@field delete_annotation fun()
----@field toggle_comments fun()
----@field toggle_threads fun(all?: boolean): boolean
----@field focus_explorer fun()
----@field navigate_file fun(direction: 1|-1, unreviewed_only?: boolean)
----@field find_file fun()
----@field open_file fun()
----@field open_commit fun()
----@field add_comment fun(pending: boolean, suggestion?: boolean)
----@field add_note fun()
----@field navigate_annotation fun(direction: 1|-1, kind: AtlasDiffAnnotationKind)
----@field dispatch fun(id: AtlasReviewActionId)
----@field open_in_browser fun()
----@field run_custom fun(callback: fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any): any
-
 ---@param items AtlasHelpKeyItem[]
 ---@param action AtlasKeymapActionId
 ---@param desc string
@@ -112,73 +88,76 @@ local function groups(name, items, review_items, custom_items)
 	}
 end
 
----@param ui AtlasDiffUI
----@param actions AtlasDiffKeymapActions
-function M.setup(ui, actions)
-	local session = ui.session
+---@param viewer AtlasDiffViewer
+function M.setup(viewer)
+	local session = viewer.session
 
 	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", "Previous unreviewed file", 20, function()
-		actions.navigate_file(-1, true)
+		viewer:navigate_file(-1, true)
 	end)
 	add(shared_items, "pulls.review.explorer.next_unreviewed_file", "Next unreviewed file", 21, function()
-		actions.navigate_file(1, true)
+		viewer:navigate_file(1, true)
 	end)
-	add(shared_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
-	add(shared_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
+	add(shared_items, "pulls.review.explorer.find_file", "Find changed file", 30, function()
+		viewer:find_file()
+	end)
+	add(shared_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, function()
+		viewer:toggle_commits()
+	end)
 	if session.source.kind == "pr" then
-		add(
-			shared_items,
-			"pulls.review.view.toggle_review_panel",
-			"Toggle review panel",
-			43,
-			actions.toggle_review_panel
-		)
+		add(shared_items, "pulls.review.view.toggle_review_panel", "Toggle review panel", 43, function()
+			viewer:toggle_review_panel()
+		end)
 	end
 	add(shared_items, "pulls.review.view.toggle_detail_panel", "Toggle PR details", 44, function()
-		actions.dispatch("toggle_detail_panel")
+		viewer:run_action("toggle_detail_panel")
 	end)
-	add(shared_items, "pulls.review.view.toggle_comments", "Toggle comment display", 45, actions.toggle_comments)
+	add(shared_items, "pulls.review.view.toggle_comments", "Toggle comment display", 45, function()
+		viewer:toggle_comments()
+	end)
 
 	local review_items = {}
 	if session.source.kind == "pr" then
 		add(review_items, "ui.open_actions", "Review actions", 1, function()
-			actions.dispatch("open_actions")
+			viewer:run_action("open_actions")
 		end)
-		add(review_items, "pulls.review.toggle_file_reviewed", "Toggle reviewed", 2, actions.toggle_file_reviewed)
+		add(review_items, "pulls.review.toggle_file_reviewed", "Toggle reviewed", 2, function()
+			viewer:toggle_file_reviewed()
+		end)
 		add(review_items, "pulls.review.approve", "Approve", 60, function()
-			actions.dispatch("approve")
+			viewer:run_action("approve")
 		end)
 		add(review_items, "pulls.review.request_changes", "Request changes", 61, function()
-			actions.dispatch("request_changes")
+			viewer:run_action("request_changes")
 		end)
 		add(review_items, "pulls.review.submit_review", "Submit review", 62, function()
-			actions.dispatch("submit_review")
+			viewer:run_action("submit_review")
 		end)
 		add(review_items, "pulls.review.prev_comment", "Previous comment", 90, function()
-			actions.navigate_annotation(-1, "comment")
+			viewer:navigate_annotation(-1, "comment")
 		end)
 		add(review_items, "pulls.review.next_comment", "Next comment", 91, function()
-			actions.navigate_annotation(1, "comment")
+			viewer:navigate_annotation(1, "comment")
 		end)
 		add(review_items, "pulls.review.prev_unresolved", "Previous unresolved thread", 94, function()
-			actions.navigate_annotation(-1, "unresolved")
+			viewer:navigate_annotation(-1, "unresolved")
 		end)
 		add(review_items, "pulls.review.next_unresolved", "Next unresolved thread", 95, function()
-			actions.navigate_annotation(1, "unresolved")
+			viewer:navigate_annotation(1, "unresolved")
 		end)
 	end
 	if session.notes then
 		add(review_items, "pulls.review.prev_note", "Previous note", 92, function()
-			actions.navigate_annotation(-1, "note")
+			viewer:navigate_annotation(-1, "note")
 		end)
 		add(review_items, "pulls.review.next_note", "Next note", 93, function()
-			actions.navigate_annotation(1, "note")
+			viewer:navigate_annotation(1, "note")
 		end)
 	end
 	if session.source.kind == "pr" then
 		add(review_items, "ui.refresh", "Refresh review", 80, function()
-			actions.dispatch("refresh_review")
+			viewer:run_action("refresh_review")
 		end)
 	end
 
@@ -186,7 +165,9 @@ function M.setup(ui, actions)
 	add(commits_items, "ui.help", "Toggle help", 100, help.toggle)
 
 	if session.source.kind == "pr" then
-		add(shared_items, "ui.open_in_browser", "Open in browser", 90, actions.open_in_browser)
+		add(shared_items, "ui.open_in_browser", "Open in browser", 90, function()
+			viewer:open_in_browser()
+		end)
 	end
 	add(shared_items, "ui.help", "Toggle Atlas help", 100, help.toggle)
 
@@ -194,57 +175,71 @@ function M.setup(ui, actions)
 	local explorer_review_items = vim.list_extend({}, review_items)
 	if session.source.kind == "pr" then
 		add(explorer_review_items, "pulls.review.add_comment", "Add pending file comment", 30, function()
-			actions.add_comment(true)
+			viewer:add_comment(true)
 		end)
 		add(explorer_review_items, "pulls.review.submit_comment", "Post file comment", 31, function()
-			actions.add_comment(false)
+			viewer:add_comment(false)
 		end)
 	end
 
 	local diff_review_items = vim.list_extend({}, review_items)
-	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, ui.view.callbacks.show_details)
+	add(diff_review_items, "pulls.review.show_details", "Show comments/notes", 35, function()
+		viewer:show_details()
+	end)
 	if session.source.kind == "pr" then
 		add(diff_review_items, "pulls.review.add_comment", "Add pending line/selection comment", 30, function()
-			actions.add_comment(true)
+			viewer:add_comment(true)
 		end, { "n", "x" })
 		add(diff_review_items, "pulls.review.submit_comment", "Post line/selection comment", 31, function()
-			actions.add_comment(false)
+			viewer:add_comment(false)
 		end, { "n", "x" })
 		add(diff_review_items, "pulls.review.add_suggestion", "Add pending suggestion", 32, function()
-			actions.add_comment(true, true)
+			viewer:add_comment(true, true)
 		end, { "n", "x" })
 		add(diff_review_items, "pulls.review.submit_suggestion", "Post suggestion", 33, function()
-			actions.add_comment(false, true)
+			viewer:add_comment(false, true)
 		end, { "n", "x" })
 	end
 	if session.notes then
-		add(diff_review_items, "pulls.review.add_note", "Add note", 34, actions.add_note, { "n", "x" })
+		add(diff_review_items, "pulls.review.add_note", "Add note", 34, function()
+			viewer:add_note()
+		end, { "n", "x" })
 	end
 	if session.source.kind == "pr" then
-		add(diff_review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, actions.toggle_resolved)
-		add(diff_review_items, "ui.delete", "Delete comment / note", 41, actions.delete_annotation)
+		add(diff_review_items, "pulls.review.toggle_resolved", "Toggle resolved", 40, function()
+			viewer:run_annotation_action("toggle_resolved")
+		end)
+		add(diff_review_items, "ui.delete", "Delete comment / note", 41, function()
+			viewer:run_annotation_action("delete_comment")
+		end)
 	end
 
-	add(commits_items, "pulls.open_diff", "Open commit diff", 1, actions.open_commit)
+	add(commits_items, "pulls.open_diff", "Open commit diff", 1, function()
+		viewer:open_commit()
+	end)
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
-		commits.show_details(ui.commits)
+		viewer.commits:show_details()
 	end)
 	add(commits_items, "ui.copy_id", "Copy commit hash", 3, function()
-		commits.copy_hash(ui.commits)
+		viewer.commits:copy_hash()
 	end)
 	add(commits_items, "ui.open_in_browser", "Open commit in browser", 4, function()
-		commits.open_in_browser(ui.commits)
+		viewer.commits:open_in_browser()
 	end)
 	add(commits_items, "ui.close", "Close commits", 101, function()
 		if not help.is_open() then
-			actions.toggle_commits()
+			viewer:toggle_commits()
 		end
 	end)
 
-	local custom_items = session.source.kind == "pr" and resolver.custom_items("pulls", actions.run_custom) or {}
-	ui.renderer.setup_keymaps(ui, actions, groups("View", shared_items, diff_review_items, custom_items))
-	register(ui.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
-	register(ui.commits.buf, groups("Commits", commits_items, review_items, custom_items))
+	local custom_items = session.source.kind == "pr"
+			and resolver.custom_items("pulls", function(callback)
+				return viewer:run_custom(callback)
+			end)
+		or {}
+	viewer.renderer:setup_keymaps(viewer, groups("View", shared_items, diff_review_items, custom_items))
+	register(viewer.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
+	register(viewer.commits.buf, groups("Commits", commits_items, review_items, custom_items))
 end
 
 return M

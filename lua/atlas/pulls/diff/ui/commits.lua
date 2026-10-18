@@ -2,7 +2,16 @@ local notify = require("atlas.core.notify")
 local info = require("atlas.ui.popups.info")
 local utils = require("atlas.ui.shared.utils")
 
-local M = {}
+---@class AtlasDiffCommits
+---@field buf integer
+---@field win integer|nil
+---@field shown boolean
+---@field items PullsCommit[]
+---@field cursor_row integer
+---@field group integer
+local Commits = {}
+Commits.__index = Commits
+
 local namespace = vim.api.nvim_create_namespace("atlas.diff.commits")
 
 local function render(state)
@@ -41,17 +50,17 @@ end
 
 ---@param items PullsCommit[]
 ---@param shown boolean
----@return { buf: integer, win?: integer, shown: boolean, items: PullsCommit[], cursor_row: integer, group: integer }
-function M.create(items, shown)
+---@return AtlasDiffCommits
+function Commits.new(items, shown)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Commits [%d]", vim.api.nvim_get_current_tabpage()))
-	local state = {
+	local state = setmetatable({
 		buf = buf,
 		shown = shown,
 		items = items,
 		cursor_row = 2,
 		group = vim.api.nvim_create_augroup("AtlasDiffCommits" .. buf, { clear = true }),
-	}
+	}, Commits)
 
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].filetype = "atlas-ui.diff-commits"
@@ -89,28 +98,28 @@ function M.create(items, shown)
 end
 
 ---@param parent_win integer|nil
-function M.resize(state, parent_win)
-	if state.win and parent_win then
-		local height = vim.api.nvim_win_get_height(parent_win) + vim.api.nvim_win_get_height(state.win) + 1
-		vim.api.nvim_win_set_height(state.win, math.max(2, math.floor(height * 0.2)))
+function Commits:resize(parent_win)
+	if self.win and parent_win then
+		local height = vim.api.nvim_win_get_height(parent_win) + vim.api.nvim_win_get_height(self.win) + 1
+		vim.api.nvim_win_set_height(self.win, math.max(2, math.floor(height * 0.2)))
 	end
 end
 
 ---@param parent_win integer
 ---@return integer|nil win
 ---@return string|nil err
-function M.open(state, parent_win)
-	if #state.items == 0 then
+function Commits:open(parent_win)
+	if #self.items == 0 then
 		return nil, "No commits available"
 	end
 
-	state.win = vim.api.nvim_open_win(state.buf, false, {
+	self.win = vim.api.nvim_open_win(self.buf, false, {
 		split = "below",
 		win = parent_win,
 		height = math.max(2, math.floor(vim.api.nvim_win_get_height(parent_win) * 0.2)),
 	})
 
-	local options = vim.wo[state.win][0]
+	local options = vim.wo[self.win][0]
 	options.winfixwidth = true
 	options.winfixheight = true
 	options.number = false
@@ -132,25 +141,25 @@ function M.open(state, parent_win)
 	options.list = false
 	options.spell = false
 
-	render(state)
-	return state.win
+	render(self)
+	return self.win
 end
 
-function M.close(state)
-	if state.win then
-		state.cursor_row = vim.api.nvim_win_get_cursor(state.win)[1]
-		vim.api.nvim_win_close(state.win, true)
+function Commits:close()
+	if self.win then
+		self.cursor_row = vim.api.nvim_win_get_cursor(self.win)[1]
+		vim.api.nvim_win_close(self.win, true)
 	end
 end
 
 ---@return PullsCommit|nil
-function M.current(state)
-	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
-	return state.items[row - 1]
+function Commits:current()
+	local row = self.win and vim.api.nvim_win_get_cursor(self.win)[1] or self.cursor_row
+	return self.items[row - 1]
 end
 
-function M.copy_hash(state)
-	local commit = M.current(state)
+function Commits:copy_hash()
+	local commit = self:current()
 	if not commit then
 		return
 	end
@@ -159,8 +168,8 @@ function M.copy_hash(state)
 	notify.success("Copied commit SHA")
 end
 
-function M.open_in_browser(state)
-	local commit = M.current(state)
+function Commits:open_in_browser()
+	local commit = self:current()
 	if not commit then
 		return
 	end
@@ -174,7 +183,7 @@ end
 
 ---@param commit PullsCommit
 ---@return { title: string, lines: string[], filetype: string }
-function M.preview(commit)
+function Commits.preview(commit)
 	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
 	while #lines > 0 and vim.trim(lines[#lines]) == "" do
 		table.remove(lines)
@@ -198,25 +207,25 @@ function M.preview(commit)
 	}
 end
 
-function M.show_details(state)
+function Commits:show_details()
 	info.toggle({
-		source_win = state.win,
+		source_win = self.win,
 		content = function(line)
-			local commit = state.items[line - 1]
+			local commit = self.items[line - 1]
 			if commit then
-				return M.preview(commit)
+				return Commits.preview(commit)
 			end
 		end,
 	})
 end
 
-function M.dispose(state)
-	M.close(state)
-	vim.api.nvim_del_augroup_by_id(state.group)
+function Commits:dispose()
+	self:close()
+	vim.api.nvim_del_augroup_by_id(self.group)
 
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
+	if vim.api.nvim_buf_is_valid(self.buf) then
+		vim.api.nvim_buf_delete(self.buf, { force = true })
 	end
 end
 
-return M
+return Commits

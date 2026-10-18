@@ -2,7 +2,6 @@ local DiffView = require("diffview.scene.views.diff.diff_view").DiffView
 local diffview_actions = require("diffview.actions")
 local config = require("diffview.config")
 local resolver = require("atlas.core.keymaps")
-local explorer = require("atlas.pulls.diff.ui.explorer")
 local help = require("atlas.ui.popups.help")
 
 local M = {}
@@ -23,23 +22,21 @@ local function bind_native(buf, mappings, callbacks)
 	end
 end
 
----@param ui AtlasDiffUI
----@param commands AtlasDiffKeymapActions
+---@param renderer AtlasDiffDiffviewRenderer
+---@param viewer AtlasDiffViewer
 ---@param groups AtlasDiffKeymapGroup[]
-function M.setup(ui, commands, groups)
-	local view = ui.view
-	---@cast view AtlasDiffDiffviewView
-	local state = ui.explorer
+function M.setup(renderer, viewer, groups)
+	local explorer = viewer.explorer
 	local native_keys = config.get_config().keymaps
 	local external_help_keys = resolver.resolve("pulls.review.view.external_help")
 
 	-- Adapt this view's internal lookup so native file actions see our explorer selection.
-	view.diffview.infer_cur_file = function(self, allow_dir)
-		if vim.api.nvim_get_current_win() ~= state.win then
+	renderer.diffview.infer_cur_file = function(self, allow_dir)
+		if vim.api.nvim_get_current_win() ~= explorer.win then
 			return DiffView.infer_cur_file(self, allow_dir)
 		end
 
-		local file = explorer.current_file(state)
+		local file = explorer:current_file()
 		if not file then
 			return
 		end
@@ -53,39 +50,45 @@ function M.setup(ui, commands, groups)
 	-- Keep Diffview's configured keys, but route file navigation through Atlas's explorer.
 	local navigation = {
 		[diffview_actions.select_prev_entry] = function()
-			commands.navigate_file(-1)
+			viewer:navigate_file(-1)
 		end,
 		[diffview_actions.select_next_entry] = function()
-			commands.navigate_file(1)
+			viewer:navigate_file(1)
 		end,
 		[diffview_actions.select_first_entry] = function()
-			if state.files[1] then
-				state.on_select(state.files[1])
+			if explorer.files[1] then
+				explorer.on_select(explorer.files[1])
 			end
 		end,
 		[diffview_actions.select_last_entry] = function()
-			if state.files[#state.files] then
-				state.on_select(state.files[#state.files])
+			if explorer.files[#explorer.files] then
+				explorer.on_select(explorer.files[#explorer.files])
 			end
 		end,
-		[diffview_actions.focus_files] = commands.focus_explorer,
-		[diffview_actions.toggle_files] = commands.toggle_explorer,
-		[diffview_actions.refresh_files] = commands.reload,
+		[diffview_actions.focus_files] = function()
+			viewer:focus_explorer()
+		end,
+		[diffview_actions.toggle_files] = function()
+			viewer:toggle_explorer()
+		end,
+		[diffview_actions.refresh_files] = function()
+			viewer:reload()
+		end,
 	}
 	local shared = vim.tbl_extend("force", navigation, {
 		[diffview_actions.close] = function()
 			if not help.is_open() then
-				commands.close()
+				viewer:close("user_close")
 			end
 		end,
 	})
 
-	if ui.session.source.kind == "pr" then
+	if renderer.session.source.kind == "pr" then
 		for _, mapping in ipairs(diffview_actions.compat.fold_cmds) do
 			local _, command, fold = unpack(mapping)
 			if command == "za" or command == "zA" then
 				shared[fold] = function()
-					if not commands.toggle_threads(command == "zA") and vim.fn.foldlevel(".") > 0 then
+					if not viewer:toggle_threads(command == "zA") and vim.fn.foldlevel(".") > 0 then
 						fold()
 					end
 				end
@@ -103,31 +106,31 @@ function M.setup(ui, commands, groups)
 		[diffview_actions.unstage_all] = false,
 		[diffview_actions.restore_entry] = false,
 		[diffview_actions.select_entry] = function()
-			explorer.activate(state)
+			explorer:activate()
 		end,
 		[diffview_actions.listing_style] = function()
-			explorer.toggle_view_mode(state)
+			explorer:toggle_view_mode()
 		end,
 		[diffview_actions.toggle_fold] = function()
-			explorer.toggle_folder(state)
+			explorer:toggle_folder()
 		end,
 		[diffview_actions.open_fold] = function()
-			explorer.set_folder_collapsed(state, false)
+			explorer:set_folder_collapsed(false)
 		end,
 		[diffview_actions.close_fold] = function()
-			explorer.set_folder_collapsed(state, true)
+			explorer:set_folder_collapsed(true)
 		end,
 		[diffview_actions.open_all_folds] = function()
-			explorer.set_all_folders_collapsed(state, false)
+			explorer:set_all_folders_collapsed(false)
 		end,
 		[diffview_actions.close_all_folds] = function()
-			explorer.set_all_folders_collapsed(state, true)
+			explorer:set_all_folders_collapsed(true)
 		end,
 		[diffview_actions.toggle_flatten_dirs] = function()
-			explorer.toggle_flatten_dirs(state)
+			explorer:toggle_flatten_dirs()
 		end,
 	})
-	bind_native(state.buf, native_keys.file_panel, explorer_actions)
+	bind_native(explorer.buf, native_keys.file_panel, explorer_actions)
 	if external_help_keys then
 		help.register("Explorer", {
 			{
@@ -137,7 +140,7 @@ function M.setup(ui, commands, groups)
 				callback = diffview_actions.help("file_panel"),
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = state.buf, index = 1 })
+		}, { buffer = explorer.buf, index = 1 })
 	end
 
 	local details_keys = resolver.resolve("pulls.review.show_details")
@@ -148,11 +151,11 @@ function M.setup(ui, commands, groups)
 				desc = "Show file details",
 				index = 2,
 				callback = function()
-					explorer.show_details(state)
+					explorer:show_details()
 				end,
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = state.buf, index = 1 })
+		}, { buffer = explorer.buf, index = 1 })
 	end
 
 	-- Diffview defines refresh in its file panel; use those keys in the other panes too.
@@ -164,10 +167,10 @@ function M.setup(ui, commands, groups)
 		local _, _, action = unpack(mapping)
 		return navigation[action] ~= nil
 	end, native_keys.view)
-	bind_native(ui.commits.buf, refresh_keys, navigation)
-	bind_native(ui.commits.buf, commits_keys, navigation)
+	bind_native(viewer.commits.buf, refresh_keys, navigation)
+	bind_native(viewer.commits.buf, commits_keys, navigation)
 
-	for _, pane in pairs({ view.left, view.right }) do
+	for _, pane in pairs({ renderer.left, renderer.right }) do
 		if pane.win then
 			bind_native(pane.buf, refresh_keys, navigation)
 			bind_native(pane.buf, native_keys.view, shared)

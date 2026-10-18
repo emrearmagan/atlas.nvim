@@ -5,7 +5,6 @@ local commits = require("atlas.pulls.diff.ui.commits")
 local detail_window = require("atlas.pulls.ui.detail.window")
 local diff = require("atlas.pulls.diff.diff")
 local diff_git = require("atlas.pulls.diff.git")
-local diff_session = require("atlas.pulls.diff.session")
 local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
@@ -205,7 +204,7 @@ M.add_note = {
 				return
 			end
 
-			diff_session.put_note(session, note)
+			session:put_note(note)
 			notify.success("Note added", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note added" }, nil)
 		end)
@@ -302,7 +301,7 @@ M.note_to_comment = {
 				if not deleted then
 					notify.error(delete_err)
 				else
-					diff_session.remove_note(session, note)
+					session:remove_note(note)
 				end
 				on_done(comment, nil)
 			end)
@@ -332,7 +331,7 @@ M.edit_note = {
 				return
 			end
 
-			diff_session.put_note(context.session, updated)
+			context.session:put_note(updated)
 			notify.success("Note updated", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note updated" }, nil)
 		end)
@@ -367,7 +366,7 @@ M.delete_note = {
 				return
 			end
 
-			diff_session.remove_note(context.session, note)
+			context.session:remove_note(note)
 			notify.success("Note deleted", { timeout = 1200 })
 			on_done({ changed_pr = false, message = "Note deleted" }, nil)
 		end)
@@ -397,7 +396,7 @@ M.toggle_note_resolved = {
 			return false
 		end
 
-		diff_session.put_note(context.session, updated)
+		context.session:put_note(updated)
 		local message = resolved and "Note resolved" or "Note reopened"
 		notify.success(message, { timeout = 1200 })
 		on_done({ changed_pr = false, message = message }, nil)
@@ -412,7 +411,7 @@ M.refresh_review = {
 	icon = icons.get("retry", "actions"),
 	run = function(context, on_done)
 		notify.loading("Refreshing review...")
-		diff_session.reload(context.session, function(ok)
+		context.session:reload(function(ok)
 			if ok then
 				notify.success("Review refreshed", { timeout = 1200 })
 			end
@@ -451,7 +450,7 @@ M.toggle_detail_panel = {
 
 				detail.refresh(updated_pr)
 				source.pr = updated_pr
-				diff_session.reload(session, function()
+				session:reload(function()
 					on_done(result, nil)
 				end)
 			end,
@@ -588,7 +587,7 @@ function M.run_custom(callback, context, on_done)
 		end
 
 		if result.changed_pr then
-			diff_session.reload(session, function()
+			session:reload(function()
 				on_done(result, nil)
 			end)
 			return
@@ -624,7 +623,7 @@ function M.dispatch(id, context, on_done)
 
 	return action_runner.run(shared_action(id, shared), shared, function(result, err)
 		if result and not err and not session.closed and review_updates[id] then
-			diff_session.reload(session, function()
+			session:reload(function()
 				complete(result, nil)
 			end)
 			return

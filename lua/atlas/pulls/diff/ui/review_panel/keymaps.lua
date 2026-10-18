@@ -30,13 +30,13 @@ local function current(state)
 end
 
 ---@param state AtlasDiffReviewPanel
----@param callbacks { render: fun(), close: fun(), on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean}) }
+---@param callbacks { on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean}) }
 function M.setup(state, callbacks)
 	local function toggle_fold()
 		local entry = current(state)
 		if entry and entry.tree_key then
 			state.expanded[entry.tree_key] = not state.expanded[entry.tree_key]
-			callbacks.render()
+			state:render()
 		end
 	end
 
@@ -51,7 +51,7 @@ function M.setup(state, callbacks)
 		for key in pairs(state.expanded) do
 			state.expanded[key] = expand
 		end
-		callbacks.render()
+		state:render()
 	end
 
 	local function open_selected(focus)
@@ -81,7 +81,7 @@ function M.setup(state, callbacks)
 
 	local function close()
 		if not help.is_open() then
-			callbacks.close()
+			state:close()
 		end
 	end
 
@@ -105,7 +105,7 @@ function M.setup(state, callbacks)
 	add(items, "ui.toggle_all_folds", "Expand / collapse all", 11, toggle_all_folds)
 	add(items, "pulls.review.panel.cycle_filter", "Cycle filter", 12, function()
 		state.filter = next_filter[state.filter]
-		callbacks.render()
+		state:render()
 	end)
 	add(items, "ui.open_in_browser", "Open item in browser", 20, function()
 		local entry = current(state)

@@ -17,33 +17,34 @@ local worktree = require("atlas.pulls.diff.worktree")
 local winbar = require("atlas.pulls.diff.ui.winbar")
 local has_refresh, refresh = pcall(require, "codediff.ui.refresh")
 
----@class AtlasDiffCodeDiffView: AtlasDiffView
+---@class AtlasDiffCodeDiffRenderer: AtlasDiffRenderer
 ---@field observer integer
 ---@field group integer
 ---@field loading_buf integer|nil
 ---@field on_done (fun(err?: string))|nil
+local Renderer = {}
+Renderer.__index = Renderer
 
----@param view AtlasDiffView
-local function update_panes(view)
-	local original_win, modified_win = lifecycle.get_windows(view.tabpage)
-	view.right.win = modified_win or original_win
-	view.right.buf = vim.api.nvim_win_get_buf(view.right.win)
-	view.left.win = original_win ~= view.right.win and original_win or nil
+---@param renderer AtlasDiffRenderer
+local function update_panes(renderer)
+	local original_win, modified_win = lifecycle.get_windows(renderer.tabpage)
+	renderer.right.win = modified_win or original_win
+	renderer.right.buf = vim.api.nvim_win_get_buf(renderer.right.win)
+	renderer.left.win = original_win ~= renderer.right.win and original_win or nil
 	-- CodeDiff owns the hidden original buffer in inline mode.
-	view.left.buf = view.left.win and vim.api.nvim_win_get_buf(view.left.win) or view.right.buf
+	renderer.left.buf = renderer.left.win and vim.api.nvim_win_get_buf(renderer.left.win) or renderer.right.buf
 end
 
----@param view AtlasDiffCodeDiffView
-local function redraw(view)
-	local session = lifecycle.get_session(view.tabpage)
-	if view.loading_buf or not view.current_file or not session or not session.stored_diff_result then
+function Renderer:redraw()
+	local session = lifecycle.get_session(self.tabpage)
+	if self.loading_buf or not self.current_file or not session or not session.stored_diff_result then
 		return
 	end
 
-	update_panes(view)
+	update_panes(self)
 	local buf = session.single_side == "original" and session.original_bufnr or session.modified_bufnr
 	-- Older CodeDiff updates can finish after we've already selected another file.
-	if view.right.buf ~= buf then
+	if self.right.buf ~= buf then
 		return
 	end
 
@@ -51,38 +52,37 @@ local function redraw(view)
 	if vim.bo[buf].buftype == "nofile" and vim.api.nvim_buf_get_name(buf) == "" then
 		vim.api.nvim_buf_set_name(
 			buf,
-			string.format("atlas-diff://%d/%d/%s", view.tabpage, buf, view.current_file.path)
+			string.format("atlas-diff://%d/%d/%s", self.tabpage, buf, self.current_file.path)
 		)
 	end
 
-	annotations.render(view, view.current_file, session)
+	annotations.render(self, self.current_file, session)
 
-	local on_done = view.on_done
-	view.on_done = nil
+	local on_done = self.on_done
+	self.on_done = nil
 	if on_done then
 		on_done()
 	end
 end
 
----@param view AtlasDiffCodeDiffView
-local function resize(view)
-	layout.arrange(view.tabpage)
-	redraw(view)
+function Renderer:resize()
+	layout.arrange(self.tabpage)
+	self:redraw()
 end
 
----@param view AtlasDiffCodeDiffView
-local function observe_rendering(view)
+---@param renderer AtlasDiffCodeDiffRenderer
+local function observe_rendering(renderer)
 	local last_result, last_buf, last_tick, last_width
 
 	-- Single-file panes have no diff to wait for, just their Git contents.
 	vim.api.nvim_create_autocmd("User", {
-		group = view.group,
+		group = renderer.group,
 		pattern = "CodeDiffVirtualFileLoaded",
 		callback = function(event)
-			if event.data.buf == view.loading_buf then
-				view.loading_buf = nil
+			if event.data.buf == renderer.loading_buf then
+				renderer.loading_buf = nil
 				vim.schedule(function()
-					redraw(view)
+					renderer:redraw()
 				end)
 			end
 		end,
@@ -90,15 +90,15 @@ local function observe_rendering(view)
 
 	-- CodeDiff's file-loaded event fires before rendering finishes.
 	-- Observe its finished result during redraw, then draw our annotations afterwards.
-	vim.api.nvim_set_decoration_provider(view.observer, {
+	vim.api.nvim_set_decoration_provider(renderer.observer, {
 		on_win = function(_, win, buf)
-			local session = lifecycle.get_session(view.tabpage)
+			local session = lifecycle.get_session(renderer.tabpage)
 			if not session or win ~= (session.modified_win or session.original_win) then
 				return false
 			end
 
 			local result = session.stored_diff_result
-			if not view.current_file or not result then
+			if not renderer.current_file or not result then
 				return false
 			end
 
@@ -108,8 +108,8 @@ local function observe_rendering(view)
 			if result ~= last_result or buf ~= last_buf or tick ~= last_tick or width ~= last_width then
 				last_result, last_buf, last_tick, last_width = result, buf, tick, width
 				vim.schedule(function()
-					if lifecycle.get_session(view.tabpage) == session then
-						redraw(view)
+					if lifecycle.get_session(renderer.tabpage) == session then
+						renderer:redraw()
 					end
 				end)
 			end
@@ -118,68 +118,67 @@ local function observe_rendering(view)
 	})
 end
 
----@param view AtlasDiffCodeDiffView
 ---@param file AtlasDiffFile
 ---@param on_done fun(err?: string)
-local function show_file(view, file, on_done)
-	view.on_done = nil
-	annotation_ui.close(view.tabpage)
-	annotations.clear(view)
+function Renderer:show_file(file, on_done)
+	self.on_done = nil
+	annotation_ui.close(self.tabpage)
+	annotations.clear(self)
 
-	local root = view.session.worktree_root or view.session.range.root
+	local root = self.session.worktree_root or self.session.range.root
 	local head_buf
-	if view.session.worktree_root and not file.binary and file.status ~= "deleted" then
-		head_buf = worktree.load(view.session.worktree_root, file.path)
+	if self.session.worktree_root and not file.binary and file.status ~= "deleted" then
+		head_buf = worktree.load(self.session.worktree_root, file.path)
 		if head_buf then
 			-- Our own file switches should not be handled as LSP jumps.
-			view.right.buf = head_buf
+			self.right.buf = head_buf
 		end
 	end
 
 	if file.status == "added" or file.status == "deleted" then
 		-- Tell CodeDiff we're switching files so old refresh results are ignored.
 		if has_refresh and refresh.begin then
-			refresh.begin(view.tabpage)
+			refresh.begin(self.tabpage)
 		end
 
 		local deleted = file.status == "deleted"
 		---@type string|nil
-		local revision = deleted and view.session.range.base_revision or view.session.range.head_revision
+		local revision = deleted and self.session.range.base_revision or self.session.range.head_revision
 		if head_buf then
-			view.loading_buf = nil
+			self.loading_buf = nil
 			revision = nil
 		else
 			local buf = vim.fn.bufadd(virtual_file.create_url(root, revision, file.path))
 			if not vim.api.nvim_buf_is_loaded(buf) then
-				view.loading_buf = buf
-			elseif view.loading_buf ~= buf then
-				view.loading_buf = nil
+				self.loading_buf = buf
+			elseif self.loading_buf ~= buf then
+				self.loading_buf = nil
 			end
 		end
 
-		if codediff.get_current_layout(view.tabpage) == "inline" then
-			inline.show_single_file(view.tabpage, vim.fs.joinpath(root, file.path), {
+		if codediff.get_current_layout(self.tabpage) == "inline" then
+			inline.show_single_file(self.tabpage, vim.fs.joinpath(root, file.path), {
 				git_root = root,
 				revision = revision,
 				rel_path = file.path,
 				side = deleted and "original" or "modified",
 			})
 		elseif head_buf then
-			side_by_side.show_untracked_file(view.tabpage, vim.fs.joinpath(root, file.path))
+			side_by_side.show_untracked_file(self.tabpage, vim.fs.joinpath(root, file.path))
 		elseif deleted then
 			-- These helpers show a single pane, even when they are in side-by-side mode.
-			side_by_side.show_deleted_virtual_file(view.tabpage, root, file.path, revision)
+			side_by_side.show_deleted_virtual_file(self.tabpage, root, file.path, revision)
 		else
-			side_by_side.show_added_virtual_file(view.tabpage, root, file.path, revision)
+			side_by_side.show_added_virtual_file(self.tabpage, root, file.path, revision)
 		end
 	else
-		view.loading_buf = nil
-		local updated = codediff.update(view.tabpage, {
+		self.loading_buf = nil
+		local updated = codediff.update(self.tabpage, {
 			git_root = root,
 			original = path.make_ref(file.old_path or file.path, root),
 			modified = path.make_ref(file.path, root),
-			original_revision = view.session.range.base_revision,
-			modified_revision = head_buf and "WORKING" or view.session.range.head_revision,
+			original_revision = self.session.range.base_revision,
+			modified_revision = head_buf and "WORKING" or self.session.range.head_revision,
 		}, config.options.diff.jump_to_first_change)
 
 		if not updated then
@@ -188,22 +187,22 @@ local function show_file(view, file, on_done)
 		end
 	end
 
-	update_panes(view)
+	update_panes(self)
 
-	view.callbacks.on_file(file)
-	view.on_done = on_done
-	redraw(view)
+	self.on_file(file)
+	self.on_done = on_done
+	self:redraw()
 end
 
----@param view AtlasDiffCodeDiffView
-local function setup_worktree(view)
-	local root = view.session.worktree_root
+---@param renderer AtlasDiffCodeDiffRenderer
+local function setup_worktree(renderer)
+	local root = renderer.session.worktree_root
 	if not root then
 		return
 	end
 
 	vim.api.nvim_create_autocmd("BufEnter", {
-		group = view.group,
+		group = renderer.group,
 		callback = function(event)
 			local buf = event.buf
 			local name = vim.api.nvim_buf_get_name(buf)
@@ -212,28 +211,31 @@ local function setup_worktree(view)
 				worktree.protect(buf)
 			end
 			if
-				vim.api.nvim_get_current_win() ~= view.right.win
-				or buf == view.right.buf
+				vim.api.nvim_get_current_win() ~= renderer.right.win
+				or buf == renderer.right.buf
 				or vim.bo[buf].buftype ~= ""
 			then
 				return
 			end
 
-			view.on_done = nil
-			view.loading_buf = nil
-			view.right.buf = buf
-			annotation_ui.close(view.tabpage)
-			annotations.clear(view)
-			view.callbacks.on_file(nil)
+			renderer.on_done = nil
+			renderer.loading_buf = nil
+			renderer.right.buf = buf
+			annotation_ui.close(renderer.tabpage)
+			annotations.clear(renderer)
+			renderer.on_file(nil)
 
 			-- LSP sets the destination cursor after entering the buffer.
 			vim.schedule(function()
-				if not vim.api.nvim_win_is_valid(view.right.win) or vim.api.nvim_win_get_buf(view.right.win) ~= buf then
+				if
+					not vim.api.nvim_win_is_valid(renderer.right.win)
+					or vim.api.nvim_win_get_buf(renderer.right.win) ~= buf
+				then
 					return
 				end
 
 				local file
-				for _, item in ipairs(view.session.files) do
+				for _, item in ipairs(renderer.session.files) do
 					if item.path == relative then
 						file = item
 						break
@@ -243,29 +245,29 @@ local function setup_worktree(view)
 				if not file then
 					-- Use the same file on both sides so LSP destinations have no diff highlights.
 					local target = path.make_ref(name, root)
-					codediff.update(view.tabpage, {
+					codediff.update(renderer.tabpage, {
 						git_root = root,
 						original = target,
 						modified = target,
 						original_revision = "WORKING",
 						modified_revision = "WORKING",
 					}, false)
-					update_panes(view)
+					update_panes(renderer)
 					return
 				end
 
-				local position = vim.api.nvim_win_call(view.right.win, vim.fn.winsaveview)
-				show_file(view, file, function(err)
+				local position = vim.api.nvim_win_call(renderer.right.win, vim.fn.winsaveview)
+				renderer:show_file(file, function(err)
 					if err then
 						logger.logerror(
 							"diff.show_file failed",
-							{ root = view.session.range.root, path = file.path, error = err }
+							{ root = renderer.session.range.root, path = file.path, error = err }
 						)
 						notify.error("Unable to open " .. file.path .. "\n\n" .. err, { vim_notify = true })
 						return
 					end
 
-					vim.api.nvim_win_call(view.right.win, function()
+					vim.api.nvim_win_call(renderer.right.win, function()
 						vim.fn.winrestview(position)
 						vim.cmd("normal! zv")
 					end)
@@ -277,9 +279,9 @@ end
 
 ---@param session AtlasDiffSession
 ---@param options AtlasPullsDiffConfig
----@param callbacks AtlasDiffCallbacks
----@return AtlasDiffCodeDiffView
-local function open(session, options, callbacks)
+---@param on_file fun(file: AtlasDiffFile|nil)
+---@return AtlasDiffCodeDiffRenderer
+function Renderer.new(session, options, on_file)
 	local codediff_options = {
 		panel = { name = "explorer" },
 		git_root = session.worktree_root or session.range.root,
@@ -302,33 +304,32 @@ local function open(session, options, callbacks)
 		-- Panel mode creates the empty panes; Atlas supplies the explorer afterwards.
 		lifecycle.get_session(tabpage).panel = nil
 
-		---@type AtlasDiffCodeDiffView
-		local view = {
+		local renderer = setmetatable({
 			tabpage = tabpage,
 			session = session,
 			options = options,
-			callbacks = callbacks,
+			on_file = on_file,
 			annotations = {},
 			expanded_threads = {},
 			observer = vim.api.nvim_create_namespace("atlas.diff.codediff.observe." .. tabpage),
 			group = vim.api.nvim_create_augroup("AtlasDiffCodeDiff" .. tabpage, { clear = true }),
 			left = { buf = opened.original_buf, win = opened.original_win },
 			right = { buf = opened.modified_buf, win = opened.modified_win },
-		}
-		observe_rendering(view)
-		setup_worktree(view)
+		}, Renderer)
+		observe_rendering(renderer)
+		setup_worktree(renderer)
 
 		-- CodeDiff clears both winbars on these events, so restore our file titles afterwards.
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufEnter", "WinEnter", "FileType" }, {
-			group = view.group,
+			group = renderer.group,
 			callback = function()
 				local win = vim.api.nvim_get_current_win()
-				if win == view.left.win or win == view.right.win then
-					winbar.update(view)
+				if win == renderer.left.win or win == renderer.right.win then
+					winbar.update(renderer)
 				end
 			end,
 		})
-		return view
+		return renderer
 	end)
 
 	if ok then
@@ -356,13 +357,12 @@ local function open(session, options, callbacks)
 	error(state, 0)
 end
 
----@param view AtlasDiffCodeDiffView
 ---@return AtlasDiffSelection|nil, string|nil
-local function get_selection(view)
-	local file = view.current_file
+function Renderer:get_selection()
+	local file = self.current_file
 	local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
-	local left = win == view.left.win and buf == view.left.buf
-	local right = win == view.right.win and buf == view.right.buf
+	local left = win == self.left.win and buf == self.left.buf
+	local right = win == self.right.win and buf == self.right.buf
 
 	if not file or not (left or right) then
 		return nil, "Select a line in the diff"
@@ -374,8 +374,8 @@ local function get_selection(view)
 	local side = (left or file.status == "deleted") and "LEFT" or "RIGHT"
 	local source = side == "LEFT" and "original" or "modified"
 	local target = side == "LEFT" and "modified" or "original"
-	local session = lifecycle.get_session(view.tabpage)
-	if view.loading_buf or not session or not session.stored_diff_result or buf ~= session[source .. "_bufnr"] then
+	local session = lifecycle.get_session(self.tabpage)
+	if self.loading_buf or not session or not session.stored_diff_result or buf ~= session[source .. "_bufnr"] then
 		return nil, "The diff is still loading"
 	end
 
@@ -408,48 +408,29 @@ local function get_selection(view)
 		return value
 	end
 
-	return annotation_ui.selection(view, file, side, lines, position)
+	return annotation_ui.selection(self, file, side, lines, position)
 end
 
----@param ui AtlasDiffUI
----@param actions AtlasDiffKeymapActions
----@param groups AtlasDiffKeymapGroup[]
-local function setup_keymaps(ui, actions, groups)
-	local view = ui.view
-	---@cast view AtlasDiffCodeDiffView
-	keymaps.setup(ui, actions, groups, {
-		toggle_layout = function()
-			local file = ui.explorer.selected
-			if file and (file.status == "added" or file.status == "deleted") then
-				return
-			end
+function Renderer:toggle_layout()
+	local file = self.current_file
+	if file and (file.status == "added" or file.status == "deleted") then
+		return
+	end
 
-			annotations.clear(view)
-			codediff.toggle_layout(view.tabpage)
-			update_panes(view)
-			view.callbacks.on_file(ui.explorer.selected)
-		end,
-	})
+	annotations.clear(self)
+	codediff.toggle_layout(self.tabpage)
+	update_panes(self)
+	self.on_file(self.current_file)
 end
 
----@param view AtlasDiffCodeDiffView
-local function dispose(view)
-	vim.api.nvim_set_decoration_provider(view.observer, {})
-	vim.api.nvim_del_augroup_by_id(view.group)
-	annotations.clear(view)
-	lifecycle.cleanup(view.tabpage)
+function Renderer:dispose()
+	vim.api.nvim_set_decoration_provider(self.observer, {})
+	vim.api.nvim_del_augroup_by_id(self.group)
+	annotations.clear(self)
+	lifecycle.cleanup(self.tabpage)
 end
 
----@type AtlasDiffRenderer
-local M = {
-	open = open,
-	show_file = show_file,
-	get_selection = get_selection,
-	navigate_annotation = annotations.navigate,
-	redraw = redraw,
-	resize = resize,
-	setup_keymaps = setup_keymaps,
-	dispose = dispose,
-}
+Renderer.navigate_annotation = annotations.navigate
+Renderer.setup_keymaps = keymaps.setup
 
-return M
+return Renderer

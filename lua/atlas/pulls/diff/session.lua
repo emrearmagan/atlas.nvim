@@ -6,8 +6,6 @@ local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
 
-local M = {}
-
 ---@class AtlasDiffPullRequestSource
 ---@field kind "pr"
 ---@field pr PullRequest
@@ -29,9 +27,10 @@ local M = {}
 ---@field reviewed_files table<string, boolean>|nil
 ---@field current_user AtlasUser|nil
 ---@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
----@field reviewed_requests table<string, AtlasRequestScope>
----@field reload_request AtlasRequestScope|nil
+---@field requests { load?: AtlasRequestScope, reload?: AtlasRequestScope, reviewed: table<string, AtlasRequestScope> }
 ---@field closed boolean
+local Session = {}
+Session.__index = Session
 
 ---@param pr PullRequest
 ---@param root string
@@ -86,40 +85,31 @@ local function apply_review(session, values)
 	end
 end
 
----@param errors table<string, string>
-local function warn_errors(errors)
-	for _, item in ipairs({
-		{ "commits", "commits" },
-		{ "current_user", "current user" },
-		{ "review", "review data" },
-		{ "review_context", "review context" },
-		{ "notes", "notes" },
-	}) do
-		if errors[item[1]] then
-			notify.warn("Unable to load " .. item[2] .. ": " .. errors[item[1]])
-		end
-	end
-end
-
+---@param source AtlasDiffSource
 ---@param root string
 ---@param base string
 ---@param head string
----@param opts { source: AtlasDiffSource, lsp?: AtlasPullsDiffLspConfig, on_progress: fun(message: string) }
+---@param opts { lsp?: AtlasPullsDiffLspConfig, on_progress: fun(message: string) }
 ---@param on_done fun(session: AtlasDiffSession|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.prepare(root, base, head, opts, on_done)
+function Session.new(source, root, base, head, opts, on_done)
+	local session = setmetatable({
+		source = source,
+		files = {},
+		commits = {},
+		requests = { reviewed = {} },
+		closed = false,
+	}, Session)
 	local request = request_scope.new()
-	local source = opts.source
+	session.requests.load = request
 	local pr = source.kind == "pr" and source.pr or nil
-	local worktree_root
 	local starts = {}
-	local reviews
 
 	if pr then
 		local provider = providers.load(pr.provider, "pulls")
 		---@cast provider PullsProvider
 		local capabilities = provider.capabilities
-		reviews = capabilities.reviews
+		session.reviewed_files = capabilities.reviews and {} or nil
 		starts = review_starts(pr, root, head)
 		if capabilities.core.fetch_commits then
 			starts.commits = function(done)
@@ -135,8 +125,15 @@ function M.prepare(root, base, head, opts, on_done)
 		request.run(function(loaded)
 			return diff_git.load(root, base, head, loaded)
 		end, function(diff, err)
-			if not diff or not opts.lsp or #diff.files == 0 then
-				done(diff, err)
+			if not diff then
+				done(nil, err)
+				return
+			end
+
+			session.range = diff.range
+			session.files = diff.files
+			if not opts.lsp or #diff.files == 0 then
+				done(true)
 				return
 			end
 
@@ -144,8 +141,8 @@ function M.prepare(root, base, head, opts, on_done)
 			request.run(function(prepared)
 				return diff_worktree.prepare(diff.range, pr, opts.lsp, prepared)
 			end, function(path)
-				worktree_root = path
-				done(diff)
+				session.worktree_root = path
+				done(true)
 			end)
 		end)
 		return nil
@@ -153,65 +150,51 @@ function M.prepare(root, base, head, opts, on_done)
 
 	opts.on_progress(pr and "Loading changed files and review data..." or "Loading changed files...")
 	request.all(starts, function(values, errors)
-		local diff = values.diff
-		if not diff then
+		session.requests.load = nil
+		if not values.diff then
+			session:close()
 			on_done(nil, errors.diff)
 			return
 		end
-		warn_errors(errors)
 
-		---@type AtlasDiffSession
-		local session = {
-			source = source,
-			range = diff.range,
-			files = diff.files,
-			worktree_root = worktree_root,
-			commits = values.commits or {},
-			reviewed_files = reviews and {} or nil,
-			current_user = values.current_user,
-			reviewed_requests = {},
-			closed = false,
-		}
-		worktree_root = nil
+		if next(errors) then
+			notify.warn("Unable to load some review data")
+		end
+		session.commits = values.commits or {}
+		session.current_user = values.current_user
 		apply_review(session, values)
 		on_done(session, nil)
 	end)
 
 	return {
 		cancel = function()
-			request.cancel()
-			if worktree_root then
-				diff_worktree.discard(root, worktree_root)
-				worktree_root = nil
-			end
+			session:close()
 		end,
 	}
 end
 
----@param session AtlasDiffSession
-function M.close(session)
-	if session.closed then
+function Session:close()
+	if self.closed then
 		return
 	end
 
-	session.closed = true
-	for _, request in pairs(session.reviewed_requests) do
+	self.closed = true
+	for _, request in pairs({ self.requests.load, self.requests.reload }) do
 		request.cancel()
 	end
-	if session.reload_request then
-		session.reload_request.cancel()
+	for _, request in pairs(self.requests.reviewed) do
+		request.cancel()
 	end
 
-	if session.worktree_root then
-		diff_worktree.discard(session.range.root, session.worktree_root)
+	if self.worktree_root then
+		diff_worktree.discard(self.range.root, self.worktree_root)
 	end
 end
 
----@param session AtlasDiffSession
 ---@param files AtlasDiffFile[]
 ---@param reviewed boolean
-function M.set_reviewed(session, files, reviewed)
-	local reviewed_files = session.reviewed_files
+function Session:set_reviewed(files, reviewed)
+	local reviewed_files = self.reviewed_files
 	---@cast reviewed_files -nil
 	local paths = {}
 	for _, file in ipairs(files) do
@@ -219,7 +202,7 @@ function M.set_reviewed(session, files, reviewed)
 		paths[#paths + 1] = file.path
 	end
 
-	local pr = session.source.pr
+	local pr = self.source.pr
 	---@cast pr PullRequest
 	local provider = providers.load(pr.provider, "pulls")
 	---@cast provider PullsProvider
@@ -230,13 +213,13 @@ function M.set_reviewed(session, files, reviewed)
 
 	local request = request_scope.new()
 	for _, path in ipairs(paths) do
-		session.reviewed_requests[path] = request
+		self.requests.reviewed[path] = request
 	end
 	request.run(function(done)
 		return reviews.set_files_reviewed(pr, paths, reviewed, done)
 	end, function(ok, err)
 		for _, path in ipairs(paths) do
-			session.reviewed_requests[path] = nil
+			self.requests.reviewed[path] = nil
 		end
 		if ok then
 			return
@@ -254,30 +237,30 @@ function M.set_reviewed(session, files, reviewed)
 	end)
 end
 
----@param session AtlasDiffSession
 ---@param on_done fun(ok: boolean)
-function M.reload(session, on_done)
-	if session.reload_request then
-		session.reload_request.cancel()
+function Session:reload(on_done)
+	if self.requests.reload then
+		self.requests.reload.cancel()
 	end
 	local request = request_scope.new()
-	session.reload_request = request
+	self.requests.reload = request
 
-	local source = session.source
-	local range = session.range
+	local source = self.source
+	local range = self.range
 	local starts = source.kind == "pr" and review_starts(source.pr, range.root, range.head_revision) or {}
 	request.all(starts, function(values, errors)
-		session.reload_request = nil
-		apply_review(session, values)
-		warn_errors(errors)
+		self.requests.reload = nil
+		apply_review(self, values)
+		if next(errors) then
+			notify.warn("Unable to load some review data")
+		end
 		on_done(next(errors) == nil)
 	end)
 end
 
----@param session AtlasDiffSession
 ---@param note AtlasNote
-function M.put_note(session, note)
-	local data = session.notes
+function Session:put_note(note)
+	local data = self.notes
 	---@cast data -nil
 	for index, existing in ipairs(data.items) do
 		if existing.id == note.id then
@@ -290,10 +273,9 @@ function M.put_note(session, note)
 	data.positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
 end
 
----@param session AtlasDiffSession
 ---@param note AtlasNote
-function M.remove_note(session, note)
-	local data = session.notes
+function Session:remove_note(note)
+	local data = self.notes
 	---@cast data -nil
 	for index, existing in ipairs(data.items) do
 		if existing.id == note.id then
@@ -304,4 +286,4 @@ function M.remove_note(session, note)
 	data.positions[note.id] = nil
 end
 
-return M
+return Session
