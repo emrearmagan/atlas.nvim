@@ -19,6 +19,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field end_line integer
 ---@field body string
 ---@field type AtlasNoteType|nil
+---@field context { start_line: integer, lines: string[] }|nil
 
 ---@class AtlasNote
 ---@field id string
@@ -31,6 +32,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field resolved boolean
 ---@field created_at string
 ---@field updated_at string|nil
+---@field context { start_line: integer, lines: string[] }|nil
 
 ---@class AtlasNotePatch
 ---@field body string|nil
@@ -172,6 +174,22 @@ local function normalize_note(value)
 	if not end_line or end_line < start_line or end_line % 1 ~= 0 then
 		return nil, "End line must be an integer from the start line on"
 	end
+	local context = value.context
+	if context ~= nil then
+		local context_start = type(context) == "table" and tonumber(context.start_line)
+		if not context_start or context_start < 1 or context_start % 1 ~= 0 then
+			return nil, "Invalid note context"
+		end
+		if not vim.islist(context.lines) or #context.lines == 0 then
+			return nil, "Invalid note context"
+		end
+		for _, line in ipairs(context.lines) do
+			if type(line) ~= "string" then
+				return nil, "Invalid note context"
+			end
+		end
+		context = { start_line = context_start, lines = context.lines }
+	end
 	if type(value.body) ~= "string" or text(value.body) == "" then
 		return nil, "Note body cannot be empty"
 	end
@@ -196,6 +214,7 @@ local function normalize_note(value)
 		resolved = value.resolved == true,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
+		context = context,
 	},
 		nil
 end
@@ -381,6 +400,7 @@ function M.update(target, id, patch)
 					resolved = note.resolved,
 					created_at = note.created_at,
 					updated_at = now(),
+					context = note.context,
 				}
 				if patch.resolved ~= nil then
 					candidate.resolved = patch.resolved

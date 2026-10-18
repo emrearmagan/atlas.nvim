@@ -115,6 +115,22 @@ function M.render_details(note, target, width)
 			hl_group = resolved_icon_hl,
 		})
 	end
+	if note.context then
+		local source = table.concat(note.context.lines, "\n")
+		local fence = "```"
+		for ticks in source:gmatch("`+") do
+			if #ticks >= #fence then
+				fence = ticks .. "`"
+			end
+		end
+
+		table.insert(lines, "")
+		utils.append_block(
+			lines,
+			spans,
+			markdown.parse(fence .. "\n" .. source .. "\n" .. fence, { width = width, file_path = note.file_path })
+		)
+	end
 	table.insert(lines, "")
 	utils.append_block(lines, spans, markdown.parse(note.body, { width = width }))
 	table.insert(lines, "")

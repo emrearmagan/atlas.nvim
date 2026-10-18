@@ -75,14 +75,21 @@ local function shared_action(id, context)
 end
 
 ---@param selection AtlasDiffSelection
----@return AtlasEditorPreview
-local function selection_preview(selection)
+---@return { start_line: integer, lines: string[] }
+local function selection_context(selection)
 	local first = math.max(1, selection.first - 2)
 	local last = math.min(#selection.source_lines, selection.last + 2)
+	return { start_line = first, lines = vim.list_slice(selection.source_lines, first, last) }
+end
+
+---@param selection AtlasDiffSelection
+---@return AtlasEditorPreview
+local function selection_preview(selection)
+	local context = selection_context(selection)
 	return code_preview.render({
 		file_path = selection.file.path,
-		lines = vim.list_slice(selection.source_lines, first, last),
-		start_line = first,
+		lines = context.lines,
+		start_line = context.start_line,
 		anchor_start = selection.first,
 		anchor_line = selection.last,
 	})
@@ -195,28 +202,24 @@ M.add_note = {
 			return false
 		end
 
-		note_editor.create(
-			data.target,
-			{
-				file_path = selection.file.path,
-				commit = context.session.data.head_revision,
-				start_line = selection.first,
-				end_line = selection.last,
-				body = "",
-			},
-			selection_preview(selection),
-			function(note, err)
-				if not note then
-					notify.error(err)
-					return
-				end
-
-				data.items[#data.items + 1] = note
-				data.positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
-				notify.success("Note added", { timeout = 1200 })
-				on_done({ changed_pr = false, message = "Note added" }, nil)
+		note_editor.create(data.target, {
+			file_path = selection.file.path,
+			commit = context.session.data.head_revision,
+			start_line = selection.first,
+			end_line = selection.last,
+			body = "",
+			context = selection_context(selection),
+		}, function(note, err)
+			if not note then
+				notify.error(err)
+				return
 			end
-		)
+
+			data.items[#data.items + 1] = note
+			data.positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
+			notify.success("Note added", { timeout = 1200 })
+			on_done({ changed_pr = false, message = "Note added" }, nil)
+		end)
 		return true
 	end,
 }

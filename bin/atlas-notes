@@ -9,7 +9,7 @@ local USAGE = [[
 Usage:
   atlas-notes add --target <url-or-ref> --commit <sha> --file <path>
                   --start-line <number> [--end-line <number>] --body <text>
-                  [--type issue|suggestion|note|praise]
+                  [--type issue|suggestion|note|praise] [--context <source>]
   atlas-notes list [--target <url-or-ref>]
 
 Options:
@@ -23,6 +23,7 @@ Options:
   --body <text>          Note text.
   --type <type>          Note type: issue, suggestion, note, or praise.
                          Defaults to note.
+  --context <source>     Source lines of the note, shown with it in Atlas.
 ]]
 
 ---@param message string
@@ -88,6 +89,10 @@ if command == "add" then
 		end_line = end_line,
 		body = required(options, "body"),
 		type = options.type,
+		context = options.context and {
+			start_line = start_line,
+			lines = vim.split(options.context, "\n", { plain = true }),
+		} or nil,
 	})
 	if not note then
 		fail(err or "unable to add note")
