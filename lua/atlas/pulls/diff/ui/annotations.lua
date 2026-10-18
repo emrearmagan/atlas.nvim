@@ -203,8 +203,14 @@ function M.selection(renderer, file, side, lines, position)
 	end
 
 	local session = renderer.session
+	-- A file renamed in just one commit may not be renamed in the PR (e.g. added there instead),
+	-- so its old side from the commit can not be really trusted. Only the new side is sent then.
+	local renamed = file.old_path ~= nil and session:shown_commits() ~= nil
 	local start_to, to = session:pr_range(file.path, "RIGHT", start and start.to, stop.to)
-	local start_from, from = session:pr_range(file.old_path or file.path, "LEFT", start and start.from, stop.from)
+	local start_from, from
+	if not renamed then
+		start_from, from = session:pr_range(file.old_path or file.path, "LEFT", start and start.from, stop.from)
+	end
 	if (side == "RIGHT" and not to) or (side == "LEFT" and not from) then
 		return nil, "These lines can't be found in the pull request"
 	end
@@ -217,7 +223,7 @@ function M.selection(renderer, file, side, lines, position)
 		source_lines = lines,
 		inline = {
 			path = file.path,
-			old_path = file.old_path,
+			old_path = not renamed and file.old_path or nil,
 			from = from,
 			to = to,
 			start_from = start_from,
