@@ -193,13 +193,16 @@ M.add_note = {
 			return false
 		end
 
+		local start_line = selection.inline.start_to or last
+		local note_context = selection_context(selection)
+		note_context.start_line = note_context.start_line + start_line - selection.first
 		note_editor.create(data.target, {
 			file_path = selection.file.path,
 			commit = session.full_range.head_revision,
-			start_line = selection.inline.start_to or last,
+			start_line = start_line,
 			end_line = last,
 			body = "",
-			context = selection_context(selection),
+			context = note_context,
 		}, function(note, err)
 			if not note then
 				notify.error(err)
