@@ -20,7 +20,20 @@ function M.update(statusline, session, files, buf)
 		{ text = identity, hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
 	}
 
-	if reviewed_files and #files > 0 then
+	if session:shows_commit() then
+		local hash = session.range.head_revision
+		local position = 0
+		for index, commit in ipairs(session.commits) do
+			if commit.hash == hash then
+				position = #session.commits - index + 1
+			end
+		end
+		items[#items + 1] = {
+			text = string.format("Commit %d/%d %s", position, #session.commits, hash:sub(1, 8)),
+			hl_group = "AtlasFooterWarning",
+			priority = 45,
+		}
+	elseif reviewed_files and #files > 0 then
 		local count = 0
 		for _, file in ipairs(files) do
 			if reviewed_files[file.path] then

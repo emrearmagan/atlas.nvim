@@ -205,7 +205,8 @@ end
 ---@param viewer AtlasDiffViewer
 local function update_panels(viewer)
 	local session = viewer.session
-	viewer.explorer:update(session.reviewed_files, session.review, session.notes and session.notes.items)
+	local reviewed_files = not session:shows_commit() and session.reviewed_files or nil
+	viewer.explorer:update(reviewed_files, session.review, session.notes and session.notes.items)
 	viewer.review_panel:render()
 	update_statusline(viewer)
 end
@@ -282,7 +283,7 @@ function Viewer:navigate_file(direction, unreviewed_only)
 
 	local position = self.explorer:current_index() or 1
 	local steps = unreviewed_only and #files - 1 or 1
-	local reviewed_files = self.session.reviewed_files or {}
+	local reviewed_files = self.explorer.reviewed_files or {}
 
 	for offset = 1, steps do
 		local file = files[((position - 1 + direction * offset) % #files) + 1]
@@ -340,11 +341,17 @@ function Viewer:toggle_file_reviewed()
 	if not reviewed_files then
 		return
 	end
+	-- NOTE: Reviewed marks belong to the whole PR, so a single commit can't set them for now. We could allow it when no
+	-- later commit changes the file and every earlier commit that did was already seen, since then you've looked at
+	-- its whole PR diff. Also we would probably need a least to track all reviewed files for each individual commit ?
+	-- So coming back to a commit still shows them as reviewed ?
+	if session:shows_commit() then
+		notify.info("Can't mark files reviewed at the commit level")
+		return
+	end
 
 	if vim.api.nvim_get_current_buf() == self.explorer.buf then
-		local files = vim.tbl_filter(function(file)
-			return not session.requests.reviewed[file.path]
-		end, self.explorer:files_under_cursor())
+		local files = self.explorer:files_under_cursor()
 		if #files > 0 then
 			session:set_reviewed(files, not reviewed_files[files[1].path])
 			update_panels(self)
@@ -353,7 +360,7 @@ function Viewer:toggle_file_reviewed()
 	end
 
 	local file = current_file(self)
-	if not file or session.requests.reviewed[file.path] then
+	if not file then
 		return
 	end
 
@@ -582,6 +589,11 @@ end
 ---@param pending boolean
 ---@param suggestion boolean|nil
 function Viewer:add_comment(pending, suggestion)
+	if self.session:shows_commit() then
+		notify.info("Can't comment at the commit level")
+		return
+	end
+
 	if vim.api.nvim_get_current_buf() == self.explorer.buf then
 		local file = self.explorer:current_file()
 		if file then
@@ -607,6 +619,11 @@ function Viewer:add_comment(pending, suggestion)
 end
 
 function Viewer:add_note()
+	if self.session:shows_commit() then
+		notify.info("Can't add notes at the commit level")
+		return
+	end
+
 	local selection, err = self.renderer:get_selection()
 	if not selection then
 		if err then
@@ -647,13 +664,24 @@ function Viewer:open_file()
 	options.winhighlight = vim.go.winhighlight
 end
 
-function Viewer:open_commit()
-	local commit = self.commits:current()
-	if not commit then
+---@param commit PullsCommit|nil
+function Viewer:show_commit(commit)
+	local session = self.session
+	-- Diffview fixes its revisions when the view is built, so supporting this here would mean
+	-- recreating the whole Diffview view. Can't be bothered yet tho..
+	if self.options.open_cmd == "DiffviewOpen" then
+		notify.info("Showing a single commit needs AtlasDiff or CodeDiff")
 		return
 	end
 
-	require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = self.session.range.root })
+	session:show_commit(commit, function()
+		self.explorer:set_files(session.files)
+		update_panels(self)
+		local first = self.explorer.files[1]
+		if first then
+			select_file(self, first)
+		end
+	end)
 end
 
 ---@param session AtlasDiffSession

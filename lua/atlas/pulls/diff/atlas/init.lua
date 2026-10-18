@@ -188,7 +188,7 @@ local function display(renderer, document)
 	end
 
 	local right_buf = renderer.revision_buf
-	local root = renderer.session.worktree_root
+	local root = renderer.session:head_worktree()
 	if root and not binary and file.status ~= "deleted" then
 		right_buf = worktree.load(root, file.path) or right_buf
 	end

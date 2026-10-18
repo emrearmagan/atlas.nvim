@@ -36,7 +36,7 @@ local statuses = {
 ---@param files AtlasDiffFile[]
 ---@param ignore_patterns string[]|nil
 ---@return AtlasDiffFile[]
-local function filter(files, ignore_patterns)
+local function visible_files(files, ignore_patterns)
 	local patterns = {}
 	for _, pattern in ipairs(ignore_patterns or {}) do
 		patterns[#patterns + 1] = vim.regex(vim.fn.glob2regpat(pattern))
@@ -57,6 +57,9 @@ local function filter(files, ignore_patterns)
 		end
 	end
 
+	table.sort(filtered, function(a, b)
+		return a.path < b.path
+	end)
 	return filtered
 end
 
@@ -377,6 +380,13 @@ function Explorer:update(reviewed_files, review_data, notes)
 	render(self)
 end
 
+---@param files AtlasDiffFile[]
+function Explorer:set_files(files)
+	self.source = visible_files(files, self.options.ignore)
+	self.selected = nil
+	render(self)
+end
+
 ---@return AtlasDiffFile|nil
 function Explorer:current_file()
 	local row = self.rows[current_row(self)]
@@ -601,10 +611,7 @@ end
 ---@return AtlasDiffExplorer
 function Explorer.new(opts)
 	local options = opts.options
-	local source = filter(opts.files, options.ignore)
-	table.sort(source, function(a, b)
-		return a.path < b.path
-	end)
+	local source = visible_files(opts.files, options.ignore)
 	local annotations = collect_annotations(opts.review_data, opts.notes)
 
 	local buf = vim.api.nvim_create_buf(false, true)

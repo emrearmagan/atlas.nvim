@@ -126,9 +126,10 @@ function Renderer:show_file(file, on_done)
 	annotations.clear(self)
 
 	local root = self.session.worktree_root or self.session.range.root
+	local head_worktree = self.session:head_worktree()
 	local head_buf
-	if self.session.worktree_root and not file.binary and file.status ~= "deleted" then
-		head_buf = worktree.load(self.session.worktree_root, file.path)
+	if head_worktree and not file.binary and file.status ~= "deleted" then
+		head_buf = worktree.load(head_worktree, file.path)
 		if head_buf then
 			-- Our own file switches should not be handled as LSP jumps.
 			self.right.buf = head_buf

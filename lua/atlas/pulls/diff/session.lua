@@ -19,6 +19,8 @@ local request_scope = require("atlas.core.requests")
 
 ---@class AtlasDiffSession
 ---@field source AtlasDiffSource
+--- This is the range that was initially opened like a pr or branch. It mainly just used to determine if the user is viewing a single commit or the full range and come back here
+---@field full_range AtlasDiffRange
 ---@field range AtlasDiffRange
 ---@field files AtlasDiffFile[]
 ---@field worktree_root string|nil
@@ -27,7 +29,7 @@ local request_scope = require("atlas.core.requests")
 ---@field reviewed_files table<string, boolean>|nil
 ---@field current_user AtlasUser|nil
 ---@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
----@field requests { load?: AtlasRequestScope, reload?: AtlasRequestScope, reviewed: table<string, AtlasRequestScope> }
+---@field requests AtlasRequestScope
 ---@field closed boolean
 local Session = {}
 Session.__index = Session
@@ -97,11 +99,9 @@ function Session.new(source, root, base, head, opts, on_done)
 		source = source,
 		files = {},
 		commits = {},
-		requests = { reviewed = {} },
+		requests = request_scope.new(),
 		closed = false,
 	}, Session)
-	local request = request_scope.new()
-	session.requests.load = request
 	local pr = source.kind == "pr" and source.pr or nil
 	local starts = {}
 
@@ -122,7 +122,7 @@ function Session.new(source, root, base, head, opts, on_done)
 	end
 
 	starts.diff = function(done)
-		request.run(function(loaded)
+		session.requests.run(function(loaded)
 			return diff_git.load(root, base, head, loaded)
 		end, function(diff, err)
 			if not diff then
@@ -130,6 +130,7 @@ function Session.new(source, root, base, head, opts, on_done)
 				return
 			end
 
+			session.full_range = diff.range
 			session.range = diff.range
 			session.files = diff.files
 			if not opts.lsp or #diff.files == 0 then
@@ -138,7 +139,7 @@ function Session.new(source, root, base, head, opts, on_done)
 			end
 
 			opts.on_progress("Preparing worktree...")
-			request.run(function(prepared)
+			session.requests.run(function(prepared)
 				return diff_worktree.prepare(diff.range, pr, opts.lsp, prepared)
 			end, function(path)
 				session.worktree_root = path
@@ -149,8 +150,7 @@ function Session.new(source, root, base, head, opts, on_done)
 	end
 
 	opts.on_progress(pr and "Loading changed files and review data..." or "Loading changed files...")
-	request.all(starts, function(values, errors)
-		session.requests.load = nil
+	session.requests.all(starts, function(values, errors)
 		if not values.diff then
 			session:close()
 			on_done(nil, errors.diff)
@@ -179,12 +179,7 @@ function Session:close()
 	end
 
 	self.closed = true
-	for _, request in pairs({ self.requests.load, self.requests.reload }) do
-		request.cancel()
-	end
-	for _, request in pairs(self.requests.reviewed) do
-		request.cancel()
-	end
+	self.requests.cancel()
 
 	if self.worktree_root then
 		diff_worktree.discard(self.range.root, self.worktree_root)
@@ -211,16 +206,7 @@ function Session:set_reviewed(files, reviewed)
 		return
 	end
 
-	local request = request_scope.new()
-	for _, path in ipairs(paths) do
-		self.requests.reviewed[path] = request
-	end
-	request.run(function(done)
-		return reviews.set_files_reviewed(pr, paths, reviewed, done)
-	end, function(ok, err)
-		for _, path in ipairs(paths) do
-			self.requests.reviewed[path] = nil
-		end
+	reviews.set_files_reviewed(pr, paths, reviewed, function(ok, err)
 		if ok then
 			return
 		end
@@ -239,23 +225,58 @@ end
 
 ---@param on_done fun(ok: boolean)
 function Session:reload(on_done)
-	if self.requests.reload then
-		self.requests.reload.cancel()
-	end
-	local request = request_scope.new()
-	self.requests.reload = request
-
 	local source = self.source
-	local range = self.range
+	local range = self.full_range
 	local starts = source.kind == "pr" and review_starts(source.pr, range.root, range.head_revision) or {}
-	request.all(starts, function(values, errors)
-		self.requests.reload = nil
+	self.requests.all(starts, function(values, errors)
 		apply_review(self, values)
 		if next(errors) then
 			notify.warn("Unable to load some review data")
 		end
 		on_done(next(errors) == nil)
 	end)
+end
+
+---@param commit PullsCommit|nil
+---@param on_done fun()
+function Session:show_commit(commit, on_done)
+	local full_range = self.full_range
+	local base, head = full_range.base_revision, full_range.head_revision
+	if commit then
+		base, head = commit.hash .. "^", commit.hash
+	end
+
+	self.requests.run(function(done)
+		return diff_git.load(full_range.root, base, head, done)
+	end, function(diff, err)
+		if not diff then
+			notify.error("Unable to load changed files" .. (err and "\n\n" .. err or ""), { vim_notify = true })
+			return
+		end
+		if #diff.files == 0 then
+			notify.info("No changed files")
+			return
+		end
+
+		self.range = commit and diff.range or full_range
+		self.files = diff.files
+		on_done()
+	end)
+end
+
+---@return boolean
+function Session:shows_commit()
+	return self.range ~= self.full_range
+end
+
+---@return string|nil
+function Session:head_worktree()
+	-- The worktree is checked out at the head of the full range, so on a single commit it would show the wrong
+	-- right side. That why commit views have no LSP (for now).
+	-- I mean we could switch the worktree to the commit, but then
+	-- open buffers need reloading, the LSP reindexes on every step and other Neovims on the same PR get their files
+	-- swapped under them. Not worth it yet..
+	return not self:shows_commit() and self.worktree_root or nil
 end
 
 ---@param note AtlasNote

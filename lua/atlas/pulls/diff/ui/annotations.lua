@@ -65,6 +65,10 @@ end
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
 function M.for_file(session, file)
+	if session:shows_commit() then
+		return {}
+	end
+
 	local items = {}
 	local review = session.review
 	if review then

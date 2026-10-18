@@ -48,14 +48,20 @@ M.action_ids = {
 ---@field index integer
 
 ---@param items AtlasHelpKeyItem[]
----@param action AtlasKeymapActionId
+---@param actions AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@param desc string
 ---@param index integer
 ---@param callback fun()
 ---@param mode string|string[]|nil
-local function add(items, action, desc, index, callback, mode)
-	local keys = resolver.resolve(action)
-	if keys then
+local function add(items, actions, desc, index, callback, mode)
+	if type(actions) == "string" then
+		actions = { actions }
+	end
+	local keys = {}
+	for _, action in ipairs(actions) do
+		vim.list_extend(keys, resolver.resolve(action) or {})
+	end
+	if #keys > 0 then
 		items[#items + 1] = {
 			key = keys,
 			desc = desc,
@@ -214,8 +220,8 @@ function M.setup(viewer)
 		end)
 	end
 
-	add(commits_items, "pulls.open_diff", "Open commit diff", 1, function()
-		viewer:open_commit()
+	add(commits_items, { "ui.select", "pulls.open_diff" }, "Show commit", 1, function()
+		viewer:show_commit(viewer.commits:current())
 	end)
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
 		viewer.commits:show_details()

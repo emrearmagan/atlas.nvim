@@ -17,7 +17,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.diff.commits")
 local function render(state)
 	local view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
 	local width = vim.api.nvim_win_get_width(state.win)
-	local lines = { string.format("Commits (%d)", #state.items) }
+	local lines = { string.format("All commits (%d)", #state.items) }
 	local highlights = { { 0, 0, #lines[1], "AtlasLogInfo" } }
 
 	for _, commit in ipairs(state.items) do
