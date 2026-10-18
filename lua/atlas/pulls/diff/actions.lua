@@ -32,6 +32,8 @@ local M = {}
 ---| "toggle_note_resolved"
 ---| "note_to_comment"
 ---| "toggle_detail_panel"
+---| "toggle_review_panel"
+---| "toggle_commits"
 ---| "open_in_browser"
 ---| "open_actions"
 ---| "refresh_review"
@@ -46,6 +48,7 @@ local M = {}
 ---@field pending boolean|nil
 ---@field suggestion boolean|nil
 ---@field on_submit (fun())|nil
+---@field viewer AtlasDiffViewer|nil
 
 ---@class AtlasDiffAction
 ---@field id AtlasReviewActionId
@@ -464,6 +467,35 @@ M.toggle_detail_panel = {
 }
 
 ---@type AtlasDiffAction
+M.toggle_review_panel = {
+	id = "toggle_review_panel",
+	label = "Show review panel",
+	icon = icons.get("comment"),
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		viewer:toggle_review_panel()
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.toggle_commits = {
+	id = "toggle_commits",
+	label = "Show commits",
+	icon = icons.get("commit"),
+	is_available = function(context)
+		return #context.session.commits > 0, "No commits available"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		viewer:toggle_commits()
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
 M.open_in_browser = {
 	id = "open_in_browser",
 	label = "Open in browser",
@@ -516,6 +548,12 @@ M.open_actions = {
 		end
 
 		items[#items + 1] = M.toggle_detail_panel
+		items[#items + 1] = M.toggle_review_panel
+		if action_runner.is_available(M.toggle_commits, context) then
+			items[#items + 1] = M.toggle_commits
+		end
+		items[#items + 1] = M.refresh_review
+		items[#items + 1] = M.open_in_browser
 
 		picker.select({
 			title = "Review action",

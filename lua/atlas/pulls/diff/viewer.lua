@@ -172,7 +172,21 @@ local function select_file(viewer, file, focus, on_done)
 		return
 	end
 
+	local function shown()
+		if focus and vim.api.nvim_get_current_win() == viewer.explorer.win then
+			vim.api.nvim_set_current_win(viewer.renderer.right.win)
+		end
+		if on_done then
+			on_done()
+		end
+	end
+
 	viewer.explorer:reveal(file)
+	if file == viewer.renderer.current_file then
+		shown()
+		return
+	end
+
 	viewer.renderer:show_file(file, function(err)
 		if err then
 			logger.logerror("diff.show_file failed", {
@@ -188,12 +202,7 @@ local function select_file(viewer, file, focus, on_done)
 			return
 		end
 
-		if focus and vim.api.nvim_get_current_win() == viewer.explorer.win then
-			vim.api.nvim_set_current_win(viewer.renderer.right.win)
-		end
-		if on_done then
-			on_done()
-		end
+		shown()
 	end)
 end
 
@@ -437,6 +446,27 @@ function Viewer:toggle_explorer()
 	resize(self)
 end
 
+---@param viewer AtlasDiffViewer
+---@return integer|nil win
+local function open_commits(viewer)
+	if not viewer.explorer.win and #viewer.commits.items > 0 then
+		local win = viewer.explorer:toggle()
+		viewer.statusline:attach(win)
+		resize(viewer)
+	end
+
+	local win, err = viewer.commits:open(viewer.explorer.win)
+	if not win then
+		---@cast err string
+		notify.info(err)
+		return nil
+	end
+
+	viewer.commits.shown = true
+	viewer.statusline:attach(win)
+	return win
+end
+
 function Viewer:toggle_commits()
 	if self.commits.win then
 		self.commits.shown = false
@@ -444,22 +474,10 @@ function Viewer:toggle_commits()
 		return
 	end
 
-	if not self.explorer.win and #self.commits.items > 0 then
-		local win = self.explorer:toggle()
-		self.statusline:attach(win)
-		resize(self)
+	local win = open_commits(self)
+	if win then
+		vim.api.nvim_set_current_win(win)
 	end
-
-	local win, err = self.commits:open(self.explorer.win)
-	if not win then
-		---@cast err string
-		notify.info(err)
-		return
-	end
-
-	self.commits.shown = true
-	self.statusline:attach(win)
-	vim.api.nvim_set_current_win(win)
 end
 
 function Viewer:toggle_review_panel()
@@ -558,7 +576,9 @@ end
 ---@param id AtlasReviewActionId
 ---@param context AtlasDiffActionContext|nil
 function Viewer:run_action(id, context)
-	actions.dispatch(id, context or { session = self.session }, function()
+	context = context or { session = self.session }
+	context.viewer = self
+	actions.dispatch(id, context, function()
 		update_review(self)
 	end)
 end
@@ -703,6 +723,12 @@ function Viewer:step_commit(direction)
 	end
 
 	local commit = session.commits[index]
+	if not commit and direction == -1 then
+		return
+	end
+	if not self.commits.win then
+		open_commits(self)
+	end
 	self:show_commits(commit, commit)
 end
 
