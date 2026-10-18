@@ -399,6 +399,7 @@ end
 ---@param renderer AtlasDiffRenderer
 ---@param target { comment?: PullsComment, note?: AtlasNote }
 ---@param focus boolean
+---@return boolean found
 function M.jump(renderer, target, focus)
 	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
@@ -417,11 +418,12 @@ function M.jump(renderer, target, focus)
 					if focus then
 						vim.api.nvim_set_current_win(pane.win)
 					end
-					return
+					return true
 				end
 			end
 		end
 	end
+	return false
 end
 
 ---@param owner integer|nil

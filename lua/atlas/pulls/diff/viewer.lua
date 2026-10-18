@@ -497,7 +497,9 @@ local function open_review_item(viewer, entry, focus)
 		if focus then
 			vim.api.nvim_set_current_win(viewer.renderer.right.win)
 		end
-		annotations.jump(viewer.renderer, { comment = comment, note = entry.note }, focus)
+		if not annotations.jump(viewer.renderer, { comment = comment, note = entry.note }, focus) then
+			notify.info((entry.note and "Note" or "Comment") .. " is not in this diff")
+		end
 	end)
 end
 
