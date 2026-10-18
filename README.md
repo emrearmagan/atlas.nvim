@@ -85,6 +85,7 @@ require("atlas").setup({})
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. It opens in your configured diff viewer.
 
 - Browse files, commits, hunks, and review history.
+- Review commit by commit or a range of commits.
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
