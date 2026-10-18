@@ -95,12 +95,12 @@ local function place(session, file, item)
 	end
 
 	local path = item.side == "LEFT" and file.old_path or file.path
-	local start_line, end_line = session:map_range(path, item.side, item.start_line or line, line)
+	local start_line, end_line = session:map_range(path, item.side, item.start_line, line)
 	if not end_line then
 		return false
 	end
 
-	item.start_line, item.end_line = item.start_line and start_line, end_line
+	item.start_line, item.end_line = start_line, end_line
 	return true
 end
 
@@ -202,6 +202,13 @@ function M.selection(renderer, file, side, lines, position)
 		return nil, "The selected lines cannot be represented as one review range"
 	end
 
+	local session = renderer.session
+	local start_to, to = session:pr_range(file.path, "RIGHT", start and start.to, stop.to)
+	local start_from, from = session:pr_range(file.old_path or file.path, "LEFT", start and start.from, stop.from)
+	if (side == "RIGHT" and not to) or (side == "LEFT" and not from) then
+		return nil, "These lines can't be found in the pull request"
+	end
+
 	return {
 		file = file,
 		side = side,
@@ -211,11 +218,11 @@ function M.selection(renderer, file, side, lines, position)
 		inline = {
 			path = file.path,
 			old_path = file.old_path,
-			from = stop.from,
-			to = stop.to,
-			start_from = start and start.from,
-			start_to = start and start.to,
-			commit_hash = renderer.session.range.head_revision,
+			from = from,
+			to = to,
+			start_from = start_from,
+			start_to = start_to,
+			commit_hash = session.full_range.head_revision,
 		},
 	}
 end

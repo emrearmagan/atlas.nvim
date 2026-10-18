@@ -302,7 +302,7 @@ end
 -- just get the same lines back.
 ---@param path string
 ---@param side "LEFT"|"RIGHT" LEFT lines are at the PR base, RIGHT lines at the PR head.
----@param start_line integer
+---@param start_line integer|nil nil for a single line.
 ---@param end_line integer
 ---@return integer|nil start_line Lines in the shown commits, nil when another commit changed the range.
 ---@return integer|nil end_line
@@ -312,7 +312,27 @@ function Session:map_range(path, side, start_line, end_line)
 	end
 
 	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
-	return diff.map_range(hunks[path] or {}, start_line, end_line)
+	local first, last = diff.map_range(hunks[path] or {}, "LEFT", start_line or end_line, end_line)
+	return start_line and first, last
+end
+
+-- New comments and notes are always stored on PR lines. When only some commits are shown, this finds
+-- where lines on screen are in the PR, or nil if another commit changed them. With all commits
+-- shown you just get the same lines back.
+---@param path string
+---@param side "LEFT"|"RIGHT" LEFT lines become PR base lines, RIGHT lines PR head lines.
+---@param start_line integer|nil nil for a single line.
+---@param end_line integer|nil nil stays nil.
+---@return integer|nil start_line
+---@return integer|nil end_line
+function Session:pr_range(path, side, start_line, end_line)
+	if not self.hunks or not end_line then
+		return start_line, end_line
+	end
+
+	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
+	local first, last = diff.map_range(hunks[path] or {}, "RIGHT", start_line or end_line, end_line)
+	return start_line and first, last
 end
 
 -- Lines in the shown commits that other commits change. Empty while all commits are shown.

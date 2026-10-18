@@ -591,11 +591,6 @@ end
 ---@param pending boolean
 ---@param suggestion boolean|nil
 function Viewer:add_comment(pending, suggestion)
-	if self.session:shown_commits() then
-		notify.info("Can't comment at the commit level")
-		return
-	end
-
 	if vim.api.nvim_get_current_buf() == self.explorer.buf then
 		local file = self.explorer:current_file()
 		if file then
@@ -621,11 +616,6 @@ function Viewer:add_comment(pending, suggestion)
 end
 
 function Viewer:add_note()
-	if self.session:shown_commits() then
-		notify.info("Can't add notes at the commit level")
-		return
-	end
-
 	local selection, err = self.renderer:get_selection()
 	if not selection then
 		if err then

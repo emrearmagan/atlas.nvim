@@ -102,7 +102,8 @@ local function comment_draft(context, provider)
 	local draft = { pending = context.pending }
 	local file = context.file
 	if file then
-		draft.file = { path = file.path, old_path = file.old_path, commit_hash = context.session.range.head_revision }
+		draft.file =
+			{ path = file.path, old_path = file.old_path, commit_hash = context.session.full_range.head_revision }
 		return draft
 	end
 
@@ -183,16 +184,17 @@ M.add_note = {
 		if not selection then
 			return false
 		end
-		if selection.side ~= "RIGHT" then
+		local last = selection.inline.to
+		if selection.side ~= "RIGHT" or not last then
 			notify.info("Notes are only available on the new side of the diff")
 			return false
 		end
 
 		note_editor.create(data.target, {
 			file_path = selection.file.path,
-			commit = session.range.head_revision,
-			start_line = selection.first,
-			end_line = selection.last,
+			commit = session.full_range.head_revision,
+			start_line = selection.inline.start_to or last,
+			end_line = last,
 			body = "",
 			context = selection_context(selection),
 		}, function(note, err)
@@ -242,10 +244,15 @@ M.note_to_comment = {
 					done("")
 					return nil
 				end
-				return diff.read(session.range.root, session.range.base_revision, file.old_path or file.path, done)
+				return diff.read(
+					session.full_range.root,
+					session.full_range.base_revision,
+					file.old_path or file.path,
+					done
+				)
 			end,
 			new = function(done)
-				return diff.read(session.range.root, session.range.head_revision, file.path, done)
+				return diff.read(session.full_range.root, session.full_range.head_revision, file.path, done)
 			end,
 		}, function(contents, errors)
 			local err = errors.old or errors.new
@@ -280,7 +287,7 @@ M.note_to_comment = {
 					to = last,
 					start_from = first ~= last and old_line(first) or nil,
 					start_to = first ~= last and first or nil,
-					commit_hash = session.range.head_revision,
+					commit_hash = session.full_range.head_revision,
 				},
 			}
 			local shared = review_context(context)

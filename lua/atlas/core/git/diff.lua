@@ -225,20 +225,24 @@ function M.map_line(hunks, side, line)
 end
 
 ---@param hunks DiffHunk[]
+---@param side "LEFT"|"RIGHT"
 ---@param start_line integer
 ---@param end_line integer
 ---@return integer|nil start_line
 ---@return integer|nil end_line
-function M.map_range(hunks, start_line, end_line)
+function M.map_range(hunks, side, start_line, end_line)
 	for _, hunk in ipairs(hunks) do
 		local start, count = hunk.old_start, hunk.old_count
+		if side == "RIGHT" then
+			start, count = hunk.new_start, hunk.new_count
+		end
 		local changed = count > 0 and start <= end_line and start + count > start_line
 		local inserted = count == 0 and start >= start_line and start < end_line
 		if changed or inserted then
 			return nil, nil
 		end
 	end
-	return (M.map_line(hunks, "LEFT", start_line)), (M.map_line(hunks, "LEFT", end_line))
+	return (M.map_line(hunks, side, start_line)), (M.map_line(hunks, side, end_line))
 end
 
 ---@param hunks DiffHunk[]
