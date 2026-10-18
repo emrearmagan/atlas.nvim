@@ -236,13 +236,14 @@ function Session:reload(on_done)
 	end)
 end
 
----@param commit AtlasGitCommit|nil
+---@param from AtlasGitCommit|nil
+---@param to AtlasGitCommit|nil
 ---@param on_done fun()
-function Session:show_commit(commit, on_done)
+function Session:show_commits(from, to, on_done)
 	local full_range = self.full_range
 	local base, head = full_range.base_revision, full_range.head_revision
-	if commit then
-		base, head = commit.hash .. "^", commit.hash
+	if from and to then
+		base, head = from.hash .. "^", to.hash
 	end
 
 	self.requests.run(function(done)
@@ -257,15 +258,29 @@ function Session:show_commit(commit, on_done)
 			return
 		end
 
-		self.range = commit and diff.range or full_range
+		self.range = from and to and diff.range or full_range
 		self.files = diff.files
 		on_done()
 	end)
 end
 
----@return boolean
-function Session:shows_commit()
-	return self.range ~= self.full_range
+---@return AtlasGitCommit[]|nil
+function Session:shown_commits()
+	if self.range == self.full_range then
+		return nil
+	end
+
+	local shown = {}
+	for _, commit in ipairs(self.commits) do
+		if commit.hash == self.range.head_revision or #shown > 0 then
+			shown[#shown + 1] = commit
+			if commit.parent == self.range.base_revision then
+				break
+			end
+		end
+	end
+
+	return shown
 end
 
 ---@return string|nil
@@ -275,7 +290,7 @@ function Session:head_worktree()
 	-- I mean we could switch the worktree to the commit, but then
 	-- open buffers need reloading, the LSP reindexes on every step and other Neovims on the same PR get their files
 	-- swapped under them. Not worth it yet..
-	return not self:shows_commit() and self.worktree_root or nil
+	return not self:shown_commits() and self.worktree_root or nil
 end
 
 ---@param note AtlasNote

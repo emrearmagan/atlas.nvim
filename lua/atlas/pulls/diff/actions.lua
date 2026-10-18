@@ -1,7 +1,6 @@
 local action_runner = require("atlas.core.actions")
 local review_actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
-local commits = require("atlas.pulls.diff.ui.commits")
 local detail_window = require("atlas.pulls.ui.detail.window")
 local diff = require("atlas.pulls.diff.diff")
 local diff_git = require("atlas.pulls.diff.git")
@@ -34,7 +33,6 @@ local M = {}
 ---| "toggle_note_resolved"
 ---| "note_to_comment"
 ---| "toggle_detail_panel"
----| "view_commits"
 ---| "open_in_browser"
 ---| "open_actions"
 ---| "refresh_review"
@@ -476,43 +474,6 @@ M.open_in_browser = {
 }
 
 ---@type AtlasDiffAction
-M.view_commits = {
-	id = "view_commits",
-	label = "View commits",
-	icon = icons.get("commit"),
-	is_available = function(context)
-		return #context.session.commits > 0, "No commits available"
-	end,
-	run = function(context)
-		local session = context.session
-		picker.select_with_preview({
-			title = "Commits",
-			items = session.commits,
-			key = function(commit)
-				return commit.hash
-			end,
-			format_item = function(commit)
-				local hash = commit.hash:sub(1, 8)
-				local message = " " .. commit.message:match("^[^\r\n]*")
-				return hash .. message, { { hash, "AtlasTextMuted" }, { message, "Normal" } }
-			end,
-			preview_item = function(commit, done)
-				done(commits.preview(commit))
-			end,
-			on_select = function(commit)
-				if not commit then
-					return
-				end
-
-				-- Opening a diff imports these actions, so load it when a commit is picked.
-				require("atlas.pulls.diff").open_commit({ commit = commit.hash, root = session.range.root })
-			end,
-		})
-		return true
-	end,
-}
-
----@type AtlasDiffAction
 M.open_actions = {
 	id = "open_actions",
 	label = "Review actions",
@@ -549,9 +510,6 @@ M.open_actions = {
 		end
 
 		items[#items + 1] = M.toggle_detail_panel
-		if action_runner.is_available(M.view_commits, context) then
-			items[#items + 1] = M.view_commits
-		end
 
 		picker.select({
 			title = "Review action",

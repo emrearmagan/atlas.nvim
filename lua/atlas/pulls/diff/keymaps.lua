@@ -228,9 +228,9 @@ function M.setup(viewer)
 		end)
 	end
 
-	add(commits_items, { "ui.select", "pulls.open_diff" }, "Show commit", 1, function()
-		viewer:show_commit(viewer.commits:current())
-	end)
+	add(commits_items, { "ui.select", "pulls.open_diff" }, "Show commits", 1, function()
+		viewer:show_commits(viewer.commits:selection())
+	end, { "n", "x" })
 	add(commits_items, "pulls.review.show_details", "Show commit details", 2, function()
 		viewer.commits:show_details()
 	end)

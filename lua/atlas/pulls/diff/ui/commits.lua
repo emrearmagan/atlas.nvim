@@ -7,7 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field win integer|nil
 ---@field shown boolean
 ---@field items AtlasGitCommit[]
----@field active string|nil Hash of the shown commit, nil while all commits are shown.
+---@field active table<string, boolean>|nil Hashes of the shown commits, nil while all commits are shown.
 ---@field seen table<string, boolean> Hashes of commits shown before.
 ---@field cursor_row integer
 ---@field group integer
@@ -23,7 +23,7 @@ local function render(state)
 	local highlights = {}
 
 	for _, commit in ipairs(state.items) do
-		local marker = commit.hash == state.active and "▸" or state.seen[commit.hash] and "✓" or " "
+		local marker = state.active and state.active[commit.hash] and "▸" or state.seen[commit.hash] and "✓" or " "
 		local hash = commit.hash:sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
 		local prefix = marker .. hash .. " "
@@ -49,6 +49,35 @@ local function render(state)
 	vim.api.nvim_win_call(state.win, function()
 		vim.fn.winrestview(view)
 	end)
+end
+
+---@param state AtlasDiffCommits
+---@return AtlasGitCommit|nil
+local function current(state)
+	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
+	return state.items[row - 1]
+end
+
+---@param commit AtlasGitCommit
+---@return { title: string, lines: string[], filetype: string }
+local function preview(commit)
+	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
+	while #lines > 0 and vim.trim(lines[#lines]) == "" do
+		table.remove(lines)
+	end
+
+	vim.list_extend(lines, {
+		"",
+		"Author: " .. commit.author,
+		"Date: " .. utils.format_date(commit.date),
+		"Commit: " .. commit.hash,
+	})
+
+	return {
+		title = " Commit " .. commit.hash:sub(1, 8) .. " ",
+		lines = lines,
+		filetype = "markdown",
+	}
 end
 
 ---@param items AtlasGitCommit[]
@@ -156,25 +185,41 @@ function Commits:close()
 	end
 end
 
----@param hash string|nil
-function Commits:set_active(hash)
-	self.active = hash
-	if hash then
-		self.seen[hash] = true
+---@param commits AtlasGitCommit[]|nil
+function Commits:set_active(commits)
+	self.active = nil
+	if commits then
+		self.active = {}
+		for _, commit in ipairs(commits) do
+			self.active[commit.hash] = true
+			self.seen[commit.hash] = true
+		end
 	end
 	if self.win then
 		render(self)
 	end
 end
 
----@return AtlasGitCommit|nil
-function Commits:current()
-	local row = self.win and vim.api.nvim_win_get_cursor(self.win)[1] or self.cursor_row
-	return self.items[row - 1]
+---@return AtlasGitCommit|nil from
+---@return AtlasGitCommit|nil to
+function Commits:selection()
+	local first = vim.api.nvim_win_get_cursor(0)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		first, last = math.min(first, last), math.max(first, last)
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	if last < 2 then
+		return nil, nil
+	end
+	return self.items[last - 1], self.items[math.max(first, 2) - 1]
 end
 
 function Commits:copy_hash()
-	local commit = self:current()
+	local commit = current(self)
 	if not commit then
 		return
 	end
@@ -183,35 +228,13 @@ function Commits:copy_hash()
 	notify.success("Copied commit SHA")
 end
 
----@param commit AtlasGitCommit
----@return { title: string, lines: string[], filetype: string }
-function Commits.preview(commit)
-	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
-	while #lines > 0 and vim.trim(lines[#lines]) == "" do
-		table.remove(lines)
-	end
-
-	vim.list_extend(lines, {
-		"",
-		"Author: " .. commit.author,
-		"Date: " .. utils.format_date(commit.date),
-		"Commit: " .. commit.hash,
-	})
-
-	return {
-		title = " Commit " .. commit.hash:sub(1, 8) .. " ",
-		lines = lines,
-		filetype = "markdown",
-	}
-end
-
 function Commits:show_details()
 	info.toggle({
 		source_win = self.win,
 		content = function(line)
 			local commit = self.items[line - 1]
 			if commit then
-				return Commits.preview(commit)
+				return preview(commit)
 			end
 		end,
 	})

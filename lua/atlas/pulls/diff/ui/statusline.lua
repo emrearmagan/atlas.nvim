@@ -20,16 +20,29 @@ function M.update(statusline, session, files, buf)
 		{ text = identity, hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
 	}
 
-	if session:shows_commit() then
-		local hash = session.range.head_revision
-		local position = 0
+	local commits = session:shown_commits()
+	if commits then
+		local newest, oldest = 0, 0
 		for index, commit in ipairs(session.commits) do
-			if commit.hash == hash then
-				position = #session.commits - index + 1
+			local position = #session.commits - index + 1
+			if commit == commits[1] then
+				newest = position
+			end
+			if commit == commits[#commits] then
+				oldest = position
 			end
 		end
 		items[#items + 1] = {
-			text = string.format("Commit %d/%d %s", position, #session.commits, hash:sub(1, 8)),
+			text = #commits == 1
+					and string.format("Commit %d/%d %s", newest, #session.commits, commits[1].hash:sub(1, 8))
+				or string.format(
+					"Commits %d-%d/%d %s..%s",
+					oldest,
+					newest,
+					#session.commits,
+					commits[#commits].hash:sub(1, 8),
+					commits[1].hash:sub(1, 8)
+				),
 			hl_group = "AtlasFooterWarning",
 			priority = 45,
 		}

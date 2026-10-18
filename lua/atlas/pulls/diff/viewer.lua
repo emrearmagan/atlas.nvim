@@ -205,7 +205,7 @@ end
 ---@param viewer AtlasDiffViewer
 local function update_panels(viewer)
 	local session = viewer.session
-	local reviewed_files = not session:shows_commit() and session.reviewed_files or nil
+	local reviewed_files = not session:shown_commits() and session.reviewed_files or nil
 	viewer.explorer:update(reviewed_files, session.review, session.notes and session.notes.items)
 	viewer.review_panel:render()
 	update_statusline(viewer)
@@ -345,7 +345,7 @@ function Viewer:toggle_file_reviewed()
 	-- later commit changes the file and every earlier commit that did was already seen, since then you've looked at
 	-- its whole PR diff. Also we would probably need a least to track all reviewed files for each individual commit ?
 	-- So coming back to a commit still shows them as reviewed ?
-	if session:shows_commit() then
+	if session:shown_commits() then
 		notify.info("Can't mark files reviewed at the commit level")
 		return
 	end
@@ -589,7 +589,7 @@ end
 ---@param pending boolean
 ---@param suggestion boolean|nil
 function Viewer:add_comment(pending, suggestion)
-	if self.session:shows_commit() then
+	if self.session:shown_commits() then
 		notify.info("Can't comment at the commit level")
 		return
 	end
@@ -619,7 +619,7 @@ function Viewer:add_comment(pending, suggestion)
 end
 
 function Viewer:add_note()
-	if self.session:shows_commit() then
+	if self.session:shown_commits() then
 		notify.info("Can't add notes at the commit level")
 		return
 	end
@@ -664,11 +664,12 @@ function Viewer:open_file()
 	options.winhighlight = vim.go.winhighlight
 end
 
----@param commit AtlasGitCommit|nil
-function Viewer:show_commit(commit)
+---@param from AtlasGitCommit|nil
+---@param to AtlasGitCommit|nil
+function Viewer:show_commits(from, to)
 	local session = self.session
-	local shown = session:shows_commit() and session.range.head_revision or nil
-	if (commit and commit.hash) == shown then
+	local shown = session:shown_commits() or {}
+	if shown[#shown] == from and shown[1] == to then
 		return
 	end
 
@@ -679,8 +680,8 @@ function Viewer:show_commit(commit)
 		return
 	end
 
-	session:show_commit(commit, function()
-		self.commits:set_active(commit and commit.hash)
+	session:show_commits(from, to, function()
+		self.commits:set_active(session:shown_commits())
 		self.explorer:set_files(session.files)
 		update_panels(self)
 		local first = self.explorer.files[1]
@@ -699,20 +700,18 @@ function Viewer:step_commit(direction)
 	end
 
 	local index = direction == 1 and #session.commits or 1
-	if session:shows_commit() then
+	local shown = session:shown_commits()
+	if shown then
+		local edge = direction == 1 and shown[1] or shown[#shown]
 		for position, commit in ipairs(session.commits) do
-			if commit.hash == session.range.head_revision then
+			if commit == edge then
 				index = position - direction
 			end
 		end
 	end
 
 	local commit = session.commits[index]
-	if not commit then
-		notify.info(direction == 1 and "Last commit" or "First commit")
-		return
-	end
-	self:show_commit(commit)
+	self:show_commits(commit, commit)
 end
 
 ---@param session AtlasDiffSession

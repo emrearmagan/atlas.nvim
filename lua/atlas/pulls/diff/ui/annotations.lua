@@ -65,7 +65,7 @@ end
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
 function M.for_file(session, file)
-	if session:shows_commit() then
+	if session:shown_commits() then
 		return {}
 	end
 
