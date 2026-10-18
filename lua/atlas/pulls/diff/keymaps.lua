@@ -15,6 +15,8 @@ local shared_actions = {
 	"pulls.review.prev_unresolved",
 	"pulls.review.next_note",
 	"pulls.review.prev_note",
+	"pulls.review.next_commit",
+	"pulls.review.prev_commit",
 	"pulls.review.add_comment",
 	"pulls.review.submit_comment",
 	"pulls.review.approve",
@@ -121,6 +123,12 @@ function M.setup(viewer)
 	end)
 	add(shared_items, "pulls.review.view.toggle_comments", "Toggle comment display", 45, function()
 		viewer:toggle_comments()
+	end)
+	add(shared_items, "pulls.review.prev_commit", "Previous commit", 46, function()
+		viewer:step_commit(-1)
+	end)
+	add(shared_items, "pulls.review.next_commit", "Next commit", 47, function()
+		viewer:step_commit(1)
 	end)
 
 	local review_items = {}

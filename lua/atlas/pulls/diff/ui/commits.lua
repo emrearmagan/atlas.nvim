@@ -8,6 +8,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field shown boolean
 ---@field items AtlasGitCommit[]
 ---@field active string|nil Hash of the shown commit, nil while all commits are shown.
+---@field seen table<string, boolean> Hashes of commits shown before.
 ---@field cursor_row integer
 ---@field group integer
 local Commits = {}
@@ -22,7 +23,7 @@ local function render(state)
 	local highlights = {}
 
 	for _, commit in ipairs(state.items) do
-		local marker = commit.hash == state.active and "▸" or " "
+		local marker = commit.hash == state.active and "▸" or state.seen[commit.hash] and "✓" or " "
 		local hash = commit.hash:sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
 		local prefix = marker .. hash .. " "
@@ -60,6 +61,7 @@ function Commits.new(items, shown)
 		buf = buf,
 		shown = shown,
 		items = items,
+		seen = {},
 		cursor_row = 2,
 		group = vim.api.nvim_create_augroup("AtlasDiffCommits" .. buf, { clear = true }),
 	}, Commits)
@@ -157,6 +159,9 @@ end
 ---@param hash string|nil
 function Commits:set_active(hash)
 	self.active = hash
+	if hash then
+		self.seen[hash] = true
+	end
 	if self.win then
 		render(self)
 	end

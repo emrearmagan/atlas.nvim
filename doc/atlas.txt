@@ -797,6 +797,8 @@ These `User` events fire after setup or cleanup completes:
           prev_unresolved = "[x",
           next_note = "]n",
           prev_note = "[n",
+          next_commit = "]r",
+          prev_commit = "[r",
           add_comment = "c",
           submit_comment = "C",
           add_suggestion = "s",

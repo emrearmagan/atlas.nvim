@@ -92,6 +92,8 @@ local config = require("atlas.config")
 ---@field prev_unresolved? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
 ---@field prev_note? AtlasKeymapValue
+---@field next_commit? AtlasKeymapValue
+---@field prev_commit? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
 ---@field add_suggestion? AtlasKeymapValue
@@ -239,6 +241,8 @@ local config = require("atlas.config")
 ---| "pulls.review.prev_unresolved"
 ---| "pulls.review.next_note"
 ---| "pulls.review.prev_note"
+---| "pulls.review.next_commit"
+---| "pulls.review.prev_commit"
 ---| "pulls.review.add_comment"
 ---| "pulls.review.submit_comment"
 ---| "pulls.review.add_suggestion"

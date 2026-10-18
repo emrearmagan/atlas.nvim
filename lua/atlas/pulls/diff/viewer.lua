@@ -690,6 +690,31 @@ function Viewer:show_commit(commit)
 	end)
 end
 
+---@param direction 1|-1
+function Viewer:step_commit(direction)
+	local session = self.session
+	if #session.commits == 0 then
+		notify.info("No commits available")
+		return
+	end
+
+	local index = direction == 1 and #session.commits or 1
+	if session:shows_commit() then
+		for position, commit in ipairs(session.commits) do
+			if commit.hash == session.range.head_revision then
+				index = position - direction
+			end
+		end
+	end
+
+	local commit = session.commits[index]
+	if not commit then
+		notify.info(direction == 1 and "Last commit" or "First commit")
+		return
+	end
+	self:show_commit(commit)
+end
+
 ---@param session AtlasDiffSession
 ---@param options AtlasPullsDiffConfig
 ---@param err any
