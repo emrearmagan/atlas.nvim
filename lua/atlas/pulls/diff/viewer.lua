@@ -664,7 +664,7 @@ function Viewer:open_file()
 	options.winhighlight = vim.go.winhighlight
 end
 
----@param commit PullsCommit|nil
+---@param commit AtlasGitCommit|nil
 function Viewer:show_commit(commit)
 	local session = self.session
 	-- Diffview fixes its revisions when the view is built, so supporting this here would mean

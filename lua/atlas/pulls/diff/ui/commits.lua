@@ -6,7 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field buf integer
 ---@field win integer|nil
 ---@field shown boolean
----@field items PullsCommit[]
+---@field items AtlasGitCommit[]
 ---@field cursor_row integer
 ---@field group integer
 local Commits = {}
@@ -21,7 +21,7 @@ local function render(state)
 	local highlights = { { 0, 0, #lines[1], "AtlasLogInfo" } }
 
 	for _, commit in ipairs(state.items) do
-		local hash = (commit.short_hash or commit.hash):sub(1, 8)
+		local hash = commit.hash:sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
 		local prefix = hash .. " "
 
@@ -48,7 +48,7 @@ local function render(state)
 	end)
 end
 
----@param items PullsCommit[]
+---@param items AtlasGitCommit[]
 ---@param shown boolean
 ---@return AtlasDiffCommits
 function Commits.new(items, shown)
@@ -152,7 +152,7 @@ function Commits:close()
 	end
 end
 
----@return PullsCommit|nil
+---@return AtlasGitCommit|nil
 function Commits:current()
 	local row = self.win and vim.api.nvim_win_get_cursor(self.win)[1] or self.cursor_row
 	return self.items[row - 1]
@@ -168,20 +168,7 @@ function Commits:copy_hash()
 	notify.success("Copied commit SHA")
 end
 
-function Commits:open_in_browser()
-	local commit = self:current()
-	if not commit then
-		return
-	end
-
-	if commit.html_url and commit.html_url ~= "" then
-		vim.ui.open(commit.html_url)
-	else
-		notify.warn("No URL available for this commit")
-	end
-end
-
----@param commit PullsCommit
+---@param commit AtlasGitCommit
 ---@return { title: string, lines: string[], filetype: string }
 function Commits.preview(commit)
 	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
@@ -189,19 +176,15 @@ function Commits.preview(commit)
 		table.remove(lines)
 	end
 
-	local author = commit.author_nickname
-	if not author or author == "" then
-		author = commit.author_name
-	end
 	vim.list_extend(lines, {
 		"",
-		"Author: " .. author,
+		"Author: " .. commit.author,
 		"Date: " .. utils.format_date(commit.date),
 		"Commit: " .. commit.hash,
 	})
 
 	return {
-		title = " Commit " .. (commit.short_hash or commit.hash):sub(1, 8) .. " ",
+		title = " Commit " .. commit.hash:sub(1, 8) .. " ",
 		lines = lines,
 		filetype = "markdown",
 	}

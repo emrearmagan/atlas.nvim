@@ -1,5 +1,6 @@
 local diff_git = require("atlas.pulls.diff.git")
 local diff_worktree = require("atlas.pulls.diff.worktree")
+local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
@@ -24,7 +25,7 @@ local request_scope = require("atlas.core.requests")
 ---@field range AtlasDiffRange
 ---@field files AtlasDiffFile[]
 ---@field worktree_root string|nil
----@field commits PullsCommit[]
+---@field commits AtlasGitCommit[]
 ---@field review PullsReviewData|nil
 ---@field reviewed_files table<string, boolean>|nil
 ---@field current_user AtlasUser|nil
@@ -111,16 +112,14 @@ function Session.new(source, root, base, head, opts, on_done)
 		local capabilities = provider.capabilities
 		session.reviewed_files = capabilities.reviews and {} or nil
 		starts = review_starts(pr, root, head)
-		if capabilities.core.fetch_commits then
-			starts.commits = function(done)
-				return capabilities.core.fetch_commits(pr, { force_refresh = true }, done)
-			end
-		end
 		if capabilities.users then
 			starts.current_user = capabilities.users.fetch_user
 		end
 	end
 
+	starts.commits = function(done)
+		return git.branch_commits(root, base .. ".." .. head, done)
+	end
 	starts.diff = function(done)
 		session.requests.run(function(loaded)
 			return diff_git.load(root, base, head, loaded)
@@ -237,7 +236,7 @@ function Session:reload(on_done)
 	end)
 end
 
----@param commit PullsCommit|nil
+---@param commit AtlasGitCommit|nil
 ---@param on_done fun()
 function Session:show_commit(commit, on_done)
 	local full_range = self.full_range

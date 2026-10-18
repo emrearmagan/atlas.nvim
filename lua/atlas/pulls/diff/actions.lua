@@ -492,7 +492,7 @@ M.view_commits = {
 				return commit.hash
 			end,
 			format_item = function(commit)
-				local hash = (commit.short_hash or commit.hash):sub(1, 8)
+				local hash = commit.hash:sub(1, 8)
 				local message = " " .. commit.message:match("^[^\r\n]*")
 				return hash .. message, { { hash, "AtlasTextMuted" }, { message, "Normal" } }
 			end,
