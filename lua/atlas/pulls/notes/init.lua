@@ -1,5 +1,4 @@
-local diff = require("atlas.pulls.diff.diff")
-local diff_git = require("atlas.pulls.diff.git")
+local diff = require("atlas.core.git.diff")
 local file = require("atlas.pulls.notes.file")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
@@ -55,23 +54,15 @@ local function text(value)
 end
 
 ---@param note AtlasNote
----@param hunks integer[][] Changes from the note's commit to the current file.
+---@param hunks DiffHunk[] Changes from the note's commit to the current file.
 ---@return AtlasNotePosition
 function M.position(note, hunks)
-	for _, hunk in ipairs(hunks) do
-		local start, count = hunk[1], hunk[2]
-		local changed = count > 0 and start <= note.end_line and start + count > note.start_line
-		local inserted = count == 0 and start >= note.start_line and start < note.end_line
-		if changed or inserted then
-			local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
-			return { start_line = line, end_line = line, outdated = true }
-		end
+	local start_line, end_line = diff.map_range(hunks, note.start_line, note.end_line)
+	if not start_line or not end_line then
+		local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
+		return { start_line = line, end_line = line, outdated = true }
 	end
-	return {
-		start_line = (diff.map_line(hunks, "LEFT", note.start_line)),
-		end_line = (diff.map_line(hunks, "LEFT", note.end_line)),
-		outdated = false,
-	}
+	return { start_line = start_line, end_line = end_line, outdated = false }
 end
 
 ---@param root string
@@ -83,25 +74,9 @@ function M.locate(root, head, items, on_done)
 	local requests = request_scope.new()
 	local starts = {}
 	for _, note in ipairs(items) do
-		local key = note.commit .. ":" .. note.file_path
-		if note.commit ~= head and not starts[key] then
-			starts[key] = function(done)
-				local reads = request_scope.new()
-				reads.all({
-					old = function(read_done)
-						return diff_git.read(root, note.commit, note.file_path, read_done)
-					end,
-					new = function(read_done)
-						return diff_git.read(root, head, note.file_path, read_done)
-					end,
-				}, function(contents, errors)
-					if errors.old or errors.new then
-						done(nil)
-						return
-					end
-					done((diff.compute(contents.old, contents.new)))
-				end)
-				return { cancel = reads.cancel }
+		if note.commit ~= head and not starts[note.commit] then
+			starts[note.commit] = function(done)
+				return diff.hunks(root, note.commit, head, done)
 			end
 		end
 	end
@@ -109,13 +84,9 @@ function M.locate(root, head, items, on_done)
 	requests.all(starts, function(hunks)
 		local positions = {}
 		for _, note in ipairs(items) do
-			if note.commit == head then
-				positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
-			else
-				local changes = hunks[note.commit .. ":" .. note.file_path]
-				positions[note.id] = changes and M.position(note, changes)
-					or { start_line = note.start_line, end_line = note.end_line, outdated = true }
-			end
+			local changes = note.commit == head and {} or hunks[note.commit]
+			positions[note.id] = changes and M.position(note, changes[note.file_path] or {})
+				or { start_line = note.start_line, end_line = note.end_line, outdated = true }
 		end
 		on_done(positions)
 	end)

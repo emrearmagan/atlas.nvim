@@ -61,14 +61,33 @@ function M.comment_options(expanded_threads)
 	return options
 end
 
+-- Updates the item's lines to match the diff on screen.
+-- Returns false when they can't be found there, so the item isn't drawn.
+-- File comments have no lines, so they're always kept.
+---@param session AtlasDiffSession
+---@param file AtlasDiffFile
+---@param item AtlasDiffAnnotation
+---@return boolean
+local function place(session, file, item)
+	local line = item.end_line
+	if not line then
+		return true
+	end
+
+	local path = item.side == "LEFT" and file.old_path or file.path
+	local start_line, end_line = session:map_range(path, item.side, item.start_line or line, line)
+	if not end_line then
+		return false
+	end
+
+	item.start_line, item.end_line = item.start_line and start_line, end_line
+	return true
+end
+
 ---@param session AtlasDiffSession
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
 function M.for_file(session, file)
-	if session:shown_commits() then
-		return {}
-	end
-
 	local items = {}
 	local review = session.review
 	if review then
@@ -85,7 +104,10 @@ function M.for_file(session, file)
 					start_line = inline.to and inline.start_to or inline.start_from
 				end
 
-				items[#items + 1] = { side = side, start_line = start_line, end_line = end_line, thread = thread }
+				local item = { side = side, start_line = start_line, end_line = end_line, thread = thread }
+				if place(session, file, item) then
+					items[#items + 1] = item
+				end
 			end
 		end
 	end
@@ -94,13 +116,16 @@ function M.for_file(session, file)
 		for _, note in ipairs(session.notes.items) do
 			if note.file_path == file.path or (file.status == "renamed" and note.file_path == file.old_path) then
 				local position = session.notes.positions[note.id]
-				items[#items + 1] = {
+				local item = {
 					side = "RIGHT",
 					start_line = position.start_line,
 					end_line = position.end_line,
 					note = vim.tbl_extend("force", note, position),
 					outdated = position.outdated,
 				}
+				if place(session, file, item) then
+					items[#items + 1] = item
+				end
 			end
 		end
 	end

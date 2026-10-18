@@ -1,4 +1,4 @@
-local diff = require("atlas.pulls.diff.diff")
+local diff = require("atlas.core.git.diff")
 local render = require("atlas.pulls.diff.atlas.render")
 local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 
@@ -24,7 +24,7 @@ local function place_annotations(renderer, document, items, expanded)
 				line, hunk = diff.map_line(document.hunks, "LEFT", item.end_line)
 				if hunk then
 					removed = true
-					line = hunk[4] > 0 and hunk[3] or hunk[3] + 1
+					line = hunk.new_count > 0 and hunk.new_start or hunk.new_start + 1
 					deleted[item.end_line] = deleted[item.end_line] or {}
 					table.insert(deleted[item.end_line], item)
 				end

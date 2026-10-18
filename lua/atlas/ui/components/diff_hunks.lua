@@ -36,7 +36,7 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 ---@param file DiffFile
----@param hunk DiffHunk
+---@param hunk DiffHunkLines
 ---@param opts AtlasDiffHunkRenderOptions
 local function render_hunk(lines, spans, line_map, file, hunk, opts)
 	local padding_x = opts.padding_x or DEFAULT_PADDING

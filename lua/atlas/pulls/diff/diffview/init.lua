@@ -7,15 +7,15 @@ local RevType = require("diffview.vcs.rev").RevType
 local StandardView = require("diffview.scene.views.standard.standard_view").StandardView
 local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 local annotations = require("atlas.pulls.diff.diffview.annotations")
-local diff = require("atlas.pulls.diff.diff")
+local diff = require("atlas.core.git.diff")
 local keymaps = require("atlas.pulls.diff.diffview.keymaps")
 
 ---@class AtlasDiffDiffviewRenderer: AtlasDiffRenderer
 ---@field diffview CDiffView
 ---@field group integer
 ---@field pending_file { file: AtlasDiffFile, on_done: fun(err?: string) }|nil
----@field hunks integer[][]
----@field split_hunks integer[][]
+---@field hunks DiffHunk[]
+---@field split_hunks DiffHunk[]
 local Renderer = {}
 Renderer.__index = Renderer
 

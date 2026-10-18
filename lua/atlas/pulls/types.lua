@@ -154,7 +154,7 @@
 ---@field resolved_at string|nil
 ---@field resolved_by AtlasUser|nil
 ---@field inline PullsInlineCommentPosition|nil
----@field hunk DiffHunk|nil
+---@field hunk DiffHunkLines|nil
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field state "RESOLVED"|"OUTDATED"|nil                -- nil = active/open

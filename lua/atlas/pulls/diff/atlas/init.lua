@@ -1,7 +1,6 @@
 local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 local annotations = require("atlas.pulls.diff.atlas.annotations")
-local diff = require("atlas.pulls.diff.diff")
-local git = require("atlas.pulls.diff.git")
+local diff = require("atlas.core.git.diff")
 local help = require("atlas.ui.popups.help")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
@@ -25,8 +24,8 @@ Renderer.__index = Renderer
 ---@field file AtlasDiffFile
 ---@field contents { old: { lines: string[], endofline: boolean }, new: { lines: string[], endofline: boolean } }
 ---@field binary boolean
----@field hunks integer[][] Old/new change ranges for inline rendering and review positions.
----@field split_hunks integer[][] Change ranges matching Neovim's split view and diffopt.
+---@field hunks DiffHunk[] Used by inline mode and comment positions.
+---@field split_hunks DiffHunk[] Used by side-by-side mode.
 
 ---@param file AtlasDiffFile
 ---@param contents { old: string, new: string }
@@ -220,7 +219,7 @@ function Renderer:show_file(file, on_done)
 				done("", nil)
 				return
 			end
-			return git.read(session.range.root, revision, path, done)
+			return diff.read(session.range.root, revision, path, done)
 		end
 	end
 

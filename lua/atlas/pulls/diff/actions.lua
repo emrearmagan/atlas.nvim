@@ -2,8 +2,7 @@ local action_runner = require("atlas.core.actions")
 local review_actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
 local detail_window = require("atlas.pulls.ui.detail.window")
-local diff = require("atlas.pulls.diff.diff")
-local diff_git = require("atlas.pulls.diff.git")
+local diff = require("atlas.core.git.diff")
 local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
@@ -243,10 +242,10 @@ M.note_to_comment = {
 					done("")
 					return nil
 				end
-				return diff_git.read(session.range.root, session.range.base_revision, file.old_path or file.path, done)
+				return diff.read(session.range.root, session.range.base_revision, file.old_path or file.path, done)
 			end,
 			new = function(done)
-				return diff_git.read(session.range.root, session.range.head_revision, file.path, done)
+				return diff.read(session.range.root, session.range.head_revision, file.path, done)
 			end,
 		}, function(contents, errors)
 			local err = errors.old or errors.new

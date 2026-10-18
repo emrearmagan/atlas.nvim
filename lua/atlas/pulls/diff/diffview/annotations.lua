@@ -1,4 +1,4 @@
-local diff = require("atlas.pulls.diff.diff")
+local diff = require("atlas.core.git.diff")
 local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 
 local M = {}

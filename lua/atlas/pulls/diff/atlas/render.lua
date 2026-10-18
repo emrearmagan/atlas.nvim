@@ -17,7 +17,7 @@ local function fold_inline(win, hunks, line_count)
 
 		local next_line = 1
 		for _, hunk in ipairs(hunks) do
-			local start, count = hunk[3], hunk[4]
+			local start, count = hunk.new_start, hunk.new_count
 			if count == 0 then
 				start = start + 1
 				if context == 0 then
@@ -68,7 +68,7 @@ local function render_inline(renderer, document)
 
 	local line_count = vim.api.nvim_buf_line_count(buf)
 	for _, hunk in ipairs(document.hunks) do
-		local new_start, new_count = hunk[3], hunk[4]
+		local new_start, new_count = hunk.new_start, hunk.new_count
 		local target = new_count > 0 and new_start or new_start + 1
 		renderer.inline_hunk_lines[#renderer.inline_hunk_lines + 1] = math.min(target, line_count)
 		highlight(buf, new_start, new_count, "DiffAdd")
@@ -81,7 +81,7 @@ end
 
 ---@param renderer AtlasDiffNativeRenderer
 ---@param old_lines string[]
----@param hunks integer[][]
+---@param hunks DiffHunk[]
 ---@param cards table<integer, [string, string|string[]][][]>
 ---@param previews table<integer, [string, string][]>
 ---@return integer
@@ -94,7 +94,8 @@ function M.deleted_lines(renderer, old_lines, hunks, cards, previews)
 	local topfill = 0
 
 	for _, hunk in ipairs(hunks) do
-		local old_start, old_count, new_start, new_count = unpack(hunk)
+		local old_start, old_count, new_start, new_count =
+			hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count
 
 		if old_count > 0 then
 			local rows = {}
@@ -198,9 +199,11 @@ function M.render(renderer, document)
 	local first = document.split_hunks[1]
 	if renderer.left.win and first then
 		for _, pane in ipairs({ renderer.left, renderer.right }) do
-			local side = pane == renderer.left and 1 or 3
-			local line = first[side]
-			if first[side + 1] == 0 then
+			local line, count = first.new_start, first.new_count
+			if pane == renderer.left then
+				line, count = first.old_start, first.old_count
+			end
+			if count == 0 then
 				line = line + 1
 			end
 			line = math.min(line, vim.api.nvim_buf_line_count(pane.buf))

@@ -402,7 +402,7 @@ function M.to_draft_comment(draft)
 end
 
 ---@param values table|nil
----@return DiffHunk|nil
+---@return DiffHunkLines|nil
 function M.to_diff_hunk(values)
 	local lines = json.safe_table(values)
 	if #lines == 0 then

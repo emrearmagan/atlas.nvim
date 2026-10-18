@@ -84,9 +84,9 @@ local function emit_comments(lines, spans, line_map, nodes, width)
 	end
 end
 
----@param hunk DiffHunk
+---@param hunk DiffHunkLines
 ---@param position PullsInlineCommentPosition
----@return DiffHunk|nil
+---@return DiffHunkLines|nil
 local function surrounding_hunk(hunk, position)
 	local line_field = position.to and "new_line" or "old_line"
 	local end_line = position.to or position.from

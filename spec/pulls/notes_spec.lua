@@ -9,23 +9,23 @@ end
 
 ---@param after integer
 ---@param count integer
----@return integer[]
+---@return DiffHunk
 local function inserted(after, count)
-	return { after, 0, after + 1, count }
+	return { old_start = after, old_count = 0, new_start = after + 1, new_count = count }
 end
 
 ---@param first integer
 ---@param count integer
----@return integer[]
+---@return DiffHunk
 local function removed(first, count)
-	return { first, count, first - 1, 0 }
+	return { old_start = first, old_count = count, new_start = first - 1, new_count = 0 }
 end
 
 ---@param first integer
 ---@param count integer
----@return integer[]
+---@return DiffHunk
 local function changed(first, count)
-	return { first, count, first, count }
+	return { old_start = first, old_count = count, new_start = first, new_count = count }
 end
 
 describe("pulls.notes", function()

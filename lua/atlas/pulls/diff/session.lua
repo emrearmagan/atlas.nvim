@@ -1,4 +1,4 @@
-local diff_git = require("atlas.pulls.diff.git")
+local diff = require("atlas.core.git.diff")
 local diff_worktree = require("atlas.pulls.diff.worktree")
 local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
@@ -24,6 +24,9 @@ local request_scope = require("atlas.core.requests")
 ---@field full_range AtlasDiffRange
 ---@field range AtlasDiffRange
 ---@field files AtlasDiffFile[]
+--- What the commits before (base) and after (head) the shown ones changed. nil while all commits are shown.
+--- THis is used to find where comments and notes are in the shown commits.
+---@field hunks { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> }|nil
 ---@field worktree_root string|nil
 ---@field commits AtlasGitCommit[]
 ---@field review PullsReviewData|nil
@@ -122,24 +125,24 @@ function Session.new(source, root, base, head, opts, on_done)
 	end
 	starts.diff = function(done)
 		session.requests.run(function(loaded)
-			return diff_git.load(root, base, head, loaded)
-		end, function(diff, err)
-			if not diff then
+			return diff.load(root, base, head, loaded)
+		end, function(result, err)
+			if not result then
 				done(nil, err)
 				return
 			end
 
-			session.full_range = diff.range
-			session.range = diff.range
-			session.files = diff.files
-			if not opts.lsp or #diff.files == 0 then
+			session.full_range = result.range
+			session.range = result.range
+			session.files = result.files
+			if not opts.lsp or #result.files == 0 then
 				done(true)
 				return
 			end
 
 			opts.on_progress("Preparing worktree...")
 			session.requests.run(function(prepared)
-				return diff_worktree.prepare(diff.range, pr, opts.lsp, prepared)
+				return diff_worktree.prepare(result.range, pr, opts.lsp, prepared)
 			end, function(path)
 				session.worktree_root = path
 				done(true)
@@ -242,24 +245,35 @@ end
 function Session:show_commits(from, to, on_done)
 	local full_range = self.full_range
 	local base, head = full_range.base_revision, full_range.head_revision
+	local starts = {}
 	if from and to then
 		base, head = from.hash .. "^", to.hash
+		starts.base_hunks = function(done)
+			return diff.hunks(full_range.root, full_range.base_revision, base, done)
+		end
+		starts.head_hunks = function(done)
+			return diff.hunks(full_range.root, full_range.head_revision, head, done)
+		end
+	end
+	starts.diff = function(done)
+		return diff.load(full_range.root, base, head, done)
 	end
 
-	self.requests.run(function(done)
-		return diff_git.load(full_range.root, base, head, done)
-	end, function(diff, err)
-		if not diff then
+	self.requests.all(starts, function(values, errors)
+		local result = values.diff
+		local _, err = next(errors)
+		if not result or err then
 			notify.error("Unable to load changed files" .. (err and "\n\n" .. err or ""), { vim_notify = true })
 			return
 		end
-		if #diff.files == 0 then
+		if #result.files == 0 then
 			notify.info("No changed files")
 			return
 		end
 
-		self.range = from and to and diff.range or full_range
-		self.files = diff.files
+		self.range = from and to and result.range or full_range
+		self.files = result.files
+		self.hunks = from and to and { base = values.base_hunks, head = values.head_hunks } or nil
 		on_done()
 	end)
 end
@@ -281,6 +295,24 @@ function Session:shown_commits()
 	end
 
 	return shown
+end
+
+-- Comments and notes are stored on PR lines. When only some commits are shown, this finds where
+-- those lines are in them, or nil if another commit changed them. With all commits shown you
+-- just get the same lines back.
+---@param path string
+---@param side "LEFT"|"RIGHT" LEFT lines are at the PR base, RIGHT lines at the PR head.
+---@param start_line integer
+---@param end_line integer
+---@return integer|nil start_line Lines in the shown commits, nil when another commit changed the range.
+---@return integer|nil end_line
+function Session:map_range(path, side, start_line, end_line)
+	if not self.hunks then
+		return start_line, end_line
+	end
+
+	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
+	return diff.map_range(hunks[path] or {}, start_line, end_line)
 end
 
 ---@return string|nil
