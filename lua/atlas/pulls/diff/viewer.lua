@@ -667,6 +667,11 @@ end
 ---@param commit AtlasGitCommit|nil
 function Viewer:show_commit(commit)
 	local session = self.session
+	local shown = session:shows_commit() and session.range.head_revision or nil
+	if (commit and commit.hash) == shown then
+		return
+	end
+
 	-- Diffview fixes its revisions when the view is built, so supporting this here would mean
 	-- recreating the whole Diffview view. Can't be bothered yet tho..
 	if self.options.open_cmd == "DiffviewOpen" then
@@ -675,6 +680,7 @@ function Viewer:show_commit(commit)
 	end
 
 	session:show_commit(commit, function()
+		self.commits:set_active(commit and commit.hash)
 		self.explorer:set_files(session.files)
 		update_panels(self)
 		local first = self.explorer.files[1]

@@ -7,6 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field win integer|nil
 ---@field shown boolean
 ---@field items AtlasGitCommit[]
+---@field active string|nil Hash of the shown commit, nil while all commits are shown.
 ---@field cursor_row integer
 ---@field group integer
 local Commits = {}
@@ -17,17 +18,18 @@ local namespace = vim.api.nvim_create_namespace("atlas.diff.commits")
 local function render(state)
 	local view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
 	local width = vim.api.nvim_win_get_width(state.win)
-	local lines = { string.format("All commits (%d)", #state.items) }
-	local highlights = { { 0, 0, #lines[1], "AtlasLogInfo" } }
+	local lines = { (state.active and " " or "▸") .. "All commits" }
+	local highlights = {}
 
 	for _, commit in ipairs(state.items) do
+		local marker = commit.hash == state.active and "▸" or " "
 		local hash = commit.hash:sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
-		local prefix = hash .. " "
+		local prefix = marker .. hash .. " "
 
 		lines[#lines + 1] = prefix
 			.. utils.truncate(vim.fn.strtrans(message), math.max(1, width - vim.fn.strdisplaywidth(prefix)))
-		highlights[#highlights + 1] = { #lines - 1, 0, #hash, "AtlasTextMuted" }
+		highlights[#highlights + 1] = { #lines - 1, #marker, #marker + #hash, "AtlasTextMuted" }
 	end
 
 	vim.bo[state.buf].modifiable = true
@@ -126,7 +128,7 @@ function Commits:open(parent_win)
 	options.relativenumber = false
 	options.signcolumn = "no"
 	options.statuscolumn = ""
-	options.winbar = ""
+	options.winbar = string.format("%%#AtlasLogInfo# Commits (%d)", #self.items)
 	options.winhighlight = ""
 	options.foldcolumn = "0"
 	options.fillchars = "eob: "
@@ -149,6 +151,14 @@ function Commits:close()
 	if self.win then
 		self.cursor_row = vim.api.nvim_win_get_cursor(self.win)[1]
 		vim.api.nvim_win_close(self.win, true)
+	end
+end
+
+---@param hash string|nil
+function Commits:set_active(hash)
+	self.active = hash
+	if self.win then
+		render(self)
 	end
 end
 
