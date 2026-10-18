@@ -315,6 +315,25 @@ function Session:map_range(path, side, start_line, end_line)
 	return diff.map_range(hunks[path] or {}, start_line, end_line)
 end
 
+-- Lines in the shown commits that other commits change. Empty while all commits are shown.
+---@param path string
+---@param side "LEFT"|"RIGHT"
+---@return integer[]
+function Session:changed_lines(path, side)
+	local lines = {}
+	if not self.hunks then
+		return lines
+	end
+
+	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
+	for _, hunk in ipairs(hunks[path] or {}) do
+		for line = hunk.new_start, hunk.new_start + hunk.new_count - 1 do
+			lines[#lines + 1] = line
+		end
+	end
+	return lines
+end
+
 ---@return string|nil
 function Session:head_worktree()
 	-- The worktree is checked out at the head of the full range, so on a single commit it would show the wrong

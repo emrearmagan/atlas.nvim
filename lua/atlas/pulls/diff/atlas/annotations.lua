@@ -115,6 +115,10 @@ end
 function M.render(renderer, document)
 	M.clear(renderer.left.buf)
 	M.clear(renderer.right.buf)
+	annotation_ui.draw_changed_lines(namespace, renderer.right.buf, renderer.session, document.file, "RIGHT")
+	if renderer.left.win then
+		annotation_ui.draw_changed_lines(namespace, renderer.left.buf, renderer.session, document.file, "LEFT")
+	end
 
 	local contents = {
 		LEFT = document.contents.old.lines,

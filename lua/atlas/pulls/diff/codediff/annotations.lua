@@ -150,6 +150,8 @@ function M.render(renderer, file, session)
 
 	for _, pane in ipairs(panes) do
 		annotation_ui.draw_signs(namespace, pane.buf, renderer.annotations[pane.buf])
+		local side = pane == renderer.left and "LEFT" or "RIGHT"
+		annotation_ui.draw_changed_lines(namespace, pane.buf, renderer.session, file, side)
 
 		for line, items in pairs(placed[pane.buf]) do
 			if expanded then

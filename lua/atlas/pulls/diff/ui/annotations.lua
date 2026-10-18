@@ -49,6 +49,26 @@ function M.draw_signs(ns, buf, lookup)
 	end
 end
 
+-- Dim sign on lines that other commits change. Comments and notes on those lines are hidden here.
+---@param ns integer
+---@param buf integer
+---@param session AtlasDiffSession
+---@param file AtlasDiffFile
+---@param side "LEFT"|"RIGHT"
+function M.draw_changed_lines(ns, buf, session, file, side)
+	local path = side == "LEFT" and file.old_path or file.path
+	local count = vim.api.nvim_buf_line_count(buf)
+	for _, line in ipairs(session:changed_lines(path, side)) do
+		if line <= count then
+			vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
+				sign_text = "┆",
+				sign_hl_group = "AtlasTextMuted",
+				priority = 1000,
+			})
+		end
+	end
+end
+
 ---@param expanded_threads table<string, boolean>|nil
 ---@return AtlasCommentThreadRenderOptions
 function M.comment_options(expanded_threads)
