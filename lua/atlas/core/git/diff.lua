@@ -20,6 +20,8 @@ local M = {}
 ---@field additions integer|nil
 ---@field deletions integer|nil
 ---@field binary boolean
+---@field old_blob string
+---@field new_blob string
 
 local statuses = {
 	A = "added",
@@ -115,6 +117,7 @@ function M.load(root, base, head, on_done)
 				"diff",
 				format,
 				"-z",
+				"--no-abbrev",
 				"--find-renames",
 				"--no-color",
 				"--no-ext-diff",
@@ -127,7 +130,7 @@ function M.load(root, base, head, on_done)
 
 		requests.all({
 			files = function(done)
-				return diff("--name-status", done)
+				return diff("--raw", done)
 			end,
 			stats = function(done)
 				return diff("--numstat", done)
@@ -148,7 +151,7 @@ function M.load(root, base, head, on_done)
 			local index = 1
 
 			while index <= #status_fields do
-				local status = status_fields[index]:sub(1, 1)
+				local old_blob, new_blob, status = status_fields[index]:match("^:%d+ %d+ (%x+) (%x+) (%a)")
 				local path = status_fields[index + 1]
 				local old_path
 				index = index + 2
@@ -164,6 +167,8 @@ function M.load(root, base, head, on_done)
 					old_path = old_path,
 					status = statuses[status],
 					binary = false,
+					old_blob = old_blob,
+					new_blob = new_blob,
 				}
 				files[#files + 1] = file
 				files_by_path[path] = file

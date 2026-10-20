@@ -265,9 +265,9 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
         that page.
         Examples: `:Atlas browse . branches`, `:Atlas browse issues`
 
-:Atlas clear [cache|notes|stars]
+:Atlas clear [cache|notes|reviewed|stars]
         Clear all Atlas data, or only cached data and cloned repositories,
-        notes, or locally starred items.
+        notes, locally saved reviewed file marks, or locally starred items.
 
 :Atlas logs
         Toggle the Atlas log buffer.
@@ -287,7 +287,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
 >lua
   require("atlas").setup({
     pulls = {
-      delete_notes = false, -- delete notes after approval or merge
+      delete_notes = false, -- delete notes after approval, merge, or decline
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_source_branch = false,
       git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.

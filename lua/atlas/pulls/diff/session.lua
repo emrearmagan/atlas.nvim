@@ -6,6 +6,7 @@ local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
+local reviewed_store = require("atlas.pulls.reviewed")
 
 ---@class AtlasDiffPullRequestSource
 ---@field kind "pr"
@@ -115,6 +116,11 @@ function Session.new(source, root, base, head, opts, on_done)
 		local capabilities = provider.capabilities
 		session.reviewed_files = capabilities.reviews and {} or nil
 		starts = review_starts(pr, root, head)
+		if capabilities.reviews and not capabilities.reviews.set_files_reviewed then
+			starts.reviewed = function(done)
+				done(reviewed_store.read(pr))
+			end
+		end
 		if capabilities.users then
 			starts.current_user = capabilities.users.fetch_user
 		end
@@ -164,6 +170,9 @@ function Session.new(source, root, base, head, opts, on_done)
 		end
 		session.commits = values.commits or {}
 		session.current_user = values.current_user
+		if values.reviewed then
+			values.review_context = reviewed_store.review_context(values.reviewed, session.files)
+		end
 		apply_review(session, values)
 		on_done(session, nil)
 	end)
@@ -204,7 +213,12 @@ function Session:set_reviewed(files, reviewed)
 	local provider = providers.load(pr.provider, "pulls")
 	---@cast provider PullsProvider
 	local reviews = provider.capabilities.reviews
-	if not reviews or not reviews.set_files_reviewed then
+	---@cast reviews -nil
+	if not reviews.set_files_reviewed then
+		local err = reviewed_store.set(pr, files, reviewed)
+		if err then
+			notify.error("Unable to update reviewed files\n\n" .. err, { vim_notify = true })
+		end
 		return
 	end
 

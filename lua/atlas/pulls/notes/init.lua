@@ -1,5 +1,4 @@
 local diff = require("atlas.core.git.diff")
-local file = require("atlas.pulls.notes.file")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
@@ -224,9 +223,20 @@ local function normalize_document(value, expected)
 end
 
 ---@param target AtlasStorageTarget
+---@return string
+local function document_path(target)
+	return vim.fs.joinpath(storage.dir(target), "notes.json")
+end
+
+---@return string[]
+local function document_paths()
+	return vim.fn.globpath(storage.root(), "**/pr-*/notes.json", false, true)
+end
+
+---@param target AtlasStorageTarget
 ---@return AtlasNotesDocument|nil, string|nil
 local function load_document(target)
-	local value, read_error = file.read(file.path(target))
+	local value, read_error = storage.read(document_path(target))
 	if read_error then
 		return nil, read_error
 	end
@@ -248,7 +258,12 @@ local function change(target, mutate)
 	if mutation_error then
 		return nil, mutation_error
 	end
-	local write_error = file.write(file.path(target), document)
+	local write_error
+	if #document.notes == 0 then
+		write_error = storage.delete(document_path(target))
+	else
+		write_error = storage.write(document_path(target), document)
+	end
 	if write_error then
 		return nil, write_error
 	end
@@ -279,8 +294,8 @@ end
 ---@return AtlasNotesDocument[]|nil, string|nil
 function M.documents()
 	local documents = {}
-	for _, path in ipairs(file.paths()) do
-		local value, read_error = file.read(path)
+	for _, path in ipairs(document_paths()) do
+		local value, read_error = storage.read(path)
 		if read_error then
 			return nil, read_error
 		end
@@ -323,7 +338,7 @@ end
 ---@param pr PullRequest
 ---@return { target: AtlasStorageTarget, items: AtlasNote[] }|nil, string|nil
 function M.for_pull_request(pr)
-	local target, target_error = storage.target_for_pull_request(pr)
+	local target, target_error = storage.pr_target(pr)
 	if not target then
 		return nil, target_error
 	end
@@ -404,26 +419,17 @@ function M.delete(target, id)
 	return deleted == true, err
 end
 
----@param target AtlasStorageTarget
----@return boolean, string|nil
-function M.clear(target)
-	local err = file.delete(file.path(target))
-	return err == nil, err
-end
-
 ---@param pr PullRequest
-function M.clear_for_pull_request(pr)
+function M.clear(pr)
 	if (require("atlas.config").options.pulls or {}).delete_notes ~= true then
 		return
 	end
-	local target, target_err = storage.target_for_pull_request(pr)
-	if not target then
-		notify.warn(target_err or "Unable to find notes", { vim_notify = true })
-		return
+	local target, err = storage.pr_target(pr)
+	if target then
+		err = storage.delete(document_path(target))
 	end
-	local ok, err = M.clear(target)
-	if not ok then
-		notify.warn(err or "Unable to delete notes", { vim_notify = true })
+	if err then
+		notify.warn(err, { vim_notify = true })
 		return
 	end
 	local ui = package.loaded["atlas.pulls.notes.ui"]
@@ -434,8 +440,8 @@ end
 
 ---@return boolean, string|nil
 function M.clear_all()
-	for _, path in ipairs(file.paths()) do
-		local err = file.delete(path)
+	for _, path in ipairs(document_paths()) do
+		local err = storage.delete(path)
 		if err then
 			return false, err
 		end
