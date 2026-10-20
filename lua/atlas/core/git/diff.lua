@@ -95,6 +95,71 @@ function M.hunks(root, base, head, on_done)
 	end)
 end
 
+-- Paths can contain tabs or newlines, so Git separates them with NULs.
+---@param output string
+---@return fun(): string|nil
+local function fields(output)
+	local list = vim.split(output, "\0", { plain = true, trimempty = true })
+	local index = 0
+	return function()
+		index = index + 1
+		return list[index]
+	end
+end
+
+---@param raw string
+---@param numstat string
+---@return AtlasDiffFile[]|nil, string|nil
+local function parse_files(raw, numstat)
+	---@type AtlasDiffFile[]
+	local files = {}
+	---@type table<string, AtlasDiffFile>
+	local files_by_path = {}
+
+	local next_field = fields(raw)
+	for line in next_field do
+		local old_blob, new_blob, status = line:match("^:%d+ %d+ (%x+) (%x+) (%a)")
+		local path, old_path = next_field(), nil
+		if status == "R" or status == "C" then
+			old_path, path = path, next_field()
+		end
+		if not old_blob or not statuses[status] or not path then
+			return nil, "Unable to read git diff output"
+		end
+
+		local file = {
+			path = path,
+			old_path = old_path,
+			status = statuses[status],
+			binary = false,
+			old_blob = old_blob,
+			new_blob = new_blob,
+		}
+		files[#files + 1] = file
+		files_by_path[path] = file
+	end
+
+	local next_stat = fields(numstat)
+	for line in next_stat do
+		local additions, deletions, path = line:match("^([^\t]+)\t([^\t]+)\t(.*)$")
+		-- Renames put the old and new paths in the next two fields.
+		if path == "" then
+			next_stat()
+			path = next_stat()
+		end
+
+		local file = files_by_path[path]
+		if not file then
+			return nil, "Unable to read git diff output"
+		end
+		file.additions = tonumber(additions)
+		file.deletions = tonumber(deletions)
+		file.binary = additions == "-"
+	end
+
+	return files, nil
+end
+
 ---@param root string
 ---@param base string
 ---@param head string
@@ -129,70 +194,24 @@ function M.load(root, base, head, on_done)
 		end
 
 		requests.all({
-			files = function(done)
+			raw = function(done)
 				return diff("--raw", done)
 			end,
-			stats = function(done)
+			numstat = function(done)
 				return diff("--numstat", done)
 			end,
 		}, function(outputs, errors)
-			local diff_err = errors.files or errors.stats
+			local diff_err = errors.raw or errors.numstat
 			if diff_err then
 				on_done(nil, diff_err)
 				return
 			end
 
-			-- Paths can contain tabs or newlines, so Git separates them with NULs.
-			local status_fields = vim.split(outputs.files, "\0", { plain = true, trimempty = true })
-			---@type AtlasDiffFile[]
-			local files = {}
-			---@type table<string, AtlasDiffFile>
-			local files_by_path = {}
-			local index = 1
-
-			while index <= #status_fields do
-				local old_blob, new_blob, status = status_fields[index]:match("^:%d+ %d+ (%x+) (%x+) (%a)")
-				local path = status_fields[index + 1]
-				local old_path
-				index = index + 2
-
-				if status == "R" or status == "C" then
-					old_path = path
-					path = status_fields[index]
-					index = index + 1
-				end
-
-				local file = {
-					path = path,
-					old_path = old_path,
-					status = statuses[status],
-					binary = false,
-					old_blob = old_blob,
-					new_blob = new_blob,
-				}
-				files[#files + 1] = file
-				files_by_path[path] = file
+			local files, parse_err = parse_files(outputs.raw, outputs.numstat)
+			if not files then
+				on_done(nil, parse_err)
+				return
 			end
-
-			local stat_fields = vim.split(outputs.stats, "\0", { plain = true, trimempty = true })
-			index = 1
-
-			while index <= #stat_fields do
-				local additions, deletions, path = stat_fields[index]:match("^([^\t]+)\t([^\t]+)\t(.*)$")
-				index = index + 1
-
-				-- Renames put the old and new paths in the next two fields.
-				if path == "" then
-					path = stat_fields[index + 1]
-					index = index + 2
-				end
-
-				local file = files_by_path[path]
-				file.additions = tonumber(additions)
-				file.deletions = tonumber(deletions)
-				file.binary = additions == "-"
-			end
-
 			on_done({ range = { root = root, base_revision = merge_base, head_revision = head }, files = files }, nil)
 		end)
 	end)

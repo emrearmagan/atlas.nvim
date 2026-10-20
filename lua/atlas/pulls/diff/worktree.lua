@@ -72,7 +72,6 @@ function M.prepare(range, pr, lsp, on_done)
 		return nil
 	end
 
-	worktree.prune(range.root)
 	local handle = worktree.ensure({
 		repo_root = range.root,
 		head_sha = range.head_revision,

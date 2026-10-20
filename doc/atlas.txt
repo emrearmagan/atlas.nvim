@@ -336,6 +336,8 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       },
       repo_config = {
         -- Map `namespace/repo` -> local path for checkout / diffs / actions.
+        -- Diffs of other repositories use a clone in the cache, removed after
+        -- 30 days without a review.
         paths = {
           ["your-workspace/*"]    = "~/code/repos/*",
           ["your-workspace/atlas"] = "~/code/atlas",

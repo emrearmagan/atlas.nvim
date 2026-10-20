@@ -2,10 +2,12 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
 
 local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
+local CLONE_STALE_SECONDS = 30 * 24 * 60 * 60 -- 30 days
 
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
@@ -292,6 +294,11 @@ local function fetch_pr_refs(pr, repo_path, on_done, opts)
 	return scope
 end
 
+---@return string
+local function clones_root()
+	return vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
+end
+
 ---@param pr PullRequest
 ---@return string|nil cache_path
 ---@return string|nil remote_url
@@ -303,7 +310,7 @@ local function cached_pr_repository(pr)
 	---@cast target AtlasTarget
 	local repository = pr.repo_full_name
 	local transport = configured_git_transport()
-	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
+	local cache_path = vim.fs.joinpath(clones_root(), target.host, repository)
 	local advertised = pr.destination.https_url
 	if transport == "ssh" then
 		advertised = pr.destination.ssh_url
@@ -406,6 +413,33 @@ local function ensure_repository(pr, repo_path, on_progress, on_done)
 	end)
 
 	return scope
+end
+
+---@param dir string
+---@param now integer
+local function prune_clones(dir, now)
+	local git_dir = vim.fs.joinpath(dir, ".git")
+	if vim.fn.isdirectory(git_dir) == 1 then
+		local stat = vim.uv.fs_stat(vim.fs.joinpath(git_dir, "FETCH_HEAD")) or vim.uv.fs_stat(git_dir)
+		if stat and now - stat.mtime.sec > CLONE_STALE_SECONDS then
+			logger.loginfo("checkout.prune removing stale clone", { dir = dir })
+			vim.fn.delete(dir, "rf")
+		end
+		return
+	end
+	for name, kind in vim.fs.dir(dir) do
+		if kind == "directory" then
+			prune_clones(vim.fs.joinpath(dir, name), now)
+		end
+	end
+	vim.fn.delete(dir, "d")
+end
+
+function M.prune()
+	local root = clones_root()
+	if vim.fn.isdirectory(root) == 1 then
+		prune_clones(root, os.time())
+	end
 end
 
 ---@param pr PullRequest

@@ -6,6 +6,7 @@ local loading = require("atlas.ui.loading")
 local logger = require("atlas.core.logger")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
+local reviewed_store = require("atlas.pulls.reviewed")
 local viewer = require("atlas.pulls.diff.viewer")
 local worktree = require("atlas.core.git.worktree")
 
@@ -17,6 +18,12 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 		worktree.shutdown()
 	end,
 })
+
+local function prune()
+	worktree.prune()
+	checkout.prune()
+	reviewed_store.prune()
+end
 
 ---@param root string
 ---@param revision string
@@ -121,6 +128,7 @@ local function start_loading(message, context, on_done)
 			end
 
 			view:finish()
+			prune()
 			if on_done then
 				on_done(nil)
 			end
