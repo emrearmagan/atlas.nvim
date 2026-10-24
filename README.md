@@ -134,7 +134,7 @@ The diff uses a temporary worktree, removed when the diff closes. Set `link` to 
 
 <img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
 
-Browse a repository's README, pull requests, issues, discussions, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
+Browse a repository's README, pull requests, issues, discussions, builds, branches, tags, releases and deployments. Use `:Atlas browse .` for the current repository, or pass a repository URL.
 
 ### Pipelines
 
