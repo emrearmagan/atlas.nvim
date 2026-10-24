@@ -3,6 +3,7 @@ local annotations = require("atlas.pulls.diff.atlas.annotations")
 local diff = require("atlas.pulls.diff.diff")
 local git = require("atlas.pulls.diff.git")
 local help = require("atlas.ui.popups.help")
+local images = require("atlas.pulls.diff.images")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
@@ -22,17 +23,21 @@ local winbar = require("atlas.pulls.diff.ui.winbar")
 
 ---@class AtlasDiffDocument
 ---@field file AtlasDiffFile
----@field contents { old: { lines: string[], endofline: boolean }, new: { lines: string[], endofline: boolean } }
+---@field contents { old: AtlasDiffContent, new: AtlasDiffContent }
 ---@field binary boolean
 ---@field hunks integer[][] Old/new change ranges for inline rendering and review positions.
 ---@field split_hunks integer[][] Change ranges matching Neovim's split view and diffopt.
+
+---@class AtlasDiffContent
+---@field lines string[]
+---@field endofline boolean
+---@field binary_content string|nil Original blob bytes for image previews.
 
 ---@param file AtlasDiffFile
 ---@param contents { old: string, new: string }
 ---@return AtlasDiffDocument
 local function prepare_document(file, contents)
-	local old = contents.old:gsub("\r\n", "\n")
-	local new = contents.new:gsub("\r\n", "\n")
+	local old, new = contents.old, contents.new
 	local binary = file.binary or old:find("\0", 1, true) ~= nil or new:find("\0", 1, true) ~= nil
 	local hunks = {}
 	local split_hunks = {}
@@ -40,22 +45,29 @@ local function prepare_document(file, contents)
 	if binary then
 		old = file.status == "added" and "" or "Binary file (base revision)\n"
 		new = file.status == "deleted" and "Binary file deleted\n" or "Binary file (head revision)\n"
-	elseif file.status ~= "added" and file.status ~= "deleted" then
-		hunks, split_hunks = diff.compute(old, new)
+	else
+		old = old:gsub("\r\n", "\n")
+		new = new:gsub("\r\n", "\n")
+		if file.status ~= "added" and file.status ~= "deleted" then
+			hunks, split_hunks = diff.compute(old, new)
+		end
 	end
 
-	local function prepare_content(content)
+	local function prepare_content(content, binary_content)
 		local lines = vim.split(content, "\n", { plain = true })
 		if lines[#lines] == "" then
 			table.remove(lines)
 		end
 
-		return { lines = lines, endofline = content:sub(-1) == "\n" }
+		return { lines = lines, endofline = content:sub(-1) == "\n", binary_content = binary_content }
 	end
 
 	return {
 		file = file,
-		contents = { old = prepare_content(old), new = prepare_content(new) },
+		contents = {
+			old = prepare_content(old, binary and contents.old ~= "" and contents.old or nil),
+			new = prepare_content(new, binary and contents.new ~= "" and contents.new or nil),
+		},
 		binary = binary,
 		hunks = hunks,
 		split_hunks = split_hunks,
@@ -171,10 +183,13 @@ end
 ---@param view AtlasDiffNativeView
 ---@param document AtlasDiffDocument
 local function display(view, document)
+	images.clear(view)
 	local file = document.file
 	local layout = view.preferred_layout
 	if file.status == "added" or file.status == "deleted" then
 		layout = "inline"
+	elseif document.binary then
+		layout = "side-by-side"
 	end
 	set_layout(view, layout)
 
@@ -201,6 +216,12 @@ local function display(view, document)
 		local old_path = file.old_path or file.path
 		set_content(view, view.left.buf, old, old_path, view.result.base_revision, binary)
 	end
+	for _, pane in ipairs({ view.left, view.right }) do
+		if pane.win then
+			setup_window(pane.win)
+			images.configure_window(document, pane.win)
+		end
+	end
 
 	render.render(view, document)
 	view.annotations = annotations.render(view, document)
@@ -217,7 +238,7 @@ local function show_file(view, file, on_done)
 
 	local function read(revision, path, missing)
 		return function(done)
-			if missing or file.binary then
+			if missing or (file.binary and not images.supports_file(path)) then
 				done("", nil)
 				return
 			end
@@ -246,6 +267,7 @@ local function show_file(view, file, on_done)
 		end
 
 		view.document = document
+		images.attach(view)
 		view.callbacks.on_file(file)
 		on_done(nil)
 	end)
@@ -293,6 +315,7 @@ end
 ---@param view AtlasDiffNativeView
 local function dispose(view)
 	view.requests.cancel()
+	images.clear(view)
 	vim.api.nvim_del_augroup_by_id(view.group)
 	for _, buf in ipairs({ view.left.buf, view.revision_buf }) do
 		if vim.api.nvim_buf_is_valid(buf) then
@@ -304,7 +327,7 @@ end
 ---@param view AtlasDiffNativeView
 local function toggle_layout(view)
 	local document = view.document
-	if not document or document.file.status == "added" or document.file.status == "deleted" then
+	if not document or document.binary or document.file.status == "added" or document.file.status == "deleted" then
 		return
 	end
 
@@ -400,6 +423,7 @@ local function setup_autocmds(view)
 	})
 
 	local function show_plain_file(buf, path)
+		images.clear(view)
 		view.document = nil
 		view.inline_hunk_lines = {}
 		view.annotations = {}
@@ -425,6 +449,7 @@ local function setup_autocmds(view)
 			end
 			-- Stop an earlier read from replacing the file we just jumped to.
 			view.requests.cancel()
+			images.clear(view)
 			annotation_ui.close(view.tabpage)
 
 			-- LSP positions the cursor after entering the buffer.
