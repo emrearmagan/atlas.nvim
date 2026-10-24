@@ -52,13 +52,16 @@ end
 ---@param files AtlasDiffFile[]
 ---@return PullsReviewContext
 function M.review_context(marks, files)
-	local reviewed_files = {}
+	local context = { reviewed_files = {}, outdated_files = {} }
 	for _, file in ipairs(files) do
-		if marks[file.path] == fingerprint(file) then
-			reviewed_files[file.path] = true
+		local mark = marks[file.path]
+		if mark == fingerprint(file) then
+			context.reviewed_files[file.path] = true
+		elseif mark then
+			context.outdated_files[file.path] = true
 		end
 	end
-	return { reviewed_files = reviewed_files }
+	return context
 end
 
 ---@param pr PullRequest

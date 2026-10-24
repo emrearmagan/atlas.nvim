@@ -31,7 +31,7 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@field worktree_root string|nil
 ---@field commits AtlasGitCommit[]
 ---@field review PullsReviewData|nil
----@field reviewed_files table<string, boolean>|nil
+---@field review_context PullsReviewContext|nil
 ---@field current_user AtlasUser|nil
 ---@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
 ---@field requests AtlasRequestScope
@@ -86,9 +86,8 @@ local function apply_review(session, values)
 	elseif values.review then
 		session.review = values.review
 	end
-	local context = values.review_context
-	if session.reviewed_files and context and context.reviewed_files then
-		session.reviewed_files = vim.deepcopy(context.reviewed_files)
+	if session.review_context and values.review_context then
+		session.review_context = vim.deepcopy(values.review_context)
 	end
 end
 
@@ -114,7 +113,7 @@ function Session.new(source, root, base, head, opts, on_done)
 		local provider = providers.load(pr.provider, "pulls")
 		---@cast provider PullsProvider
 		local capabilities = provider.capabilities
-		session.reviewed_files = capabilities.reviews and {} or nil
+		session.review_context = capabilities.reviews and { reviewed_files = {}, outdated_files = {} } or nil
 		starts = review_starts(pr, root, head)
 		if capabilities.reviews and not capabilities.reviews.set_files_reviewed then
 			starts.reviewed = function(done)
@@ -200,11 +199,12 @@ end
 ---@param files AtlasDiffFile[]
 ---@param reviewed boolean
 function Session:set_reviewed(files, reviewed)
-	local reviewed_files = self.reviewed_files
-	---@cast reviewed_files -nil
+	local context = self.review_context
+	---@cast context -nil
 	local paths = {}
 	for _, file in ipairs(files) do
-		reviewed_files[file.path] = reviewed or nil
+		context.reviewed_files[file.path] = reviewed or nil
+		context.outdated_files[file.path] = nil
 		paths[#paths + 1] = file.path
 	end
 

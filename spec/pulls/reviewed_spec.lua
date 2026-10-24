@@ -12,25 +12,25 @@ describe("pulls.reviewed", function()
 	describe("review_context", function()
 		it("counts a file as reviewed while it is unchanged", function()
 			assert.are.same(
-				{ reviewed_files = { ["a.lua"] = true } },
+				{ reviewed_files = { ["a.lua"] = true }, outdated_files = {} },
 				reviewed.review_context({ ["a.lua"] = "111:222" }, { file("a.lua", "111", "222") })
 			)
 		end)
 
-		it("drops the mark once the file changed", function()
+		it("marks a reviewed file as outdated once either side changed", function()
 			assert.are.same(
-				{ reviewed_files = {} },
+				{ reviewed_files = {}, outdated_files = { ["a.lua"] = true } },
 				reviewed.review_context({ ["a.lua"] = "111:222" }, { file("a.lua", "111", "333") })
 			)
 			assert.are.same(
-				{ reviewed_files = {} },
+				{ reviewed_files = {}, outdated_files = { ["a.lua"] = true } },
 				reviewed.review_context({ ["a.lua"] = "111:222" }, { file("a.lua", "000", "222") })
 			)
 		end)
 
 		it("ignores files without a mark and marks of files no longer in the diff", function()
 			assert.are.same(
-				{ reviewed_files = {} },
+				{ reviewed_files = {}, outdated_files = {} },
 				reviewed.review_context({ ["gone.lua"] = "111:222" }, { file("a.lua", "111", "222") })
 			)
 		end)

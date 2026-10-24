@@ -214,8 +214,8 @@ end
 ---@param viewer AtlasDiffViewer
 local function update_panels(viewer)
 	local session = viewer.session
-	local reviewed_files = not session:shown_commits() and session.reviewed_files or nil
-	viewer.explorer:update(reviewed_files, session.review, session.notes and session.notes.items)
+	local review_context = not session:shown_commits() and session.review_context or nil
+	viewer.explorer:update(review_context, session.review, session.notes and session.notes.items)
 	viewer.review_panel:render()
 	update_statusline(viewer)
 end
@@ -346,10 +346,10 @@ end
 
 function Viewer:toggle_file_reviewed()
 	local session = self.session
-	local reviewed_files = session.reviewed_files
-	if not reviewed_files then
+	if not session.review_context then
 		return
 	end
+	local reviewed_files = session.review_context.reviewed_files
 	-- NOTE: Reviewed marks belong to the whole PR, so a single commit can't set them for now. We could allow it when no
 	-- later commit changes the file and every earlier commit that did was already seen, since then you've looked at
 	-- its whole PR diff. Also we would probably need a least to track all reviewed files for each individual commit ?
@@ -828,7 +828,7 @@ local function setup(viewer)
 	viewer.explorer = explorer.new({
 		files = session.files,
 		options = explorer_options,
-		reviewed_files = session.reviewed_files,
+		review_context = session.review_context,
 		review_data = session.review,
 		notes = session.notes and session.notes.items,
 		on_select = function(file, focus)

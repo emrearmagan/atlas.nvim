@@ -14,6 +14,7 @@ local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 ---@field collapsed table<string, table<string, boolean>>
 ---@field flatten_dirs boolean
 ---@field reviewed_files table<string, boolean>|nil
+---@field outdated_files table<string, boolean>|nil
 ---@field annotated_paths table<string, { comments?: boolean, notes?: boolean }>
 ---@field selected AtlasDiffFile|nil
 ---@field cursor_row integer|nil
@@ -214,13 +215,21 @@ local function file_chunks(state, file, prefix, available)
 		remaining = remaining - vim.fn.strdisplaywidth(chunk[1])
 	end
 
+	local outdated = state.outdated_files and state.outdated_files[file.path]
+	local label_hl = outdated and "AtlasLogWarn" or "Normal"
+	local mark = outdated and " ~" or ""
+	remaining = remaining - #mark
+
 	local label = vim.fn.strtrans(name)
 	if vim.fn.strdisplaywidth(label) + suffix_width + 1 > remaining then
 		suffix, suffix_width = { marker }, 1
 	end
 
 	label = utils.truncate(label, math.max(1, remaining - suffix_width - 1))
-	chunks[#chunks + 1] = { label, "Normal" }
+	chunks[#chunks + 1] = { label, label_hl }
+	if outdated then
+		chunks[#chunks + 1] = { mark, label_hl }
+	end
 	remaining = remaining - vim.fn.strdisplaywidth(label)
 
 	local parent = not state.options.grouped and file.path:match("^(.*)/[^/]+$")
@@ -371,11 +380,12 @@ local function collect_annotations(review_data, notes)
 	return annotations
 end
 
----@param reviewed_files table<string, boolean>|nil
+---@param review_context PullsReviewContext|nil
 ---@param review_data PullsReviewData|nil
 ---@param notes AtlasNote[]|nil
-function Explorer:update(reviewed_files, review_data, notes)
-	self.reviewed_files = reviewed_files
+function Explorer:update(review_context, review_data, notes)
+	self.reviewed_files = review_context and review_context.reviewed_files
+	self.outdated_files = review_context and review_context.outdated_files
 	self.annotated_paths = collect_annotations(review_data, notes)
 	render(self)
 end
@@ -603,7 +613,7 @@ end
 ---@param opts {
 --- files: AtlasDiffFile[],
 --- options: AtlasPullsDiffExplorerConfig,
---- reviewed_files?: table<string, boolean>,
+--- review_context?: PullsReviewContext,
 --- review_data?: PullsReviewData,
 --- notes?: AtlasNote[],
 --- on_select: fun(file: AtlasDiffFile, focus?: boolean),
@@ -624,7 +634,8 @@ function Explorer.new(opts)
 		rows = {},
 		collapsed = { files = {}, reviewed = {} },
 		flatten_dirs = true,
-		reviewed_files = opts.reviewed_files,
+		reviewed_files = opts.review_context and opts.review_context.reviewed_files,
+		outdated_files = opts.review_context and opts.review_context.outdated_files,
 		annotated_paths = annotations,
 		on_select = opts.on_select,
 		group = vim.api.nvim_create_augroup("AtlasDiffExplorer" .. buf, { clear = true }),

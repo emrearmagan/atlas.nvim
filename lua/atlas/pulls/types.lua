@@ -203,7 +203,8 @@
 ---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
----@field reviewed_files table<string, boolean>|nil
+---@field reviewed_files table<string, boolean>
+---@field outdated_files table<string, boolean>
 
 --------------------------------------------------------------------------------
 -- Conversation

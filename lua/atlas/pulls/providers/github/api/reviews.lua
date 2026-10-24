@@ -1092,6 +1092,7 @@ function M.fetch_context(pr, opts, on_done)
 		end
 		local pull_request
 		local reviewed_files = {}
+		local outdated_files = {}
 		for _, page in ipairs(pages) do
 			local data = json.safe_table(json.safe_table(page).data)
 			local current = json.nilify(json.safe_table(data.repository).pullRequest)
@@ -1103,6 +1104,8 @@ function M.fetch_context(pr, opts, on_done)
 			for _, file in ipairs(((current.files or {}).nodes or {})) do
 				if file.viewerViewedState == "VIEWED" then
 					reviewed_files[tostring(file.path)] = true
+				elseif file.viewerViewedState == "DISMISSED" then
+					outdated_files[tostring(file.path)] = true
 				end
 			end
 		end
@@ -1111,7 +1114,7 @@ function M.fetch_context(pr, opts, on_done)
 			return
 		end
 		pr.node_id = tostring(pull_request.id or "")
-		local context = { reviewed_files = reviewed_files }
+		local context = { reviewed_files = reviewed_files, outdated_files = outdated_files }
 		cli.set_mem(cache_key, context, cli.cache_ttl())
 		on_done(context, nil)
 	end, { action = "Fetch PR reviewed files", repo = repo_slug, number = pr.id })

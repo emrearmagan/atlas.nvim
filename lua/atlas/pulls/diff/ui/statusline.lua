@@ -11,7 +11,7 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@param buf integer
 function M.update(statusline, session, files, buf)
 	local review_data = session.review
-	local reviewed_files = session.reviewed_files
+	local reviewed_files = session.review_context and session.review_context.reviewed_files
 
 	local pr = session.source.pr
 	local identity = pr and string.format("#%s %s", pr.id, pr.title)
