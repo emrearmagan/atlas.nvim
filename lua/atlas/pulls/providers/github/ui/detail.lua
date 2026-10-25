@@ -3,6 +3,7 @@ local M = {}
 
 local header = require("atlas.pulls.ui.components.header")
 local highlights = require("atlas.ui.highlights")
+local stack = require("atlas.pulls.stack")
 
 -- Detail
 
@@ -23,13 +24,21 @@ function M.header_fields(_pr, details, loading)
 	return { header.assignee_field(logins) }
 end
 
----@param _pr PullRequest
+---@param pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsDetailChip[]
-function M.chips(_pr, details, _loading)
+function M.chips(pr, details, _loading)
 	---@cast details GitHubPullRequestDetails|nil
 	local chips = {}
+
+	local current_stack = details and details.stack or pr.stack
+	if stack.is_stacked(current_stack) then
+		table.insert(chips, {
+			label = string.format("⧉ %d/%d", current_stack.position, current_stack.size),
+			hl = "AtlasRelatedChip",
+		})
+	end
 
 	for _, lbl in ipairs(details and details.labels or {}) do
 		table.insert(chips, { label = lbl.name, hl = highlights.label(lbl.color) })

@@ -219,3 +219,55 @@ describe("GitHub comment author roles", function()
 		assert.same({ "Author", "Collaborator" }, normalizer.to_review_comment(node, {}, nil, "alice").author_roles)
 	end)
 end)
+
+describe("GitHub pull request stacks", function()
+	it("maps a stack summary onto the pull request", function()
+		local raw = base_raw()
+		raw.stackEntry = { position = 2, stack = { number = 530, size = 5, baseRefName = "main" } }
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.same({ position = 2, number = 530, size = 5, base_ref_name = "main" }, pr.stack)
+	end)
+
+	it("maps stack entries onto pull request details", function()
+		local raw = base_raw()
+		raw.stackEntry = {
+			position = 2,
+			stack = {
+				number = 530,
+				size = 3,
+				baseRefName = "main",
+				entries = {
+					nodes = {
+						{
+							position = 1,
+							pullRequest = { number = 10, title = "Base", state = "OPEN", isDraft = false },
+						},
+						{
+							position = 2,
+							pullRequest = { number = 11, title = "Middle", state = "OPEN", isDraft = true },
+						},
+						{ position = 3, pullRequest = vim.NIL },
+					},
+				},
+			},
+		}
+
+		local details = normalizer.to_pull_request_details(raw)
+
+		assert.equal(2, details.stack.position)
+		assert.equal(3, details.stack.size)
+		assert.same({ position = 1, number = 10, title = "Base", state = "open" }, details.stack.entries[1])
+		assert.equal("draft", details.stack.entries[2].state)
+		assert.same({ position = 3 }, details.stack.entries[3])
+	end)
+
+	it("leaves stack nil when the pull request is not stacked", function()
+		local raw = base_raw()
+		raw.stackEntry = vim.NIL
+
+		assert.is_nil(normalizer.to_pull_request(raw).stack)
+		assert.is_nil(normalizer.to_pull_request_details(raw).stack)
+	end)
+end)

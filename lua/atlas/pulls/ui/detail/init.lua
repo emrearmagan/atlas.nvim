@@ -10,6 +10,7 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local links = require("atlas.ui.links")
+local stack = require("atlas.pulls.stack")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -487,6 +488,43 @@ function M.refresh(ref)
 		update_spinner()
 		render_if_open()
 	end)
+end
+
+---@param direction 1|-1
+---@return boolean
+function M.navigate_stack(direction)
+	local pr = state.current_pr
+	if pr == nil then
+		return false
+	end
+
+	local details = state.current_details
+	local current_stack = details and details.stack or pr.stack
+	local entry, reason = stack.neighbor(current_stack, direction)
+	if entry == nil then
+		if reason == "not_stacked" then
+			notify.info("PR is not part of a stack")
+		elseif reason == "loading" then
+			notify.info("Stack details are still loading")
+		elseif reason == "top" then
+			notify.info("Top of stack")
+		elseif reason == "bottom" then
+			notify.info("Bottom of stack")
+		end
+		return false
+	end
+
+	if entry.number == nil then
+		notify.warn("Stack PR is not accessible")
+		return false
+	end
+
+	M.open({ id = entry.number, repo_full_name = pr.repo_full_name }, {
+		provider = state.provider,
+		on_update = state.on_update,
+		back = state.back,
+	})
+	return true
 end
 
 ---@param step 1|-1

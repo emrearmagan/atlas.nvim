@@ -180,21 +180,73 @@ function M.to_reviewers(raw)
 end
 
 ---@param raw table
+---@return "open"|"merged"|"declined"|"draft"
+local function pull_state(raw)
+	local raw_state = tostring(raw.state or ""):upper()
+	if raw_state == "MERGED" then
+		return "merged"
+	elseif raw_state == "CLOSED" then
+		return "declined"
+	elseif raw.isDraft == true then
+		return "draft"
+	end
+	return "open"
+end
+
+---@param raw any
+---@param include_entries boolean|nil
+---@return PullsStack|nil
+local function pull_stack(raw, include_entries)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local stack = json.nilify(raw.stack)
+	if type(stack) ~= "table" then
+		return nil
+	end
+	local position = tonumber(raw.position)
+	local size = tonumber(stack.size)
+	if position == nil or size == nil then
+		return nil
+	end
+
+	---@type PullsStack
+	local result = {
+		position = position,
+		number = tonumber(stack.number),
+		size = size,
+		base_ref_name = json.safe_str(stack.baseRefName),
+	}
+
+	if include_entries then
+		result.entries = {}
+		for _, node in ipairs(github_mapper.connection_nodes(stack.entries)) do
+			local entry = json.nilify(node)
+			if type(entry) == "table" then
+				---@type PullsStackEntry
+				local item = { position = tonumber(entry.position) or 0 }
+				local pr = json.nilify(entry.pullRequest)
+				if type(pr) == "table" then
+					item.number = tonumber(pr.number)
+					item.title = json.safe_str(pr.title) or ""
+					item.state = pull_state(pr)
+				end
+				table.insert(result.entries, item)
+			end
+		end
+	end
+
+	return result
+end
+
+---@param raw table
 ---@return GitHubPullRequest
 function M.to_pull_request(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
 	local reviewers = M.to_reviewers(raw)
-
-	local state = "open"
-	local raw_state = tostring(raw.state or ""):upper()
-	if raw_state == "MERGED" then
-		state = "merged"
-	elseif raw_state == "CLOSED" then
-		state = "declined"
-	elseif raw.isDraft == true then
-		state = "draft"
-	end
+	local state = pull_state(raw)
 
 	local raw_repository = json.safe_table(raw.repository)
 	local owner, repo_name, repo_full_name = github_mapper.repository(raw_repository)
@@ -240,6 +292,7 @@ function M.to_pull_request(raw)
 		},
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
+		stack = pull_stack(raw.stackEntry),
 		node_id = json.safe_str(raw.id),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
@@ -257,6 +310,7 @@ function M.to_pull_request_details(raw)
 		reactions = github_mapper.graphql_reactions(raw.reactionGroups),
 		assignees = pull_assignees(raw) or {},
 		labels = pull_labels(raw) or {},
+		stack = pull_stack(raw.stackEntry, true),
 	}
 	local subscription = tostring(raw.viewerSubscription or "")
 	if subscription ~= "" then

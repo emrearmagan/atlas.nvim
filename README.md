@@ -91,6 +91,7 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Browse files, commits, hunks, and review history.
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
+- Stacked PRs show their position (for example `⧉ 2/5`) in the PR list and header; navigate with `]s` / `[s`.
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
@@ -889,6 +890,10 @@ keymaps = {
     checkout = "gc",
     open_repository = "o",
     edit_pr = "ge",
+    stack = {
+      next = "]s",
+      prev = "[s",
+    },
     review = {
       show_details = "K", -- File/commit details.
       toggle_file_reviewed = "-",

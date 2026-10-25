@@ -291,6 +291,10 @@ local defaults = {
 			checkout = "gc",
 			open_repository = "o",
 			edit_pr = "ge",
+			stack = {
+				next = "]s",
+				prev = "[s",
+			},
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },

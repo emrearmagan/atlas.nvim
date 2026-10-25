@@ -120,6 +120,10 @@ local config = require("atlas.config")
 ---@field toggle_raw_logs? AtlasKeymapValue
 ---@field toggle_auto_refresh? AtlasKeymapValue
 
+---@class AtlasPullsStackKeymaps
+---@field next? AtlasKeymapValue
+---@field prev? AtlasKeymapValue
+
 ---@class AtlasPullsCustomKeymap
 ---@field key string|string[]
 ---@field desc string
@@ -133,6 +137,7 @@ local config = require("atlas.config")
 ---@field checkout? AtlasKeymapValue
 ---@field open_repository? AtlasKeymapValue
 ---@field edit_pr? AtlasKeymapValue
+---@field stack? AtlasPullsStackKeymaps
 ---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
@@ -207,6 +212,8 @@ local config = require("atlas.config")
 ---| "pulls.checkout"
 ---| "pulls.open_repository"
 ---| "pulls.edit_pr"
+---| "pulls.stack.next"
+---| "pulls.stack.prev"
 ---| "pulls.pipelines.next_job"
 ---| "pulls.pipelines.previous_job"
 ---| "pulls.pipelines.show_history"
