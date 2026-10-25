@@ -61,10 +61,22 @@ function M.draw_changed_lines(ns, buf, session, file, side)
 	for _, line in ipairs(session:changed_lines(path, side)) do
 		if line <= count then
 			vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
-				sign_text = "┆",
+				sign_text = "»",
 				sign_hl_group = "AtlasTextMuted",
 				priority = 1000,
 			})
+		end
+	end
+
+	if side == "RIGHT" then
+		for _, line in ipairs(session:outdated_lines(path)) do
+			if line <= count then
+				vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
+					sign_text = "~",
+					sign_hl_group = "AtlasLogWarn",
+					priority = 1000,
+				})
+			end
 		end
 	end
 end

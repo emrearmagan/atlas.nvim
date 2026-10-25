@@ -17,13 +17,13 @@ describe("pulls.reviewed", function()
 			)
 		end)
 
-		it("marks a reviewed file as outdated once either side changed", function()
+		it("marks a reviewed file as outdated with the version you reviewed once either side changed", function()
 			assert.are.same(
-				{ reviewed_files = {}, outdated_files = { ["a.lua"] = true } },
+				{ reviewed_files = {}, outdated_files = { ["a.lua"] = "222" } },
 				reviewed.review_context({ ["a.lua"] = "111:222" }, { file("a.lua", "111", "333") })
 			)
 			assert.are.same(
-				{ reviewed_files = {}, outdated_files = { ["a.lua"] = true } },
+				{ reviewed_files = {}, outdated_files = { ["a.lua"] = "222" } },
 				reviewed.review_context({ ["a.lua"] = "111:222" }, { file("a.lua", "000", "222") })
 			)
 		end)

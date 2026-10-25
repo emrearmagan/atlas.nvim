@@ -55,6 +55,7 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$repo){
     pullRequest(number:$number){
       id
+      viewerLatestReview{state commit{oid}}
       files(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{path viewerViewedState}
@@ -1114,6 +1115,14 @@ function M.fetch_context(pr, opts, on_done)
 			return
 		end
 		pr.node_id = tostring(pull_request.id or "")
+		-- Outdated files are compared from the commit of your last submitted review, if there is one.
+		local latest = json.safe_table(pull_request.viewerLatestReview)
+		local review_commit = json.safe_str(json.safe_table(latest.commit).oid)
+		if review_commit and latest.state ~= "PENDING" then
+			for path in pairs(outdated_files) do
+				outdated_files[path] = review_commit .. ":" .. path
+			end
+		end
 		local context = { reviewed_files = reviewed_files, outdated_files = outdated_files }
 		cli.set_mem(cache_key, context, cli.cache_ttl())
 		on_done(context, nil)

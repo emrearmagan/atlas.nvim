@@ -204,7 +204,7 @@
 
 ---@class PullsReviewContext
 ---@field reviewed_files table<string, boolean>
----@field outdated_files table<string, boolean>
+---@field outdated_files table<string, string|true> The version you reviewed: a blob or "<commit>:<path>". true when unknown.
 
 --------------------------------------------------------------------------------
 -- Conversation

@@ -32,6 +32,7 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@field commits AtlasGitCommit[]
 ---@field review PullsReviewData|nil
 ---@field review_context PullsReviewContext|nil
+---@field outdated_hunks table<string, DiffHunk[]>|nil
 ---@field current_user AtlasUser|nil
 ---@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
 ---@field requests AtlasRequestScope
@@ -89,6 +90,33 @@ local function apply_review(session, values)
 	if session.review_context and values.review_context then
 		session.review_context = vim.deepcopy(values.review_context)
 	end
+end
+
+---@param session AtlasDiffSession
+---@param on_done fun()
+local function load_outdated_hunks(session, on_done)
+	local context = session.review_context
+	if not context then
+		on_done()
+		return
+	end
+
+	local root = session.full_range.root
+	local starts = {}
+	for _, file in ipairs(session.files) do
+		local reviewed = context.outdated_files[file.path]
+		-- true means the provider doesn't know which version you reviewed.
+		if type(reviewed) == "string" then
+			starts[file.path] = function(done)
+				return diff.file_hunks(root, reviewed, file.new_blob, done)
+			end
+		end
+	end
+
+	session.requests.all(starts, function(values)
+		session.outdated_hunks = values
+		on_done()
+	end)
 end
 
 ---@param source AtlasDiffSource
@@ -173,7 +201,9 @@ function Session.new(source, root, base, head, opts, on_done)
 			values.review_context = reviewed_store.review_context(values.reviewed, session.files)
 		end
 		apply_review(session, values)
-		on_done(session, nil)
+		load_outdated_hunks(session, function()
+			on_done(session, nil)
+		end)
 	end)
 
 	return {
@@ -362,6 +392,24 @@ function Session:changed_lines(path, side)
 	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
 	for _, hunk in ipairs(hunks[path] or {}) do
 		for line = hunk.new_start, hunk.new_start + hunk.new_count - 1 do
+			lines[#lines + 1] = line
+		end
+	end
+	return lines
+end
+
+---@param path string
+---@return integer[]
+function Session:outdated_lines(path)
+	local lines = {}
+	local outdated = self.review_context and self.review_context.outdated_files or {}
+	if self:shown_commits() or not outdated[path] or not self.outdated_hunks then
+		return lines
+	end
+
+	for _, hunk in ipairs(self.outdated_hunks[path] or {}) do
+		local first = hunk.new_count == 0 and math.max(hunk.new_start, 1) or hunk.new_start
+		for line = first, first + math.max(hunk.new_count, 1) - 1 do
 			lines[#lines + 1] = line
 		end
 	end

@@ -95,6 +95,35 @@ function M.hunks(root, base, head, on_done)
 	end)
 end
 
+-- Which lines differ between two versions of one file.
+-- Only line 10 changed -> { { old_start = 10, old_count = 1, new_start = 10, new_count = 1 } }
+---@param root string
+---@param old string Blob ID or "<revision>:<path>".
+---@param new string Blob ID or "<revision>:<path>".
+---@param on_done fun(hunks: DiffHunk[]|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.file_hunks(root, old, new, on_done)
+	return run(root, {
+		"diff",
+		"-U0",
+		"--histogram",
+		"--no-indent-heuristic",
+		"--no-color",
+		"--no-ext-diff",
+		"--no-textconv",
+		old,
+		new,
+	}, function(output, err)
+		if not output then
+			on_done(nil, err)
+			return
+		end
+
+		local file = diff_parser.parse(output)[1]
+		on_done(file and file.hunks or {}, nil)
+	end)
+end
+
 -- Paths can contain tabs or newlines, so Git separates them with NULs.
 ---@param output string
 ---@return fun(): string|nil

@@ -58,7 +58,9 @@ function M.review_context(marks, files)
 		if mark == fingerprint(file) then
 			context.reviewed_files[file.path] = true
 		elseif mark then
-			context.outdated_files[file.path] = true
+			-- A mark is "<left blob>:<right blob>". The right blob is the file as you read it, so we diff from there.
+			local right_blob = mark:match(":(%x+)$")
+			context.outdated_files[file.path] = right_blob
 		end
 	end
 	return context

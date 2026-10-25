@@ -14,7 +14,7 @@ local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 ---@field collapsed table<string, table<string, boolean>>
 ---@field flatten_dirs boolean
 ---@field reviewed_files table<string, boolean>|nil
----@field outdated_files table<string, boolean>|nil
+---@field outdated_files table<string, string|true>|nil
 ---@field annotated_paths table<string, { comments?: boolean, notes?: boolean }>
 ---@field selected AtlasDiffFile|nil
 ---@field cursor_row integer|nil
