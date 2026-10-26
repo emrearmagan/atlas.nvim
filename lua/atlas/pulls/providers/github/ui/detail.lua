@@ -3,7 +3,10 @@ local M = {}
 
 local header = require("atlas.pulls.ui.components.header")
 local highlights = require("atlas.ui.highlights")
+local notify = require("atlas.core.notify")
+local resolver = require("atlas.core.keymaps")
 local stack = require("atlas.pulls.providers.github.stack")
+local state = require("atlas.pulls.ui.detail.state")
 
 -- Detail
 
@@ -50,6 +53,74 @@ end
 ---@return PullsDetailTab[]
 function M.tabs()
 	return require("atlas.pulls.ui.detail").default_tabs()
+end
+
+-- Keymaps
+
+---@param direction 1|-1
+local function navigate_stack(direction)
+	local pr = state.current_pr
+	if pr == nil then
+		return
+	end
+	---@cast pr GitHubPullRequest
+
+	local details = state.current_details
+	---@cast details GitHubPullRequestDetails|nil
+	local current_stack = details and details.stack or pr.stack
+	local entry, reason = stack.neighbor(current_stack, direction)
+	if entry == nil then
+		if reason == "not_stacked" then
+			notify.info("PR is not part of a stack")
+		elseif reason == "loading" then
+			notify.info("Stack details are still loading")
+		elseif reason == "top" then
+			notify.info("Top of stack")
+		elseif reason == "bottom" then
+			notify.info("Bottom of stack")
+		end
+		return
+	end
+
+	if entry.number == nil then
+		notify.warn("Stack PR is not accessible")
+		return
+	end
+
+	require("atlas.pulls.ui.detail").open({ id = entry.number, repo_full_name = pr.repo_full_name }, {
+		provider = state.provider,
+		on_update = state.on_update,
+		back = state.back,
+	})
+end
+
+---@return PullsDetailKeymap[]
+function M.keymaps()
+	local keymaps = {}
+
+	local prev_keys = resolver.resolve("pulls.stack.prev")
+	if prev_keys then
+		table.insert(keymaps, {
+			key = prev_keys,
+			desc = "Previous PR in stack",
+			callback = function()
+				navigate_stack(-1)
+			end,
+		})
+	end
+
+	local next_keys = resolver.resolve("pulls.stack.next")
+	if next_keys then
+		table.insert(keymaps, {
+			key = next_keys,
+			desc = "Next PR in stack",
+			callback = function()
+				navigate_stack(1)
+			end,
+		})
+	end
+
+	return keymaps
 end
 
 return M

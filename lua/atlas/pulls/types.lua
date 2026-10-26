@@ -243,10 +243,16 @@
 ---@field label string
 ---@field hl string|nil
 
+---@class PullsDetailKeymap
+---@field key string|string[]
+---@field desc string
+---@field callback fun()
+
 ---@class PullsProviderDetail
 ---@field header_fields (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailHeaderField[])|nil
 ---@field chips (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailChip[])|nil
 ---@field tabs (fun(): PullsDetailTab[])|nil
+---@field keymaps (fun(): PullsDetailKeymap[])|nil
 
 ---@class PullsDetailTabModule
 ---@field render fun(pr: PullRequest, details: PullRequestDetails|nil, width: integer): string[], table[], table<integer, table>|nil
