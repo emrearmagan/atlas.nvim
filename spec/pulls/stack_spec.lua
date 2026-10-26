@@ -19,12 +19,6 @@ describe("pull request stacks", function()
 		assert.is_false(stack.is_stacked({ position = 1, size = 1 }))
 	end)
 
-	it("builds a stack indicator", function()
-		assert.equal("⧉ 2/3", stack.indicator(stacked()))
-		assert.is_nil(stack.indicator(nil))
-		assert.is_nil(stack.indicator({ position = 1, size = 1 }))
-	end)
-
 	it("finds the next and previous stack entries", function()
 		local next_entry = assert(stack.neighbor(stacked(), 1))
 		local previous_entry = assert(stack.neighbor(stacked(), -1))

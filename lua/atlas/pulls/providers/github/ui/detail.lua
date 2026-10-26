@@ -32,12 +32,9 @@ function M.chips(pr, details, _loading)
 	---@cast details GitHubPullRequestDetails|nil
 	local chips = {}
 
-	local current_stack = details and details.stack or pr.stack
-	if stack.is_stacked(current_stack) then
-		table.insert(chips, {
-			label = string.format("⧉ %d/%d", current_stack.position, current_stack.size),
-			hl = "AtlasRelatedChip",
-		})
+	local indicator = stack.indicator(pr.stack)
+	if indicator then
+		table.insert(chips, { label = indicator, hl = "AtlasRelatedChip" })
 	end
 
 	for _, lbl in ipairs(details and details.labels or {}) do

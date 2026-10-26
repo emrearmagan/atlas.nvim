@@ -1,5 +1,7 @@
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
+
 ---@param stack PullsStack|nil
 ---@return boolean
 function M.is_stacked(stack)
@@ -12,7 +14,7 @@ function M.indicator(stack)
 	if not M.is_stacked(stack) then
 		return nil
 	end
-	return string.format("⧉ %d/%d", stack.position, stack.size)
+	return string.format("%s %d/%d", icons.get("stack"), stack.position, stack.size)
 end
 
 ---@param stack PullsStack|nil

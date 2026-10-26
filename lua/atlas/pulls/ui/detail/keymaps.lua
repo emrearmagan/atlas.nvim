@@ -262,29 +262,31 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(
-		items,
-		item("pulls.stack.prev", {
-			desc = "Previous PR in stack",
-			index = 7,
-			opts = { nowait = true, silent = true },
-			callback = function()
-				require("atlas.pulls.ui.detail").navigate_stack(-1)
-			end,
-		})
-	)
+	if state.provider and state.provider.id == "github" then
+		utils.insert_if(
+			items,
+			item("pulls.stack.prev", {
+				desc = "Previous PR in stack",
+				index = 7,
+				opts = { nowait = true, silent = true },
+				callback = function()
+					require("atlas.pulls.ui.detail").navigate_stack(-1)
+				end,
+			})
+		)
 
-	utils.insert_if(
-		items,
-		item("pulls.stack.next", {
-			desc = "Next PR in stack",
-			index = 7,
-			opts = { nowait = true, silent = true },
-			callback = function()
-				require("atlas.pulls.ui.detail").navigate_stack(1)
-			end,
-		})
-	)
+		utils.insert_if(
+			items,
+			item("pulls.stack.next", {
+				desc = "Next PR in stack",
+				index = 7,
+				opts = { nowait = true, silent = true },
+				callback = function()
+					require("atlas.pulls.ui.detail").navigate_stack(1)
+				end,
+			})
+		)
+	end
 
 	if supports_action("edit_pr") then
 		utils.insert_if(
