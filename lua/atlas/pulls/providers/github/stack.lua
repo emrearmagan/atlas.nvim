@@ -14,29 +14,21 @@ function M.indicator(stack)
 	if not M.is_stacked(stack) then
 		return nil
 	end
+	---@cast stack GitHubPullStack
 	return string.format("%s %d/%d", icons.get("stack"), stack.position, stack.size)
 end
 
----@param stack GitHubPullStack|nil
+---@param stack GitHubPullStack
 ---@param direction 1|-1
 ---@return GitHubPullStackEntry|nil
----@return "not_stacked"|"loading"|"top"|"bottom"|nil
 function M.neighbor(stack, direction)
-	if not M.is_stacked(stack) then
-		return nil, "not_stacked"
-	end
-	if stack.entries == nil or #stack.entries == 0 then
-		return nil, "loading"
-	end
-
 	local target = stack.position + direction
-	for _, entry in ipairs(stack.entries) do
+	for _, entry in ipairs(stack.entries or {}) do
 		if entry.position == target then
-			return entry, nil
+			return entry
 		end
 	end
-
-	return nil, direction > 0 and "top" or "bottom"
+	return nil
 end
 
 return M

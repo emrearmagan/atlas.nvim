@@ -7,10 +7,10 @@ local M = {}
 
 local CHECK_STATES = {
 	muted = { priority = 0, label = "", icon = "unknown" },
-	successful = { priority = 1, label = "Checks passed", icon = "successful" },
+	successful = { priority = 1, label = "Checks passed", icon = "successful", hl = "AtlasTextPositive" },
 	inprogress = { priority = 2, label = "Checks pending", icon = "inprogress", hl = "AtlasTextMuted" },
-	warning = { priority = 3, label = "Checks blocked", icon = "inprogress" },
-	failed = { priority = 4, label = "Checks failed", icon = "failed" },
+	warning = { priority = 3, label = "Checks blocked", icon = "inprogress", hl = "AtlasTextWarning" },
+	failed = { priority = 4, label = "Checks failed", icon = "failed", hl = "AtlasLogError" },
 }
 
 ---@param checks PullsMergeCheck[]
@@ -23,11 +23,12 @@ local function checks_chip(checks)
 			status = current
 		end
 	end
+
 	if status == CHECK_STATES.muted then
 		return nil
 	end
-	local icon, hl = icons.get(status.icon, "status")
-	return { label = icon .. " " .. status.label, hl = status.hl or hl }
+
+	return { label = icons.get(status.icon, "status") .. " " .. status.label, hl = status.hl }
 end
 
 ---@param pr PullRequest

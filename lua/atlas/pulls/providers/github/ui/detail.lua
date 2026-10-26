@@ -64,19 +64,22 @@ local function navigate_stack(direction)
 		return
 	end
 	---@cast pr GitHubPullRequest
+	if not stack.is_stacked(pr.stack) then
+		notify.info("PR is not part of a stack")
+		return
+	end
 
 	local details = state.current_details
 	---@cast details GitHubPullRequestDetails|nil
-	local current_stack = details and details.stack or pr.stack
-	local entry, reason = stack.neighbor(current_stack, direction)
+	if details == nil or details.stack == nil then
+		return
+	end
+
+	local entry = stack.neighbor(details.stack, direction)
 	if entry == nil then
-		if reason == "not_stacked" then
-			notify.info("PR is not part of a stack")
-		elseif reason == "loading" then
-			notify.info("Stack details are still loading")
-		elseif reason == "top" then
+		if direction > 0 then
 			notify.info("Top of stack")
-		elseif reason == "bottom" then
+		else
 			notify.info("Bottom of stack")
 		end
 		return
