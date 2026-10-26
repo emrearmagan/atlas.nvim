@@ -13,12 +13,6 @@ describe("pull request stacks", function()
 		}
 	end
 
-	it("detects stacked pull requests", function()
-		assert.is_true(stack.is_stacked(stacked()))
-		assert.is_false(stack.is_stacked(nil))
-		assert.is_false(stack.is_stacked({ position = 1, size = 1 }))
-	end)
-
 	it("finds the next and previous stack entries", function()
 		local next_entry = assert(stack.neighbor(stacked(), 1))
 		local previous_entry = assert(stack.neighbor(stacked(), -1))

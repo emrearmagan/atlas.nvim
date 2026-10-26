@@ -91,7 +91,6 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Browse files, commits, hunks, and review history.
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
-- Stacked PRs show their position (for example `⧉ 2/5`) in the PR list and header; navigate with `]s` / `[s`.
 - Submit, approve, request changes, or merge.
 
 > [!NOTE]
@@ -290,6 +289,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - Save issue descriptions as templates and reuse them when creating issues.
 - Close or reopen GitHub/GitLab issues and change Jira workflow states.
 - Jump between linked issues and pull requests and back, or browse related issues and sub-issues.
+- See a GitHub PR's position in its stack (e.g. `2/5`) and step through the stack with `]s` / `[s`.
 - Read GitHub and GitLab notifications, open them in Atlas, and mark them as read or done.
 - Remap shortcuts or assign multiple keys to the same action.
 - Set local repository paths and PR templates per project.
