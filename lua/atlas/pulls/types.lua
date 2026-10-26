@@ -72,11 +72,17 @@
 -- Merge check
 --------------------------------------------------------------------------------
 
+---@class PullsMergeCheckDetail
+---@field text string
+---@field text_hl string|nil
+---@field icon string
+---@field icon_hl string|nil
+
 ---@class PullsMergeCheck
 ---@field key string
 ---@field state "successful"|"failed"|"inprogress"|"warning"|"muted"
 ---@field label string
----@field details string[]|nil
+---@field details (string|PullsMergeCheckDetail)[]|nil
 
 --------------------------------------------------------------------------------
 -- Diffstat
