@@ -35,14 +35,10 @@
 ---@class PullsStackEntry
 ---@field position integer
 ---@field number integer|nil
----@field title string|nil
----@field state "open"|"merged"|"declined"|"draft"|nil
 
 ---@class PullsStack
 ---@field position integer
----@field number integer|nil
 ---@field size integer
----@field base_ref_name string|nil
 ---@field entries PullsStackEntry[]|nil
 
 ---@class PullRequest : PullRequestRef

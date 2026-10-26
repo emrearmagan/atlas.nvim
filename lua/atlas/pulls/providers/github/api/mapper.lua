@@ -179,20 +179,6 @@ function M.to_reviewers(raw)
 	return reviewers
 end
 
----@param raw table
----@return "open"|"merged"|"declined"|"draft"
-local function pull_state(raw)
-	local raw_state = tostring(raw.state or ""):upper()
-	if raw_state == "MERGED" then
-		return "merged"
-	elseif raw_state == "CLOSED" then
-		return "declined"
-	elseif raw.isDraft == true then
-		return "draft"
-	end
-	return "open"
-end
-
 ---@param raw any
 ---@param include_entries boolean|nil
 ---@return PullsStack|nil
@@ -214,9 +200,7 @@ local function pull_stack(raw, include_entries)
 	---@type PullsStack
 	local result = {
 		position = position,
-		number = tonumber(stack.number),
 		size = size,
-		base_ref_name = json.safe_str(stack.baseRefName),
 	}
 
 	if include_entries then
@@ -229,8 +213,6 @@ local function pull_stack(raw, include_entries)
 				local pr = json.nilify(entry.pullRequest)
 				if type(pr) == "table" then
 					item.number = tonumber(pr.number)
-					item.title = json.safe_str(pr.title) or ""
-					item.state = pull_state(pr)
 				end
 				table.insert(result.entries, item)
 			end
@@ -246,7 +228,16 @@ function M.to_pull_request(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
 	local reviewers = M.to_reviewers(raw)
-	local state = pull_state(raw)
+
+	local state = "open"
+	local raw_state = tostring(raw.state or ""):upper()
+	if raw_state == "MERGED" then
+		state = "merged"
+	elseif raw_state == "CLOSED" then
+		state = "declined"
+	elseif raw.isDraft == true then
+		state = "draft"
+	end
 
 	local raw_repository = json.safe_table(raw.repository)
 	local owner, repo_name, repo_full_name = github_mapper.repository(raw_repository)

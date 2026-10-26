@@ -15,7 +15,7 @@ end
 local STACK_SUMMARY_FIELDS = [[
   stackEntry {
     position
-    stack { number size baseRefName }
+    stack { size }
   }
 ]]
 
@@ -23,13 +23,11 @@ local STACK_DETAIL_FIELDS = [[
       stackEntry {
         position
         stack {
-          number
           size
-          baseRefName
           entries(first: 50) {
             nodes {
               position
-              pullRequest { number title state isDraft }
+              pullRequest { number }
             }
           }
         }

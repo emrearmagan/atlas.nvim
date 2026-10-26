@@ -223,11 +223,11 @@ end)
 describe("GitHub pull request stacks", function()
 	it("maps a stack summary onto the pull request", function()
 		local raw = base_raw()
-		raw.stackEntry = { position = 2, stack = { number = 530, size = 5, baseRefName = "main" } }
+		raw.stackEntry = { position = 2, stack = { size = 5 } }
 
 		local pr = normalizer.to_pull_request(raw)
 
-		assert.same({ position = 2, number = 530, size = 5, base_ref_name = "main" }, pr.stack)
+		assert.same({ position = 2, size = 5 }, pr.stack)
 	end)
 
 	it("maps stack entries onto pull request details", function()
@@ -235,19 +235,11 @@ describe("GitHub pull request stacks", function()
 		raw.stackEntry = {
 			position = 2,
 			stack = {
-				number = 530,
 				size = 3,
-				baseRefName = "main",
 				entries = {
 					nodes = {
-						{
-							position = 1,
-							pullRequest = { number = 10, title = "Base", state = "OPEN", isDraft = false },
-						},
-						{
-							position = 2,
-							pullRequest = { number = 11, title = "Middle", state = "OPEN", isDraft = true },
-						},
+						{ position = 1, pullRequest = { number = 10 } },
+						{ position = 2, pullRequest = { number = 11 } },
 						{ position = 3, pullRequest = vim.NIL },
 					},
 				},
@@ -256,11 +248,15 @@ describe("GitHub pull request stacks", function()
 
 		local details = normalizer.to_pull_request_details(raw)
 
-		assert.equal(2, details.stack.position)
-		assert.equal(3, details.stack.size)
-		assert.same({ position = 1, number = 10, title = "Base", state = "open" }, details.stack.entries[1])
-		assert.equal("draft", details.stack.entries[2].state)
-		assert.same({ position = 3 }, details.stack.entries[3])
+		assert.same({
+			position = 2,
+			size = 3,
+			entries = {
+				{ position = 1, number = 10 },
+				{ position = 2, number = 11 },
+				{ position = 3 },
+			},
+		}, details.stack)
 	end)
 
 	it("leaves stack nil when the pull request is not stacked", function()
