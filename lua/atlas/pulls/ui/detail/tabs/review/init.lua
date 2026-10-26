@@ -9,6 +9,7 @@ local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
 local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state")
+local reactions = require("atlas.ui.shared.reactions")
 local utils = require("atlas.ui.shared.utils")
 
 ---@param pr PullRequest
@@ -221,6 +222,23 @@ end
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
 	run_comment_action("delete_comment", pr, entry and entry.comment, refresh)
+end
+
+---@param pr PullRequest
+---@param entry table
+---@param refresh fun()
+function M.react(pr, entry, refresh)
+	local comment = entry and entry.comment
+	local capability = detail.provider
+		and detail.provider.capabilities.comments
+		and detail.provider.capabilities.comments.reactions
+	if not comment or comment.deleted or not capability then
+		return
+	end
+
+	reactions.pick(capability, pr, comment, function()
+		return is_current(pr)
+	end, refresh)
 end
 
 ---@param pr PullRequest
