@@ -8,8 +8,8 @@ local M = {}
 local CHECK_STATES = {
 	muted = { priority = 0, label = "", icon = "unknown" },
 	successful = { priority = 1, label = "Checks passed", icon = "successful" },
-	inprogress = { priority = 2, label = "Checks pending", icon = "inprogress" },
-	warning = { priority = 3, label = "Checks pending", icon = "inprogress" },
+	inprogress = { priority = 2, label = "Checks pending", icon = "inprogress", hl = "AtlasTextMuted" },
+	warning = { priority = 3, label = "Checks blocked", icon = "inprogress" },
 	failed = { priority = 4, label = "Checks failed", icon = "failed" },
 }
 
@@ -27,7 +27,7 @@ local function checks_chip(checks)
 		return nil
 	end
 	local icon, hl = icons.get(status.icon, "status")
-	return { label = icon .. " " .. status.label, hl = hl }
+	return { label = icon .. " " .. status.label, hl = status.hl or hl }
 end
 
 ---@param pr PullRequest
