@@ -3,7 +3,7 @@ local M = {}
 
 local header = require("atlas.pulls.ui.components.header")
 local highlights = require("atlas.ui.highlights")
-local stack = require("atlas.pulls.stack")
+local stack = require("atlas.pulls.providers.github.stack")
 
 -- Detail
 
@@ -29,6 +29,7 @@ end
 ---@param _loading boolean
 ---@return PullsDetailChip[]
 function M.chips(pr, details, _loading)
+	---@cast pr GitHubPullRequest
 	---@cast details GitHubPullRequestDetails|nil
 	local chips = {}
 

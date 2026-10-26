@@ -32,15 +32,6 @@
 ---@field id string|number
 ---@field repo_full_name string
 
----@class PullsStackEntry
----@field position integer
----@field number integer|nil
-
----@class PullsStack
----@field position integer
----@field size integer
----@field entries PullsStackEntry[]|nil
-
 ---@class PullRequest : PullRequestRef
 ---@field title string
 ---@field state "open"|"merged"|"declined"|"draft"
@@ -55,7 +46,6 @@
 ---@field repo AtlasRepository
 ---@field is_starred boolean|nil
 ---@field reviewers PullsReviewer[]|nil
----@field stack PullsStack|nil
 
 ---@class PullRequestDetails
 ---@field description string
@@ -63,7 +53,6 @@
 ---@field is_subscribed boolean|nil
 ---@field assignees AtlasUser[]|nil
 ---@field labels PullsLabel[]|nil
----@field stack PullsStack|nil
 
 --------------------------------------------------------------------------------
 -- Reviewer

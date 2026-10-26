@@ -1,4 +1,4 @@
-local stack = require("atlas.pulls.stack")
+local stack = require("atlas.pulls.providers.github.stack")
 
 describe("pull request stacks", function()
 	local function stacked(entries)

@@ -1,5 +1,6 @@
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.pulls.ui.presentation")
+local stack = require("atlas.pulls.providers.github.stack")
 local ui_utils = require("atlas.ui.shared.utils")
 local utils = require("atlas.pulls.ui.layouts.utils")
 
@@ -34,7 +35,7 @@ M.github = {
 		local diff, diff_hl = utils.diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 
 		return {
-			name = icon .. " " .. utils.title(pr, "#"),
+			name = icon .. " " .. utils.title(pr, "#", stack.indicator(pr.stack)),
 			conversation = tostring(pr.comments_count),
 			review = review,
 			review_hl = review_hl,

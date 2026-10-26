@@ -1,12 +1,12 @@
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.pulls.ui.presentation")
-local stack = require("atlas.pulls.stack")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
 local STAR_ICON, STAR_HIGHLIGHT = icons.get("star")
+local STACK_ICON = icons.get("stack")
 local STATE_ICONS = {
 	open = { icons.get("pr") },
 	draft = { icons.get("draft_pr") },
@@ -41,12 +41,12 @@ end
 
 ---@param pr PullRequest
 ---@param reference string
+---@param suffix string|nil
 ---@return string
-function M.title(pr, reference)
+function M.title(pr, reference, suffix)
 	local title = (pr.is_starred and STAR_ICON .. " " or "") .. reference .. tostring(pr.id) .. " " .. pr.title
-	local indicator = stack.indicator(pr.stack)
-	if indicator then
-		title = title .. "  " .. indicator
+	if suffix then
+		title = title .. "  " .. suffix
 	end
 	return title
 end
@@ -103,16 +103,9 @@ local function cell_highlights(row, column, context, opts)
 			table.insert(spans, { start_col = #icon + 1, end_col = #icon + 1 + #STAR_ICON, hl_group = STAR_HIGHLIGHT })
 		end
 
-		local indicator = stack.indicator(pr.stack)
-		if indicator then
-			local start_col = context.text:find(indicator, 1, true)
-			if start_col then
-				table.insert(spans, {
-					start_col = start_col - 1,
-					end_col = start_col - 1 + #indicator,
-					hl_group = "AtlasTextMuted",
-				})
-			end
+		local stack_start = context.text:find(STACK_ICON, 1, true)
+		if stack_start then
+			table.insert(spans, { start_col = stack_start - 1, end_col = #context.text, hl_group = "AtlasTextMuted" })
 		end
 
 		return spans

@@ -10,7 +10,7 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local links = require("atlas.ui.links")
-local stack = require("atlas.pulls.stack")
+local stack = require("atlas.pulls.providers.github.stack")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -497,8 +497,10 @@ function M.navigate_stack(direction)
 	if pr == nil then
 		return false
 	end
+	---@cast pr GitHubPullRequest
 
 	local details = state.current_details
+	---@cast details GitHubPullRequestDetails|nil
 	local current_stack = details and details.stack or pr.stack
 	local entry, reason = stack.neighbor(current_stack, direction)
 	if entry == nil then

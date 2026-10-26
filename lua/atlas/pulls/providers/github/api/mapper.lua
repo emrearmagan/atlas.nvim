@@ -181,7 +181,7 @@ end
 
 ---@param raw any
 ---@param include_entries boolean|nil
----@return PullsStack|nil
+---@return GitHubPullStack|nil
 local function pull_stack(raw, include_entries)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
@@ -197,7 +197,7 @@ local function pull_stack(raw, include_entries)
 		return nil
 	end
 
-	---@type PullsStack
+	---@type GitHubPullStack
 	local result = {
 		position = position,
 		size = size,
@@ -208,7 +208,7 @@ local function pull_stack(raw, include_entries)
 		for _, node in ipairs(github_mapper.connection_nodes(stack.entries)) do
 			local entry = json.nilify(node)
 			if type(entry) == "table" then
-				---@type PullsStackEntry
+				---@type GitHubPullStackEntry
 				local item = { position = tonumber(entry.position) or 0 }
 				local pr = json.nilify(entry.pullRequest)
 				if type(pr) == "table" then
