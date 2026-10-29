@@ -27,6 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field draft boolean
 ---@field branches AtlasCreateBranchOption[]
 ---@field reviewer_candidates PullsReviewerCandidate[]
+---@field reviewer_candidates_error string|nil
 ---@field reviewers PullsReviewerCandidate[]
 ---@field commits_buf integer
 ---@field requests AtlasRequestScope
@@ -141,10 +142,13 @@ local function refresh_reviewers(state, editor)
 			return
 		end
 		if err then
-			editor.statusline:notify("error", err)
+			state.reviewer_candidates_error = err
+			editor.statusline:notify("warn", err)
+			form.render_meta(editor)
 			return
 		end
 
+		state.reviewer_candidates_error = nil
 		state.reviewer_candidates = candidates or {}
 		state.reviewers = vim.tbl_filter(function(reviewer)
 			return reviewer.selected
@@ -203,6 +207,11 @@ end
 ---@param editor AtlasForm
 local function select_reviewers(state, editor)
 	if state.submitting then
+		return
+	end
+	if #state.reviewer_candidates == 0 then
+		local message = state.reviewer_candidates_error or "No reviewer candidates available"
+		editor.statusline:notify(state.reviewer_candidates_error and "warn" or "info", message)
 		return
 	end
 
@@ -346,7 +355,8 @@ local function render_meta(state)
 		},
 	}
 	if state.write.fetch_reviewer_candidates then
-		rows[#rows + 1] = { meta.people("Reviewers:", reviewers, "None") }
+		local empty = state.reviewer_candidates_error and "Unavailable" or "None"
+		rows[#rows + 1] = { meta.people("Reviewers:", reviewers, empty) }
 	end
 	return rows
 end
@@ -557,11 +567,7 @@ function M.open()
 
 					scope.all(loads, function(loaded, load_errors)
 						local content_err = load_errors.content
-						if load_errors.reviewers then
-							notify.error(load_errors.reviewers)
-							return
-						end
-
+						local reviewer_err = load_errors.reviewers
 						local content = loaded.content or { title = "", body = "", commits = {}, diffstat = {} }
 						local candidates = loaded.reviewers or {}
 						local reviewers = vim.tbl_filter(function(reviewer)
@@ -581,6 +587,7 @@ function M.open()
 							draft = false,
 							branches = branches,
 							reviewer_candidates = candidates,
+							reviewer_candidates_error = reviewer_err,
 							reviewers = reviewers,
 							commits_buf = vim.api.nvim_create_buf(false, true),
 							requests = requests.new(),
@@ -593,8 +600,17 @@ function M.open()
 						local editor = open_editor(state, content)
 						if content_err then
 							editor.statusline:notify("error", content_err)
-						elseif base_notice then
-							editor.statusline:notify("warn", base_notice)
+						else
+							local notices = {}
+							if base_notice then
+								table.insert(notices, base_notice)
+							end
+							if reviewer_err then
+								table.insert(notices, reviewer_err)
+							end
+							if #notices > 0 then
+								editor.statusline:notify("warn", table.concat(notices, " | "))
+							end
 						end
 					end)
 				end)

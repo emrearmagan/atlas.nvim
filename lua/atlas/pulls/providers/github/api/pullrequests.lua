@@ -544,6 +544,17 @@ function M.decline(pr, on_done)
 	})
 end
 
+---@param slug string
+---@param err string|nil
+---@return string|nil
+local function reviewer_candidates_error(slug, err)
+	local text = tostring(err or "")
+	if text:match("403") or text:lower():match("push access") then
+		return "Reviewer suggestions require push access to " .. slug
+	end
+	return err
+end
+
 ---@param opts { repo_slug: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -562,7 +573,7 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				{ "api", "--paginate", "--slurp", string.format("repos/%s/collaborators?per_page=100", slug) },
 				function(result, err)
 					if err or type(result) ~= "table" then
-						done(nil, err or "Failed to fetch repository collaborators")
+						done(nil, reviewer_candidates_error(slug, err) or "Failed to fetch repository collaborators")
 						return
 					end
 					done(result, nil)
