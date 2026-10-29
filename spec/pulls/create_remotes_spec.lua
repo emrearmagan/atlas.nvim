@@ -47,6 +47,24 @@ describe("pulls.create.remotes", function()
 			assert.equal("parent", assert(value).name)
 		end)
 
+		it("uses the tracked remote before origin", function()
+			local value = remotes.base_remote({
+				remote("origin", "me/repo"),
+				remote("parent", "parent/repo"),
+			}, nil, "parent")
+
+			assert.equal("parent", assert(value).name)
+		end)
+
+		it("ignores an unsupported tracked remote", function()
+			local value = remotes.base_remote({
+				remote("origin", "me/repo"),
+				remote("mirror"),
+			}, nil, "mirror")
+
+			assert.equal("origin", assert(value).name)
+		end)
+
 		it("rejects unknown or unsupported configured remotes", function()
 			local value, err = remotes.base_remote({ remote("origin", "me/repo") }, "upstream")
 			assert.is_nil(value)
@@ -75,6 +93,15 @@ describe("pulls.create.remotes", function()
 				remote("origin", "me/repo"),
 				remote("fork", "me/repo"),
 			}, "fork")
+
+			assert.equal("fork", assert(value).name)
+		end)
+
+		it("uses the pushed remote before origin", function()
+			local value = remotes.head_remote({
+				remote("origin", "me/repo"),
+				remote("fork", "me/repo"),
+			}, nil, "fork")
 
 			assert.equal("fork", assert(value).name)
 		end)
@@ -169,6 +196,25 @@ describe("pulls.create.remotes", function()
 			local options = remotes.branch_options(branches, { upstream }, "origin", "topic", origin.target)
 
 			assert.equal("parent/repo", options[1].target.repo_full_name)
+		end)
+	end)
+
+	describe("base_branch", function()
+		it("prefers the remote default when it is fetched", function()
+			assert.equal("dev", remotes.base_branch({ "dev", "main" }, "dev", "topic", false))
+		end)
+
+		it("falls back to a common default branch", function()
+			assert.equal("dev", remotes.base_branch({ "dev", "feat/x" }, "main", "topic", false))
+			assert.equal("main", remotes.base_branch({ "main", "feat/x" }, "missing", "topic", false))
+		end)
+
+		it("skips the head branch in the same repository", function()
+			assert.equal("develop", remotes.base_branch({ "feature", "develop" }, "feature", "feature", true))
+		end)
+
+		it("returns nil when there is no usable local branch", function()
+			assert.is_nil(remotes.base_branch({}, nil, "topic", false))
 		end)
 	end)
 

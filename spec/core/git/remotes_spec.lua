@@ -1,14 +1,16 @@
 local git = require("atlas.core.git")
 
 describe("core.git remotes", function()
-	local original_run
+	local original_run, original_check_commits
 
 	before_each(function()
 		original_run = git.run
+		original_check_commits = git.check_commits
 	end)
 
 	after_each(function()
 		git.run = original_run
+		git.check_commits = original_check_commits
 	end)
 
 	---@param stdout string
@@ -43,6 +45,46 @@ describe("core.git remotes", function()
 		assert.equal("upstream", remotes[2].name)
 		assert.equal("parent/repo", remotes[2].target.repo_full_name)
 		assert.is_nil(remotes[3].target)
+	end)
+
+	it("resolves the remotes a branch tracks and pushes to", function()
+		git.run = function(args, _, done)
+			assert.same({
+				"-C",
+				"/repo",
+				"for-each-ref",
+				"--format=%(upstream:remotename) %(push:remotename)",
+				"refs/heads/feature",
+			}, args)
+			return complete("upstream origin\n", done)
+		end
+
+		local remotes
+		git.branch_remotes("/repo", "feature", function(value)
+			remotes = value
+		end)
+
+		assert.equal("upstream", remotes.merge)
+		assert.equal("origin", remotes.push)
+	end)
+
+	it("checks qualified base revisions without assuming origin", function()
+		local checked
+		git.check_commits = function(_, revisions, done)
+			checked = revisions
+			done({ true, true }, nil)
+			return {
+				cancel = function() end,
+			}
+		end
+
+		local result
+		git.diff_revisions("/repo", "upstream/dev", "feature", function(base, head)
+			result = { base = base, head = head }
+		end)
+
+		assert.same({ "upstream/dev", "feature" }, checked)
+		assert.same({ base = "upstream/dev", head = "feature" }, result)
 	end)
 
 	it("lists branches for every remote", function()

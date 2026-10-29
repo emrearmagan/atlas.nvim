@@ -246,8 +246,7 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
         shows the notes of the current repository's pull requests.
 
 :Atlas create pr
-        Create a pull request from the current branch. The `gb` target
-        picker lists branches from every Git remote as <remote>/<branch>.
+        Create a pull request from the current branch.
 
 :Atlas create issue [provider|.]
         Create an issue. Without a provider, it uses the only one that can
@@ -299,10 +298,11 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
       create = {
         -- Remote used for the PR target repository and base branches.
-        -- Defaults to origin, then the first remote.
+        -- Defaults to the remote the current branch tracks, then origin,
+        -- then the first supported remote.
         base_remote = nil,
-        -- Remote the current branch is pushed to. Defaults to origin,
-        -- then the first remote.
+        -- Remote the current branch is pushed to. Defaults to the branch's
+        -- push remote, then origin, then the first remote.
         head_remote = nil,
       },
       description = {

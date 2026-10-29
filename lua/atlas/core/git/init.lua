@@ -290,16 +290,15 @@ function M.diff_revisions(root, base, head, on_done)
 		return nil
 	end
 
-	local remote_base = base:match("^origin/") and base or "origin/" .. base
-	return M.check_commits(root, { remote_base, base, head }, function(exists, err)
+	return M.check_commits(root, { base, head }, function(exists, err)
 		if not exists then
 			on_done(nil, nil, err)
-		elseif not exists[1] and not exists[2] then
+		elseif not exists[1] then
 			on_done(nil, nil, "Base branch not found: " .. base)
-		elseif not exists[3] then
+		elseif not exists[2] then
 			on_done(nil, nil, "Head branch not found: " .. head)
 		else
-			on_done(exists[1] and remote_base or base, head, nil)
+			on_done(base, head, nil)
 		end
 	end)
 end
@@ -423,10 +422,36 @@ function M.local_repository(cwd, on_done)
 	end)
 end
 
+---@class AtlasGitBranchRemotes
+---@field merge string|nil Remote the branch tracks.
+---@field push string|nil Remote the branch is pushed to.
+
 ---@class AtlasGitRemote
 ---@field name string
 ---@field url string
 ---@field target AtlasTarget|nil
+
+---@param root string
+---@param branch string
+---@param on_done fun(remotes: AtlasGitBranchRemotes|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.branch_remotes(root, branch, on_done)
+	local format = "--format=%(upstream:remotename) %(push:remotename)"
+	return M.run({ "-C", root, "for-each-ref", format, "refs/heads/" .. branch }, { text = true }, function(res)
+		local ok, err = command_result(res, "Failed to resolve branch remotes")
+		if not ok then
+			on_done(nil, err)
+			return
+		end
+
+		local line = (res.stdout or ""):match("[^\r\n]*") or ""
+		local merge_remote, push_remote = line:match("^(%S*)%s*(%S*)$")
+		on_done({
+			merge = merge_remote ~= nil and merge_remote ~= "" and merge_remote or nil,
+			push = push_remote ~= nil and push_remote ~= "" and push_remote or nil,
+		}, nil)
+	end)
+end
 
 ---@param root string
 ---@param on_done fun(remotes: AtlasGitRemote[]|nil, err: string|nil)

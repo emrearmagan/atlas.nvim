@@ -39,8 +39,9 @@ end
 
 ---@param remotes AtlasCreateRemote[]
 ---@param configured string|nil
+---@param tracked string|nil The remote the current branch tracks.
 ---@return AtlasCreateRemote|nil, string|nil
-function M.base_remote(remotes, configured)
+function M.base_remote(remotes, configured, tracked)
 	if configured and configured ~= "" then
 		local remote = find(remotes, configured)
 		if not remote then
@@ -52,6 +53,12 @@ function M.base_remote(remotes, configured)
 		return remote
 	end
 
+	if tracked and tracked ~= "" then
+		local remote = find(remotes, tracked)
+		if remote and remote.target then
+			return remote
+		end
+	end
 	local origin = find(remotes, "origin")
 	if origin and origin.target then
 		return origin
@@ -66,8 +73,9 @@ end
 
 ---@param remotes AtlasCreateRemote[]
 ---@param configured string|nil
+---@param pushed string|nil The remote the current branch is pushed to.
 ---@return AtlasCreateRemote|nil, string|nil
-function M.head_remote(remotes, configured)
+function M.head_remote(remotes, configured, pushed)
 	if configured and configured ~= "" then
 		local remote = find(remotes, configured)
 		if not remote then
@@ -76,6 +84,12 @@ function M.head_remote(remotes, configured)
 		return remote
 	end
 
+	if pushed and pushed ~= "" then
+		local remote = find(remotes, pushed)
+		if remote then
+			return remote
+		end
+	end
 	local origin = find(remotes, "origin")
 	if origin then
 		return origin
@@ -142,6 +156,39 @@ function M.branch_options(branches, remotes, head_remote, head_branch, head_targ
 		end
 	end
 	return options
+end
+
+---@param branches string[]
+---@param preferred string|nil
+---@param head_branch string|nil
+---@param same_repository boolean
+---@return string|nil
+function M.base_branch(branches, preferred, head_branch, same_repository)
+	local available = {}
+	for _, branch in ipairs(branches) do
+		available[branch] = true
+	end
+
+	---@param branch string|nil
+	---@return boolean
+	local function usable(branch)
+		return branch ~= nil and branch ~= "" and not (same_repository and branch == head_branch)
+	end
+
+	if preferred and available[preferred] and usable(preferred) then
+		return preferred
+	end
+	for _, candidate in ipairs({ "main", "master", "dev", "develop" }) do
+		if available[candidate] and usable(candidate) then
+			return candidate
+		end
+	end
+	for _, branch in ipairs(branches) do
+		if usable(branch) then
+			return branch
+		end
+	end
+	return preferred
 end
 
 ---@param options AtlasCreateBranchOption[]
