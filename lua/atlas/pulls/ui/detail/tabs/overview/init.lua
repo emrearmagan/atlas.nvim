@@ -489,13 +489,32 @@ local function render_merge_check_group(check, width)
 		end
 	end
 
+	local indent = "  "
 	for _, message in ipairs(check.details or {}) do
-		local indent = "  "
-		local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
-		for _, detail_line in ipairs(utils.wrap_line(message, detail_width)) do
-			local text = indent .. detail_line
+		if type(message) == "string" then
+			local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
+			for _, detail_line in ipairs(utils.wrap_line(message, detail_width)) do
+				local text = indent .. detail_line
+				table.insert(lines, text)
+				table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+			end
+		else
+			local prefix = indent .. message.icon .. " "
+			local text_width = math.max(2, content_width - vim.api.nvim_strwidth(prefix))
+			local text = prefix .. utils.truncate(message.text, text_width)
 			table.insert(lines, text)
-			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+			table.insert(spans, {
+				line = #lines - 1,
+				start_col = #indent,
+				end_col = #indent + #message.icon,
+				hl_group = message.icon_hl or "AtlasTextMuted",
+			})
+			table.insert(spans, {
+				line = #lines - 1,
+				start_col = #prefix,
+				end_col = #text,
+				hl_group = message.text_hl or "AtlasTextMuted",
+			})
 		end
 	end
 

@@ -34,7 +34,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.rerun(ctx.context, ctx.pipeline, true, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -47,7 +47,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.rerun(ctx.context, ctx.pipeline, false, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -61,7 +61,7 @@ return {
 		end,
 		run = function(ctx, done)
 			api.cancel(ctx.context, ctx.pipeline, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -70,14 +70,11 @@ return {
 		label = "Re-run job",
 		icon = icons.get("retry", "actions"),
 		is_available = function(ctx)
-			return ctx.job ~= nil
-				and tonumber(ctx.job.id) ~= nil
-				and active_states[ctx.job.state] ~= true
-				and not is_active(ctx.pipeline)
+			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and not is_active(ctx.pipeline)
 		end,
 		run = function(ctx, done)
 			api.rerun_job(ctx.context, ctx.job, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},

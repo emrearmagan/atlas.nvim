@@ -179,6 +179,49 @@ function M.to_reviewers(raw)
 	return reviewers
 end
 
+---@param raw any
+---@param include_entries boolean|nil
+---@return GitHubPullStack|nil
+local function pull_stack(raw, include_entries)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local stack = json.nilify(raw.stack)
+	if type(stack) ~= "table" then
+		return nil
+	end
+	local position = tonumber(raw.position)
+	local size = tonumber(stack.size)
+	if position == nil or size == nil then
+		return nil
+	end
+
+	---@type GitHubPullStack
+	local result = {
+		position = position,
+		size = size,
+	}
+
+	if include_entries then
+		result.entries = {}
+		for _, node in ipairs(github_mapper.connection_nodes(stack.entries)) do
+			local entry = json.nilify(node)
+			if type(entry) == "table" then
+				---@type GitHubPullStackEntry
+				local item = { position = tonumber(entry.position) or 0 }
+				local pr = json.nilify(entry.pullRequest)
+				if type(pr) == "table" then
+					item.number = tonumber(pr.number)
+				end
+				table.insert(result.entries, item)
+			end
+		end
+	end
+
+	return result
+end
+
 ---@param raw table
 ---@return GitHubPullRequest
 function M.to_pull_request(raw)
@@ -240,6 +283,7 @@ function M.to_pull_request(raw)
 		},
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
+		stack = pull_stack(raw.stackEntry),
 		node_id = json.safe_str(raw.id),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
@@ -257,6 +301,7 @@ function M.to_pull_request_details(raw)
 		reactions = github_mapper.graphql_reactions(raw.reactionGroups),
 		assignees = pull_assignees(raw) or {},
 		labels = pull_labels(raw) or {},
+		stack = pull_stack(raw.stackEntry, true),
 	}
 	local subscription = tostring(raw.viewerSubscription or "")
 	if subscription ~= "" then
@@ -319,7 +364,8 @@ function M.to_activity(node)
 		local msg = (json.safe_str(commit.message) or ""):match("([^\n]+)") or ""
 		local sha = (json.safe_str(commit.oid) or ""):sub(1, 8)
 		entry.kind = "committed"
-		entry.actor = actor_from_login(json.safe_str(author.name) or "")
+		local login = json.safe_str(json.safe_table(author.user).login) or json.safe_str(author.name) or ""
+		entry.actor = actor_from_login(login)
 		entry.date = json.safe_str(commit.authoredDate) or ""
 		entry.label = sha ~= "" and string.format("%s %s", sha, msg) or msg
 	elseif event == "LabeledEvent" or event == "UnlabeledEvent" then

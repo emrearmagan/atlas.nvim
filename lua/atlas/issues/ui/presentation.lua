@@ -8,11 +8,11 @@ function M.person_name(author)
 	if author == nil then
 		return "Unknown"
 	end
-	if author.name and author.name ~= "" then
-		return author.name
-	end
 	if author.username and author.username ~= "" then
 		return author.username
+	end
+	if author.name and author.name ~= "" then
+		return author.name
 	end
 	if author.id and author.id ~= "" then
 		return author.id

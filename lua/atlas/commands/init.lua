@@ -260,18 +260,19 @@ M.register({
 
 M.register({
 	name = "clear",
-	usage = "clear [cache|notes|stars]",
-	description = "Clear Atlas data, caches, notes, or starred items",
+	usage = "clear [cache|notes|reviewed|stars]",
+	description = "Clear Atlas data, caches, notes, reviewed file marks, or starred items",
 	choices = function()
 		return {
-			{ args = {}, description = "Clear caches, clones, notes, stars, and logs" },
+			{ args = {}, description = "Clear caches, clones, notes, reviewed file marks, stars, and logs" },
 			{ args = { "cache" }, description = "Clear caches and cloned repositories" },
 			{ args = { "notes" }, description = "Clear review notes" },
+			{ args = { "reviewed" }, description = "Clear reviewed file marks" },
 			{ args = { "stars" }, description = "Clear starred items" },
 		}
 	end,
 	complete = function(arglead)
-		return complete_options(arglead, { "cache", "notes", "stars" })
+		return complete_options(arglead, { "cache", "notes", "reviewed", "stars" })
 	end,
 	run = function(args)
 		return require("atlas.commands.clear").run(args[1] and args[1]:lower() or nil)

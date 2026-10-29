@@ -1,7 +1,24 @@
 local cli = require("atlas.providers.github.client")
+local icons = require("atlas.ui.shared.icons")
 local json = require("atlas.core.json")
 
 local M = {}
+
+local STACK_FIELDS = [[
+      stackEntry {
+        position
+        stack {
+          number
+          baseRefName
+          entries(first: 50) {
+            nodes {
+              position
+              pullRequest { number title state isDraft mergeable mergeStateStatus }
+            }
+          }
+        }
+      }
+]]
 
 local MERGE_CHECKS_QUERY = [[
 query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
@@ -19,10 +36,19 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
       commits(last: 1) {
         nodes { commit { statusCheckRollup { state } } }
       }
+%s
     }
   }
 }
 ]]
+
+---@return string
+local function merge_checks_query()
+	if cli.is_enterprise_server() then
+		return string.format(MERGE_CHECKS_QUERY, "")
+	end
+	return string.format(MERGE_CHECKS_QUERY, STACK_FIELDS)
+end
 
 ---@type table<string, "successful"|"failed"|"inprogress">
 local PIPELINE_STATES = {
@@ -33,12 +59,19 @@ local PIPELINE_STATES = {
 	SUCCESS = "successful",
 }
 
+---@class GitHubMergeStack
+---@field number integer
+---@field base string|nil
+---@field position integer
+---@field entries { position: integer, number: integer|nil, title: string, state: "open"|"merged"|"closed"|"draft", conflicting: boolean, merge_state: string }[]
+
 ---@class GitHubMergeState
 ---@field mergeable string
 ---@field review_decision string
 ---@field review_requests string[]
 ---@field latest_reviews { login: string, state: string }[]
 ---@field pipeline_state "successful"|"failed"|"inprogress"|nil
+---@field stack GitHubMergeStack|nil
 
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"DISMISSED" }[], string[]
 local function parse_reviews(review_nodes, request_nodes)
@@ -77,6 +110,57 @@ local function parse_reviews(review_nodes, request_nodes)
 	return reviews, pending
 end
 
+---@param raw any
+---@return GitHubMergeStack|nil
+local function parse_stack(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local stack = json.safe_table(raw.stack)
+	local number = tonumber(stack.number)
+	local position = tonumber(raw.position)
+	if number == nil or position == nil then
+		return nil
+	end
+
+	local entries = {}
+	for _, node in ipairs(json.safe_table(json.safe_table(stack.entries).nodes)) do
+		local entry = json.safe_table(node)
+		local pr = json.safe_table(entry.pullRequest)
+		local pr_state = tostring(pr.state or ""):upper()
+		local state = "open"
+		if pr_state == "MERGED" then
+			state = "merged"
+		elseif pr_state == "CLOSED" then
+			state = "closed"
+		elseif pr.isDraft == true then
+			state = "draft"
+		end
+		table.insert(entries, {
+			position = tonumber(entry.position) or 0,
+			number = tonumber(pr.number),
+			title = json.safe_str(pr.title) or "",
+			state = state,
+			conflicting = pr.mergeable == "CONFLICTING",
+			merge_state = tostring(pr.mergeStateStatus or ""),
+		})
+	end
+	if #entries < 2 then
+		return nil
+	end
+	table.sort(entries, function(a, b)
+		return a.position < b.position
+	end)
+
+	return {
+		number = number,
+		base = json.safe_str(stack.baseRefName),
+		position = position,
+		entries = entries,
+	}
+end
+
 ---@param pr PullRequest
 ---@param on_done fun(result: GitHubMergeState|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -96,7 +180,7 @@ local function fetch_merge_state(pr, on_done)
 		"--paginate",
 		"--slurp",
 		"-f",
-		"query=" .. MERGE_CHECKS_QUERY,
+		"query=" .. merge_checks_query(),
 		"-f",
 		"owner=" .. owner,
 		"-f",
@@ -135,6 +219,7 @@ local function fetch_merge_state(pr, on_done)
 			review_requests = review_requests,
 			latest_reviews = latest_reviews,
 			pipeline_state = rollup and PIPELINE_STATES[rollup.state] or nil,
+			stack = parse_stack(pull_request.stackEntry),
 		}
 		on_done(out, nil)
 	end, {
@@ -220,6 +305,60 @@ local function conflicts_check(mergeable)
 	return nil
 end
 
+---@param stack GitHubMergeStack|nil
+---@return PullsMergeCheck|nil
+local function stack_check(stack)
+	if stack == nil then
+		return nil
+	end
+
+	---@type PullsMergeCheckDetail[]
+	local details = {}
+	if stack.base then
+		local icon, icon_hl = icons.get("pending")
+		table.insert(details, { text = stack.base, icon = icon, icon_hl = icon_hl })
+	end
+
+	local state = "successful"
+	local blocked_below = false
+	for _, entry in ipairs(stack.entries) do
+		local merge_state = entry.merge_state
+
+		local icon_name = "success"
+		local entry_state = "successful"
+		if entry.state == "merged" then
+			icon_name = "merged_pr"
+		elseif entry.state == "closed" then
+			icon_name = "declined_pr"
+			entry_state = "failed"
+		elseif entry.state == "draft" then
+			icon_name = "draft_pr"
+			entry_state = "warning"
+		elseif entry.conflicting then
+			icon_name = "error"
+			entry_state = "failed"
+		elseif blocked_below or merge_state == "BLOCKED" or merge_state == "BEHIND" or merge_state == "UNSTABLE" then
+			icon_name = "progress"
+			entry_state = "warning"
+		end
+		if entry_state ~= "successful" then
+			blocked_below = true
+		end
+		local icon, icon_hl = icons.get(icon_name)
+
+		local text_hl = nil
+		if entry.position == stack.position then
+			text_hl = "Normal"
+			state = entry_state
+		end
+
+		local text = string.format("#%s %s", entry.number or "-", entry.title)
+		table.insert(details, 1, { text = text, text_hl = text_hl, icon = icon, icon_hl = icon_hl })
+	end
+
+	return { key = "stack", state = state, label = "Stack #" .. stack.number, details = details }
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
@@ -261,6 +400,11 @@ function M.fetch(pr, opts, on_done)
 		local c = conflicts_check(mc_result.mergeable)
 		if c then
 			table.insert(checks, c)
+		end
+
+		local stack = stack_check(mc_result.stack)
+		if stack then
+			table.insert(checks, stack)
 		end
 
 		cli.set_mem(cache_key, checks, cli.cache_ttl())

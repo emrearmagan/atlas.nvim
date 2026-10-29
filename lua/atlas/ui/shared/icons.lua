@@ -33,6 +33,7 @@ local ICONS = {
 	draft_pr = { icon = "", hl_group = "AtlasPRDraft" },
 	merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
 	declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
+	stack = { icon = "󰌨", hl_group = "AtlasTextMuted" },
 	lsp = { icon = "", hl_group = "AtlasTextMuted" },
 	issue = { icon = "", hl_group = "AtlasTextPositive" },
 	tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },

@@ -8,12 +8,14 @@ local M = {}
 ---@field new_line integer|nil          -- nil on "remove" and "meta"
 
 ---@class DiffHunk
----@field header string                 -- raw "@@ -x,y +a,b @@ <context>" line
----@field context string                -- text after the second @@ (e.g. function name)
 ---@field old_start integer
 ---@field old_count integer
 ---@field new_start integer
 ---@field new_count integer
+
+---@class DiffHunkLines: DiffHunk
+---@field header string                 -- raw "@@ -x,y +a,b @@ <context>" line
+---@field context string                -- text after the second @@ (e.g. function name)
 ---@field additions integer
 ---@field deletions integer
 ---@field lines DiffLine[]
@@ -24,7 +26,7 @@ local M = {}
 ---@field path string                   -- display path (new path, or old path for deletions)
 ---@field old_path string|nil           -- only set for renames
 ---@field status DiffFileStatus
----@field hunks DiffHunk[]
+---@field hunks DiffHunkLines[]
 ---@field additions integer|nil         -- optional total when supplied without hunks
 ---@field deletions integer|nil          -- optional total when supplied without hunks
 
@@ -103,7 +105,7 @@ function M.parse(raw)
 	local files = {}
 	---@type DiffFile|nil
 	local cur_file = nil
-	---@type DiffHunk|nil
+	---@type DiffHunkLines|nil
 	local cur_hunk = nil
 	local old_cursor = 0
 	local new_cursor = 0
@@ -228,7 +230,7 @@ function M.parse(raw)
 end
 
 ---@param raw string
----@return DiffHunk|nil
+---@return DiffHunkLines|nil
 function M.parse_hunk(raw)
 	local file = M.parse(raw)[1]
 	return file and file.hunks[1] or nil

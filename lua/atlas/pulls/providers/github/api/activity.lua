@@ -19,7 +19,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
             reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
           }
           ...on PullRequestReview{id state body submittedAt url commit{oid} author{...actor}}
-          ...on PullRequestCommit{commit{oid message authoredDate author{name}}}
+          ...on PullRequestCommit{commit{oid message authoredDate author{name user{login}}}}
           ...on ReviewDismissedEvent{createdAt actor{...actor} previousReviewState review{id}}
           ...on ReviewRequestedEvent{createdAt actor{...actor} requestedReviewer{...actor}}
           ...on HeadRefForcePushedEvent{createdAt actor{...actor}}

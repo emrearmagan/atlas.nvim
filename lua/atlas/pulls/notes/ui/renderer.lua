@@ -10,7 +10,7 @@ local progress_icon = icons.get("progress")
 local resolved_icon, resolved_icon_hl = icons.get("success")
 
 ---@class AtlasNotesUIItem
----@field target AtlasNoteTarget|nil
+---@field target AtlasStorageTarget|nil
 ---@field note AtlasNote|nil
 ---@field tree_key string|nil
 
@@ -18,6 +18,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
+---@field reply? string
 
 ---@class AtlasNotesUIRenderOptions
 ---@field action_keys AtlasNotesUIActionKeys|nil
@@ -27,7 +28,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field location (fun(note: AtlasNote): string)|nil
 
 ---@class AtlasNotesUIListItem
----@field target AtlasNoteTarget
+---@field target AtlasStorageTarget
 ---@field note AtlasNote
 ---@field expanded boolean
 
@@ -43,7 +44,7 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field action_keys AtlasNotesUIActionKeys|nil
 
 ---@class AtlasNotesUIManagerDocument
----@field target AtlasNoteTarget
+---@field target AtlasStorageTarget
 ---@field notes AtlasNote[]
 
 ---@param value AtlasNoteType
@@ -52,7 +53,7 @@ local function type_label(value)
 	return value:upper()
 end
 
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param note AtlasNote
 ---@return string
 function M.note_key(target, note)
@@ -74,22 +75,30 @@ local function type_highlight(note_type)
 	return "AtlasLogInfo"
 end
 
----@param note_type AtlasNoteType
----@param file_path string
----@param line integer
+---@param value { start_line: integer, end_line: integer }
 ---@return string
-function M.note_title(note_type, file_path, line)
-	return string.format("Note [%s] %s:%d", type_label(note_type), file_path, line)
+function M.line_range(value)
+	if value.start_line == value.end_line then
+		return tostring(value.start_line)
+	end
+	return string.format("%d-%d", value.start_line, value.end_line)
+end
+
+---@param note_type AtlasNoteType
+---@param value { file_path: string, start_line: integer, end_line: integer }
+---@return string
+function M.note_title(note_type, value)
+	return string.format("Note [%s] %s:%s", type_label(note_type), value.file_path, M.line_range(value))
 end
 
 ---@param note AtlasNote
----@param target AtlasNoteTarget
+---@param target AtlasStorageTarget
 ---@param width integer|nil
 ---@return string[], AtlasUIHighlight[]
 function M.render_details(note, target, width)
 	local label = notes.target_label(target)
 	local note_type = type_label(note.type)
-	local location = string.format("%s:%d", note.file_path, note.line)
+	local location = note.file_path .. ":" .. M.line_range(note)
 	local lines = { string.format("%s  %s  %s", note_type, location, label), "", "Target: " .. target.ref }
 	local spans = {
 		{ line = 0, start_col = 0, end_col = #note_type, hl_group = type_highlight(note.type) },
@@ -119,10 +128,7 @@ function M.render_details(note, target, width)
 		utils.append_block(
 			lines,
 			spans,
-			markdown.parse(fence .. "\n" .. source .. "\n" .. fence, {
-				width = width,
-				file_path = note.file_path,
-			})
+			markdown.parse(fence .. "\n" .. source .. "\n" .. fence, { width = width, file_path = note.file_path })
 		)
 	end
 	table.insert(lines, "")
@@ -157,6 +163,10 @@ local function note_footer(note, action_keys)
 			text = string.format("%s %s", toggle_key, note.resolved and "reopen" or "resolve"),
 			hl_group = "AtlasTextMuted",
 		})
+	end
+	local reply_key = action_keys and action_keys.reply
+	if reply_key then
+		table.insert(footer_items, { text = reply_key .. " comment", hl_group = "AtlasTextMuted" })
 	end
 	return footer_items
 end
@@ -225,7 +235,7 @@ end
 local function list_item(item, opts)
 	local note = item.note
 	local path = note.file_path:match("([^/\\]+)$") or note.file_path
-	local metadata = { { string.format("%s:%d", path, note.line), "Normal" } }
+	local metadata = { { path .. ":" .. M.line_range(note), "Normal" } }
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
 	if timestamp ~= "" then
 		metadata[#metadata + 1] = { "  " .. timestamp, "AtlasTextMuted" }

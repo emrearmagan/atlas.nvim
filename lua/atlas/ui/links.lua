@@ -147,6 +147,21 @@ local function names(items)
 	)
 end
 
+---@param user AtlasUser|nil
+---@return string|nil
+local function user_name(user)
+	if user == nil then
+		return nil
+	end
+	return user.username or user.name
+end
+
+---@param users AtlasUser[]|nil
+---@return string
+local function user_names(users)
+	return table.concat(vim.tbl_map(user_name, users or {}), ", ")
+end
+
 ---@param lines string[]
 ---@param details PullRequestDetails|IssueDetails|nil
 ---@param err string|nil
@@ -189,8 +204,8 @@ local function pr_preview(link, pr, details, err)
 	field(lines, "Repository", pr.repo_full_name)
 	field(lines, "Relationship", link.relationship)
 	field(lines, "Status", pr.state)
-	field(lines, "Author", pr.author.name)
-	field(lines, "Assignees", details and names(details.assignees))
+	field(lines, "Author", user_name(pr.author))
+	field(lines, "Assignees", details and user_names(details.assignees))
 	field(lines, "Branches", pr.source.branch .. " → " .. pr.destination.branch)
 	field(lines, "Labels", details and names(details.labels))
 	field(lines, "URL", link.url)
@@ -210,8 +225,8 @@ local function issue_preview(link, target, issue, details, err)
 	field(lines, "Repository", target.repo_full_name or target.project_path)
 	field(lines, "Relationship", link.relationship)
 	field(lines, "Status", issue.status)
-	field(lines, "Reporter", issue.reporter and issue.reporter.name)
-	field(lines, "Assignees", details and names(details.assignees) or issue.assignee and issue.assignee.name)
+	field(lines, "Reporter", user_name(issue.reporter))
+	field(lines, "Assignees", details and user_names(details.assignees) or user_name(issue.assignee))
 	field(lines, "Labels", details and names(details.labels))
 	field(lines, "URL", link.url)
 	add_description(lines, details, err)

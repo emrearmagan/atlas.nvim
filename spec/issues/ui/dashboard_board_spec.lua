@@ -56,23 +56,4 @@ describe("Issue board layout", function()
 		assert.equal(1, visible(40))
 		assert.same({ 2, 5 }, { visible(80, 10) })
 	end)
-
-	it("keeps issue keys before titles and highlights them correctly with Unicode", function()
-		local lines, map, spans = layouts.render({ layout = "board", provider_id = "jira", width = 120 }, {
-			{ key = "AT-1", title = "Café", status_id = "open", status = "Open" },
-			{ key = "AT-2", title = "Résumé", status_id = "done", status = "Done" },
-			{ key = "AT-3", title = "Überprüfung", status_id = "review", status = "Review" },
-		})
-		local cell = map[2].cells[2]
-		local text = "AT-2 Résumé"
-		assert.equal(text, lines[2]:sub(cell.start_col + 1, cell.start_col + #text))
-
-		local highlighted = {}
-		for _, span in ipairs(spans) do
-			if span.hl_group ~= "AtlasColumnHeader" then
-				table.insert(highlighted, lines[span.line + 1]:sub(span.start_col + 1, span.end_col))
-			end
-		end
-		assert.same({ "AT-1", "AT-2", "AT-3" }, highlighted)
-	end)
 end)

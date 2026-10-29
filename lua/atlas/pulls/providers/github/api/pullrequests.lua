@@ -12,6 +12,28 @@ local function invalidate_details(repo, number)
 	cli.delete_mem(string.format("github:pr:%s:%s", repo, tostring(number)))
 end
 
+local STACK_SUMMARY_FIELDS = [[
+  stackEntry {
+    position
+    stack { size }
+  }
+]]
+
+local STACK_DETAIL_FIELDS = [[
+      stackEntry {
+        position
+        stack {
+          size
+          entries(first: 50) {
+            nodes {
+              position
+              pullRequest { number }
+            }
+          }
+        }
+      }
+]]
+
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -20,6 +42,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       reactionGroups { content viewerHasReacted reactors(first: 10) { totalCount nodes { ... on User { login name } ... on Bot { login } } } }
       labels(first: 100) { nodes { name color } }
       assignees(first: 10) { nodes { id login name } }
+%s
     }
   }
 }
@@ -37,8 +60,31 @@ fragment PullRequestFields on PullRequest {
   commits(last: 1) {
     nodes { commit { statusCheckRollup { state } } }
   }
+%s
 }
 ]]
+
+-- GitHub's stacked pull request API, including `stackEntry`, is available on
+-- github.com but not on GitHub Enterprise Server. Omit the fields there so the
+-- query remains valid.
+---@param detail boolean
+---@return string
+local function stack_fields(detail)
+	if cli.is_enterprise_server() then
+		return ""
+	end
+	return detail and STACK_DETAIL_FIELDS or STACK_SUMMARY_FIELDS
+end
+
+---@return string
+local function get_pr_gql()
+	return string.format(GET_PR_GQL, stack_fields(true))
+end
+
+---@return string
+local function pull_request_fields_gql()
+	return string.format(PULL_REQUEST_FIELDS_GQL, stack_fields(false))
+end
 
 local SEARCH_GQL = [[
 query(
@@ -75,7 +121,12 @@ query(
     pageInfo { hasNextPage endCursor }
   }
 }
-]] .. PULL_REQUEST_FIELDS_GQL
+]]
+
+---@return string
+local function search_gql()
+	return SEARCH_GQL .. "\n" .. pull_request_fields_gql()
+end
 
 ---@param queries string[]
 ---@param opts PullsFetchOpts
@@ -103,7 +154,7 @@ function M.fetch_search(queries, opts, on_done)
 		"api",
 		"graphql",
 		"-f",
-		"query=" .. vim.trim(SEARCH_GQL),
+		"query=" .. vim.trim(search_gql()),
 		"-f",
 		"query1=" .. (queries[1] or ""),
 		"-f",
@@ -201,7 +252,7 @@ function M.fetch_by_refs(refs, _, on_done)
 		"query(%s) {\n%s\n}\n%s",
 		table.concat(variables, ", "),
 		table.concat(selections, "\n"),
-		PULL_REQUEST_FIELDS_GQL
+		pull_request_fields_gql()
 	)
 	table.insert(args, "-f")
 	table.insert(args, "query=" .. query)
@@ -255,7 +306,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		"api",
 		"graphql",
 		"-f",
-		"query=" .. vim.trim(GET_PR_GQL),
+		"query=" .. vim.trim(get_pr_gql()),
 		"-f",
 		"owner=" .. owner,
 		"-f",

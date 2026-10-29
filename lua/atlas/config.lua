@@ -90,7 +90,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(pr: PullRequest): string)|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 -- Configs
@@ -124,7 +124,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(issue: Issue): string)|nil
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
@@ -291,6 +291,10 @@ local defaults = {
 			checkout = "gc",
 			open_repository = "o",
 			edit_pr = "ge",
+			stack = {
+				next = "]s",
+				prev = "[s",
+			},
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },
@@ -303,8 +307,12 @@ local defaults = {
 				toggle_file_reviewed = "-",
 				next_comment = "]c",
 				prev_comment = "[c",
+				next_unresolved = "]x",
+				prev_unresolved = "[x",
 				next_note = "]n",
 				prev_note = "[n",
+				next_commit = "]r",
+				prev_commit = "[r",
 				add_comment = "c",
 				submit_comment = "C",
 				add_suggestion = "s",
@@ -327,6 +335,9 @@ local defaults = {
 					next_unreviewed_file = "]u",
 					prev_unreviewed_file = "[u",
 					find_file = "<leader>f",
+				},
+				panel = {
+					cycle_filter = "f",
 				},
 				-- Built-in navigation; external viewers use their own keys.
 				atlas = {

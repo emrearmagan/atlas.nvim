@@ -23,15 +23,16 @@
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field users AtlasUsersCapability|nil
 ---@field completion table<string, AtlasCompletionSource>|nil
----@field actions AtlasActionsCapability|nil
+---@field actions AtlasAction[]|nil
 
----@alias AtlasAction AtlasIssueAction|AtlasPullAction|PullsPipelineAction|AtlasDiffAction
----@alias AtlasActionContext AtlasIssueActionContext|AtlasPullActionContext|PullsPipelineActionContext|AtlasDiffActionContext
----@alias AtlasActionResult IssuesActionResult|PullsActionResult
-
----@class AtlasActionsCapability
----@field items AtlasAction[]
----@field find fun(action_id: string): AtlasAction|nil
+---@class AtlasAction
+---@field id string
+---@field label string
+---@field icon string|nil
+---@field hidden boolean|nil
+---@field confirm string|(fun(context: table): string)|nil
+---@field is_available (fun(context: table): boolean, string|nil)|nil
+---@field run fun(context: table, on_done: fun(result: any, err: string|nil)): boolean|{ cancel: fun() }|nil
 
 ---@class AtlasUsersCapability
 ---@field fetch_user fun(on_done: fun(user: AtlasUser|nil, err: string|nil)): { cancel: fun() }|nil

@@ -59,25 +59,6 @@ local function open_current_line()
 	return false
 end
 
----@param issue Issue
----@param on_update (fun(issue: Issue|nil, result: IssuesActionResult|nil))|nil
----@param result IssuesActionResult|nil
-local function complete_action(issue, on_update, result)
-	if not result or not result.issue_key then
-		return
-	end
-	if on_update then
-		on_update(issue, result)
-		return
-	end
-
-	if result.removed then
-		detail.close()
-	else
-		detail.refresh(issue)
-	end
-end
-
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
 ---@return table|nil
@@ -147,7 +128,7 @@ function M.register(buf)
 					if issue then
 						local on_update = state.on_update
 						actions.run("edit_issue", context(issue), function(result)
-							complete_action(issue, on_update, result)
+							detail.apply_action_result(issue, on_update, result)
 						end)
 					end
 				end,
@@ -168,7 +149,7 @@ function M.register(buf)
 					end
 					local on_update = state.on_update
 					actions.open(context(issue), function(result)
-						complete_action(issue, on_update, result)
+						detail.apply_action_result(issue, on_update, result)
 					end, {
 						{
 							label = "Open related items",
@@ -210,7 +191,7 @@ function M.register(buf)
 				if issue then
 					local on_update = state.on_update
 					actions.run("toggle_subscription", context(issue), function(result)
-						complete_action(issue, on_update, result)
+						detail.apply_action_result(issue, on_update, result)
 					end)
 				end
 			end,
@@ -300,7 +281,7 @@ function M.register(buf)
 		end
 		local on_update = state.on_update
 		return callback(context(issue), function(result)
-			complete_action(issue, on_update, result)
+			detail.apply_action_result(issue, on_update, result)
 		end)
 	end)
 	registrations[buf] = {

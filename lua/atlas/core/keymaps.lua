@@ -68,6 +68,9 @@ local config = require("atlas.config")
 ---@field prev_unreviewed_file? AtlasKeymapValue
 ---@field find_file? AtlasKeymapValue
 
+---@class AtlasPullsReviewPanelKeymaps
+---@field cycle_filter? AtlasKeymapValue
+
 ---@class AtlasPullsReviewAtlasKeymaps
 ---@field next_file? AtlasKeymapValue
 ---@field prev_file? AtlasKeymapValue
@@ -85,8 +88,12 @@ local config = require("atlas.config")
 ---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field prev_comment? AtlasKeymapValue
+---@field next_unresolved? AtlasKeymapValue
+---@field prev_unresolved? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
 ---@field prev_note? AtlasKeymapValue
+---@field next_commit? AtlasKeymapValue
+---@field prev_commit? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
 ---@field add_suggestion? AtlasKeymapValue
@@ -100,6 +107,7 @@ local config = require("atlas.config")
 ---@field comment_templates? AtlasKeymapValue
 ---@field view? AtlasPullsReviewViewKeymaps
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
+---@field panel? AtlasPullsReviewPanelKeymaps
 ---@field atlas? AtlasPullsReviewAtlasKeymaps
 
 ---@class AtlasPullsFilterKeymaps
@@ -114,6 +122,10 @@ local config = require("atlas.config")
 ---@field toggle_raw_logs? AtlasKeymapValue
 ---@field toggle_auto_refresh? AtlasKeymapValue
 
+---@class AtlasPullsStackKeymaps
+---@field next? AtlasKeymapValue
+---@field prev? AtlasKeymapValue
+
 ---@class AtlasPullsCustomKeymap
 ---@field key string|string[]
 ---@field desc string
@@ -127,6 +139,7 @@ local config = require("atlas.config")
 ---@field checkout? AtlasKeymapValue
 ---@field open_repository? AtlasKeymapValue
 ---@field edit_pr? AtlasKeymapValue
+---@field stack? AtlasPullsStackKeymaps
 ---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
@@ -201,6 +214,8 @@ local config = require("atlas.config")
 ---| "pulls.checkout"
 ---| "pulls.open_repository"
 ---| "pulls.edit_pr"
+---| "pulls.stack.next"
+---| "pulls.stack.prev"
 ---| "pulls.pipelines.next_job"
 ---| "pulls.pipelines.previous_job"
 ---| "pulls.pipelines.show_history"
@@ -214,6 +229,7 @@ local config = require("atlas.config")
 ---| "pulls.review.explorer.next_unreviewed_file"
 ---| "pulls.review.explorer.prev_unreviewed_file"
 ---| "pulls.review.explorer.find_file"
+---| "pulls.review.panel.cycle_filter"
 ---| "pulls.review.atlas.next_file"
 ---| "pulls.review.atlas.prev_file"
 ---| "pulls.review.atlas.toggle_explorer"
@@ -228,8 +244,12 @@ local config = require("atlas.config")
 ---| "pulls.review.toggle_file_reviewed"
 ---| "pulls.review.next_comment"
 ---| "pulls.review.prev_comment"
+---| "pulls.review.next_unresolved"
+---| "pulls.review.prev_unresolved"
 ---| "pulls.review.next_note"
 ---| "pulls.review.prev_note"
+---| "pulls.review.next_commit"
+---| "pulls.review.prev_commit"
 ---| "pulls.review.add_comment"
 ---| "pulls.review.submit_comment"
 ---| "pulls.review.add_suggestion"

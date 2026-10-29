@@ -95,6 +95,9 @@ _G.vim = {
 		dirname = function(path)
 			return path:match("^(.+)/[^/]*$") or (path:sub(1, 1) == "/" and "/" or ".")
 		end,
+		joinpath = function(...)
+			return (table.concat({ ... }, "/"):gsub("//+", "/"))
+		end,
 	},
 
 	filetype = {

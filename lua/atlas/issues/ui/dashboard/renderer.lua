@@ -6,6 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local bookmarks = require("atlas.ui.shared.bookmarks")
 local layouts = require("atlas.issues.ui.layouts")
+local presentation = require("atlas.issues.ui.presentation")
 local notifications = require("atlas.ui.notifications")
 local window = require("atlas.issues.ui.dashboard.window")
 
@@ -67,7 +68,7 @@ function M.render(opts)
 			hl_group = "AtlasFooterActive",
 		}
 	end
-	local user_name = (state.current_user and state.current_user.name) or ""
+	local user_name = state.current_user and presentation.person_name(state.current_user) or ""
 	if user_name ~= "" then
 		statusline_items[#statusline_items + 1] = {
 			text = "| @" .. user_name,

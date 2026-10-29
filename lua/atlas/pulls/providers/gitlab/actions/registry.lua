@@ -5,21 +5,15 @@
 ---| "toggle_subscription"
 ---| "open_project"
 
-local M = {}
----@cast M AtlasActionsCapability
-
 local actions = require("atlas.pulls.actions")
-local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
-local core_notify = require("atlas.core.notify")
+local notify = require("atlas.core.notify")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.providers.gitlab.users")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local gitlab_search = require("atlas.providers.gitlab.completion.search")
-
-local notify = action_utils.notify
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -37,15 +31,8 @@ local function pr_label(pr)
 	return string.format("!%s", tostring(pr.id or ""))
 end
 
----@param ctx AtlasPullActionContext
----@return boolean
-local function is_open_or_draft(ctx)
-	return has_pr(ctx) and (ctx.pr.state == "open" or ctx.pr.state == "draft")
-end
-
 ---@type AtlasPullAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasPullAction
 local function register(action)
@@ -54,26 +41,21 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function review_available(ctx)
-	if not is_open_or_draft(ctx) then
-		return false, "MR is not open"
+local function project_available(ctx)
+	if not has_pr(ctx) then
+		return false, "No MR selected"
 	end
-	return true, nil
+	return ctx.pr.repo_full_name ~= "", "Missing project path"
 end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function merge_available(ctx)
-	if not has_pr(ctx) then
-		return false, "No MR selected"
+local function assignees_available(ctx)
+	local ok, err = project_available(ctx)
+	if not ok then
+		return ok, err
 	end
-	if ctx.pr.state == "draft" then
-		return false, "MR is a draft"
-	end
-	if ctx.pr.state ~= "open" then
-		return false, "MR is not open"
-	end
-	return true, nil
+	return ctx.pr.state == "open" or ctx.pr.state == "draft", "MR is not open"
 end
 
 ---@param ctx AtlasPullActionContext
@@ -92,15 +74,15 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
 	local pr = assert(ctx.pr)
-	notify(ctx, "loading", string.format("Reopening %s...", pr_label(pr)))
+	notify.loading(string.format("Reopening %s...", pr_label(pr)))
 	pullrequests_api.set_state(pr, "reopen", function(ok, err)
 		if not ok then
-			notify(ctx, "error", err or "Reopen failed")
+			notify.error(err or "Reopen failed")
 			done(nil, err or "Reopen failed")
 			return
 		end
-		notify(ctx, "success", string.format("Reopened %s", pr_label(pr)), 1200)
-		done({ changed_pr = true, message = "Reopened" }, nil)
+		notify.success(string.format("Reopened %s", pr_label(pr)), { timeout = 1200 })
+		done({ changed_pr = true }, nil)
 	end)
 end
 
@@ -109,25 +91,21 @@ end
 local function edit_assignees(ctx, done)
 	local pr = assert(ctx.pr)
 	local path = pr.repo_full_name
-	if path == "" then
-		done(nil, "Could not determine project path")
-		return
-	end
 
 	---@param assignees AtlasUser[]
 	local function open_picker(assignees)
 		users_api.list_members(path, "", function(members, err)
 			if err or members == nil then
-				notify(ctx, "error", err or "Failed to load members")
+				notify.error(err or "Failed to load members")
 				done(nil, err or "Failed to load members")
 				return
 			end
 			if #members == 0 then
-				notify(ctx, "warn", "No assignable members")
+				notify.warn("No assignable members")
 				done(nil, "No assignable members")
 				return
 			end
-			notify(ctx, "success", "Members loaded", 1200)
+			notify.success("Members loaded", { timeout = 1200 })
 
 			local original = {}
 			local original_set = {}
@@ -141,7 +119,7 @@ local function edit_assignees(ctx, done)
 
 			picker.multi_select({
 				items = members,
-				selected = vim.deepcopy(original),
+				selected = original,
 				key = function(item)
 					return tostring(item.id or "")
 				end,
@@ -178,27 +156,27 @@ local function edit_assignees(ctx, done)
 					end
 
 					if not changed then
-						done({ changed_pr = false, message = "No changes" }, nil)
+						done({ changed_pr = false }, nil)
 						return
 					end
 
-					notify(ctx, "loading", string.format("Updating assignees on %s...", pr_label(pr)))
+					notify.loading(string.format("Updating assignees on %s...", pr_label(pr)))
 					pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
 						if not ok then
-							notify(ctx, "error", set_err or "Failed")
+							notify.error(set_err or "Failed")
 							done(nil, set_err or "Failed")
 							return
 						end
 						local msg = string.format("%d assignee(s)", #final_ids)
-						notify(ctx, "success", msg, 1200)
-						done({ changed_pr = true, message = msg }, nil)
+						notify.success(msg, { timeout = 1200 })
+						done({ changed_pr = true }, nil)
 					end)
 				end,
 			})
 		end)
 	end
 
-	notify(ctx, "loading", "Loading members...")
+	notify.loading("Loading members...")
 	if ctx.details then
 		open_picker(ctx.details.assignees or {})
 		return
@@ -206,7 +184,7 @@ local function edit_assignees(ctx, done)
 	pullrequests_api.fetch_pullrequest(pr, { force_refresh = false }, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load merge request")
-			notify(ctx, "error", message)
+			notify.error(message)
 			done(nil, message)
 			return
 		end
@@ -274,7 +252,7 @@ local function search_preview(pr, details)
 	end, details.labels)
 	local lines = {
 		"**Status:** " .. pr.state,
-		"**Author:** " .. pr.author.name,
+		"**Author:** @" .. pr.author.username,
 		string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
 	}
 	if #reviewers > 0 then
@@ -393,44 +371,24 @@ local function open_project(_, done)
 end
 
 ---@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function toggle_subscription_available(ctx)
-	if not has_pr(ctx) then
-		return false, "No MR selected"
-	end
-	local path = ctx.pr.repo_full_name
-	if path == "" then
-		return false, "Missing project path"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local pr = assert(ctx.pr)
 	local path = pr.repo_full_name
-	local iid = tonumber(pr.id)
-	if iid == nil then
-		done(nil, "Invalid MR identifier")
-		return
-	end
+	local iid = assert(tonumber(pr.id))
 
 	---@param details PullRequestDetails
 	local function toggle(details)
-		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
 		pullrequests_api.set_subscription(path, iid, details.is_subscribed ~= true, function(subscribed, err)
 			if err then
-				notify(ctx, "error", tostring(err))
+				notify.error(tostring(err))
 				done(nil, tostring(err))
 				return
 			end
 			details.is_subscribed = subscribed
-			notify(ctx, "success", details.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-			done({
-				changed_pr = true,
-				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
-			}, nil)
+			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			done({ changed_pr = true }, nil)
 		end)
 	end
 
@@ -441,7 +399,7 @@ local function toggle_subscription(ctx, done)
 	pullrequests_api.fetch_pullrequest(pr, { force_refresh = false }, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load merge request")
-			notify(ctx, "error", message)
+			notify.error(message)
 			done(nil, message)
 			return
 		end
@@ -449,27 +407,14 @@ local function toggle_subscription(ctx, done)
 	end)
 end
 
-register({
-	id = actions.approve.id,
-	label = actions.approve.label,
-	icon = actions.approve.icon,
-	is_available = review_available,
-	run = actions.approve.run,
-})
-
-register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	icon = actions.request_changes.icon,
-	is_available = review_available,
-	run = actions.request_changes.run,
-})
+register(actions.approve)
+register(actions.request_changes)
 
 register({
 	id = "merge",
 	label = "Merge MR",
 	icon = icons.get("merge", "actions"),
-	is_available = merge_available,
+	is_available = actions.merge.is_available,
 	run = actions.merge.run,
 })
 
@@ -492,7 +437,7 @@ register({
 	id = "edit_assignees",
 	label = "Edit assignees",
 	icon = icons.get("user", "actions"),
-	is_available = review_available,
+	is_available = assignees_available,
 	run = edit_assignees,
 })
 
@@ -543,7 +488,7 @@ register({
 			---@cast view AtlasGitLabPullsViewConfig
 			local ok, err = gitlab_query.apply(view, query)
 			if not ok then
-				core_notify.warn(err)
+				notify.warn(err)
 				return
 			end
 			require("atlas.pulls.ui.dashboard.controller").refresh_view()
@@ -556,7 +501,7 @@ register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
 	icon = icons.get("notification", "actions"),
-	is_available = toggle_subscription_available,
+	is_available = project_available,
 	run = toggle_subscription,
 })
 
@@ -568,15 +513,4 @@ register(actions.copy_id)
 register(actions.copy_url)
 register(actions.open_in_browser)
 
----@param id AtlasGitLabActionId
----@return AtlasPullAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

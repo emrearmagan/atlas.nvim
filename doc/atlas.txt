@@ -153,7 +153,7 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "show_repo_status",
         label = "Show repository status",
         icon = "",
-        confirmation = true,
+        confirm = "Show repository status?",
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -187,7 +187,6 @@ to your own tooling. They appear in the action menu (default `A`).
         id = "copy_branch_name",
         label = "Copy branch name",
         icon = "",
-        confirmation = false,
         ---@param issue Issue
         ---@param ctx AtlasIssuesCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -265,9 +264,9 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
         that page.
         Examples: `:Atlas browse . branches`, `:Atlas browse issues`
 
-:Atlas clear [cache|notes|stars]
+:Atlas clear [cache|notes|reviewed|stars]
         Clear all Atlas data, or only cached data and cloned repositories,
-        notes, or locally starred items.
+        notes, locally saved reviewed file marks, or locally starred items.
 
 :Atlas logs
         Toggle the Atlas log buffer.
@@ -287,7 +286,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
 >lua
   require("atlas").setup({
     pulls = {
-      delete_notes = false, -- delete notes after approval or merge
+      delete_notes = false, -- delete notes after approval, merge, or decline
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_source_branch = false,
       git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -336,6 +335,8 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       },
       repo_config = {
         -- Map `namespace/repo` -> local path for checkout / diffs / actions.
+        -- Diffs of other repositories use a clone in the cache, removed after
+        -- 30 days without a review.
         paths = {
           ["your-workspace/*"]    = "~/code/repos/*",
           ["your-workspace/atlas"] = "~/code/atlas",
@@ -368,8 +369,8 @@ CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 >sh
   ./bin/atlas-notes add \
     --target https://github.com/owner/repository/pull/123 \
-    --file lua/review_queue.lua --line 19 \
-    --context "local item = queue[index]" \
+    --commit 3f2a9c1e \
+    --file lua/review_queue.lua --start-line 19 \
     --type suggestion --body "Should this be a bool?"
 <
 
@@ -775,6 +776,10 @@ These `User` events fire after setup or cleanup completes:
         checkout               = "gc",
         open_repository        = "o",
         edit_pr                = "ge",
+        stack = {
+          next                 = "]s",
+          prev                 = "[s",
+        },
         pipelines = {
           next_job             = { "]j", "<Tab>" },
           previous_job         = { "[j", "<S-Tab>" },
@@ -793,8 +798,12 @@ These `User` events fire after setup or cleanup completes:
           toggle_resolved = "x",
           next_comment = "]c",
           prev_comment = "[c",
+          next_unresolved = "]x",
+          prev_unresolved = "[x",
           next_note = "]n",
           prev_note = "[n",
+          next_commit = "]r",
+          prev_commit = "[r",
           add_comment = "c",
           submit_comment = "C",
           add_suggestion = "s",
@@ -811,6 +820,9 @@ These `User` events fire after setup or cleanup completes:
             next_unreviewed_file = "]u",
             prev_unreviewed_file = "[u",
             find_file = "<leader>f",
+          },
+          panel = {
+            cycle_filter = "f",
           },
           -- Built-in navigation; external viewers use their own keys.
           atlas = {

@@ -4,6 +4,7 @@ local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.issues.actions")
+local action_runner = require("atlas.core.actions")
 local state = require("atlas.issues.state")
 local window = require("atlas.issues.ui.dashboard.window")
 local navigation = require("atlas.issues.ui.dashboard.navigation")
@@ -148,6 +149,7 @@ function M.register(buf, views)
 	local function context(issue)
 		return { provider = provider, issue = issue, current_user = state.current_user }
 	end
+
 	local function run_with_issue(action_id, on_done)
 		return function()
 			local issue = selected_issue()
@@ -158,13 +160,9 @@ function M.register(buf, views)
 			actions.run(action_id, context(issue), on_done)
 		end
 	end
+
 	local function supports(action_id)
-		for _, action in ipairs((capabilities.actions and capabilities.actions.items) or {}) do
-			if action.id == action_id then
-				return true
-			end
-		end
-		return false
+		return action_runner.find(capabilities.actions, action_id) ~= nil
 	end
 
 	local items = {}

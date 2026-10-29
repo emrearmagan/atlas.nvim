@@ -3,6 +3,8 @@ local help = require("atlas.ui.popups.help")
 
 local M = {}
 
+local next_filter = { all = "unresolved", unresolved = "mine", mine = "all" }
+
 ---@param items AtlasHelpKeyItem[]
 ---@param action AtlasKeymapActionId
 ---@param description string
@@ -24,18 +26,17 @@ end
 ---@param state AtlasDiffReviewPanel
 ---@return AtlasDiffReviewPanelRow|nil
 local function current(state)
-	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
-	return state.line_map[row]
+	return state.line_map[vim.api.nvim_win_get_cursor(0)[1]]
 end
 
 ---@param state AtlasDiffReviewPanel
----@param callbacks { render: fun(), close: fun(), on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean}) }
+---@param callbacks { on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean}) }
 function M.setup(state, callbacks)
 	local function toggle_fold()
 		local entry = current(state)
 		if entry and entry.tree_key then
 			state.expanded[entry.tree_key] = not state.expanded[entry.tree_key]
-			callbacks.render()
+			state:render()
 		end
 	end
 
@@ -50,7 +51,7 @@ function M.setup(state, callbacks)
 		for key in pairs(state.expanded) do
 			state.expanded[key] = expand
 		end
-		callbacks.render()
+		state:render()
 	end
 
 	local function open_selected(focus)
@@ -80,7 +81,7 @@ function M.setup(state, callbacks)
 
 	local function close()
 		if not help.is_open() then
-			callbacks.close()
+			state:close()
 		end
 	end
 
@@ -102,6 +103,10 @@ function M.setup(state, callbacks)
 	end)
 	add(items, "ui.toggle_fold", "Expand / collapse", 10, toggle_fold)
 	add(items, "ui.toggle_all_folds", "Expand / collapse all", 11, toggle_all_folds)
+	add(items, "pulls.review.panel.cycle_filter", "Cycle filter", 12, function()
+		state.filter = next_filter[state.filter]
+		state:render()
+	end)
 	add(items, "ui.open_in_browser", "Open item in browser", 20, function()
 		local entry = current(state)
 		local target = entry and (entry.review_entry or entry.comment or entry.thread_root)
@@ -111,7 +116,7 @@ function M.setup(state, callbacks)
 		end
 	end)
 
-	if state.data.pr then
+	if state.session.source.kind == "pr" then
 		add(items, "ui.open_actions", "Review actions", 0, function()
 			callbacks.on_action("open_actions", {})
 		end)
@@ -127,7 +132,9 @@ function M.setup(state, callbacks)
 
 		local function reply(pending)
 			local entry = current(state)
-			if entry and entry.comment and not entry.comment.is_task then
+			if entry and entry.note then
+				dispatch("note_to_comment", entry, pending)
+			elseif entry and entry.comment and not entry.comment.is_task then
 				dispatch("add_comment", entry, pending)
 			end
 		end

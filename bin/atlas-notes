@@ -1,5 +1,4 @@
 #!/usr/bin/env -S nvim --clean --headless -l
--- luacheck: globals vim
 
 local script = vim.uv.fs_realpath(arg[0]) or arg[0]
 vim.opt.runtimepath:prepend(vim.fs.dirname(vim.fs.dirname(script)))
@@ -8,20 +7,23 @@ local notes = require("atlas.pulls.notes")
 
 local USAGE = [[
 Usage:
-  atlas-notes add --target <url-or-ref> --file <path> --line <number>
-                  --body <text> [--context <source>]
-                  [--type issue|suggestion|note|praise]
+  atlas-notes add --target <url-or-ref> --commit <sha> --file <path>
+                  --start-line <number> [--end-line <number>] --body <text>
+                  [--type issue|suggestion|note|praise] [--context <source>]
   atlas-notes list [--target <url-or-ref>]
 
 Options:
-  --target <url-or-ref>  Pull request URL or canonical Atlas reference.
+  --target <url-or-ref>  Pull request URL, or an Atlas ref like
+                         github.com/owner/repo/pr-2.
+  --commit <sha>         Pull request head commit the line numbers refer to.
   --file <path>          Repository-relative file path.
-  --line <number>        1-based line number in the pull request head.
+  --start-line <number>  First line of the note, 1-based, in that commit.
+  --end-line <number>    Last line of a multi-line note. Defaults to
+                         --start-line.
   --body <text>          Note text.
-  --context <source>     Source line saved for previews and used to detect an
-                         outdated note. Without it, the note is always outdated.
   --type <type>          Note type: issue, suggestion, note, or praise.
                          Defaults to note.
+  --context <source>     Source lines of the note, shown with it in Atlas.
 ]]
 
 ---@param message string
@@ -59,7 +61,7 @@ local function required(options, name)
 end
 
 ---@param value string
----@return AtlasNoteTarget
+---@return AtlasStorageTarget
 local function target(value)
 	local result, err = notes.resolve_target(value)
 	if not result then
@@ -77,18 +79,20 @@ end
 local options = parse_options()
 if command == "add" then
 	local file_path = required(options, "file")
-	local line = tonumber(required(options, "line"))
-	if not line or line < 1 or line % 1 ~= 0 then
-		fail("--line must be a positive integer")
-	end
+	local start_line = tonumber(required(options, "start-line"))
+	local end_line = tonumber(options["end-line"] or start_line)
 	local note_target = target(required(options, "target"))
-	local context = options.context
 	local note, err = notes.add(note_target, {
 		file_path = file_path,
-		line = line,
+		commit = required(options, "commit"),
+		start_line = start_line,
+		end_line = end_line,
 		body = required(options, "body"),
-		context = context and { start_line = line, lines = { context } } or nil,
 		type = options.type,
+		context = options.context and {
+			start_line = start_line,
+			lines = vim.split(options.context, "\n", { plain = true }),
+		} or nil,
 	})
 	if not note then
 		fail(err or "unable to add note")

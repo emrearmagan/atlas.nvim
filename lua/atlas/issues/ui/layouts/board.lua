@@ -4,9 +4,8 @@ local config = require("atlas.config")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
-local presentation = require("atlas.issues.ui.presentation")
 
-local MIN_COLUMN_WIDTH = 32
+local MIN_COLUMN_WIDTH = 33
 local COLUMN_GAP = 3
 local MARGIN = 1
 
@@ -54,7 +53,6 @@ M.jira = {
 		local segments = {
 			{ text = star, hl_group = star_hl },
 			{ text = priority, hl_group = priority_hl },
-			{ text = utils.truncate(clean(issue.key), 16, true), hl_group = presentation.issue_hl(issue.key) },
 			title,
 			{ text = points, hl_group = "AtlasTextMuted" },
 		}

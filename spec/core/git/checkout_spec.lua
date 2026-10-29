@@ -201,29 +201,15 @@ describe("core.git.checkout", function()
 			assert.is_false(checked_commits)
 		end)
 
-		it("passes mapped paths to custom actions, including configured SSH aliases", function()
-			local invoked, completed
-			config.options.pulls.custom_actions = {
-				{
-					id = "test",
-					label = "Test",
-					run = function(_, ctx, done)
-						invoked = ctx.repo_path
-						done(true)
-					end,
-				},
-			}
-			local action = assert(require("atlas.pulls.actions.utils").find_custom_action("test"))
+		it("resolves mapped paths for pull requests, including configured SSH aliases", function()
 			for _, remote in ipairs({ "https://github.com/owner/repo.git", "git@my-github-alias:owner/repo.git" }) do
-				invoked, completed = nil, false
-				local ctx = { pr = pr, notify = function() end }
-				action.run(ctx, function(_, err)
-					assert.is_nil(err)
-					completed = true
+				local resolved, resolve_err
+				checkout.resolve_repo_path_for_pr(pr, { require_existing = false }, function(repo_path, err)
+					resolved, resolve_err = repo_path, err
 				end)
 				complete_remote(remote)
-				assert.equal("/mapped", invoked)
-				assert.is_true(completed)
+				assert.is_nil(resolve_err)
+				assert.equal("/mapped", resolved)
 			end
 		end)
 	end)

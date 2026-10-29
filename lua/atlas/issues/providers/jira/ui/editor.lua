@@ -211,8 +211,8 @@ local function render_meta(state)
 	local type_style = state.issue_type and state.issue_type.icon
 	local type_icon = type_style and type_style.icon or icons.get("issue")
 	local type_hl = type_style and type_style.hl_group or "AtlasTextMuted"
-	local assignee = state.assignee and state.assignee.name
-	local reporter = state.reporter and state.reporter.name
+	local assignee = state.assignee and presentation.person_name(state.assignee)
+	local reporter = state.reporter and presentation.person_name(state.reporter)
 
 	return {
 		{

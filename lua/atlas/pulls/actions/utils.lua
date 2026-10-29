@@ -4,7 +4,7 @@ local config = require("atlas.config")
 local git_checkout = require("atlas.core.git.checkout")
 local console = require("atlas.ui.console")
 local logger = require("atlas.core.logger")
-local core_notify = require("atlas.core.notify")
+local notify = require("atlas.core.notify")
 
 ---@param context AtlasPullActionContext
 ---@return boolean, string|nil
@@ -15,29 +15,20 @@ local function has_pr(context)
 	return true
 end
 
----@param context AtlasPullActionContext
----@param level "loading"|"success"|"info"|"warn"|"error"
----@param message string
----@param duration integer|nil
-local function notify(context, level, message, duration)
-	if context.notify then
-		context.notify(level, message, duration)
-		return
-	end
-	core_notify.show(level, message, { timeout = duration })
-end
-
 ---@param item AtlasPullsCustomAction
 ---@return AtlasPullAction
 local function custom_action(item)
+	local confirm = item.confirm
 	return {
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
-		confirmation = item.confirmation,
+		confirm = type(confirm) == "function" and function(context)
+			return confirm(assert(context.pr))
+		end or confirm,
 		is_available = has_pr,
 		run = function(context, done)
-			notify(context, "loading", string.format("Running %s...", item.label))
+			notify.loading(string.format("Running %s...", item.label))
 			local finished = false
 			---@type AtlasConsoleOutput|nil
 			local output
@@ -66,13 +57,13 @@ local function custom_action(item)
 					if ok == false then
 						local err = message or (item.label .. " failed")
 						log_failure(err)
-						notify(context, "error", err)
+						notify.error(err)
 						done(nil, err)
 						return
 					end
 					local result = message or (item.label .. " done")
-					notify(context, "success", result)
-					done({ changed_pr = false, message = result }, nil)
+					notify.success(result)
+					done({ changed_pr = false }, nil)
 				end)
 			end
 			local pr = assert(context.pr)
@@ -123,16 +114,6 @@ function M.custom_actions()
 	return actions
 end
 
----@param id string
----@return AtlasPullAction|nil
-function M.find_custom_action(id)
-	for _, action in ipairs(M.custom_actions()) do
-		if action.id == id then
-			return action
-		end
-	end
-end
-
 M.copy_id = {
 	id = "copy_id",
 	label = "Copy ID",
@@ -141,8 +122,8 @@ M.copy_id = {
 	run = function(context, done)
 		local pr = assert(context.pr)
 		vim.fn.setreg("+", tostring(pr.id))
-		notify(context, "success", string.format("Copied #%s to clipboard", tostring(pr.id)), 1200)
-		done({ changed_pr = false, message = "Copied ID" }, nil)
+		notify.success(string.format("Copied #%s to clipboard", tostring(pr.id)), { timeout = 1200 })
+		done({ changed_pr = false }, nil)
 	end,
 }
 
@@ -155,13 +136,13 @@ M.copy_url = {
 		local pr = assert(context.pr)
 		local url = pr.link.html
 		if url == "" then
-			notify(context, "warn", "No URL available")
+			notify.warn("No URL available")
 			done(nil, "No URL available")
 			return
 		end
 		vim.fn.setreg("+", url)
-		notify(context, "success", "Copied URL to clipboard", 1200)
-		done({ changed_pr = false, message = "Copied URL" }, nil)
+		notify.success("Copied URL to clipboard", { timeout = 1200 })
+		done({ changed_pr = false }, nil)
 	end,
 }
 
@@ -174,17 +155,16 @@ M.open_in_browser = {
 		local pr = assert(context.pr)
 		local url = pr.link.html
 		if url == "" then
-			notify(context, "warn", "No URL available")
+			notify.warn("No URL available")
 			done(nil, "No URL available")
 			return
 		end
 		vim.ui.open(url)
-		notify(context, "info", "Opened in browser")
-		done({ changed_pr = false, message = "Opened in browser" }, nil)
+		notify.info("Opened in browser")
+		done({ changed_pr = false }, nil)
 	end,
 }
 
 M.has_pr = has_pr
-M.notify = notify
 
 return M

@@ -1,6 +1,5 @@
 local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
-local actions = require("atlas.pulls.pipelines.ui.actions")
 local action_runner = require("atlas.core.actions")
 local config = require("atlas.pulls.pipelines.ui.config")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
@@ -122,26 +121,39 @@ local function open_actions(session, selection)
 		return
 	end
 
+	---@type PullsPipelineActionContext
 	local ctx = {
 		context = session.explorer.context,
 		pipeline = selection.pipeline,
 		stage = selection.stage,
 		job = selection.job,
 	}
-	actions.open(session.explorer.backend, ctx, function(action)
+	local backend = session.explorer.backend
+	local available = vim.tbl_filter(function(action)
+		return action_runner.is_available(action, ctx)
+	end, backend and backend.actions or {})
+	if #available == 0 then
+		notify.warn("No pipeline actions available")
+		return
+	end
+
+	local title = "Actions: " .. (ctx.job and ctx.job.name or ctx.stage and ctx.stage.name or ctx.pipeline.name)
+	action_runner.select(title, available, function(action)
 		if session.closed or session.action then
 			return
 		end
 		session.action = action
 		update_statusline(session)
-		action_runner.run(action, ctx, function(_, err)
+		action_runner.run(action, ctx, function(ok, err)
 			if session.closed then
 				return
 			end
-			if err then
+			if not ok then
 				session.action = nil
 				update_statusline(session)
-				notify.error(action.label .. " failed: " .. err)
+				if err then
+					notify.error(action.label .. " failed: " .. err)
+				end
 				return
 			end
 			vim.defer_fn(function()
