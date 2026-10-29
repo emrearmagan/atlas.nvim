@@ -183,6 +183,12 @@ local function comment_item(comment, opts, is_root)
 				hl_group = "AtlasTextMuted",
 			})
 		end
+		if not comment.is_task and opts.action_keys.react and not is_deleted then
+			table.insert(footer_items, {
+				text = opts.action_keys.react .. " react",
+				hl_group = "AtlasTextMuted",
+			})
+		end
 		local toggle_key = opts.action_keys.toggle_resolved
 		if toggle_key and not is_deleted then
 			local label = is_resolved and "reopen" or (comment.is_task and "complete" or "resolve")
@@ -320,6 +326,7 @@ end
 ---@class AtlasCommentThreadActionKeys
 ---@field reply? string
 ---@field add_task? string
+---@field react? string
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
