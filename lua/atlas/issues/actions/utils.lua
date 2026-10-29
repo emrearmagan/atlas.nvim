@@ -66,11 +66,14 @@ end
 ---@param item AtlasIssuesCustomAction
 ---@return AtlasIssueAction
 local function custom_action(item)
+	local confirm = item.confirm
 	return {
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
-		confirmation = item.confirmation,
+		confirm = type(confirm) == "function" and function(context)
+			return confirm(assert(context.issue))
+		end or confirm,
 		is_available = has_issue,
 		run = function(context, done)
 			notify.loading(string.format("Running %s...", item.label))
@@ -150,16 +153,6 @@ function M.custom_actions()
 		end
 	end
 	return actions
-end
-
----@param id string
----@return AtlasIssueAction|nil
-function M.find_custom_action(id)
-	for _, action in ipairs(M.custom_actions()) do
-		if action.id == id then
-			return action
-		end
-	end
 end
 
 M.browse_issue = {

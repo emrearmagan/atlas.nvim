@@ -1,7 +1,6 @@
 local M = {}
 
 local action_runner = require("atlas.core.actions")
-local notify = require("atlas.core.notify")
 local pull_actions = require("atlas.pulls.actions")
 local reactions = require("atlas.ui.shared.reactions")
 local review = require("atlas.pulls.actions.review")
@@ -20,12 +19,10 @@ local function action_context(pr, comment)
 	if not provider then
 		return nil
 	end
-	local items = state.comments(comment and comment.is_task == true or false)
 	return {
 		provider = provider,
 		pr = pr,
 		comment = comment,
-		items = items,
 		conversation = state.comments(),
 		upsert_comment = function(created)
 			if state.is_current(pr) then
@@ -37,23 +34,7 @@ local function action_context(pr, comment)
 				state.remove_comment(removed)
 			end
 		end,
-		notify = function(level, message, duration)
-			if state.is_current(pr) then
-				notify.show(level, message, { timeout = duration })
-			end
-		end,
 	}
-end
-
----@param pr PullRequest
----@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
----@param result PullsActionResult
-local function complete_action(pr, on_update, result)
-	if on_update then
-		on_update(pr, result)
-	else
-		require("atlas.pulls.ui.detail").refresh()
-	end
 end
 
 ---@param pr PullRequest
@@ -66,7 +47,7 @@ local function on_done(pr, refresh)
 			return
 		end
 		if result.changed_pr then
-			complete_action(pr, on_update, result)
+			require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 		elseif state.is_current(pr) then
 			refresh()
 		end

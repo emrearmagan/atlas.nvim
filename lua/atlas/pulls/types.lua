@@ -160,7 +160,7 @@
 ---@field resolved_at string|nil
 ---@field resolved_by AtlasUser|nil
 ---@field inline PullsInlineCommentPosition|nil
----@field hunk DiffHunk|nil
+---@field hunk DiffHunkLines|nil
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field state "RESOLVED"|"OUTDATED"|nil                -- nil = active/open
@@ -203,7 +203,8 @@
 ---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
----@field reviewed_files table<string, boolean>|nil
+---@field reviewed_files table<string, boolean>
+---@field outdated_files table<string, string|true> The version you reviewed: a blob or "<commit>:<path>". true when unknown.
 
 --------------------------------------------------------------------------------
 -- Conversation

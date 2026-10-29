@@ -1,108 +1,45 @@
-local M = {}
----@cast M AtlasActionsCapability
-
 local actions = require("atlas.pulls.actions")
-local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local bitbucket_query = require("atlas.providers.bitbucket.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local picker = require("atlas.ui.picker")
 local state = require("atlas.pulls.state")
 local workspaces_api = require("atlas.providers.bitbucket.workspaces")
 
-local notify = action_utils.notify
-
 ---@type AtlasPullAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasPullAction
 local function register(action)
 	table.insert(ACTIONS, action)
 end
 
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function approve_available(ctx)
-	local pr = ctx.pr
-	if pr == nil then
-		return false, "No PR selected"
-	end
-	---@cast pr BitbucketPullRequest
-	if (pr.links.approve or "") == "" then
-		return false, "No approve URL available"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function merge_available(ctx)
-	local pr = ctx.pr
-	if pr == nil then
-		return false, "No PR selected"
-	end
-	---@cast pr BitbucketPullRequest
-	if (pr.links.merge or "") == "" then
-		return false, "No merge URL available"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function decline_available(ctx)
-	local pr = ctx.pr
-	if not actions.decline.is_available(ctx) or pr == nil then
-		return false, "PR is not open"
-	end
-	---@cast pr BitbucketPullRequest
-	if (pr.links.decline or "") == "" then
-		return false, "No decline URL available"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function request_changes_available(ctx)
-	local pr = ctx.pr
-	if pr == nil then
-		return false, "No PR selected"
-	end
-	---@cast pr BitbucketPullRequest
-	if (pr.links.request_changes or "") == "" then
-		return false, "No request changes URL available"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param on_select fun(repo: AtlasRepository)
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function select_repository(ctx, on_select, done)
-	notify(ctx, "loading", "Loading workspaces...")
+local function select_repository(on_select, done)
+	notify.loading("Loading workspaces...")
 	workspaces_api.fetch_workspaces(function(workspaces, err)
 		if err ~= nil then
-			notify(ctx, "error", string.format("Failed loading workspaces: %s", tostring(err)))
+			notify.error(string.format("Failed loading workspaces: %s", tostring(err)))
 			done(nil, tostring(err))
 			return
 		end
 
 		local ws = workspaces or {}
 		if #ws == 0 then
-			notify(ctx, "warn", "No workspaces found")
-			done({ changed_pr = false, message = "No workspaces found" }, nil)
+			notify.warn("No workspaces found")
+			done({ changed_pr = false }, nil)
 			return
 		end
 
-		notify(ctx, "info", string.format("Loaded %d workspaces", #ws), 1200)
+		notify.info(string.format("Loaded %d workspaces", #ws), { timeout = 1200 })
 
 		---@param selected_ws BitbucketWorkspace
 		local function continue_with_workspace(selected_ws)
 			if selected_ws.slug == "" then
-				notify(ctx, "warn", "Invalid workspace selection")
-				done({ changed_pr = false, message = "Invalid workspace" }, nil)
+				notify.warn("Invalid workspace selection")
+				done({ changed_pr = false }, nil)
 				return
 			end
 
@@ -116,7 +53,7 @@ local function select_repository(ctx, on_select, done)
 				end,
 				on_select = on_select,
 				on_cancel = function()
-					done({ changed_pr = false, message = "Search cancelled" }, nil)
+					done({ changed_pr = false }, nil)
 				end,
 			})
 		end
@@ -134,7 +71,7 @@ local function select_repository(ctx, on_select, done)
 			end,
 			on_select = function(selected)
 				if selected == nil then
-					done({ changed_pr = false, message = "Selection cancelled" }, nil)
+					done({ changed_pr = false }, nil)
 					return
 				end
 				continue_with_workspace(selected)
@@ -143,37 +80,10 @@ local function select_repository(ctx, on_select, done)
 	end)
 end
 
-register({
-	id = actions.approve.id,
-	label = actions.approve.label,
-	icon = actions.approve.icon,
-	is_available = approve_available,
-	run = actions.approve.run,
-})
-
-register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	icon = actions.request_changes.icon,
-	is_available = request_changes_available,
-	run = actions.request_changes.run,
-})
-
-register({
-	id = "merge",
-	label = "Merge",
-	icon = icons.get("merge", "actions"),
-	is_available = merge_available,
-	run = actions.merge.run,
-})
-
-register({
-	id = actions.decline.id,
-	label = actions.decline.label,
-	icon = actions.decline.icon,
-	is_available = decline_available,
-	run = actions.decline.run,
-})
+register(actions.approve)
+register(actions.request_changes)
+register(actions.merge)
+register(actions.decline)
 
 register(actions.edit_pr)
 register(actions.ready_for_review)
@@ -184,17 +94,17 @@ register({
 	id = "search",
 	label = "Search repositories",
 	icon = icons.get("search", "actions"),
-	run = function(ctx, done)
-		select_repository(ctx, function(repo)
+	run = function(_, done)
+		select_repository(function(repo)
 			---@type AtlasBitbucketViewConfig
 			local search_view = {
 				name = "Search",
 				layout = "compact",
 				search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
 			}
-			notify(ctx, "success", string.format("Search view -> %s", repo.full_name))
+			notify.success(string.format("Search view -> %s", repo.full_name))
 			require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
-			done({ changed_pr = false, message = "Search view switched" }, nil)
+			done({ changed_pr = false }, nil)
 		end, done)
 	end,
 })
@@ -205,7 +115,7 @@ register({
 	label = "Browse Repository",
 	icon = icons.get("overview"),
 	run = function(ctx, done)
-		select_repository(ctx, function(repo)
+		select_repository(function(repo)
 			require("atlas.ui.repository").open(repo.full_name, ctx.provider, { page = ctx.page })
 			done(nil, nil)
 		end, done)
@@ -247,15 +157,4 @@ register(actions.copy_id)
 register(actions.copy_url)
 register(actions.open_in_browser)
 
----@param id AtlasPullActionId
----@return AtlasPullAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

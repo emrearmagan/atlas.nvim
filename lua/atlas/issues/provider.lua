@@ -50,11 +50,6 @@
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reactions AtlasReactionsCapability|nil
 
----@class IssuesActionResult
----@field issue_key string|nil
----@field removed boolean|nil
----@field message string|nil
-
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil
 ---@field repository { pages: RepositoryPage[] }|nil

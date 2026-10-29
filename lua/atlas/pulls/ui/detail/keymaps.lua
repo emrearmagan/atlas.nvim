@@ -6,7 +6,7 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
 local actions = require("atlas.pulls.actions")
-local notify = require("atlas.core.notify")
+local action_runner = require("atlas.core.actions")
 local links = require("atlas.ui.links")
 
 local registrations = {}
@@ -52,36 +52,13 @@ local function action_context(pr, buf)
 		pr = pr,
 		details = state.current_details,
 		buf = buf,
-		notify = function(level, message, duration)
-			notify.show(level, message, { timeout = duration })
-		end,
 	}
-end
-
----@param pr PullRequest
----@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
----@param result PullsActionResult|nil
-local function complete_action(pr, on_update, result)
-	if not result or not result.changed_pr then
-		return
-	end
-	if on_update then
-		on_update(pr, result)
-	else
-		require("atlas.pulls.ui.detail").refresh()
-	end
 end
 
 ---@param action_id string
 ---@return boolean
 local function supports_action(action_id)
-	local capability = state.provider and state.provider.capabilities.actions
-	for _, action in ipairs(capability and capability.items or {}) do
-		if action.id == action_id then
-			return true
-		end
-	end
-	return false
+	return state.provider ~= nil and action_runner.find(state.provider.capabilities.actions, action_id) ~= nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -131,7 +108,7 @@ function M.register(buf)
 			if current then
 				local on_update = state.on_update
 				actions.run(action_id, current, function(result)
-					complete_action(pr, on_update, result)
+					require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 				end)
 			end
 		end
@@ -210,7 +187,7 @@ function M.register(buf)
 					if context then
 						local on_update = state.on_update
 						actions.open(context, function(result)
-							complete_action(pr, on_update, result)
+							require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 						end, {
 							{
 								label = "Open related items",
@@ -390,7 +367,7 @@ function M.register(buf)
 		local on_update = state.on_update
 		if context then
 			return callback(context, function(result)
-				complete_action(pr, on_update, result)
+				require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 			end)
 		end
 	end)

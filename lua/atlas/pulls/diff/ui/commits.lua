@@ -2,23 +2,35 @@ local notify = require("atlas.core.notify")
 local info = require("atlas.ui.popups.info")
 local utils = require("atlas.ui.shared.utils")
 
-local M = {}
+---@class AtlasDiffCommits
+---@field buf integer
+---@field win integer|nil
+---@field shown boolean
+---@field items AtlasGitCommit[]
+---@field active table<string, boolean>|nil Hashes of the shown commits, nil while all commits are shown.
+---@field seen table<string, boolean> Hashes of commits shown before.
+---@field cursor_row integer
+---@field group integer
+local Commits = {}
+Commits.__index = Commits
+
 local namespace = vim.api.nvim_create_namespace("atlas.diff.commits")
 
 local function render(state)
 	local view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
 	local width = vim.api.nvim_win_get_width(state.win)
-	local lines = { string.format("Commits (%d)", #state.items) }
-	local highlights = { { 0, 0, #lines[1], "AtlasLogInfo" } }
+	local lines = { (state.active and " " or "▸") .. "All commits" }
+	local highlights = {}
 
 	for _, commit in ipairs(state.items) do
-		local hash = (commit.short_hash or commit.hash):sub(1, 8)
+		local marker = state.active and state.active[commit.hash] and "▸" or state.seen[commit.hash] and "✓" or " "
+		local hash = commit.hash:sub(1, 8)
 		local message = commit.message:match("[^\r\n]*")
-		local prefix = hash .. " "
+		local prefix = marker .. hash .. " "
 
 		lines[#lines + 1] = prefix
 			.. utils.truncate(vim.fn.strtrans(message), math.max(1, width - vim.fn.strdisplaywidth(prefix)))
-		highlights[#highlights + 1] = { #lines - 1, 0, #hash, "AtlasTextMuted" }
+		highlights[#highlights + 1] = { #lines - 1, #marker, #marker + #hash, "AtlasTextMuted" }
 	end
 
 	vim.bo[state.buf].modifiable = true
@@ -39,19 +51,49 @@ local function render(state)
 	end)
 end
 
----@param items PullsCommit[]
+---@param state AtlasDiffCommits
+---@return AtlasGitCommit|nil
+local function current(state)
+	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
+	return state.items[row - 1]
+end
+
+---@param commit AtlasGitCommit
+---@return { title: string, lines: string[], filetype: string }
+local function preview(commit)
+	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
+	while #lines > 0 and vim.trim(lines[#lines]) == "" do
+		table.remove(lines)
+	end
+
+	vim.list_extend(lines, {
+		"",
+		"Author: " .. commit.author,
+		"Date: " .. utils.format_date(commit.date),
+		"Commit: " .. commit.hash,
+	})
+
+	return {
+		title = " Commit " .. commit.hash:sub(1, 8) .. " ",
+		lines = lines,
+		filetype = "markdown",
+	}
+end
+
+---@param items AtlasGitCommit[]
 ---@param shown boolean
----@return { buf: integer, win?: integer, shown: boolean, items: PullsCommit[], cursor_row: integer, group: integer }
-function M.create(items, shown)
+---@return AtlasDiffCommits
+function Commits.new(items, shown)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Commits [%d]", vim.api.nvim_get_current_tabpage()))
-	local state = {
+	local state = setmetatable({
 		buf = buf,
 		shown = shown,
 		items = items,
+		seen = {},
 		cursor_row = 2,
 		group = vim.api.nvim_create_augroup("AtlasDiffCommits" .. buf, { clear = true }),
-	}
+	}, Commits)
 
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].filetype = "atlas-ui.diff-commits"
@@ -89,35 +131,35 @@ function M.create(items, shown)
 end
 
 ---@param parent_win integer|nil
-function M.resize(state, parent_win)
-	if state.win and parent_win then
-		local height = vim.api.nvim_win_get_height(parent_win) + vim.api.nvim_win_get_height(state.win) + 1
-		vim.api.nvim_win_set_height(state.win, math.max(2, math.floor(height * 0.2)))
+function Commits:resize(parent_win)
+	if self.win and parent_win then
+		local height = vim.api.nvim_win_get_height(parent_win) + vim.api.nvim_win_get_height(self.win) + 1
+		vim.api.nvim_win_set_height(self.win, math.max(2, math.floor(height * 0.2)))
 	end
 end
 
 ---@param parent_win integer
 ---@return integer|nil win
 ---@return string|nil err
-function M.open(state, parent_win)
-	if #state.items == 0 then
+function Commits:open(parent_win)
+	if #self.items == 0 then
 		return nil, "No commits available"
 	end
 
-	state.win = vim.api.nvim_open_win(state.buf, false, {
+	self.win = vim.api.nvim_open_win(self.buf, false, {
 		split = "below",
 		win = parent_win,
 		height = math.max(2, math.floor(vim.api.nvim_win_get_height(parent_win) * 0.2)),
 	})
 
-	local options = vim.wo[state.win][0]
+	local options = vim.wo[self.win][0]
 	options.winfixwidth = true
 	options.winfixheight = true
 	options.number = false
 	options.relativenumber = false
 	options.signcolumn = "no"
 	options.statuscolumn = ""
-	options.winbar = ""
+	options.winbar = string.format("%%#AtlasLogInfo# Commits (%d)", #self.items)
 	options.winhighlight = ""
 	options.foldcolumn = "0"
 	options.fillchars = "eob: "
@@ -132,25 +174,52 @@ function M.open(state, parent_win)
 	options.list = false
 	options.spell = false
 
-	render(state)
-	return state.win
+	render(self)
+	return self.win
 end
 
-function M.close(state)
-	if state.win then
-		state.cursor_row = vim.api.nvim_win_get_cursor(state.win)[1]
-		vim.api.nvim_win_close(state.win, true)
+function Commits:close()
+	if self.win then
+		self.cursor_row = vim.api.nvim_win_get_cursor(self.win)[1]
+		vim.api.nvim_win_close(self.win, true)
 	end
 end
 
----@return PullsCommit|nil
-function M.current(state)
-	local row = state.win and vim.api.nvim_win_get_cursor(state.win)[1] or state.cursor_row
-	return state.items[row - 1]
+---@param commits AtlasGitCommit[]|nil
+function Commits:set_active(commits)
+	self.active = nil
+	if commits then
+		self.active = {}
+		for _, commit in ipairs(commits) do
+			self.active[commit.hash] = true
+			self.seen[commit.hash] = true
+		end
+	end
+	if self.win then
+		render(self)
+	end
 end
 
-function M.copy_hash(state)
-	local commit = M.current(state)
+---@return AtlasGitCommit|nil from
+---@return AtlasGitCommit|nil to
+function Commits:selection()
+	local first = vim.api.nvim_win_get_cursor(0)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		first, last = math.min(first, last), math.max(first, last)
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	if last < 2 then
+		return nil, nil
+	end
+	return self.items[last - 1], self.items[math.max(first, 2) - 1]
+end
+
+function Commits:copy_hash()
+	local commit = current(self)
 	if not commit then
 		return
 	end
@@ -159,64 +228,25 @@ function M.copy_hash(state)
 	notify.success("Copied commit SHA")
 end
 
-function M.open_in_browser(state)
-	local commit = M.current(state)
-	if not commit then
-		return
-	end
-
-	if commit.html_url and commit.html_url ~= "" then
-		vim.ui.open(commit.html_url)
-	else
-		notify.warn("No URL available for this commit")
-	end
-end
-
----@param commit PullsCommit
----@return { title: string, lines: string[], filetype: string }
-function M.preview(commit)
-	local lines = vim.split(commit.message:gsub("\r\n", "\n"), "\n", { plain = true })
-	while #lines > 0 and vim.trim(lines[#lines]) == "" do
-		table.remove(lines)
-	end
-
-	local author = commit.author_nickname
-	if not author or author == "" then
-		author = commit.author_name
-	end
-	vim.list_extend(lines, {
-		"",
-		"Author: " .. author,
-		"Date: " .. utils.format_date(commit.date),
-		"Commit: " .. commit.hash,
-	})
-
-	return {
-		title = " Commit " .. (commit.short_hash or commit.hash):sub(1, 8) .. " ",
-		lines = lines,
-		filetype = "markdown",
-	}
-end
-
-function M.show_details(state)
+function Commits:show_details()
 	info.toggle({
-		source_win = state.win,
+		source_win = self.win,
 		content = function(line)
-			local commit = state.items[line - 1]
+			local commit = self.items[line - 1]
 			if commit then
-				return M.preview(commit)
+				return preview(commit)
 			end
 		end,
 	})
 end
 
-function M.dispose(state)
-	M.close(state)
-	vim.api.nvim_del_augroup_by_id(state.group)
+function Commits:dispose()
+	self:close()
+	vim.api.nvim_del_augroup_by_id(self.group)
 
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
+	if vim.api.nvim_buf_is_valid(self.buf) then
+		vim.api.nvim_buf_delete(self.buf, { force = true })
 	end
 end
 
-return M
+return Commits

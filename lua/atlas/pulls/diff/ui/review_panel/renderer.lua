@@ -86,12 +86,12 @@ local function comment_location(comment)
 	return line and string.format("%s:%d", path, line) or path
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
 ---@param filter AtlasDiffReviewPanelFilter
 ---@return table[]
-local function sections(result, filter)
+local function sections(session, filter)
 	local pending, reviews, tasks, comments, notes = {}, {}, {}, {}, {}
-	local data = result.review and result.review.data
+	local data = session.review
 	if data then
 		for _, thread in ipairs(review_actions.group_comments(data.comments, data.tasks)) do
 			local comment = thread.comment
@@ -134,11 +134,11 @@ local function sections(result, filter)
 			item.history[#item.history + 1] = entry
 		end
 	end
-	if result.notes then
-		for _, note in ipairs(result.notes.items) do
-			local position = result.notes.positions[note.id]
+	if session.notes then
+		for _, note in ipairs(session.notes.items) do
+			local position = session.notes.positions[note.id]
 			notes[#notes + 1] = {
-				key = note_renderer.note_key(result.notes.target, note),
+				key = note_renderer.note_key(session.notes.target, note),
 				note = vim.tbl_extend("force", note, position),
 				path = note.file_path,
 				line = position.end_line,
@@ -172,7 +172,7 @@ local function sections(result, filter)
 			item_name = item_name,
 			total = #items,
 			items = vim.tbl_filter(function(item)
-				return matches(item, filter, result.current_user)
+				return matches(item, filter, session.current_user)
 			end, items),
 		}
 	end
@@ -325,15 +325,16 @@ local function render_review(item, width, expanded, history_expanded, pr_head, e
 	return lines, spans, line_map
 end
 
----@param data AtlasDiffResult
+---@param session AtlasDiffSession
 ---@param filter AtlasDiffReviewPanelFilter
 ---@param width integer
 ---@param action_keys table<string, string|nil>
 ---@param expanded fun(key: string): boolean
 ---@return string[], table[], table<integer, AtlasDiffReviewPanelRow>
-function M.render(data, filter, width, action_keys, expanded)
+function M.render(session, filter, width, action_keys, expanded)
+	local pr = session.source.pr
 	local lines, spans, line_map = {}, {}, {}
-	for _, section in ipairs(sections(data, filter)) do
+	for _, section in ipairs(sections(session, filter)) do
 		if #section.items > 0 then
 			if #lines > 0 then
 				lines[#lines + 1] = ""
@@ -371,7 +372,7 @@ function M.render(data, filter, width, action_keys, expanded)
 					)
 				elseif item.note then
 					content, highlights, entries = note_renderer.render_list({
-						{ target = data.notes.target, note = item.note, expanded = item_open },
+						{ target = session.notes.target, note = item.note, expanded = item_open },
 					}, width, { action_keys = action_keys })
 				else
 					content, highlights, entries = render_review(
@@ -379,7 +380,7 @@ function M.render(data, filter, width, action_keys, expanded)
 						width,
 						item_open,
 						history_open,
-						data.pr and data.pr.source.commit_hash,
+						pr and pr.source.commit_hash,
 						action_keys.edit
 					)
 				end

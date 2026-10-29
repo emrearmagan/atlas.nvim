@@ -1,4 +1,7 @@
 -- Some helper functions for when lsp is enabled
+local notify = require("atlas.core.notify")
+local worktree = require("atlas.core.git.worktree")
+
 local M = {}
 
 ---@param root string|nil
@@ -51,14 +54,54 @@ function M.load(root, path)
 	return buf
 end
 
+---@param range AtlasDiffRange
+---@param pr PullRequest|nil
+---@param lsp AtlasPullsDiffLspConfig
+---@param on_done fun(root: string|nil)
+---@return { cancel: fun() }|nil
+function M.prepare(range, pr, lsp, on_done)
+	local dir, claim_err = worktree.claim({
+		repo_root = range.root,
+		head_sha = range.head_revision,
+		repo_full_name = pr and pr.repo_full_name,
+		pr_id = pr and pr.id,
+	}, lsp)
+	if not dir then
+		notify.warn("LSP worktree unavailable: " .. claim_err)
+		on_done(nil)
+		return nil
+	end
+
+	local handle = worktree.ensure({
+		repo_root = range.root,
+		head_sha = range.head_revision,
+		dir = dir,
+		link = lsp.link,
+	}, function(path, err)
+		if not path then
+			worktree.discard(range.root, dir)
+			notify.warn("LSP worktree unavailable: " .. err)
+		end
+		on_done(path)
+	end)
+	return {
+		cancel = function()
+			handle.cancel()
+			worktree.discard(range.root, dir)
+		end,
+	}
+end
+
 -- Clear file buffers before removing their checkout.
+---@param repo_root string
 ---@param root string
-function M.cleanup(root)
+function M.discard(repo_root, root)
 	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
 		if not vim.bo[buf].modified and M.relative_path(root, vim.api.nvim_buf_get_name(buf)) then
 			vim.api.nvim_buf_delete(buf, { force = true })
 		end
 	end
+	worktree.discard(repo_root, root)
 end
 
 return M

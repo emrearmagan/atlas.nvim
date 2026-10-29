@@ -90,7 +90,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(pr: PullRequest): string)|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 -- Configs
@@ -124,7 +124,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(issue: Issue): string)|nil
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
@@ -311,6 +311,8 @@ local defaults = {
 				prev_unresolved = "[x",
 				next_note = "]n",
 				prev_note = "[n",
+				next_commit = "]r",
+				prev_commit = "[r",
 				add_comment = "c",
 				submit_comment = "C",
 				add_suggestion = "s",

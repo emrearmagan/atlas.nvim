@@ -2,18 +2,20 @@ local keymap_resolver = require("atlas.core.keymaps")
 local keymaps = require("atlas.pulls.diff.ui.review_panel.keymaps")
 local renderer = require("atlas.pulls.diff.ui.review_panel.renderer")
 
-local M = {}
-local namespace = vim.api.nvim_create_namespace("atlas.diff.review_panel")
-local filter_labels = { all = "All", unresolved = "Unresolved", mine = "Mine" }
-
 ---@class AtlasDiffReviewPanel
----@field data AtlasDiffResult
+---@field session AtlasDiffSession
+---@field options AtlasPullsDiffReviewPanelConfig
 ---@field buf integer
 ---@field win integer|nil
 ---@field group integer
 ---@field expanded table<string, boolean>
 ---@field line_map table<integer, AtlasDiffReviewPanelRow>
 ---@field filter AtlasDiffReviewPanelFilter
+local ReviewPanel = {}
+ReviewPanel.__index = ReviewPanel
+
+local namespace = vim.api.nvim_create_namespace("atlas.diff.review_panel")
+local filter_labels = { all = "All", unresolved = "Unresolved", mine = "Mine" }
 
 ---@param action AtlasKeymapActionId
 ---@return string|nil
@@ -22,19 +24,18 @@ local function key_label(action)
 	return keys and #keys > 0 and table.concat(keys, " / ") or nil
 end
 
----@param state AtlasDiffReviewPanel
-function M.render(state)
-	if not state.win then
+function ReviewPanel:render()
+	if not self.win then
 		return
 	end
-	local previous = state.expanded
-	state.expanded = {}
+	local previous = self.expanded
+	self.expanded = {}
 	local function expanded(key)
-		state.expanded[key] = previous[key] == true
-		return state.expanded[key]
+		self.expanded[key] = previous[key] == true
+		return self.expanded[key]
 	end
 
-	local lines, spans, line_map = renderer.render(state.data, state.filter, vim.api.nvim_win_get_width(state.win), {
+	local lines, spans, line_map = renderer.render(self.session, self.filter, vim.api.nvim_win_get_width(self.win), {
 		reply = key_label("pulls.review.add_comment"),
 		add_task = key_label("pulls.review.add_task"),
 		edit = key_label("ui.comments.edit"),
@@ -43,53 +44,45 @@ function M.render(state)
 	}, expanded)
 
 	local filter_key = key_label("pulls.review.panel.cycle_filter")
-	vim.wo[state.win].winbar = " Review%="
-		.. filter_labels[state.filter]
+	vim.wo[self.win].winbar = " Review%="
+		.. filter_labels[self.filter]
 		.. (filter_key and "  %#AtlasTextMuted#" .. filter_key:gsub("%%", "%%%%") .. " filter" or "")
 		.. " "
 
-	state.line_map = line_map
-	vim.bo[state.buf].modifiable = true
-	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-	vim.bo[state.buf].modifiable = false
-	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
+	self.line_map = line_map
+	vim.bo[self.buf].modifiable = true
+	vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
+	vim.bo[self.buf].modifiable = false
+	vim.api.nvim_buf_clear_namespace(self.buf, namespace, 0, -1)
 	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col, {
+		vim.api.nvim_buf_set_extmark(self.buf, namespace, span.line, span.start_col, {
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
 	end
 end
 
----@param result AtlasDiffResult
+---@param session AtlasDiffSession
+---@param options AtlasPullsDiffReviewPanelConfig
 ---@param callbacks { on_select: fun(entry: AtlasDiffReviewPanelRow, focus: boolean), on_action: fun(id: AtlasReviewActionId, target: { comment?: PullsComment, note?: AtlasNote, review_entry?: PullsReviewHistoryEntry, pending?: boolean }), on_resize: fun() }
 ---@return AtlasDiffReviewPanel
-function M.create(result, callbacks)
+function ReviewPanel.new(session, options, callbacks)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Review [%d]", vim.api.nvim_get_current_tabpage()))
-	---@type AtlasDiffReviewPanel
-	local state = {
-		data = result,
+	local state = setmetatable({
+		session = session,
+		options = options,
 		buf = buf,
 		group = vim.api.nvim_create_augroup("AtlasDiffReviewPanel" .. buf, { clear = true }),
 		expanded = {},
 		line_map = {},
 		filter = "all",
-	}
+	}, ReviewPanel)
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].filetype = "atlas-ui.review"
 	vim.bo[buf].modifiable = false
 
-	keymaps.setup(state, {
-		on_select = callbacks.on_select,
-		on_action = callbacks.on_action,
-		render = function()
-			M.render(state)
-		end,
-		close = function()
-			M.close(state)
-		end,
-	})
+	keymaps.setup(state, callbacks)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = state.group,
@@ -104,7 +97,7 @@ function M.create(result, callbacks)
 		group = state.group,
 		callback = function()
 			if state.win and vim.tbl_contains(vim.v.event.windows, state.win) then
-				M.render(state)
+				state:render()
 				callbacks.on_resize()
 			end
 		end,
@@ -115,30 +108,28 @@ end
 ---@param state AtlasDiffReviewPanel
 ---@return integer
 local function height(state)
-	local configured = math.max(4, math.floor(state.data.options.review_panel.height))
+	local configured = math.max(4, math.floor(state.options.height))
 	return math.min(configured, math.max(4, vim.o.lines - 8))
 end
 
----@param state AtlasDiffReviewPanel
-function M.resize(state)
-	if state.win then
-		vim.api.nvim_win_set_height(state.win, height(state))
-		M.render(state)
+function ReviewPanel:resize()
+	if self.win then
+		vim.api.nvim_win_set_height(self.win, height(self))
+		self:render()
 	end
 end
 
----@param state AtlasDiffReviewPanel
 ---@return integer
-function M.open(state)
-	if state.win then
-		return state.win
+function ReviewPanel:open()
+	if self.win then
+		return self.win
 	end
-	state.win = vim.api.nvim_open_win(state.buf, false, {
+	self.win = vim.api.nvim_open_win(self.buf, false, {
 		split = "below",
 		win = -1,
-		height = height(state),
+		height = height(self),
 	})
-	local options = vim.wo[state.win][0]
+	local options = vim.wo[self.win][0]
 	options.winfixheight = true
 	options.number = false
 	options.relativenumber = false
@@ -157,24 +148,22 @@ function M.open(state)
 	options.colorcolumn = ""
 	options.list = false
 	options.spell = false
-	M.render(state)
-	return state.win
+	self:render()
+	return self.win
 end
 
----@param state AtlasDiffReviewPanel
-function M.close(state)
-	if state.win then
-		vim.api.nvim_win_close(state.win, true)
+function ReviewPanel:close()
+	if self.win then
+		vim.api.nvim_win_close(self.win, true)
 	end
 end
 
----@param state AtlasDiffReviewPanel
-function M.dispose(state)
-	M.close(state)
-	vim.api.nvim_del_augroup_by_id(state.group)
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
+function ReviewPanel:dispose()
+	self:close()
+	vim.api.nvim_del_augroup_by_id(self.group)
+	if vim.api.nvim_buf_is_valid(self.buf) then
+		vim.api.nvim_buf_delete(self.buf, { force = true })
 	end
 end
 
-return M
+return ReviewPanel

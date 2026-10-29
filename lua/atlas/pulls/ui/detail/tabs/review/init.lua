@@ -8,7 +8,6 @@ local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
-local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local utils = require("atlas.ui.shared.utils")
 
 ---@param pr PullRequest
@@ -160,12 +159,6 @@ local function action_context(pr)
 		provider = provider,
 		pr = pr,
 		data = data,
-		conversation = conversation.comments(),
-		notify = function(level, message, duration)
-			if is_current(pr) then
-				notify.show(level, message, { timeout = duration })
-			end
-		end,
 	}
 end
 
@@ -191,11 +184,7 @@ local function run_comment_action(action, pr, comment, refresh)
 		end
 		---@cast result PullsActionResult
 		if result.changed_pr then
-			if on_update then
-				on_update(pr, result)
-			else
-				require("atlas.pulls.ui.detail").refresh()
-			end
+			require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 		elseif is_current(pr) then
 			refresh()
 		end

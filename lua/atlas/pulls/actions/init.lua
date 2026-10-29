@@ -4,20 +4,20 @@ local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local merge_buffer = require("atlas.pulls.ui.merge")
 local notes = require("atlas.pulls.notes")
+local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local pipeline_api = require("atlas.pulls.pipelines")
 local repository = require("atlas.ui.repository")
 local review = require("atlas.pulls.actions.review")
+local reviewed_store = require("atlas.pulls.reviewed")
 local utils = require("atlas.pulls.actions.utils")
 
 local M = {}
 
 local has_pr = utils.has_pr
-local notify = utils.notify
 
 ---@class PullsActionResult
 ---@field changed_pr boolean
----@field message string|nil
 
 ---@alias AtlasPullActionId
 ---| "copy_id"
@@ -47,14 +47,8 @@ local notify = utils.notify
 ---@field current_user AtlasUser|nil
 ---@field buf integer|nil
 ---@field page string|nil Repository page for `browse_repositories`
----@field notify fun(level: AtlasNotifyLevel, message: string, duration: integer|nil)|nil
 
----@class AtlasPullAction
----@field id string
----@field label string
----@field icon string|nil
----@field hidden boolean|nil
----@field confirmation boolean|nil
+---@class AtlasPullAction: AtlasAction
 ---@field is_available (fun(context: AtlasPullActionContext): boolean, string|nil)|nil
 ---@field run fun(context: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean|nil
 
@@ -85,17 +79,17 @@ local function draft_action(draft)
 		end,
 		run = function(context, done)
 			local pr = assert(context.pr)
-			notify(context, "loading", draft and "Converting to draft..." or "Marking as ready...")
+			notify.loading(draft and "Converting to draft..." or "Marking as ready...")
 			context.provider.capabilities.write.update(pr, { draft = draft }, function(ok, err)
 				if err or ok == false then
 					local message = tostring(err or "Unknown error")
-					notify(context, "error", label .. " failed: " .. message)
+					notify.error(label .. " failed: " .. message)
 					done(nil, message)
 					return
 				end
 				pr.state = draft and "draft" or "open"
-				notify(context, "success", draft and "PR converted to draft" or "PR marked as ready for review", 1200)
-				done({ changed_pr = true, message = label }, nil)
+				notify.success(draft and "PR converted to draft" or "PR marked as ready for review", { timeout = 1200 })
+				done({ changed_pr = true }, nil)
 			end)
 		end,
 	}
@@ -103,16 +97,10 @@ end
 
 ---@param id string
 ---@param context AtlasPullActionContext
----@return AtlasPullAction|nil
+---@return AtlasAction|nil
 function M.find(id, context)
-	local action = utils.find_custom_action(id)
-	if action then
-		return action
-	end
-	local actions = context.provider.capabilities.actions
-	local provider_action = actions and actions.find(id) or nil
-	---@cast provider_action AtlasPullAction|nil
-	return provider_action
+	return action_runner.find(utils.custom_actions(), id)
+		or action_runner.find(context.provider.capabilities.actions, id)
 end
 
 ---@param id string
@@ -127,61 +115,38 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
 ---@return boolean handled
 function M.run(id, context, on_done)
-	local action = M.find(id, context)
-	if action then
-		return action_runner.run(action, context, on_done)
-	end
-	if not context.provider.capabilities.actions then
-		return false
-	end
-	return action_runner.reject(context, on_done, string.format("Unknown action: %s", tostring(id)))
+	return action_runner.run(M.find(id, context), context, on_done)
 end
 
 ---@param context AtlasPullActionContext
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
 ---@param extra_items { label: string, icon?: string, callback: fun() }[]|nil
 function M.open(context, on_done, extra_items)
-	local actions = context.provider.capabilities.actions
+	local custom = utils.custom_actions()
 	local items = {}
-	for _, action in ipairs(actions and actions.items or {}) do
-		if not action.hidden and not utils.find_custom_action(action.id) and M.is_available(action.id, context) then
+	for _, action in ipairs(context.provider.capabilities.actions or {}) do
+		if not action.hidden and not action_runner.find(custom, action.id) then
 			table.insert(items, action)
 		end
 	end
-	for _, action in ipairs(utils.custom_actions()) do
-		if action_runner.is_available(action, context) then
-			table.insert(items, action)
-		end
-	end
+	vim.list_extend(items, custom)
+	items = vim.tbl_filter(function(action)
+		return action_runner.is_available(action, context)
+	end, items)
 	vim.list_extend(items, extra_items or {})
 	if #items == 0 then
-		if on_done then
-			on_done(nil, "No actions available")
-		end
+		notify.info("No actions available")
 		return
 	end
 
 	local target = context.pr and string.format(" for #%s", tostring(context.pr.id)) or ""
-	picker.select({
-		title = string.format("Choose %s action%s", context.provider.name, target),
-		items = items,
-		format_item = function(action)
-			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
-		end,
-		on_select = function(action)
-			if not action then
-				if on_done then
-					on_done({ changed_pr = false, message = "Cancelled" }, nil)
-				end
-				return
-			end
-			if action.callback then
-				action.callback()
-			else
-				M.run(action.id, context, on_done)
-			end
-		end,
-	})
+	action_runner.select(string.format("Choose %s action%s", context.provider.name, target), items, function(item)
+		if item.callback then
+			item.callback()
+		else
+			action_runner.run(item, context, on_done)
+		end
+	end)
 end
 
 M.edit_pr = {
@@ -221,20 +186,21 @@ M.merge = {
 		local core = context.provider.capabilities.core
 		merge_buffer.open(pr, {
 			on_cancel = function()
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
+				done({ changed_pr = false }, nil)
 			end,
 			on_submit = function(options, completed)
-				notify(context, "loading", "Merging...")
+				notify.loading("Merging...")
 				core.merge(pr, options, function(ok, merge_err)
 					if not ok or merge_err then
-						notify(context, "error", "Merge failed: " .. tostring(merge_err or "Unknown error"))
+						notify.error("Merge failed: " .. tostring(merge_err or "Unknown error"))
 						completed(false)
 						return
 					end
-					notes.clear_for_pull_request(pr)
+					notes.clear(pr)
+					reviewed_store.clear(pr)
 					completed(true)
-					notify(context, "success", "Merge succeeded", 1200)
-					done({ changed_pr = true, message = "Merged" }, nil)
+					notify.success("Merge succeeded", { timeout = 1200 })
+					done({ changed_pr = true }, nil)
 				end)
 			end,
 		})
@@ -245,29 +211,27 @@ M.decline = {
 	id = "decline",
 	label = "Decline",
 	icon = icons.get("close", "actions"),
+	confirm = function(context)
+		return string.format("Decline PR #%s?", tostring(assert(context.pr).id))
+	end,
 	is_available = function(context)
 		return context.pr ~= nil and (context.pr.state == "open" or context.pr.state == "draft")
 	end,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		vim.ui.input({ prompt = string.format("Decline PR #%s? [y/N]: ", tostring(pr.id)) }, function(input)
-			local confirmed = input and vim.trim(input):lower()
-			if confirmed ~= "y" and confirmed ~= "yes" then
-				done({ changed_pr = false, message = "Decline cancelled" }, nil)
+		notify.loading("Declining PR...")
+		context.provider.capabilities.core.decline(pr, function(ok, err)
+			if not ok then
+				local message = tostring(err or "Decline failed")
+				notify.error(message)
+				done(nil, message)
 				return
 			end
-			notify(context, "loading", "Declining PR...")
-			context.provider.capabilities.core.decline(pr, function(ok, err)
-				if not ok then
-					local message = tostring(err or "Decline failed")
-					notify(context, "error", message)
-					done(nil, message)
-					return
-				end
-				pr.state = "declined"
-				notify(context, "success", "PR declined", 1200)
-				done({ changed_pr = true, message = "Declined" }, nil)
-			end)
+			pr.state = "declined"
+			notes.clear(pr)
+			reviewed_store.clear(pr)
+			notify.success("PR declined", { timeout = 1200 })
+			done({ changed_pr = true }, nil)
 		end)
 	end,
 }
@@ -291,21 +255,21 @@ M.edit_reviewers = {
 		local pr = assert(context.pr)
 		local write = context.provider.capabilities.write
 
-		notify(context, "loading", "Loading reviewers...")
+		notify.loading("Loading reviewers...")
 		write.fetch_reviewer_candidates({
 			repo_slug = pr.repo_full_name,
 			pr = pr,
 		}, function(reviewers, err)
 			if err then
-				notify(context, "error", "Failed to load reviewers: " .. tostring(err))
+				notify.error("Failed to load reviewers: " .. tostring(err))
 				done(nil, err)
 				return
 			end
 
 			reviewers = reviewers or {}
 			if #reviewers == 0 then
-				notify(context, "warn", "No reviewers available")
-				done({ changed_pr = false, message = "No reviewers available" }, nil)
+				notify.warn("No reviewers available")
+				done({ changed_pr = false }, nil)
 				return
 			end
 
@@ -315,7 +279,7 @@ M.edit_reviewers = {
 					table.insert(original, reviewer)
 				end
 			end
-			notify(context, "success", "Reviewers loaded", 1200)
+			notify.success("Reviewers loaded", { timeout = 1200 })
 
 			picker.multi_select({
 				items = reviewers,
@@ -342,20 +306,20 @@ M.edit_reviewers = {
 						end
 					end
 					if not changed then
-						done({ changed_pr = false, message = "No changes" }, nil)
+						done({ changed_pr = false }, nil)
 						return
 					end
 
-					notify(context, "loading", "Updating reviewers...")
+					notify.loading("Updating reviewers...")
 					write.update(pr, { reviewers = chosen }, function(ok, update_err)
 						if update_err or ok == false then
 							local message = tostring(update_err or "Unknown error")
-							notify(context, "error", "Update reviewers failed: " .. message)
+							notify.error("Update reviewers failed: " .. message)
 							done(nil, message)
 							return
 						end
-						notify(context, "success", "Reviewers updated", 1200)
-						done({ changed_pr = true, message = "Reviewers updated" }, nil)
+						notify.success("Reviewers updated", { timeout = 1200 })
+						done({ changed_pr = true }, nil)
 					end)
 				end,
 			})
@@ -387,7 +351,7 @@ M.open_pipelines = {
 	end,
 	run = function(context, done)
 		pipeline_api.open(assert(context.pr), context.provider)
-		done({ changed_pr = false, message = "Opened Pipelines" }, nil)
+		done({ changed_pr = false }, nil)
 	end,
 }
 
@@ -399,11 +363,11 @@ M.open_diff = {
 	run = function(context, done)
 		diff.open_pr(context.pr, function(err)
 			if err then
-				notify(context, "error", "Unable to open diff: " .. tostring(err))
+				notify.error("Unable to open diff: " .. tostring(err))
 				done(nil, err)
 				return
 			end
-			done({ changed_pr = false, message = "Opened diff" }, nil)
+			done({ changed_pr = false }, nil)
 		end)
 	end,
 }
@@ -418,16 +382,16 @@ M.checkout = {
 
 		---@param selected PullRequest
 		local function checkout(selected)
-			notify(context, "loading", string.format("Checking out PR #%s", tostring(selected.id)))
+			notify.loading(string.format("Checking out PR #%s", tostring(selected.id)))
 			git_checkout.checkout_pr(selected, function(_, err)
 				vim.schedule(function()
 					if err then
-						notify(context, "error", string.format("Checkout failed: %s", tostring(err)))
+						notify.error(string.format("Checkout failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return
 					end
-					notify(context, "success", string.format("Checked out PR #%s", tostring(selected.id)))
-					done({ changed_pr = false, message = "Checked out PR" }, nil)
+					notify.success(string.format("Checked out PR #%s", tostring(selected.id)))
+					done({ changed_pr = false }, nil)
 				end)
 			end)
 		end
@@ -437,12 +401,12 @@ M.checkout = {
 			return
 		end
 
-		notify(context, "loading", "Loading pull request revisions...")
+		notify.loading("Loading pull request revisions...")
 		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = false }, function(pulls, err)
 			local fresh = pulls and pulls[1] or nil
 			if fresh == nil then
 				local message = tostring(err or "Unable to load pull request revisions")
-				notify(context, "error", message)
+				notify.error(message)
 				done(nil, message)
 				return
 			end

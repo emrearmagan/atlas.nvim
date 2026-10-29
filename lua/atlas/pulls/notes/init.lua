@@ -1,6 +1,4 @@
-local diff = require("atlas.pulls.diff.diff")
-local diff_git = require("atlas.pulls.diff.git")
-local file = require("atlas.pulls.notes.file")
+local diff = require("atlas.core.git.diff")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
@@ -55,23 +53,15 @@ local function text(value)
 end
 
 ---@param note AtlasNote
----@param hunks integer[][] Changes from the note's commit to the current file.
+---@param hunks DiffHunk[] Changes from the note's commit to the current file.
 ---@return AtlasNotePosition
 function M.position(note, hunks)
-	for _, hunk in ipairs(hunks) do
-		local start, count = hunk[1], hunk[2]
-		local changed = count > 0 and start <= note.end_line and start + count > note.start_line
-		local inserted = count == 0 and start >= note.start_line and start < note.end_line
-		if changed or inserted then
-			local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
-			return { start_line = line, end_line = line, outdated = true }
-		end
+	local start_line, end_line = diff.map_range(hunks, "LEFT", note.start_line, note.end_line)
+	if not start_line or not end_line then
+		local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
+		return { start_line = line, end_line = line, outdated = true }
 	end
-	return {
-		start_line = (diff.map_line(hunks, "LEFT", note.start_line)),
-		end_line = (diff.map_line(hunks, "LEFT", note.end_line)),
-		outdated = false,
-	}
+	return { start_line = start_line, end_line = end_line, outdated = false }
 end
 
 ---@param root string
@@ -83,25 +73,9 @@ function M.locate(root, head, items, on_done)
 	local requests = request_scope.new()
 	local starts = {}
 	for _, note in ipairs(items) do
-		local key = note.commit .. ":" .. note.file_path
-		if note.commit ~= head and not starts[key] then
-			starts[key] = function(done)
-				local reads = request_scope.new()
-				reads.all({
-					old = function(read_done)
-						return diff_git.read(root, note.commit, note.file_path, read_done)
-					end,
-					new = function(read_done)
-						return diff_git.read(root, head, note.file_path, read_done)
-					end,
-				}, function(contents, errors)
-					if errors.old or errors.new then
-						done(nil)
-						return
-					end
-					done((diff.compute(contents.old, contents.new)))
-				end)
-				return { cancel = reads.cancel }
+		if note.commit ~= head and not starts[note.commit] then
+			starts[note.commit] = function(done)
+				return diff.hunks(root, note.commit, head, done)
 			end
 		end
 	end
@@ -109,13 +83,9 @@ function M.locate(root, head, items, on_done)
 	requests.all(starts, function(hunks)
 		local positions = {}
 		for _, note in ipairs(items) do
-			if note.commit == head then
-				positions[note.id] = { start_line = note.start_line, end_line = note.end_line, outdated = false }
-			else
-				local changes = hunks[note.commit .. ":" .. note.file_path]
-				positions[note.id] = changes and M.position(note, changes)
-					or { start_line = note.start_line, end_line = note.end_line, outdated = true }
-			end
+			local changes = note.commit == head and {} or hunks[note.commit]
+			positions[note.id] = changes and M.position(note, changes[note.file_path] or {})
+				or { start_line = note.start_line, end_line = note.end_line, outdated = true }
 		end
 		on_done(positions)
 	end)
@@ -253,9 +223,20 @@ local function normalize_document(value, expected)
 end
 
 ---@param target AtlasStorageTarget
+---@return string
+local function document_path(target)
+	return vim.fs.joinpath(storage.dir(target), "notes.json")
+end
+
+---@return string[]
+local function document_paths()
+	return vim.fn.globpath(storage.root(), "**/pr-*/notes.json", false, true)
+end
+
+---@param target AtlasStorageTarget
 ---@return AtlasNotesDocument|nil, string|nil
 local function load_document(target)
-	local value, read_error = file.read(file.path(target))
+	local value, read_error = storage.read(document_path(target))
 	if read_error then
 		return nil, read_error
 	end
@@ -277,7 +258,12 @@ local function change(target, mutate)
 	if mutation_error then
 		return nil, mutation_error
 	end
-	local write_error = file.write(file.path(target), document)
+	local write_error
+	if #document.notes == 0 then
+		write_error = storage.delete(document_path(target))
+	else
+		write_error = storage.write(document_path(target), document)
+	end
 	if write_error then
 		return nil, write_error
 	end
@@ -308,8 +294,8 @@ end
 ---@return AtlasNotesDocument[]|nil, string|nil
 function M.documents()
 	local documents = {}
-	for _, path in ipairs(file.paths()) do
-		local value, read_error = file.read(path)
+	for _, path in ipairs(document_paths()) do
+		local value, read_error = storage.read(path)
 		if read_error then
 			return nil, read_error
 		end
@@ -352,7 +338,7 @@ end
 ---@param pr PullRequest
 ---@return { target: AtlasStorageTarget, items: AtlasNote[] }|nil, string|nil
 function M.for_pull_request(pr)
-	local target, target_error = storage.target_for_pull_request(pr)
+	local target, target_error = storage.pr_target(pr)
 	if not target then
 		return nil, target_error
 	end
@@ -433,26 +419,17 @@ function M.delete(target, id)
 	return deleted == true, err
 end
 
----@param target AtlasStorageTarget
----@return boolean, string|nil
-function M.clear(target)
-	local err = file.delete(file.path(target))
-	return err == nil, err
-end
-
 ---@param pr PullRequest
-function M.clear_for_pull_request(pr)
+function M.clear(pr)
 	if (require("atlas.config").options.pulls or {}).delete_notes ~= true then
 		return
 	end
-	local target, target_err = storage.target_for_pull_request(pr)
-	if not target then
-		notify.warn(target_err or "Unable to find notes", { vim_notify = true })
-		return
+	local target, err = storage.pr_target(pr)
+	if target then
+		err = storage.delete(document_path(target))
 	end
-	local ok, err = M.clear(target)
-	if not ok then
-		notify.warn(err or "Unable to delete notes", { vim_notify = true })
+	if err then
+		notify.warn(err, { vim_notify = true })
 		return
 	end
 	local ui = package.loaded["atlas.pulls.notes.ui"]
@@ -463,8 +440,8 @@ end
 
 ---@return boolean, string|nil
 function M.clear_all()
-	for _, path in ipairs(file.paths()) do
-		local err = file.delete(path)
+	for _, path in ipairs(document_paths()) do
+		local err = storage.delete(path)
 		if err then
 			return false, err
 		end
