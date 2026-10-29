@@ -1,5 +1,6 @@
 local keymap_resolver = require("atlas.core.keymaps")
 local keymaps = require("atlas.pulls.diff.ui.review_panel.keymaps")
+local providers = require("atlas.providers")
 local renderer = require("atlas.pulls.diff.ui.review_panel.renderer")
 
 ---@class AtlasDiffReviewPanel
@@ -35,11 +36,17 @@ function ReviewPanel:render()
 		return self.expanded[key]
 	end
 
+	local pr = self.session.source.pr
+	local provider = pr and providers.load(pr.provider, "pulls")
+	---@cast provider PullsProvider|nil
+	local comments = provider and provider.capabilities.comments
+	local can_react = comments and comments.reactions ~= nil
 	local lines, spans, line_map = renderer.render(self.session, self.filter, vim.api.nvim_win_get_width(self.win), {
 		reply = key_label("pulls.review.add_comment"),
 		add_task = key_label("pulls.review.add_task"),
 		edit = key_label("ui.comments.edit"),
 		delete = key_label("ui.delete"),
+		react = can_react and key_label("ui.comments.react") or nil,
 		toggle_resolved = key_label("pulls.review.toggle_resolved"),
 	}, expanded)
 

@@ -3,7 +3,6 @@ local threads = require("atlas.ui.components.threads")
 local highlights = require("atlas.ui.highlights")
 local emojis = require("atlas.ui.shared.emojis")
 local icons = require("atlas.ui.shared.icons")
-local reactions = require("atlas.ui.shared.reactions")
 local utils = require("atlas.ui.shared.utils")
 
 local M = {}
@@ -26,25 +25,6 @@ local function add_line(lines, spans, segments)
 end
 
 ---@param comment GitHubDiscussionComment
----@return AtlasThreadFooterItem[]
-local function footer(comment)
-	local items = {}
-	if comment.upvotes > 0 then
-		table.insert(items, {
-			text = icons.get("upvote") .. " " .. comment.upvotes,
-			hl_group = comment.upvoted and "AtlasLogInfo" or nil,
-		})
-	end
-
-	local text, reaction_spans = reactions.format(comment.reactions)
-	if text ~= "" then
-		table.insert(items, { text = text, highlights = reaction_spans })
-	end
-
-	return items
-end
-
----@param comment GitHubDiscussionComment
 ---@param root GitHubDiscussionComment|nil
 ---@param expanded table<string, boolean>
 ---@return AtlasThreadItem
@@ -58,7 +38,7 @@ local function comment_item(comment, root, expanded)
 		table.insert(additional, { "  " .. icons.get("check_circle") .. " Answer", "AtlasTextPositive" })
 	end
 
-	local footer_items = footer(comment)
+	local footer_items = {}
 	local children = {}
 	if #comment.replies > 0 and not expanded[comment.id] then
 		local count = #comment.replies
@@ -72,6 +52,12 @@ local function comment_item(comment, root, expanded)
 		end
 	end
 
+	local reactions = comment.reactions
+	if comment.upvotes > 0 then
+		local upvote = { name = "arrow_up", count = comment.upvotes, reacted = comment.upvoted }
+		reactions = vim.list_extend({ upvote }, comment.reactions or {})
+	end
+
 	return {
 		icon = icons.get("user"),
 		icon_hl = highlights.dynamic_for(author),
@@ -80,6 +66,7 @@ local function comment_item(comment, root, expanded)
 		additional = additional,
 		content = comment.deleted and "*This comment was deleted.*" or comment.body,
 		markdown = true,
+		reactions = reactions,
 		footer_items = footer_items,
 		children = children,
 		line_map = { root = root, subject = not comment.deleted and comment or nil },
