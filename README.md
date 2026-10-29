@@ -273,7 +273,7 @@ done(true, "Checks passed")
   <img width="49%" alt="Create issue" src="https://github.com/user-attachments/assets/8fdc418c-2a29-4a8a-a748-a7daec021984">
 </p>
 
-Use `:Atlas create pr` to create a pull request from the current branch, or `:Atlas create issue` for a new issue. For pull requests, the description can be filled from your template or commits.
+Use `:Atlas create pr` to create a pull request from the current branch, or `:Atlas create issue` for a new issue. For pull requests, the description can be filled from your template or commits. The `gb` target picker lists branches from every Git remote as `<remote>/<branch>`, so you can target a fork's parent repository without renaming remotes.
 
 ### Bookmarks
 
@@ -390,6 +390,13 @@ pulls = {
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
+
+  create = {
+    -- Remote used for the PR target repository and base branches. Defaults to origin, then the first remote.
+    base_remote = nil,
+    -- Remote the current branch is pushed to. Defaults to origin, then the first remote.
+    head_remote = nil,
+  },
 
   description = {
     include_summary = true,

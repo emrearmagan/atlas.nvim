@@ -1,6 +1,7 @@
 local M = {}
 
 local cli = require("atlas.providers.github.client")
+local create_remotes = require("atlas.pulls.create.remotes")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
@@ -820,13 +821,15 @@ function M.create_pr(opts, on_done)
 		return nil
 	end
 
+	local head = create_remotes.head_ref(slug, opts.head_repo_slug, tostring(opts.head or ""))
+
 	local args = {
 		"pr",
 		"create",
 		"--repo",
 		slug,
 		"--head",
-		opts.head,
+		head,
 		"--base",
 		opts.base,
 		"--title",

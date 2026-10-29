@@ -423,6 +423,79 @@ function M.local_repository(cwd, on_done)
 	end)
 end
 
+---@class AtlasGitRemote
+---@field name string
+---@field url string
+---@field target AtlasTarget|nil
+
+---@param root string
+---@param on_done fun(remotes: AtlasGitRemote[]|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.list_repository_remotes(root, on_done)
+	return M.run({ "-C", root, "remote", "-v" }, { text = true }, function(res)
+		local ok, err = command_result(res, "Failed to list Git remotes")
+		if not ok then
+			on_done(nil, err)
+			return
+		end
+
+		local remotes = {}
+		local seen = {}
+		for line in (res.stdout or ""):gmatch("[^\r\n]+") do
+			local name, url, kind = line:match("^(%S+)%s+(.-)%s+%((%a+)%)")
+			if name and url and kind == "fetch" and not seen[name] then
+				seen[name] = true
+				local target = M.parse_remote_url(trim(url))
+				table.insert(remotes, { name = name, url = trim(url), target = target })
+			end
+		end
+		on_done(remotes, nil)
+	end)
+end
+
+---@param root string
+---@param remotes string[]
+---@param on_done fun(branches: table<string, string[]>|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.list_all_remote_branches(root, remotes, on_done)
+	local names = {}
+	for _, name in ipairs(remotes) do
+		table.insert(names, name)
+	end
+	table.sort(names, function(left, right)
+		if #left ~= #right then
+			return #left > #right
+		end
+		return left < right
+	end)
+	return M.run({ "-C", root, "branch", "-r", "--format=%(refname:short)" }, { text = true }, function(res)
+		local ok, err = command_result(res, "Failed to list remote branches")
+		if not ok then
+			on_done(nil, err)
+			return
+		end
+
+		local branches = {}
+		for _, name in ipairs(names) do
+			branches[name] = {}
+		end
+		for line in (res.stdout or ""):gmatch("[^\r\n]+") do
+			local ref = trim(line)
+			for _, name in ipairs(names) do
+				local prefix = name .. "/"
+				if ref:sub(1, #prefix) == prefix then
+					local branch = ref:sub(#prefix + 1)
+					if branch ~= "" and branch ~= "HEAD" then
+						table.insert(branches[name], branch)
+					end
+					break
+				end
+			end
+		end
+		on_done(branches, nil)
+	end)
+end
+
 ---@param root string
 ---@param remote string|nil
 ---@param on_done fun(branch: string|nil, err: string|nil)

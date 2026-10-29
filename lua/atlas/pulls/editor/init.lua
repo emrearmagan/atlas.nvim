@@ -3,6 +3,7 @@
 ---@field title string
 ---@field body string
 ---@field head string
+---@field head_repo_slug string|nil Full name of the repository that owns the head branch when it differs from repo_slug.
 ---@field base string
 ---@field draft boolean|nil
 ---@field reviewers PullsReviewerCandidate[]|nil
