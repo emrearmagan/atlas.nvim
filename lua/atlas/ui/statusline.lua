@@ -290,10 +290,11 @@ end
 ---@param win integer|nil
 ---@return boolean
 function M.enabled(context, win)
-	context = context or "atlas"
 	win = win or vim.api.nvim_get_current_win()
-	local buf = vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) or nil
-	return config.statusline_enabled(context, buf, win)
+	if not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+	return config.statusline_enabled(context or "atlas", vim.api.nvim_win_get_buf(win), win)
 end
 
 ---@param options AtlasStatuslineOptions|nil

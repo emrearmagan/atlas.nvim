@@ -375,22 +375,14 @@ local defaults = {
 M.options = vim.deepcopy(defaults)
 
 ---@param context AtlasStatuslineContext
----@param buf integer|nil
----@param win integer|nil
+---@param buf integer
+---@param win integer
 ---@return boolean
 function M.statusline_enabled(context, buf, win)
 	local enable = M.options.ui.statusline.enable
 	if type(enable) ~= "function" then
 		return enable ~= false
 	end
-
-	if not win or not vim.api.nvim_win_is_valid(win) then
-		win = vim.api.nvim_get_current_win()
-	end
-	if not buf or not vim.api.nvim_buf_is_valid(buf) then
-		buf = vim.api.nvim_win_get_buf(win)
-	end
-
 	return enable(buf, win, context) == true
 end
 
