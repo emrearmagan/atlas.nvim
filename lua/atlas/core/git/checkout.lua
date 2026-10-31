@@ -524,44 +524,59 @@ function M.checkout_pr(pr, on_done)
 	end
 
 	local scope = requests.new()
+
+	local function checkout_repo(repo_path)
+		local function finish(ok, err)
+			on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, err)
+		end
+		local function create_branch(err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			scope.run(function(done)
+				return git.checkout_new_branch(repo_path, src_branch, pr.source.commit_hash, done)
+			end, finish)
+		end
+		scope.run(function(done)
+			return git.rev_exists(repo_path, "refs/heads/" .. src_branch, done)
+		end, function(exists)
+			if exists then
+				scope.run(function(done)
+					return git.checkout_branch(repo_path, src_branch, done)
+				end, finish)
+				return
+			end
+			scope.run(function(done)
+				return fetch_pr_refs(pr, repo_path, done)
+			end, create_branch)
+		end)
+	end
+
+	-- Prefer the checkout or worktree the user is currently in. Falling back to repo_config.paths
+	-- keeps checkout working when Atlas is opened outside a matching repository.
 	scope.run(function(done)
-		return M.resolve_repo_path_for_pr(pr, { require_existing = true }, done)
-	end, function(mapped_path, resolve_err)
-		if not mapped_path then
-			on_done(nil, resolve_err)
+		return current_repo_path(pr, nil, done)
+	end, function(repo_path)
+		if repo_path then
+			checkout_repo(repo_path)
 			return
 		end
 		scope.run(function(done)
-			return git.repo_root(mapped_path, done)
-		end, function(repo_path)
-			if not repo_path then
-				on_done(nil, string.format("mapped path is not a git repository: %s", mapped_path))
+			return M.resolve_repo_path_for_pr(pr, { require_existing = true }, done)
+		end, function(mapped_path, resolve_err)
+			if not mapped_path then
+				on_done(nil, resolve_err)
 				return
 			end
-			local function finish(ok, err)
-				on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, err)
-			end
-			local function create_branch(err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				scope.run(function(done)
-					return git.checkout_new_branch(repo_path, src_branch, pr.source.commit_hash, done)
-				end, finish)
-			end
 			scope.run(function(done)
-				return git.rev_exists(repo_path, "refs/heads/" .. src_branch, done)
-			end, function(exists)
-				if exists then
-					scope.run(function(done)
-						return git.checkout_branch(repo_path, src_branch, done)
-					end, finish)
+				return git.repo_root(mapped_path, done)
+			end, function(root)
+				if not root then
+					on_done(nil, string.format("mapped path is not a git repository: %s", mapped_path))
 					return
 				end
-				scope.run(function(done)
-					return fetch_pr_refs(pr, repo_path, done)
-				end, create_branch)
+				checkout_repo(root)
 			end)
 		end)
 	end)

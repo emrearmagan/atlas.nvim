@@ -445,6 +445,7 @@ pulls = {
   },
   repo_config = {
     -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- PR checkout prefers the matching checkout or worktree Atlas is run from, then falls back here.
     -- Diffs of other repositories use a clone in the cache, removed after 30 days without a review.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
