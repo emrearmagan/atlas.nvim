@@ -14,13 +14,9 @@ local registrations = {}
 ---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
 	local node = navigation.current_item()
-	if type(node) ~= "table" then
-		return nil, nil
-	end
-	if (node.kind == "pr" or node.kind == "pr_meta") and type(node.pr) == "table" then
+	if node and node.pr then
 		return node.pr, node.repo
 	end
-	return nil, nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -206,7 +202,7 @@ function M.register(buf, views)
 			index = 2,
 			callback = function()
 				local node = navigation.current_item()
-				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
+				if node and (node.kind == "bookmark" or node.kind == "starred") then
 					controller.select_bookmark(node)
 				end
 			end,
@@ -439,7 +435,7 @@ function M.register(buf, views)
 			index = 40,
 			callback = function()
 				local node = navigation.current_item()
-				local repo = type(node) == "table" and node.repo or nil
+				local repo = node and node.repo
 				if repo == nil then
 					notify.warn("No repository selected")
 					return
@@ -481,7 +477,6 @@ end
 
 ---@param buf integer
 function M.remove(buf)
-	navigation.detach(buf)
 	local registered = registrations[buf]
 	if registered == nil then
 		return

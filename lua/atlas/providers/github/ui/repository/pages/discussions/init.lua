@@ -128,6 +128,7 @@ end
 local function edit_query(state)
 	prompt.open({
 		name = "AtlasDiscussionSearch",
+		prompt = "Discussion search: ",
 		default = state.query .. " ",
 		complete = function(arglead)
 			local items = { "repo:", "is:", "author:", "category:", "label:", "sort:" }

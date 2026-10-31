@@ -90,7 +90,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(pr: PullRequest): string)|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 -- Configs
@@ -124,7 +124,7 @@
 ---@field id string
 ---@field label string
 ---@field icon string|nil
----@field confirmation boolean|nil
+---@field confirm string|(fun(issue: Issue): string)|nil
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
@@ -136,9 +136,11 @@
 
 -- Config
 
+---@alias AtlasStatuslineContext "atlas"|"diff"
+---@alias AtlasStatuslineEnable fun(buf: integer, win: integer, context: AtlasStatuslineContext): boolean
+
 ---@class AtlasUIStatuslineConfig
----@field atlas? boolean Show the statusline in Atlas's main UI (default: true)
----@field diff? boolean Show the statusline in Atlas-owned diff/review sessions (default: true)
+---@field enable? boolean|AtlasStatuslineEnable Predicate for where Atlas's statusline is shown (default: true)
 
 ---@class AtlasUIConfig
 ---@field statusline AtlasUIStatuslineConfig|nil
@@ -157,7 +159,7 @@ local M = {}
 ---@type AtlasConfig
 local defaults = {
 	ui = {
-		statusline = { atlas = true, diff = true },
+		statusline = { enable = true },
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -291,6 +293,10 @@ local defaults = {
 			checkout = "gc",
 			open_repository = "o",
 			edit_pr = "ge",
+			stack = {
+				next = "]s",
+				prev = "[s",
+			},
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },
@@ -303,8 +309,12 @@ local defaults = {
 				toggle_file_reviewed = "-",
 				next_comment = "]c",
 				prev_comment = "[c",
+				next_unresolved = "]x",
+				prev_unresolved = "[x",
 				next_note = "]n",
 				prev_note = "[n",
+				next_commit = "]r",
+				prev_commit = "[r",
 				add_comment = "c",
 				submit_comment = "C",
 				add_suggestion = "s",
@@ -327,6 +337,9 @@ local defaults = {
 					next_unreviewed_file = "]u",
 					prev_unreviewed_file = "[u",
 					find_file = "<leader>f",
+				},
+				panel = {
+					cycle_filter = "f",
 				},
 				-- Built-in navigation; external viewers use their own keys.
 				atlas = {
@@ -373,10 +386,16 @@ local defaults = {
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
 
----@param context "atlas"|"diff"
+---@param context AtlasStatuslineContext
+---@param buf integer
+---@param win integer
 ---@return boolean
-function M.statusline_enabled(context)
-	return M.options.ui.statusline[context] ~= false
+function M.statusline_enabled(context, buf, win)
+	local enable = M.options.ui.statusline.enable
+	if type(enable) ~= "function" then
+		return enable ~= false
+	end
+	return enable(buf, win, context) == true
 end
 
 ---@return string
@@ -417,7 +436,7 @@ end
 function M.setup(opts)
 	local resolved = vim.deepcopy(opts or {})
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
-	if M.statusline_enabled("atlas") or M.statusline_enabled("diff") then
+	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
 	end
 end

@@ -2,7 +2,7 @@ local M = {}
 
 local action_runner = require("atlas.core.actions")
 local icons = require("atlas.ui.shared.icons")
-local picker = require("atlas.ui.picker")
+local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local repository = require("atlas.ui.repository")
 local templates = require("atlas.templates")
@@ -23,35 +23,27 @@ local utils = require("atlas.issues.actions.utils")
 ---| "manage_templates"
 ---| "toggle_subscription"
 
+---@class IssuesActionResult
+---@field issue_key string|nil
+---@field removed boolean|nil
+
 ---@class AtlasIssueActionContext
 ---@field provider IssuesProvider
 ---@field issue Issue|nil
 ---@field current_user AtlasUser|nil
 ---@field repo_slug string|nil
 ---@field project_path string|nil
----@field notify fun(level: AtlasNotifyLevel, message: string, duration: integer|nil)|nil
 
----@class AtlasIssueAction
----@field id string
----@field label string
----@field icon string|nil
----@field hidden boolean|nil
----@field confirmation boolean|nil
+---@class AtlasIssueAction: AtlasAction
 ---@field is_available (fun(context: AtlasIssueActionContext): boolean, string|nil)|nil
 ---@field run fun(context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean|{ cancel: fun() }|nil
 
 ---@param id string
 ---@param context AtlasIssueActionContext
----@return AtlasIssueAction|nil
+---@return AtlasAction|nil
 function M.find(id, context)
-	local action = utils.find_custom_action(id)
-	if action then
-		return action
-	end
-	local actions = context.provider.capabilities.actions
-	local provider_action = actions and actions.find(id) or nil
-	---@cast provider_action AtlasIssueAction|nil
-	return provider_action
+	return action_runner.find(utils.custom_actions(), id)
+		or action_runner.find(context.provider.capabilities.actions, id)
 end
 
 ---@param id string
@@ -66,61 +58,38 @@ end
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
 ---@return boolean handled
 function M.run(id, context, on_done)
-	local action = M.find(id, context)
-	if action then
-		return action_runner.run(action, context, on_done)
-	end
-	if not context.provider.capabilities.actions then
-		return false
-	end
-	return action_runner.reject(context, on_done, string.format("Unknown action: %s", tostring(id)))
+	return action_runner.run(M.find(id, context), context, on_done)
 end
 
 ---@param context AtlasIssueActionContext
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
 ---@param extra_items { label: string, icon?: string, callback: fun() }[]|nil
 function M.open(context, on_done, extra_items)
-	local actions = context.provider.capabilities.actions
+	local custom = utils.custom_actions()
 	local items = {}
-	for _, action in ipairs(actions and actions.items or {}) do
-		if not action.hidden and not utils.find_custom_action(action.id) and M.is_available(action.id, context) then
+	for _, action in ipairs(context.provider.capabilities.actions or {}) do
+		if not action.hidden and not action_runner.find(custom, action.id) then
 			table.insert(items, action)
 		end
 	end
-	for _, action in ipairs(utils.custom_actions()) do
-		if action_runner.is_available(action, context) then
-			table.insert(items, action)
-		end
-	end
+	vim.list_extend(items, custom)
+	items = vim.tbl_filter(function(action)
+		return action_runner.is_available(action, context)
+	end, items)
 	vim.list_extend(items, extra_items or {})
 	if #items == 0 then
-		if on_done then
-			on_done(nil, "No actions available")
-		end
+		notify.info("No actions available")
 		return
 	end
 
 	local target = context.issue and string.format(" for %s", tostring(context.issue.key)) or ""
-	picker.select({
-		title = string.format("Choose %s action%s", context.provider.name, target),
-		items = items,
-		format_item = function(action)
-			return (action.icon or icons.get("custom", "actions")) .. "  " .. action.label
-		end,
-		on_select = function(action)
-			if not action then
-				if on_done then
-					on_done(nil, nil)
-				end
-				return
-			end
-			if action.callback then
-				action.callback()
-			else
-				M.run(action.id, context, on_done)
-			end
-		end,
-	})
+	action_runner.select(string.format("Choose %s action%s", context.provider.name, target), items, function(item)
+		if item.callback then
+			item.callback()
+		else
+			action_runner.run(item, context, on_done)
+		end
+	end)
 end
 
 M.browse_repository = {

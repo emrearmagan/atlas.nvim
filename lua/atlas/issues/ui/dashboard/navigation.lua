@@ -1,268 +1,238 @@
 local M = {}
 
+local state = require("atlas.issues.state")
 local window = require("atlas.issues.ui.dashboard.window")
 
 local DEBOUNCE_MS = 150
-local select_timer = nil
-local autocmd_groups = {}
-local selection_ns = vim.api.nvim_create_namespace("atlas.issues.selection")
-
-local function stop_select_timer()
-	if select_timer then
-		select_timer:stop()
-		select_timer:close()
-		select_timer = nil
-	end
-end
+local highlight_ns = vim.api.nvim_create_namespace("atlas.issues.board")
+local selected_line, selected_column = nil, nil
 
 local function is_selectable(node)
-	if type(node) ~= "table" then
-		return false
-	end
-	return node.kind == "issue" or node.kind == "bookmark" or node.kind == "starred"
+	return node ~= nil and (node.kind == "issue" or node.kind == "bookmark" or node.kind == "starred")
 end
 
-local function cells(node)
-	return node and node.kind == "board_row" and node.cells or nil
-end
-
-local function cell_in_column(row, column)
-	for _, cell in ipairs(row) do
-		if cell.column == column then
-			return cell
+local function cell_at(row, col)
+	local current = row.cells[1]
+	for _, cell in ipairs(row.cells) do
+		if cell.start_col <= col then
+			current = cell
 		end
 	end
+	return current
 end
 
-local function item_at(node, col)
-	local row = cells(node)
-	if not row then
-		return node
+---@return { lnum: integer, col: integer, column?: integer, item: table }[]
+local function positions()
+	local list = {}
+	local buf = window.buf()
+	if buf == nil then
+		return list
 	end
-	local selected = 1
-	for index, cell in ipairs(row) do
-		if cell.start_col > col then
-			break
+	for lnum = 1, vim.api.nvim_buf_line_count(buf) do
+		local node = window.line_map[lnum]
+		if node and node.kind == "board_row" then
+			for _, cell in ipairs(node.cells) do
+				if cell.issue then
+					list[#list + 1] = { lnum = lnum, col = cell.start_col, column = cell.column, item = cell }
+				end
+			end
+		elseif is_selectable(node) then
+			list[#list + 1] = { lnum = lnum, col = 0, item = node }
 		end
-		selected = index
 	end
-	return row[selected], selected
+	return list
 end
 
-function M.current_item()
+---@return { lnum: integer, column?: integer, item?: table }|nil
+local function cursor()
 	local win = window.win()
 	if win == nil then
 		return nil
 	end
-	local cursor = vim.api.nvim_win_get_cursor(win)
-	local item = item_at(window.line_map[cursor[1]], cursor[2])
-	return item
+	local position = vim.api.nvim_win_get_cursor(win)
+	local node = window.line_map[position[1]]
+	if node and node.kind == "board_row" then
+		local cell = cell_at(node, position[2])
+		return { lnum = position[1], column = cell.column, item = cell }
+	end
+	return { lnum = position[1], item = node }
+end
+
+local function select_current()
+	local current = cursor()
+	if current == nil then
+		return
+	end
+	selected_line, selected_column = current.lnum, current.column
+	vim.defer_fn(function()
+		local now = cursor()
+		if now and now.lnum == current.lnum and now.column == current.column and window.is_active() then
+			require("atlas.issues.ui.dashboard").select(now.item)
+		end
+	end, DEBOUNCE_MS)
+end
+
+local function board_cell(lnum, column)
+	local row = window.line_map[lnum]
+	if row == nil or row.kind ~= "board_row" then
+		return nil
+	end
+
+	return vim.iter(row.cells):find(function(cell)
+		return cell.column == column
+	end)
+end
+
+---@param column integer
+local function reveal(row, column)
+	local first, last = row.cells[1].column, row.cells[#row.cells].column
+	if column < first then
+		state.board_column = column
+	elseif column > last then
+		state.board_column = column - (last - first)
+	else
+		return
+	end
+
+	window.render()
+end
+
+---@param position { lnum: integer, col: integer }|nil
+---@return boolean
+local function focus(position)
+	local win = window.win()
+	if win == nil or position == nil then
+		return false
+	end
+	vim.api.nvim_win_set_cursor(win, { position.lnum, position.col })
+	M.highlight_current_item()
+	select_current()
+	return true
+end
+
+function M.current_item()
+	local current = cursor()
+	return current and current.item
+end
+
+function M.reset()
+	state.board_column = 1
+	selected_line, selected_column = nil, nil
+end
+
+function M.keep_board_selection()
+	local win = window.win()
+	if win == nil or selected_column == nil then
+		return
+	end
+
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	local row = window.line_map[lnum]
+	if row == nil or row.kind ~= "board_row" or selected_column > row.column_count then
+		return
+	end
+
+	reveal(row, selected_column)
+	local cell = board_cell(lnum, selected_column)
+	if cell then
+		vim.api.nvim_win_set_cursor(win, { lnum, cell.start_col })
+		M.highlight_current_item()
+	end
 end
 
 function M.highlight_current_item()
-	local buf, win = window.buf(), window.win()
-	if not buf or not win then
+	local buf, win, current = window.buf(), window.win(), cursor()
+	if buf == nil or win == nil or current == nil then
 		return
 	end
-	vim.api.nvim_buf_clear_namespace(buf, selection_ns, 0, -1)
-	local cursor = vim.api.nvim_win_get_cursor(win)
-	local row = window.line_map[cursor[1]]
-	vim.api.nvim_set_option_value("cursorline", cells(row) == nil, { win = win })
-	local item = item_at(row, cursor[2])
-	if item and item.start_col and is_selectable(item) then
-		vim.api.nvim_buf_set_extmark(buf, selection_ns, cursor[1] - 1, item.start_col, {
-			end_col = item.end_col,
+	vim.api.nvim_buf_clear_namespace(buf, highlight_ns, 0, -1)
+	vim.wo[win].cursorline = current.column == nil
+	if current.column and current.item.issue then
+		vim.api.nvim_buf_set_extmark(buf, highlight_ns, current.lnum - 1, current.item.start_col, {
+			end_col = current.item.end_col,
 			hl_group = "CursorLine",
 			priority = 150,
 		})
 	end
 end
 
-local function on_cursor_moved()
-	M.highlight_current_item()
-	stop_select_timer()
-	select_timer = vim.defer_fn(function()
-		select_timer = nil
-		if window.is_active() then
-			require("atlas.issues.ui.dashboard").select(M.current_item())
-		end
-	end, DEBOUNCE_MS)
-end
-
-local function focus(win, lnum, item)
-	vim.api.nvim_win_set_cursor(win, { lnum, item.start_col or 0 })
-	if item.start_col then
-		vim.api.nvim_win_call(win, function()
-			vim.fn.winrestview({ leftcol = 0 })
-		end)
-	end
-	on_cursor_moved()
-end
-
-local function current_column(win)
-	local cursor = vim.api.nvim_win_get_cursor(win)
-	local row = window.line_map[cursor[1]]
-	local item = cells(row) and item_at(row, cursor[2])
-	return item and item.column
-end
-
----@param buf integer
-function M.detach(buf)
-	if vim.api.nvim_buf_is_valid(buf) then
-		vim.api.nvim_buf_clear_namespace(buf, selection_ns, 0, -1)
-	end
-	local group = autocmd_groups[buf]
-	if group then
-		autocmd_groups[buf] = nil
-		pcall(vim.api.nvim_del_augroup_by_id, group)
-	end
-	stop_select_timer()
-end
-
 ---@param buf integer
 function M.attach(buf)
-	if not vim.api.nvim_buf_is_valid(buf) then
-		return
-	end
-
-	M.detach(buf)
-	local group = vim.api.nvim_create_augroup("AtlasIssuesNavigation" .. tostring(buf), { clear = true })
-	autocmd_groups[buf] = group
-
 	vim.api.nvim_create_autocmd("CursorMoved", {
-		group = group,
+		group = vim.api.nvim_create_augroup("AtlasIssuesNavigation" .. buf, { clear = true }),
 		buffer = buf,
-		callback = on_cursor_moved,
-	})
-	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-		group = group,
-		buffer = buf,
-		once = true,
 		callback = function()
-			if autocmd_groups[buf] == group then
-				M.detach(buf)
+			M.highlight_current_item()
+			local current = cursor()
+			if current and (current.lnum ~= selected_line or current.column ~= selected_column) then
+				select_current()
 			end
 		end,
 	})
 end
 
+---@param direction "up"|"down"
 function M.move_cursor(direction)
-	local win, buf = window.win(), window.buf()
-	if win == nil or buf == nil then
+	local current = cursor()
+	if current == nil then
 		return
 	end
-
-	local current = vim.api.nvim_win_get_cursor(win)
-	local line = current[1]
-	local col = current[2]
-	local max_line = vim.api.nvim_buf_line_count(buf)
-	local step = direction == "up" and -1 or 1
-	local line_map = window.line_map
-	local _, column = item_at(line_map[line], col)
-
-	for lnum = line + step, (direction == "up" and 1 or max_line), step do
-		local row = cells(line_map[lnum])
-		local item = row and row[math.min(column or 1, #row)] or line_map[lnum]
-		if is_selectable(item) and (column == nil or row ~= nil) then
-			if row then
-				focus(win, lnum, item)
-			else
-				vim.api.nvim_win_set_cursor(win, { lnum, col })
-				on_cursor_moved()
-			end
-			return
-		end
+	local function reachable(position)
+		return current.column == nil or position.column == nil or position.column == current.column
 	end
-	if column then
-		return
+	local candidates = vim.iter(positions()):filter(reachable)
+	local target
+	if direction == "down" then
+		target = candidates:find(function(position)
+			return position.lnum > current.lnum
+		end)
+	else
+		target = candidates:rev():find(function(position)
+			return position.lnum < current.lnum
+		end)
 	end
-
-	local fallback = math.max(1, math.min(max_line, line + step))
-	vim.api.nvim_win_set_cursor(win, { fallback, col })
-	on_cursor_moved()
-end
-
-local function find_item(predicate)
-	local buf = window.buf()
-	if buf == nil then
-		return nil
-	end
-
-	local line_map = window.line_map
-	for lnum = 1, vim.api.nvim_buf_line_count(buf) do
-		for _, item in ipairs(cells(line_map[lnum]) or { line_map[lnum] }) do
-			if is_selectable(item) and predicate(item) then
-				return lnum, item
-			end
-		end
-	end
-end
-
----@param predicate fun(item: table): boolean
----@return boolean
-function M.focus_item(predicate)
-	local win = window.win()
-	if win == nil then
-		return false
-	end
-	local lnum, item = find_item(predicate)
-	if lnum then
-		focus(win, lnum, item)
-		return true
-	end
-	return false
-end
-
----@param opts? { all_columns?: boolean }
-function M.focus_first_item(opts)
-	local win = window.win()
-	local column = not (opts and opts.all_columns) and win and current_column(win) or nil
-	M.focus_item(function(item)
-		return column == nil or item.column == column
-	end)
-end
-
-function M.focus_last_item()
-	local win, buf = window.win(), window.buf()
-	if win == nil or buf == nil then
-		return
-	end
-
-	local line_map = window.line_map
-	local max_line = vim.api.nvim_buf_line_count(buf)
-	local column = current_column(win)
-	for lnum = max_line, 1, -1 do
-		local row = cells(line_map[lnum]) or { line_map[lnum] }
-		for index = #row, 1, -1 do
-			local item = row[index]
-			if is_selectable(item) and (column == nil or item.column == column) then
-				focus(win, lnum, item)
-				return
-			end
-		end
+	if target then
+		focus(target)
+	else
+		vim.cmd("normal! " .. (direction == "down" and "j" or "k"))
 	end
 end
 
 ---@param step integer
 function M.move_column(step)
-	local win = window.win()
-	if not win then
+	local current = cursor()
+	if current == nil or current.column == nil then
+		vim.cmd("normal! " .. math.abs(step) .. (step < 0 and "h" or "l"))
 		return
 	end
-	local cursor = vim.api.nvim_win_get_cursor(win)
-	local row = cells(window.line_map[cursor[1]])
-	if not row then
-		return
-	end
-	local column = current_column(win) + step
-	local item = cell_in_column(row, column)
-	if item then
-		focus(win, cursor[1], item)
-	else
-		M.focus_item(function(candidate)
-			return candidate.column == column
-		end)
-	end
+	local row = window.line_map[current.lnum]
+	local target = math.max(1, math.min(row.column_count, current.column + step))
+	selected_column = target
+	reveal(row, target)
+	local column = vim.tbl_filter(function(position)
+		return position.column == target
+	end, positions())
+	local beside = vim.iter(column):rev():find(function(position)
+		return position.lnum <= current.lnum
+	end)
+	focus(beside or column[1])
+end
+
+---@param predicate fun(item: table): boolean
+---@return boolean
+function M.focus_item(predicate)
+	return focus(vim.iter(positions()):find(function(position)
+		return predicate(position.item)
+	end))
+end
+
+function M.focus_first_item()
+	focus(positions()[1])
+end
+
+function M.focus_last_item()
+	local list = positions()
+	focus(list[#list])
 end
 
 return M

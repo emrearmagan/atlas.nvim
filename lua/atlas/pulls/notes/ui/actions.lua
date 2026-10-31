@@ -20,7 +20,7 @@ local function selected_item(state)
 end
 
 ---@param state AtlasNotesUIState
----@return { target: AtlasNoteTarget, note: AtlasNote }[]
+---@return { target: AtlasStorageTarget, note: AtlasNote }[]
 local function selected_notes(state)
 	if not valid_window(state) or vim.api.nvim_get_current_buf() ~= state.buf then
 		return {}

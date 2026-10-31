@@ -579,6 +579,7 @@ function M.edit(default, on_submit)
 	autocomplete_api.get_data(function() end)
 	prompt.open({
 		name = "AtlasJqlSearch",
+		prompt = "JQL: ",
 		complete = complete_cmdline,
 		on_submit = function(query)
 			query = vim.trim(tostring(query or ""))

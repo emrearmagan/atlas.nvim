@@ -34,6 +34,20 @@ function M.render()
 	navigation.highlight_current_item()
 end
 
+function M.resize()
+	M.render()
+	local win = window.win()
+	if win == nil then
+		return
+	end
+
+	-- When the window gets narrower (like when the detail panel opens) it can stay scrolled sideways, so scroll back.
+	vim.api.nvim_win_call(win, function()
+		vim.fn.winrestview({ leftcol = 0 })
+	end)
+	navigation.keep_board_selection()
+end
+
 ---@param issue Issue
 local function open_detail(issue)
 	detail.open(issue, {
@@ -48,13 +62,10 @@ local function open_detail(issue)
 	})
 end
 
----@param item { kind: string, _issue: Issue|nil }|nil
+---@param item { issue: Issue|nil }|nil
 function M.select(item)
-	if not detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
-		return
-	end
-	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
-		open_detail(item._issue)
+	if item and item.issue and detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
+		open_detail(item.issue)
 	end
 end
 
@@ -64,8 +75,8 @@ function M.toggle_detail()
 		return
 	end
 	local item = navigation.current_item()
-	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
-		open_detail(item._issue)
+	if item and item.issue then
+		open_detail(item.issue)
 	end
 end
 
@@ -95,6 +106,7 @@ function M.init(provider, opts)
 	state.current_page = 1
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
+	navigation.reset()
 
 	state.starred_items = starred.list("issues", provider.id) or {}
 	state.bookmarks = bookmarks.new(provider.id, "issues")

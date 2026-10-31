@@ -440,4 +440,23 @@ function M.close()
 	end
 end
 
+---@param issue Issue
+---@param on_update (fun(issue: Issue|nil, result: IssuesActionResult|nil))|nil
+---@param result IssuesActionResult|nil
+function M.apply_action_result(issue, on_update, result)
+	if not result or not result.issue_key then
+		return
+	end
+	if on_update then
+		on_update(issue, result)
+		return
+	end
+
+	if result.removed then
+		M.close()
+	else
+		M.refresh(issue)
+	end
+end
+
 return M

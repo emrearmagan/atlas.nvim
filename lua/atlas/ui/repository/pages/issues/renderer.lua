@@ -38,8 +38,8 @@ function M.render(state, width)
 	local offset = #lines
 	utils.append_block(lines, spans, { lines = table_lines, highlights = table_spans })
 	for row, node in pairs(table_map) do
-		if node.kind == "issue" and node._issue then
-			line_map[offset + row] = node._issue
+		if node.kind == "issue" and node.issue then
+			line_map[offset + row] = node.issue
 		end
 	end
 

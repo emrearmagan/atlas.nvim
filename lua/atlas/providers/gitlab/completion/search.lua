@@ -29,6 +29,7 @@ function M.edit(kind, default, on_submit)
 	default = vim.trim(default)
 	prompt.open({
 		name = "AtlasGitLabSearch",
+		prompt = "GitLab search: ",
 		default = default ~= "" and default .. " " or "",
 		complete = function(arglead)
 			local is_state = arglead:match("^is:") ~= nil

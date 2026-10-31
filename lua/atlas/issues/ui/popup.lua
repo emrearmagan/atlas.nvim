@@ -16,8 +16,8 @@ local function generic_rows(issue)
 	local issue_type = issue.type and issue.type.name or nil
 	local _, issue_type_hl = icons.get("issue")
 	issue_type_hl = issue.icon and issue.icon.hl_group or issue_type_hl
-	local assignee = issue.assignee and issue.assignee.name or nil
-	local reporter = issue.reporter and issue.reporter.name or nil
+	local assignee = issue.assignee and helper.person_name(issue.assignee) or nil
+	local reporter = issue.reporter and helper.person_name(issue.reporter) or nil
 
 	add(rows, "Type", issue_type, issue_type_hl)
 	add(rows, "Status", issue.status, helper.status_hl(issue.status_id))

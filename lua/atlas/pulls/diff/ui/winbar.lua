@@ -29,15 +29,15 @@ function M.set(win, path)
 	vim.wo[win].winbar = "%#Normal# " .. table.concat(breadcrumbs, string.format("%%#%s# %s ", highlight, separator))
 end
 
----@param view AtlasDiffView
-function M.update(view)
-	local file = view.current_file
+---@param renderer AtlasDiffRenderer
+function M.update(renderer)
+	local file = renderer.current_file
 	if not file then
 		return
 	end
 
-	M.set(view.right.win, file.path)
-	M.set(view.left.win, file.old_path or file.path)
+	M.set(renderer.right.win, file.path)
+	M.set(renderer.left.win, file.old_path or file.path)
 end
 
 return M

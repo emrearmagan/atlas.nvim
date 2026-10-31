@@ -331,6 +331,36 @@ describe("worktree", function()
 			assert.same({}, deleted)
 		end)
 
+		it("ensure takes over a deleted worktree path, even a locked one below the cache root", function()
+			local inside = worktree.cache_root() .. "/repo/pr-1"
+			local outside = "/home/dev/reviews"
+			local forces = {}
+			vim.fn.isdirectory = function()
+				return 0
+			end
+			core_git.run = function(args, _, on_done)
+				local force_count = 0
+				for _, arg in ipairs(args) do
+					if arg == "--force" then
+						force_count = force_count + 1
+					end
+				end
+				forces[args[#args - 1]] = force_count
+				on_done({ code = 0, stdout = "", stderr = "" })
+				return { cancel = function() end }
+			end
+
+			for _, dir in ipairs({ inside, outside }) do
+				worktree.ensure({
+					repo_root = "/home/dev/code/atlas.nvim",
+					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+					dir = dir,
+				}, function() end)
+			end
+
+			assert.same({ [inside] = 2, [outside] = 1 }, forces)
+		end)
+
 		it("ensure refuses an existing directory that is not a worktree of the repository", function()
 			local calls = fake_git({
 				["worktree list"] = {

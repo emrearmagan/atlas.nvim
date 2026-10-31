@@ -4,7 +4,6 @@ local completion = require("atlas.completion")
 local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local utils = require("atlas.ui.shared.utils")
-local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local preview_namespace = vim.api.nvim_create_namespace("atlas.editor.preview")
@@ -211,7 +210,6 @@ function M.open(opts)
 	if opts.completion then
 		completion.attach(buf, opts.completion)
 	end
-	statusline.inherit(win, source_win)
 	local function reveal_preview()
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ topline = 1, topfill = preview_height })

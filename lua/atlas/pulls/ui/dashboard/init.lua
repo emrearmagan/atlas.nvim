@@ -36,6 +36,18 @@ function M.render()
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
 
+function M.resize()
+	M.render()
+	local win = window.win()
+	if win == nil then
+		return
+	end
+	-- When the window gets narrower (like when the detail panel opens) it can stay scrolled sideways, so scroll back.
+	vim.api.nvim_win_call(win, function()
+		vim.fn.winrestview({ leftcol = 0 })
+	end)
+end
+
 ---@param pr PullRequest
 local function open_detail(pr)
 	detail.open(pr, {
@@ -44,15 +56,11 @@ local function open_detail(pr)
 	})
 end
 
----@param item table|nil
+---@param item { pr: PullRequest|nil }|nil
 function M.select(item)
-	if type(item) ~= "table" or (item.kind ~= "pr" and item.kind ~= "pr_meta") or type(item.pr) ~= "table" then
-		return
+	if item and item.pr and detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
+		open_detail(item.pr)
 	end
-	if not detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
-		return
-	end
-	open_detail(item.pr)
 end
 
 function M.toggle_detail()
@@ -61,7 +69,7 @@ function M.toggle_detail()
 		return
 	end
 	local item = navigation.current_item()
-	if type(item) == "table" and (item.kind == "pr" or item.kind == "pr_meta") and type(item.pr) == "table" then
+	if item and item.pr then
 		open_detail(item.pr)
 	end
 end

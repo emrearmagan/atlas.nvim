@@ -550,4 +550,18 @@ function M.close()
 	end
 end
 
+---@param pr PullRequest
+---@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
+---@param result PullsActionResult|nil
+function M.apply_action_result(pr, on_update, result)
+	if not result or not result.changed_pr then
+		return
+	end
+	if on_update then
+		on_update(pr, result)
+	else
+		M.refresh()
+	end
+end
+
 return M

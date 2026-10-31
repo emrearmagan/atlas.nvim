@@ -92,7 +92,7 @@ local function restore_options()
 	end
 	statusline.detach(win)
 	for name, value in pairs(state.options) do
-		if name ~= "statusline" or statusline.enabled() then
+		if name ~= "statusline" or statusline.enabled("atlas", win) then
 			set_option(win, name, value)
 		end
 	end
@@ -306,7 +306,11 @@ end
 
 vim.api.nvim_create_autocmd({ "VimResized", "WinResized", "TabEnter" }, {
 	group = vim.api.nvim_create_augroup("AtlasPullsDashboardResize", { clear = true }),
-	callback = M.render,
+	callback = function()
+		if M.is_active() then
+			require("atlas.pulls.ui.dashboard").resize()
+		end
+	end,
 })
 
 return M

@@ -140,6 +140,11 @@ describe("providers.resolve", function()
 			)
 		end)
 
+		it("resolves SSH remotes on a custom port", function()
+			local expected = assert(providers.resolve(base))
+			assert.same(expected, assert(providers.resolve("ssh://gitlab.example.com:1234/team/repo.git")))
+		end)
+
 		it("resolves a merge request", function()
 			local target = assert(providers.resolve(base .. "/-/merge_requests/12"))
 			assert.are.equal("pr", target.entity)
@@ -223,6 +228,16 @@ describe("providers.resolve", function()
 			end
 		end)
 
+		it("resolves SSH host remotes to the canonical Cloud repository", function()
+			local expected = assert(providers.resolve(base))
+			for _, remote in ipairs({
+				"git@ssh.bitbucket.org:team/repo.git",
+				"ssh://git@ssh.bitbucket.org/team/repo.git",
+			}) do
+				assert.same(expected, assert(providers.resolve(remote)))
+			end
+		end)
+
 		it("resolves a pull request", function()
 			local target = assert(providers.resolve(base .. "/pull-requests/7"))
 			assert.are.equal("pr", target.entity)
@@ -247,6 +262,8 @@ describe("providers.resolve", function()
 			assert.is_nil(providers.resolve(base .. "/pull-requests/7abc"))
 			assert.is_nil(providers.resolve("https://bitbucket.org/team"))
 			assert.is_nil(providers.resolve("git@bitbucket.org:team.git"))
+			assert.is_nil(providers.resolve("git@ssh.bitbucket.org:team/repo/extra.git"))
+			assert.is_nil(providers.resolve("https://ssh.bitbucket.org/team/repo"))
 
 			local target, err =
 				providers.resolve("https://bitbucket.example.com/projects/ATLAS/repos/repo/pull-requests/12")

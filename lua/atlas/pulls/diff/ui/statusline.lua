@@ -1,29 +1,58 @@
 local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
+local review_actions = require("atlas.pulls.actions.review")
 
 local M = {}
 local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥" }
 
+---@param statusline AtlasStatusline
 ---@param session AtlasDiffSession
-function M.update(session)
-	local result = session.data
-	local review_data = result.review and result.review.data
-	local files = session.explorer.files
-	local count = 0
+---@param files AtlasDiffFile[]
+---@param buf integer
+function M.update(statusline, session, files, buf)
+	local review_data = session.review
+	local reviewed_files = session.review_context and session.review_context.reviewed_files
 
-	for _, file in ipairs(files) do
-		if session.reviewed_files[file.path] then
-			count = count + 1
-		end
-	end
-
-	local identity = result.pr and string.format("#%s %s", result.pr.id, result.pr.title)
-		or string.format("%s...%s", result.base_revision:sub(1, 8), result.head_revision:sub(1, 8))
+	local pr = session.source.pr
+	local identity = pr and string.format("#%s %s", pr.id, pr.title)
+		or string.format("%s...%s", session.range.base_revision:sub(1, 8), session.range.head_revision:sub(1, 8))
 	local items = {
 		{ text = identity, hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
 	}
 
-	if (result.review or next(session.reviewed_files)) and #files > 0 then
+	local commits = session:shown_commits()
+	if commits then
+		local newest, oldest = 0, 0
+		for index, commit in ipairs(session.commits) do
+			local position = #session.commits - index + 1
+			if commit == commits[1] then
+				newest = position
+			end
+			if commit == commits[#commits] then
+				oldest = position
+			end
+		end
+		items[#items + 1] = {
+			text = #commits == 1
+					and string.format("Commit %d/%d %s", newest, #session.commits, commits[1].hash:sub(1, 8))
+				or string.format(
+					"Commits %d-%d/%d %s..%s",
+					oldest,
+					newest,
+					#session.commits,
+					commits[#commits].hash:sub(1, 8),
+					commits[1].hash:sub(1, 8)
+				),
+			hl_group = "AtlasFooterWarning",
+			priority = 45,
+		}
+	elseif reviewed_files and #files > 0 then
+		local count = 0
+		for _, file in ipairs(files) do
+			if reviewed_files[file.path] then
+				count = count + 1
+			end
+		end
 		items[#items + 1] = {
 			text = string.format("%s %d/%d", review_progress[math.ceil(count / #files * 8) + 1], count, #files),
 			hl_group = count == #files and "AtlasFooterSuccess" or "AtlasFooterInfo",
@@ -31,7 +60,7 @@ function M.update(session)
 		}
 	end
 
-	local client = vim.lsp.get_clients({ bufnr = session.view.right.buf })[1]
+	local client = vim.lsp.get_clients({ bufnr = buf })[1]
 	if client then
 		items[#items + 1] = {
 			text = string.format("%s %s", icons.get("lsp"), client.name),
@@ -44,16 +73,20 @@ function M.update(session)
 	local comments = vim.tbl_filter(function(comment)
 		return not comment.deleted
 	end, review_data and review_data.comments or {})
-	if #comments > 0 then
+	local threads = review_data and review_actions.group_comments(review_data.comments) or {}
+	if #threads > 0 then
+		local unresolved = #vim.tbl_filter(function(thread)
+			return thread.comment.state ~= "RESOLVED"
+		end, threads)
 		items[#items + 1] = {
-			text = string.format("%s %d", icons.get("comment"), #comments),
+			text = string.format("%s %d/%d", icons.get("comment"), unresolved, #threads),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 30,
 		}
 	end
 
-	local notes = result.notes and result.notes.items or {}
+	local notes = session.notes and session.notes.items or {}
 	if #notes > 0 then
 		items[#items + 1] = {
 			text = string.format("%s %d", icons.get("pin"), #notes),
@@ -82,8 +115,8 @@ function M.update(session)
 	end
 
 	local help_keys = keymaps.resolve("ui.help")
-	session.statusline.options.help_key = help_keys and help_keys[1] or nil
-	session.statusline:set_items(items)
+	statusline.options.help_key = help_keys and help_keys[1] or nil
+	statusline:set_items(items)
 end
 
 return M

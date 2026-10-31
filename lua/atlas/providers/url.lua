@@ -7,6 +7,17 @@ local config = require("atlas.config")
 ---@field path string
 ---@field remote boolean
 
+---@param host string
+---@param path string
+---@param remote boolean
+---@return AtlasParsedUrl
+local function normalized(host, path, remote)
+	path = path:gsub("%%(%x%x)", function(hex)
+		return string.char(tonumber(hex, 16))
+	end):gsub("/+$", "")
+	return { host = host:lower(), path = path, remote = remote }
+end
+
 ---@param value string
 ---@return AtlasParsedUrl|nil, string|nil
 function M.parse(value)
@@ -14,34 +25,27 @@ function M.parse(value)
 		return nil, "Missing URL"
 	end
 
-	local host, path = value:match("^[^/@:]+@([^/:]+):(.+)$")
-	local remote = host ~= nil
-	if remote then
-		path = "/" .. path:gsub("^/+", "")
-	else
-		local scheme, authority
-		scheme, authority, path = value:match("^([%a][%w+.-]*)://([^/?#]+)([^?#]*)")
-		scheme = scheme and scheme:lower() or nil
-		if scheme ~= "http" and scheme ~= "https" and scheme ~= "ssh" and scheme ~= "git" then
-			return nil, "Expected an http(s) URL or Git remote"
-		end
-		host = authority:match("@(.+)$") or authority
-		remote = scheme == "ssh" or scheme == "git" or path:match("%.git/*$") ~= nil
+	local ssh_host, ssh_path = value:match("^[^/@:]+@([^/:]+):(.+)$")
+	if ssh_host then
+		return normalized(ssh_host, "/" .. ssh_path:gsub("^/+", ""), true)
 	end
 
-	path = (path or "")
-		:gsub("%%(%x%x)", function(hex)
-			return string.char(tonumber(hex, 16))
-		end)
-		:gsub("/+$", "")
-	return { host = host:lower(), path = path, remote = remote }
+	local scheme, authority, path = value:match("^([%a][%w+.-]*)://([^/?#]+)([^?#]*)")
+	scheme = scheme and scheme:lower()
+	if scheme ~= "http" and scheme ~= "https" and scheme ~= "ssh" and scheme ~= "git" then
+		return nil, "Expected an http(s) URL or Git remote"
+	end
+	local host = authority:match("@(.+)$") or authority
+	if scheme == "ssh" then
+		host = host:gsub(":%d+$", "")
+	end
+	return normalized(host, path, scheme == "ssh" or scheme == "git" or path:match("%.git/*$") ~= nil)
 end
 
 ---@param provider AtlasProviderId
 ---@return AtlasParsedUrl|nil
 function M.configured_base(provider)
-	local options = config.provider_options(provider)
-	local base_url = type(options) == "table" and options.base_url or nil
+	local base_url = (config.provider_options(provider) or {}).base_url
 	if type(base_url) ~= "string" then
 		return nil
 	end
@@ -51,7 +55,7 @@ end
 ---@param parsed AtlasParsedUrl
 ---@param base AtlasParsedUrl|nil
 ---@return string|nil
-function M.path(parsed, base)
+function M.relative_path(parsed, base)
 	if base == nil or parsed.host ~= base.host then
 		return nil
 	end
@@ -74,16 +78,12 @@ function M.valid_tail(tail)
 end
 
 ---@param provider AtlasProviderId
----@param target_host string|nil
----@param fallback_host string|nil
+---@param host string
 ---@return string
-function M.base_url(provider, target_host, fallback_host)
-	local options = config.provider_options(provider) or {}
-	local configured = type(options.base_url) == "string" and options.base_url:gsub("/+$", "") or nil
-	if configured and configured ~= "" then
-		return configured
-	end
-	return "https://" .. (target_host and target_host ~= "" and target_host or fallback_host or "")
+function M.base_url(provider, host)
+	local configured = (config.provider_options(provider) or {}).base_url
+	configured = type(configured) == "string" and configured:gsub("/+$", "") or ""
+	return configured ~= "" and configured or "https://" .. host
 end
 
 return M

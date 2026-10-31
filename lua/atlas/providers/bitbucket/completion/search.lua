@@ -174,6 +174,7 @@ function M.edit(view, on_submit)
 
 	prompt.open({
 		name = "AtlasBitbucketSearch",
+		prompt = "Bitbucket search: ",
 		complete = complete_cmdline,
 		default = default,
 		on_submit = function(value)

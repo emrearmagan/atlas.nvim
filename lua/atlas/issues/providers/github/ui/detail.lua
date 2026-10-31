@@ -101,10 +101,7 @@ end
 function M.header_fields(issue, details, _loading)
 	---@cast issue GitHubIssue
 	---@cast details GitHubIssueDetails|nil
-	local reporter_name = issue.reporter and issue.reporter.name or ""
-	if reporter_name == "" then
-		reporter_name = "Unknown"
-	end
+	local reporter_name = helper.person_name(issue.reporter)
 
 	local assignees = details and details.assignees or (issue.assignee and { issue.assignee } or {})
 	local assignees_text, assignees_hl = assignees_display(assignees)

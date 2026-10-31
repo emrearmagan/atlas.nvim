@@ -32,6 +32,17 @@ function M.run(target)
 		require("atlas.pulls.notes.ui").clear_all()
 		return
 	end
+	if target == "reviewed" then
+		confirm("Delete reviewed file marks? [y/N]: ", function()
+			local cleared, err = require("atlas.pulls.reviewed").clear_all()
+			if not cleared then
+				notify.error(err or "Unable to delete reviewed file marks", { vim_notify = true })
+				return
+			end
+			notify.info("Reviewed file marks deleted", { vim_notify = true })
+		end)
+		return
+	end
 	if target == "stars" then
 		confirm("Delete all starred items? [y/N]: ", function()
 			local cleared, err = require("atlas.core.starred").clear_all()
@@ -47,10 +58,15 @@ function M.run(target)
 		return false
 	end
 
-	confirm("Delete Atlas caches, cloned repositories, notes, starred items, and logs? [y/N]: ", function()
+	confirm("Delete Atlas caches, clones, notes, reviewed file marks, stars, and logs? [y/N]: ", function()
 		local cleared, err = require("atlas.pulls.notes").clear_all()
 		if not cleared then
 			notify.error(err or "Unable to delete notes", { vim_notify = true })
+			return
+		end
+		local reviewed_cleared, reviewed_err = require("atlas.pulls.reviewed").clear_all()
+		if not reviewed_cleared then
+			notify.error(reviewed_err or "Unable to delete reviewed file marks", { vim_notify = true })
 			return
 		end
 		local stars_cleared, stars_err = require("atlas.core.starred").clear_all()

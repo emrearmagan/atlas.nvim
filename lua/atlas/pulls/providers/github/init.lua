@@ -1,13 +1,24 @@
+---@class GitHubPullStackEntry
+---@field position integer
+---@field number integer|nil
+
+---@class GitHubPullStack
+---@field position integer
+---@field size integer
+---@field entries GitHubPullStackEntry[]|nil
+
 ---@class GitHubPullRequest : PullRequest
 ---@field node_id string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
 ---@field lines_added number
 ---@field lines_removed number
+---@field stack GitHubPullStack|nil
 
 ---@class GitHubPullRequestDetails : PullRequestDetails
 ---@field assignees AtlasUser[]
 ---@field labels PullsLabel[]
+---@field stack GitHubPullStack|nil
 
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")

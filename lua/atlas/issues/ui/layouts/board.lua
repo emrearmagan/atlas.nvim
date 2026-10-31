@@ -4,10 +4,8 @@ local config = require("atlas.config")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
-local presentation = require("atlas.issues.ui.presentation")
 
-local MIN_COLUMN_WIDTH = 36
-local MAX_COLUMN_WIDTH = 48
+local MIN_COLUMN_WIDTH = 33
 local COLUMN_GAP = 3
 local MARGIN = 1
 
@@ -15,55 +13,22 @@ local function clean(value)
 	return (tostring(value or ""):gsub("%c", " "))
 end
 
-local function cell_content(column, row, width)
-	if row == 0 then
-		local count = string.format(" (%d)", #column.cards)
-		local text = utils.truncate(column.name, width - #count) .. count
-
-		return text, { { start_col = 0, end_col = #text, hl_group = "AtlasColumnHeader" } }
-	end
-
-	local card = column.cards[row]
-	if card then
-		return card.text, card.spans, card.issue
-	end
-
-	return "", {}
-end
-
-local function render_row(columns, row, width, first_column)
-	local parts, cells, spans = {}, {}, {}
-	local byte_col = MARGIN
-
-	for index, column in ipairs(columns) do
-		local text, highlights, issue = cell_content(column, row, width)
-		local padded = ui_utils.pad_right(text, width)
-
-		parts[index] = padded
-		cells[index] = {
-			kind = issue and "issue" or "issue_column",
-			key = issue and issue.key,
-			_issue = issue,
-			column = first_column + index - 1,
-			start_col = byte_col,
-			end_col = byte_col + #padded,
-		}
-
-		for _, span in ipairs(highlights) do
-			spans[#spans + 1] = {
-				line = row,
-				start_col = byte_col + span.start_col,
-				end_col = byte_col + span.end_col,
-				hl_group = span.hl_group,
-			}
+---@param segments { text: string, hl_group?: string }[]
+---@return string, { start_col: integer, end_col: integer, hl_group: string }[]
+local function join(segments)
+	local text, spans = "", {}
+	for _, segment in ipairs(segments) do
+		if segment.text ~= "" then
+			if text ~= "" then
+				text = text .. " "
+			end
+			if segment.hl_group then
+				table.insert(spans, { start_col = #text, end_col = #text + #segment.text, hl_group = segment.hl_group })
+			end
+			text = text .. segment.text
 		end
-
-		byte_col = byte_col + #padded + COLUMN_GAP
 	end
-
-	local line = string.rep(" ", MARGIN) .. table.concat(parts, string.rep(" ", COLUMN_GAP))
-
-	return line, { kind = "board_row", cells = cells }, spans
+	return text, spans
 end
 
 M.jira = {
@@ -72,61 +37,109 @@ M.jira = {
 		return status_icons[status.name] or status_icons[status.category] or icons.get("fallback")
 	end,
 	card = function(issue, width)
-		local prefix, star_hl = "", nil
+		local star, star_hl = "", nil
 		if issue.is_starred then
-			prefix, star_hl = icons.get("star")
-			prefix = prefix .. " "
+			star, star_hl = icons.get("star")
 		end
-
 		local priority, priority_hl = "", nil
 		if issue.priority and issue.priority ~= "" then
 			priority, priority_hl = icons.get(issue.priority, "priority")
 		end
-
-		local priority_text = priority ~= "" and (priority .. " ") or ""
 		local points = issue.story_points ~= nil
 				and utils.truncate(clean(issue.story_points) .. " pts", math.floor(width / 3))
 			or ""
-		local metadata = points ~= "" and (" " .. points) or ""
 
-		local key_width = math.min(16, width - ui_utils.text_width(prefix .. priority_text .. metadata) - 2)
-		local key = utils.truncate(clean(issue.key), key_width, true)
-		local key_text = key ~= "" and (key .. " ") or ""
-		local title_width = width - ui_utils.text_width(prefix .. priority_text .. key_text .. metadata)
-		local title = utils.truncate(clean(issue.title), title_width)
-		local text = prefix .. priority_text .. key_text .. title .. metadata
+		local title = { text = "" }
+		local segments = {
+			{ text = star, hl_group = star_hl },
+			{ text = priority, hl_group = priority_hl },
+			title,
+			{ text = points, hl_group = "AtlasTextMuted" },
+		}
+		local without_title = join(segments)
+		title.text = utils.truncate(clean(issue.title), width - ui_utils.text_width(without_title) - 1)
 
-		local spans = {}
-
-		if key ~= "" then
-			spans[#spans + 1] = {
-				start_col = #prefix + #priority_text,
-				end_col = #prefix + #priority_text + #key,
-				hl_group = presentation.issue_hl(issue.key),
-			}
-		end
-
-		if priority ~= "" then
-			spans[#spans + 1] = {
-				start_col = #prefix,
-				end_col = #prefix + #priority,
-				hl_group = priority_hl,
-			}
-		end
-
-		if points ~= "" then
-			spans[#spans + 1] = { start_col = #text - #points, end_col = #text, hl_group = "AtlasTextMuted" }
-		end
-
-		if star_hl then
-			spans[#spans + 1] = { start_col = 0, end_col = #prefix - 1, hl_group = star_hl }
-		end
-
+		local text, spans = join(segments)
 		return { issue = issue, text = text, spans = spans }
 	end,
 }
 
----@param opts { width: integer, statuses?: JiraIssueStatus[], loading?: boolean, spinner?: string }
+local function status_columns(issues, statuses, provider)
+	local columns, by_status = {}, {}
+
+	local function column_for(status_id, name)
+		status_id, name = clean(status_id), clean(name)
+		local key = status_id ~= "" and ("id:" .. status_id) or ("name:" .. name)
+		if by_status[key] == nil then
+			by_status[key] = { name = name ~= "" and name or "Unknown", issues = {} }
+			table.insert(columns, by_status[key])
+		end
+		return by_status[key]
+	end
+
+	for _, status in ipairs(statuses or {}) do
+		local icon = provider.column_icon(status)
+		column_for(status.id, status.name).name = clean(icon ~= "" and (icon .. " " .. status.name) or status.name)
+	end
+	for _, issue in ipairs(issues) do
+		table.insert(column_for(issue.status_id, issue.status).issues, issue)
+	end
+
+	return vim.tbl_filter(function(column)
+		return #column.issues > 0
+	end, columns)
+end
+
+---@param count integer
+---@param total_width integer
+---@return integer[]
+local function column_widths(count, total_width)
+	local inner_width = total_width - 2 * MARGIN
+	local fitting = math.floor((inner_width + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP))
+	local visible = math.max(1, math.min(count, fitting))
+	local available = inner_width - (visible - 1) * COLUMN_GAP
+	local width, extra = math.floor(available / visible), available % visible
+
+	local widths = {}
+	for index = 1, visible do
+		widths[index] = math.max(1, width + (index <= extra and 1 or 0))
+	end
+	return widths
+end
+
+local function header(column)
+	local count = string.format(" (%d)", #column.issues)
+	local text = utils.truncate(column.name, column.width - #count) .. count
+	return { text = text, spans = { { start_col = 0, end_col = #text, hl_group = "AtlasColumnHeader" } } }
+end
+
+local function render_row(columns, row, column_count)
+	local parts, cells, spans = {}, {}, {}
+	local col = MARGIN
+
+	for index, column in ipairs(columns) do
+		local content = column.rows[row] or { text = "", spans = {} }
+		local padded = ui_utils.pad_right(content.text, column.width)
+
+		parts[index] = padded
+		cells[index] = { issue = content.issue, column = column.index, start_col = col, end_col = col + #padded }
+		for _, span in ipairs(content.spans) do
+			table.insert(spans, {
+				line = row - 1,
+				start_col = col + span.start_col,
+				end_col = col + span.end_col,
+				hl_group = span.hl_group,
+			})
+		end
+
+		col = col + #padded + COLUMN_GAP
+	end
+
+	local line = string.rep(" ", MARGIN) .. table.concat(parts, string.rep(" ", COLUMN_GAP))
+	return line, { kind = "board_row", cells = cells, column_count = column_count }, spans
+end
+
+---@param opts { width: integer, first_column?: integer, statuses?: JiraIssueStatus[], loading?: boolean, spinner?: string }
 ---@param issues Issue[]
 ---@param provider table
 ---@return string[], table<integer, table>, table[]
@@ -136,90 +149,36 @@ function M.render(opts, issues, provider)
 		return { loading }, {}, {}
 	end
 
-	local columns, by_status = {}, {}
-
-	local function column_for(status_id, name)
-		status_id, name = clean(status_id), clean(name)
-		local key = status_id ~= "" and ("id:" .. status_id) or ("name:" .. name)
-		local column = by_status[key]
-
-		if column == nil then
-			column = { name = name ~= "" and name or "Unknown", issues = {} }
-			by_status[key] = column
-			table.insert(columns, column)
-		end
-
-		return column
-	end
-
-	for _, status in ipairs(opts.statuses or {}) do
-		local column = column_for(status.id, status.name)
-		local icon = provider.column_icon(status)
-
-		column.name = clean(icon ~= "" and (icon .. " " .. status.name) or status.name)
-	end
-
-	for _, issue in ipairs(issues) do
-		local column = column_for(issue.status_id, issue.status)
-		table.insert(column.issues, issue)
-	end
-
-	local populated = {}
-	for _, column in ipairs(columns) do
-		if #column.issues > 0 then
-			table.insert(populated, column)
-		end
-	end
-	columns = populated
-
+	local columns = status_columns(issues, opts.statuses, provider)
 	if #columns == 0 then
 		return { " No issues found." }, {}, {}
 	end
 
-	local inner_width = opts.width - 2 * MARGIN
-	local columns_per_row = math.max(1, math.floor((inner_width + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP)))
-	columns_per_row = math.min(#columns, columns_per_row)
-
-	local available = inner_width - (columns_per_row - 1) * COLUMN_GAP
-	local width = math.max(1, math.min(MAX_COLUMN_WIDTH, math.floor(available / columns_per_row)))
-
-	for _, column in ipairs(columns) do
-		column.cards = {}
+	local widths = column_widths(#columns, opts.width)
+	local first = math.max(1, math.min(opts.first_column or 1, #columns - #widths + 1))
+	local visible, height = {}, 0
+	for index, width in ipairs(widths) do
+		local column = columns[first + index - 1]
+		column.index = first + index - 1
+		column.width = width
+		column.rows = { header(column) }
 		for _, issue in ipairs(column.issues) do
-			table.insert(column.cards, provider.card(issue, width))
+			table.insert(column.rows, provider.card(issue, width))
 		end
+		height = math.max(height, #column.rows)
+		visible[index] = column
 	end
 
 	local lines, line_map, spans = {}, {}, {}
-
-	for first = 1, #columns, columns_per_row do
-		if first > 1 then
-			vim.list_extend(lines, { "", "" })
-		end
-
-		local band, height = {}, 0
-		for index = first, math.min(first + columns_per_row - 1, #columns) do
-			local column = columns[index]
-			table.insert(band, column)
-			height = math.max(height, #column.cards)
-		end
-
-		local base = #lines
-		for row = 0, height do
-			local line, entry, highlights = render_row(band, row, width, first)
-
-			lines[#lines + 1] = line
-			line_map[#lines] = entry
-			for _, span in ipairs(highlights) do
-				span.line = span.line + base
-				table.insert(spans, span)
-			end
-		end
+	for row = 1, height do
+		local line, entry, row_spans = render_row(visible, row, #columns)
+		lines[row] = line
+		line_map[row] = entry
+		vim.list_extend(spans, row_spans)
 	end
 
 	if loading then
-		table.insert(lines, "")
-		table.insert(lines, loading)
+		vim.list_extend(lines, { "", loading })
 	end
 
 	return lines, line_map, spans

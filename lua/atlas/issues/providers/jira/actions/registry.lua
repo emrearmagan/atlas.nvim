@@ -5,9 +5,6 @@
 ---| "open_project"
 ---| "search_jql"
 
-local M = {}
----@cast M AtlasActionsCapability
-
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
@@ -18,6 +15,7 @@ local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.providers.jira.users")
 local issues_state = require("atlas.issues.state")
+local presentation = require("atlas.issues.ui.presentation")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -30,14 +28,8 @@ local function has_issue_key(ctx)
 	return key ~= ""
 end
 
----@return string
-local function current_jql()
-	return issues_state.query
-end
-
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasIssueAction
 local function register(action)
@@ -51,77 +43,51 @@ local function transition(ctx, done)
 
 	local issue_key = issue.key
 	local current_status = tostring(issue.status or "")
-	---@type { id: string, label: string, value: IssueTransition }[]|nil
-	local all_items = nil
 
-	---@param items { id: string, label: string, value: IssueTransition }[]
-	---@param query string
-	local function filter_items(items, query)
-		local normalized = vim.trim(query):lower()
-		if normalized == "" then
-			return items
+	notify.loading("Loading transitions...")
+	return transitions_api.get_transitions(issue_key, function(transitions, err)
+		if err ~= nil or transitions == nil then
+			notify.error(err or "Failed to load transitions")
+			done(nil, err or "Failed to load transitions")
+			return
 		end
-		local filtered = {}
-		for _, item in ipairs(items) do
-			if item.label:lower():find(normalized, 1, true) then
-				table.insert(filtered, item)
+		notify.clear()
+
+		---@type { label: string, value: IssueTransition }[]
+		local items = {}
+		for _, candidate in ipairs(transitions) do
+			local to_status = tostring((candidate and candidate.to_status_name) or "")
+			if current_status == "" or to_status == "" or to_status ~= current_status then
+				table.insert(items, { label = to_status ~= "" and to_status or candidate.name, value = candidate })
 			end
 		end
-		return filtered
-	end
 
-	picker.search({
-		title = string.format("Transition %s", issue_key),
-		debounce_ms = 0,
-		format_item = function(item)
-			local icon = item.value.icon and item.value.icon.icon or icons.get("fallback")
-			return icon ~= "" and string.format("%s %s", icon, item.label) or item.label
-		end,
-		fetch = function(query, fetch_done)
-			if all_items then
-				fetch_done(filter_items(all_items, query), nil)
-				return
-			end
-
-			return transitions_api.get_transitions(issue_key, function(transitions, err)
-				if err ~= nil or transitions == nil then
-					fetch_done(nil, err or "Failed to load transitions")
+		picker.select({
+			title = string.format("Transition %s", issue_key),
+			items = items,
+			format_item = function(item)
+				local icon = item.value.icon and item.value.icon.icon or icons.get("fallback")
+				return icon ~= "" and string.format("%s %s", icon, item.label) or item.label
+			end,
+			on_select = function(item)
+				if not item then
+					done(nil, nil)
 					return
 				end
-
-				local items = {}
-				for _, candidate in ipairs(transitions) do
-					local to_status = tostring((candidate and candidate.to_status_name) or "")
-					if current_status == "" or to_status == "" or to_status ~= current_status then
-						table.insert(items, {
-							id = tostring(candidate.id or ""),
-							label = to_status ~= "" and to_status or candidate.name,
-							value = candidate,
-						})
+				notify.loading(string.format("Transitioning %s...", issue_key))
+				transitions_api.transition_issue(issue_key, item.value.id, function(ok, transition_err)
+					if not ok then
+						notify.error(transition_err or "Transition failed")
+						done(nil, transition_err or "Transition failed")
+						return
 					end
-				end
-				all_items = items
-				fetch_done(filter_items(items, query), nil)
-			end)
-		end,
-		on_select = function(item)
-			local selected = item.value
-			notify.loading(string.format("Transitioning %s...", issue_key))
-			transitions_api.transition_issue(issue_key, selected.id, function(ok, err)
-				if not ok then
-					notify.error(err or "Transition failed")
-					done(nil, err or "Transition failed")
-					return
-				end
 
-				notify.success(string.format("Transitioned %s to %s", issue_key, item.label), { timeout = 1200 })
-				done({ issue_key = issue_key }, nil)
-			end)
-		end,
-		on_cancel = function()
-			done(nil, nil)
-		end,
-	})
+					notify.success(string.format("Transitioned %s to %s", issue_key, item.label), { timeout = 1200 })
+					done({ issue_key = issue_key }, nil)
+				end)
+			end,
+		})
+	end)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -284,30 +250,16 @@ local function delete_issue(ctx, done)
 	local issue = assert(ctx.issue)
 
 	local issue_key = issue.key
-	vim.ui.input({
-		prompt = string.format("Delete issue %s? [y/N]: ", issue_key),
-	}, function(input)
-		if input == nil then
-			done(nil, nil)
+	notify.loading(string.format("Deleting %s...", issue_key))
+	issues_api.delete_issue(issue_key, function(ok, err)
+		if not ok then
+			notify.error(err or "Delete failed")
+			done(nil, err or "Delete failed")
 			return
 		end
 
-		if vim.trim(tostring(input)):lower() ~= "y" then
-			done(nil, nil)
-			return
-		end
-
-		notify.loading(string.format("Deleting %s...", issue_key))
-		issues_api.delete_issue(issue_key, function(ok, err)
-			if not ok then
-				notify.error(err or "Delete failed")
-				done(nil, err or "Delete failed")
-				return
-			end
-
-			notify.success(string.format("Deleted %s", issue_key), { timeout = 1200 })
-			done({ issue_key = issue_key, removed = true }, nil)
-		end)
+		notify.success(string.format("Deleted %s", issue_key), { timeout = 1200 })
+		done({ issue_key = issue_key, removed = true }, nil)
 	end)
 end
 
@@ -338,20 +290,6 @@ local function format_project(project)
 	local label = string.format("%s %s - %s", icons.provider_icon("jira", "issues"), project.key, project.name)
 	local category = project.category and project.category.name or ""
 	return category ~= "" and label .. " (" .. category .. ")" or label
-end
-
----@param items { label: string, value?: JiraIssueProject }[]
----@param query string
----@return table[]
-local function filter_projects(items, query)
-	query = vim.trim(query):lower()
-	return vim.tbl_filter(function(item)
-		local project = item.value
-		local name = project and project.name or ""
-		local category = project and project.category and project.category.name or ""
-		local text = string.format("%s %s %s", item.label, name, category):lower()
-		return text:find(query, 1, true) ~= nil
-	end, items)
 end
 
 ---@param _ AtlasIssueActionContext
@@ -433,7 +371,7 @@ end
 local function format_preview(issue, details)
 	local assignee = details.assignees[1]
 	local status = "**Status:** " .. (details.status or "Unknown")
-	local assignee_name = "**Assignee:** " .. (assignee and assignee.name or "Unassigned")
+	local assignee_name = "**Assignee:** " .. (assignee and presentation.person_name(assignee) or "Unassigned")
 	local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
 	local lines = {
 		status
@@ -443,7 +381,7 @@ local function format_preview(issue, details)
 		assignee_name
 			.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
 			.. "**Reporter:** "
-			.. (details.reporter and details.reporter.name or "Unknown"),
+			.. presentation.person_name(details.reporter),
 	}
 	local labels = vim.tbl_map(function(label)
 		return label.name
@@ -533,14 +471,12 @@ local function search_issue(ctx, done)
 		end
 
 		local items = vim.tbl_map(function(project)
-			return { id = project.id, label = project.key, value = project }
+			return { label = project.key, value = project }
 		end, projects)
-		table.insert(items, 1, { id = "all", label = "All projects" })
-		picker.search({
+		table.insert(items, 1, { label = "All projects" })
+		picker.select({
 			title = "Search Issues - Project",
-			initial_items = items,
-			fetch_on_open = false,
-			debounce_ms = 0,
+			items = items,
 			format_item = function(item)
 				local project = item.value
 				if not project then
@@ -548,14 +484,12 @@ local function search_issue(ctx, done)
 				end
 				return format_project(project)
 			end,
-			fetch = function(query, fetch_done)
-				fetch_done(filter_projects(items, query), nil)
-			end,
 			on_select = function(item)
+				if not item then
+					done(nil, nil)
+					return
+				end
 				search_issues(item.value, ctx, done)
-			end,
-			on_cancel = function()
-				done(nil, nil)
 			end,
 		})
 	end)
@@ -598,7 +532,7 @@ end
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search_jql(_, done)
-	require("atlas.issues.providers.jira.completion.search").open(current_jql())
+	require("atlas.issues.providers.jira.completion.search").open(issues_state.query)
 	done(nil, nil)
 end
 
@@ -645,15 +579,6 @@ local function copy_issue_url(ctx, done)
 	vim.fn.setreg('"', url)
 	notify.success("Copied issue URL", { timeout = 1200 })
 	done(nil, nil)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function toggle_subscription_available(ctx)
-	if not has_issue_key(ctx) then
-		return false, "No issue selected"
-	end
-	return true, nil
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -749,7 +674,7 @@ register({
 	label = "Edit Current Search",
 	icon = icons.get("search", "actions"),
 	run = function(_, done)
-		require("atlas.issues.providers.jira.completion.search").edit(current_jql(), function(query)
+		require("atlas.issues.providers.jira.completion.search").edit(issues_state.query, function(query)
 			local view = issues_state.search_view()
 			if view then
 				---@cast view AtlasJiraViewConfig
@@ -781,7 +706,7 @@ register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
 	icon = icons.get("notification", "actions"),
-	is_available = toggle_subscription_available,
+	is_available = has_issue_key,
 	run = toggle_subscription,
 })
 register({
@@ -794,19 +719,11 @@ register({
 	id = "delete_issue",
 	label = "Delete Issue",
 	icon = icons.get("delete", "actions"),
+	confirm = function(ctx)
+		return string.format("Delete issue %s?", assert(ctx.issue).key)
+	end,
 	is_available = has_issue_key,
 	run = delete_issue,
 })
 
----@param id AtlasJiraIssueActionId
----@return AtlasIssueAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

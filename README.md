@@ -3,7 +3,7 @@
 [![CI](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/emrearmagan/atlas.nvim?style=flat-square&color=blue)](LICENSE)
 
-# Atlas.nvim
+# atlas.nvim
 
 Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira without leaving your editor.
 
@@ -23,10 +23,14 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
 
 - [Configuration](#configuration)
 - [Commands](#commands)
-- GitHub: [Pull requests](#github) · [Issues](#github-issues)
-- GitLab: [Pull requests](#gitlab) · [Issues](#gitlab-issues)
-- [Bitbucket](#bitbucket)
-- [Jira](#jira)
+- [Pull requests](#pulls)
+  - [GitHub](#github)
+  - [GitLab](#gitlab)
+  - [Bitbucket](#bitbucket)
+- [Issues](#issues)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
+  - [Jira](#jira)
 
 ## Installation
 
@@ -85,6 +89,7 @@ require("atlas").setup({})
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. It opens in your configured diff viewer.
 
 - Browse files, commits, hunks, and review history.
+- Review commit by commit or a range of commits.
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
@@ -109,8 +114,8 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeD
 ```sh
 ./bin/atlas-notes add \
   --target https://github.com/owner/repository/pull/123 \
-  --file lua/review_queue.lua --line 19 \
-  --context "local item = queue[index]" \
+  --commit 3f2a9c1e \
+  --file lua/review_queue.lua --start-line 19 \
   --type suggestion --body "Should this be a bool?"
 ```
 
@@ -205,7 +210,7 @@ pulls = {
       id = "show_repo_status",
       label = "Show repository status",
       icon = "",
-      confirmation = true,
+      confirm = "Show repository status?",
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -239,7 +244,6 @@ issues = {
       id = "copy_branch_name",
       label = "Copy branch name",
       icon = "",
-      confirmation = false,
       ---@param issue Issue
       ---@param ctx AtlasIssuesCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -285,6 +289,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - Save issue descriptions as templates and reuse them when creating issues.
 - Close or reopen GitHub/GitLab issues and change Jira workflow states.
 - Jump between linked issues and pull requests and back, or browse related issues and sub-issues.
+- See a GitHub PR's position in its stack (e.g. `2/5`) and step through the stack with `]s` / `[s`.
 - Read GitHub and GitLab notifications, open them in Atlas, and mark them as read or done.
 - Remap shortcuts or assign multiple keys to the same action.
 - Set local repository paths and PR templates per project.
@@ -296,10 +301,14 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    -- Set either to false to keep your existing statusline.
     statusline = {
-      atlas = true, -- Dashboards, details, and other non-diff Atlas views.
-      diff = true, -- Diff and review views.
+      -- false keeps your existing statusline. A function(buf, win, context) decides per window;
+      -- `context` is "atlas" for dashboards/details and "diff" for diff views.
+      enable = true,
+      -- For example, keep your statusline in Atlas detail views:
+      -- enable = function(buf, win, context)
+      --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
+      -- end,
     },
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
@@ -364,7 +373,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - `:Atlas open [target|.]` - Open a pull request or issue by URL, Jira key, or number; `.` opens the current branch's pull request
 - `:Atlas browse [repository URL|.|page] [page]` - Open the repository browser; `.` uses the current repository, a page name alone picks a repository first, and a URL to a repository page or item opens that page, e.g. `:Atlas browse . branches`, `:Atlas browse issues` or `:Atlas browse https://github.com/owner/repo/discussions`
 - `:Atlas notes [target|.]` - Inspect notes; `.` shows the current repository's notes
-- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, or starred items
+- `:Atlas clear [cache|notes|reviewed|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, reviewed file marks, or starred items
 - `:Atlas logs` - Toggle Atlas logs
 - `:Atlas console` - Open the latest command output
 
@@ -377,7 +386,7 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 
 ```lua
 pulls = {
-  delete_notes = false, -- Delete notes after approval or merge.
+  delete_notes = false, -- Delete notes after approval, merge, or decline.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -436,6 +445,8 @@ pulls = {
   },
   repo_config = {
     -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- PR checkout prefers the matching checkout or worktree Atlas is run from, then falls back here.
+    -- Diffs of other repositories use a clone in the cache, removed after 30 days without a review.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
@@ -787,6 +798,7 @@ issues = {
   },
 },
 ```
+
 <img alt="github-issue" src="https://github.com/user-attachments/assets/109b9a2a-86f2-4867-86e2-ff6a0645ca29" />
 
 </details>
@@ -930,6 +942,10 @@ keymaps = {
     checkout = "gc",
     open_repository = "o",
     edit_pr = "ge",
+    stack = {
+      next = "]s",
+      prev = "[s",
+    },
     review = {
       show_details = "K", -- File/commit details.
       toggle_file_reviewed = "-",
@@ -941,8 +957,12 @@ keymaps = {
       toggle_resolved = "x",
       next_comment = "]c",
       prev_comment = "[c",
+      next_unresolved = "]x",
+      prev_unresolved = "[x",
       next_note = "]n",
       prev_note = "[n",
+      next_commit = "]r",
+      prev_commit = "[r",
       add_comment = "c",
       submit_comment = "C",
       add_suggestion = "s",
@@ -959,6 +979,9 @@ keymaps = {
         next_unreviewed_file = "]u",
         prev_unreviewed_file = "[u",
         find_file = "<leader>f",
+      },
+      panel = {
+        cycle_filter = "f",
       },
       -- Built-in navigation; external viewers use their own keys.
       atlas = {

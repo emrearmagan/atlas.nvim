@@ -1,7 +1,6 @@
 local M = {}
 
 local threads = require("atlas.ui.components.threads")
-local reactions = require("atlas.ui.shared.reactions")
 local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -157,12 +156,8 @@ local function comment_item(comment, opts, is_root)
 		item.language_aliases = comment.inline
 			and { suggestion = vim.filetype.match({ filename = comment.inline.path }) }
 		item.meta.is_deleted = is_deleted
-
 		if not is_deleted then
-			local reaction_text, reaction_highlights = reactions.format(comment.reactions)
-			if reaction_text ~= "" then
-				table.insert(footer_items, { text = reaction_text, highlights = reaction_highlights })
-			end
+			item.reactions = comment.reactions
 		end
 	end
 
@@ -180,6 +175,12 @@ local function comment_item(comment, opts, is_root)
 		if not comment.is_task and opts.action_keys.add_task then
 			table.insert(footer_items, {
 				text = opts.action_keys.add_task .. " task",
+				hl_group = "AtlasTextMuted",
+			})
+		end
+		if not comment.is_task and opts.action_keys.react and not is_deleted then
+			table.insert(footer_items, {
+				text = opts.action_keys.react .. " react",
 				hl_group = "AtlasTextMuted",
 			})
 		end
@@ -302,6 +303,7 @@ local function build_item(node, opts, is_root, root)
 		item.children = {}
 		if is_closed(node.comment) then
 			item.content = nil
+			item.reactions = nil
 			item.footer_items = {}
 		elseif #node.children > 0 then
 			local count = descendant_count(node)
@@ -320,6 +322,7 @@ end
 ---@class AtlasCommentThreadActionKeys
 ---@field reply? string
 ---@field add_task? string
+---@field react? string
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
@@ -366,6 +369,7 @@ function M.render_compact(node, width, expanded, location, opts)
 		item.line_map.thread_root = comment
 		item.line_map.thread_has_replies = #node.children > 0
 		item.content = nil
+		item.reactions = nil
 		item.footer_items = {}
 	end
 	local replies = descendant_count(node)

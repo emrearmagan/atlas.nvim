@@ -3,13 +3,13 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local highlights = require("atlas.ui.highlights")
 local markdown = require("atlas.formats.markdown")
+local reactions = require("atlas.ui.shared.reactions")
 
 ---@alias AtlasThreadMode "tree" | "linked"
 
 ---@class AtlasThreadFooterItem
 ---@field text string
 ---@field hl_group string|nil
----@field highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
 
 ---@class AtlasThreadItem
 ---@field icon string|nil Icon string rendered before author
@@ -23,6 +23,7 @@ local markdown = require("atlas.formats.markdown")
 ---@field language string|nil
 ---@field file_path string|nil
 ---@field language_aliases table<string, string>|nil
+---@field reactions AtlasReaction[]|nil
 ---@field footer_items AtlasThreadFooterItem[]|nil
 ---@field children AtlasThreadItem[]|nil Nested replies
 ---@field meta table|nil Arbitrary metadata passed through
@@ -310,7 +311,7 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	end
 end
 
--- Footer rendering
+-- Reactions rendering
 
 ---@param lines string[]
 ---@param spans AtlasThreadSpan[]
@@ -318,34 +319,75 @@ end
 ---@param item AtlasThreadItem
 ---@param depth integer
 ---@param pfx AtlasThreadPrefixes
-local function render_footer(lines, spans, line_map, item, depth, pfx)
-	local footer_items = item.footer_items or {}
-	if #footer_items == 0 then
+local function render_reactions(lines, spans, line_map, item, depth, pfx)
+	local text, reaction_spans = reactions.format(item.reactions)
+	if text == "" then
 		return
 	end
 
-	local footer_prefix = pfx.body_prefix
-	local line = footer_prefix
+	local prefix = pfx.body_prefix
 	local row = #lines
-	if #footer_prefix > 0 then
-		span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+	if #prefix > 0 then
+		span(spans, row, 0, #prefix, "AtlasTextMuted")
 	end
-	for index, footer_item in ipairs(footer_items) do
-		if index > 1 then
-			line = line .. "   "
-		end
-		local start_col = #line
-		line = line .. footer_item.text
-		if footer_item.highlights and #footer_item.highlights > 0 then
-			for _, highlight in ipairs(footer_item.highlights) do
-				span(spans, row, start_col + highlight.start_col, start_col + highlight.end_col, highlight.hl_group)
-			end
+	for _, reaction_span in ipairs(reaction_spans) do
+		span(spans, row, #prefix + reaction_span.start_col, #prefix + reaction_span.end_col, reaction_span.hl_group)
+	end
+	lines[#lines + 1] = prefix .. text
+	line_map[#lines] = make_line_map(item, "reactions", depth)
+end
+
+-- Footer rendering
+
+local FOOTER_SEPARATOR = "   "
+
+---@param footer_items AtlasThreadFooterItem[]
+---@param width integer
+---@return AtlasThreadFooterItem[][]
+local function footer_rows(footer_items, width)
+	local rows = {}
+	local row_width = 0
+	for _, footer_item in ipairs(footer_items) do
+		local item_width = vim.api.nvim_strwidth(footer_item.text)
+		local row = rows[#rows]
+		if row and row_width + #FOOTER_SEPARATOR + item_width <= width then
+			table.insert(row, footer_item)
+			row_width = row_width + #FOOTER_SEPARATOR + item_width
 		else
+			table.insert(rows, { footer_item })
+			row_width = item_width
+		end
+	end
+	return rows
+end
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param pfx AtlasThreadPrefixes
+---@param width integer
+local function render_footer(lines, spans, line_map, item, depth, pfx, width)
+	local footer_prefix = pfx.body_prefix
+	local available = width - vim.api.nvim_strwidth(footer_prefix)
+	for _, footer_items in ipairs(footer_rows(item.footer_items or {}, available)) do
+		local line = footer_prefix
+		local row = #lines
+		if #footer_prefix > 0 then
+			span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+		end
+		for index, footer_item in ipairs(footer_items) do
+			if index > 1 then
+				line = line .. FOOTER_SEPARATOR
+			end
+			local start_col = #line
+			line = line .. footer_item.text
 			span(spans, row, start_col, #line, footer_item.hl_group or "AtlasTextMuted")
 		end
+		lines[#lines + 1] = line
+		line_map[#lines] = make_line_map(item, "footer", depth)
 	end
-	lines[#lines + 1] = line
-	line_map[#lines] = make_line_map(item, "footer", depth)
 end
 
 -- Blank / separator lines
@@ -391,7 +433,8 @@ local function render_item(lines, spans, line_map, item, depth, branch_prefix, i
 
 	render_header(lines, spans, line_map, item, depth, pfx, opts, width)
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
-	render_footer(lines, spans, line_map, item, depth, pfx)
+	render_reactions(lines, spans, line_map, item, depth, pfx)
+	render_footer(lines, spans, line_map, item, depth, pfx, width - opts.padding_x)
 
 	local children = item.children or {}
 	for index, child in ipairs(children) do

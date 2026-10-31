@@ -13,7 +13,7 @@ function M.resolve(value, parsed)
 	if parsed.host ~= base.host then
 		return nil, nil
 	end
-	local path = url.path(parsed, base)
+	local path = url.relative_path(parsed, base)
 	if path == nil and parsed.remote then
 		path = parsed.path
 	end
@@ -36,7 +36,7 @@ function M.resolve(value, parsed)
 		return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"
 	end
 
-	local web_url = url.base_url("gitlab", parsed.host, "gitlab.com") .. "/" .. project_path
+	local web_url = url.base_url("gitlab", parsed.host) .. "/" .. project_path
 	---@type AtlasTarget
 	local target = {
 		provider = "gitlab",

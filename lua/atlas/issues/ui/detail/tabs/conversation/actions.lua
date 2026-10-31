@@ -122,14 +122,7 @@ function M.edit(issue, entry, refresh)
 	end
 	if state.is_description(comment) then
 		issue_actions.run("edit_issue", { provider = detail.provider, issue = issue }, function(result)
-			if not result or not result.issue_key then
-				return
-			end
-			if detail.on_update then
-				detail.on_update(issue, result)
-			else
-				require("atlas.issues.ui.detail").refresh(issue)
-			end
+			require("atlas.issues.ui.detail").apply_action_result(issue, detail.on_update, result)
 		end)
 		return
 	end

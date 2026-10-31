@@ -9,7 +9,13 @@ function M.resolve(value, parsed)
 	if parsed == nil then
 		return nil, nil
 	end
-	if parsed.host ~= "bitbucket.org" then
+	local host = parsed.host
+	-- Bitbucket Cloud moved SSH to ssh.bitbucket.org
+	-- https://community.atlassian.com/forums/discussion/3234032/upcoming-change-to-bitbucket-cloud-ssh-access-move-from-bitbucket-org-to-ssh-bitbucket-org
+	if parsed.remote and host == "ssh.bitbucket.org" then
+		host = "bitbucket.org"
+	end
+	if host ~= "bitbucket.org" then
 		local project, repo, number, tail =
 			parsed.path:match("^/projects/([^/]+)/repos/([^/]+)/pull%-requests/(%d+)(.*)$")
 		local server_pr = project and repo and number and url.valid_tail(tail)
@@ -34,7 +40,7 @@ function M.resolve(value, parsed)
 	end
 
 	local full_name = workspace .. "/" .. repo
-	local web_url = url.base_url("bitbucket", parsed.host, "bitbucket.org") .. "/" .. full_name
+	local web_url = url.base_url("bitbucket", host) .. "/" .. full_name
 	---@type AtlasTarget
 	local target = {
 		provider = "bitbucket",
@@ -42,7 +48,7 @@ function M.resolve(value, parsed)
 		entity = "repo",
 		url = web_url,
 		repository_url = web_url .. ".git",
-		host = parsed.host,
+		host = host,
 		workspace = workspace,
 		owner = workspace,
 		repo = repo,

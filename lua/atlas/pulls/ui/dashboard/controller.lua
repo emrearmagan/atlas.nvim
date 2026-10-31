@@ -387,16 +387,12 @@ function M.refresh_view()
 
 	local selected_item = navigation.current_item()
 	local selected_bookmark = selected_item and (selected_item.kind == "bookmark" or selected_item.kind == "starred")
-	local selected_pr = type(selected_item) == "table"
-			and (selected_item.kind == "pr" or selected_item.kind == "pr_meta")
-			and type(selected_item.pr) == "table"
-			and selected_item.pr
-		or nil
+	local selected_pr = selected_item and selected_item.pr
 	local function finish()
 		local focused = false
 		if selected_pr ~= nil then
 			focused = navigation.focus_item(function(item)
-				return item.kind == "pr"
+				return item.pr ~= nil
 					and tostring(item.pr.id) == tostring(selected_pr.id)
 					and item.pr.repo_full_name == selected_pr.repo_full_name
 			end)
@@ -406,12 +402,7 @@ function M.refresh_view()
 		end
 
 		local item = navigation.current_item()
-		if
-			(selected_pr ~= nil and not focused)
-			or type(item) ~= "table"
-			or item.kind ~= "pr"
-			or type(item.pr) ~= "table"
-		then
+		if (selected_pr ~= nil and not focused) or not (item and item.pr) then
 			if detail.is_open() then
 				detail.close()
 			end
@@ -466,12 +457,12 @@ end
 ---@param source_buf integer|nil
 function M.show_pr_details(source_buf)
 	local node = navigation.current_item()
-	if type(node) ~= "table" or (node.kind ~= "pr" and node.kind ~= "pr_meta") or type(node.pr) ~= "table" then
+	local pr = node and node.pr
+	if not pr then
 		notify.warn("No PR selected")
 		return
 	end
 
-	local pr = node.pr
 	local lines, highlights = require("atlas.pulls.ui.dashboard.popup").content(pr)
 	info_popup.show({
 		lines = lines,
