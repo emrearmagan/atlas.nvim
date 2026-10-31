@@ -2,10 +2,12 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
 
 local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
+local CLONE_STALE_SECONDS = 30 * 24 * 60 * 60 -- 30 days
 
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
@@ -213,7 +215,7 @@ end
 ---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
----@param opts { console?: boolean, on_progress?: fun(label: string, percent: integer) }|nil
+---@param opts AtlasGitFetchOptions|nil
 ---@return { cancel: fun() }|nil
 local function fetch_pr_refs(pr, repo_path, on_done, opts)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
@@ -292,6 +294,11 @@ local function fetch_pr_refs(pr, repo_path, on_done, opts)
 	return scope
 end
 
+---@return string
+local function clones_root()
+	return vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
+end
+
 ---@param pr PullRequest
 ---@return string|nil cache_path
 ---@return string|nil remote_url
@@ -303,7 +310,7 @@ local function cached_pr_repository(pr)
 	---@cast target AtlasTarget
 	local repository = pr.repo_full_name
 	local transport = configured_git_transport()
-	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
+	local cache_path = vim.fs.joinpath(clones_root(), target.host, repository)
 	local advertised = pr.destination.https_url
 	if transport == "ssh" then
 		advertised = pr.destination.ssh_url
@@ -408,6 +415,33 @@ local function ensure_repository(pr, repo_path, on_progress, on_done)
 	return scope
 end
 
+---@param dir string
+---@param now integer
+local function prune_clones(dir, now)
+	local git_dir = vim.fs.joinpath(dir, ".git")
+	if vim.fn.isdirectory(git_dir) == 1 then
+		local stat = vim.uv.fs_stat(vim.fs.joinpath(git_dir, "FETCH_HEAD")) or vim.uv.fs_stat(git_dir)
+		if stat and now - stat.mtime.sec > CLONE_STALE_SECONDS then
+			logger.loginfo("checkout.prune removing stale clone", { dir = dir })
+			vim.fn.delete(dir, "rf")
+		end
+		return
+	end
+	for name, kind in vim.fs.dir(dir) do
+		if kind == "directory" then
+			prune_clones(vim.fs.joinpath(dir, name), now)
+		end
+	end
+	vim.fn.delete(dir, "d")
+end
+
+function M.prune()
+	local root = clones_root()
+	if vim.fn.isdirectory(root) == 1 then
+		prune_clones(root, os.time())
+	end
+end
+
 ---@param pr PullRequest
 ---@param root string|nil
 ---@param on_done fun(root: string|nil)
@@ -490,47 +524,211 @@ function M.checkout_pr(pr, on_done)
 	end
 
 	local scope = requests.new()
+
+	local function checkout_repo(repo_path)
+		local function finish(ok, err)
+			on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, err)
+		end
+		local function create_branch(err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			scope.run(function(done)
+				return git.checkout_new_branch(repo_path, src_branch, pr.source.commit_hash, done)
+			end, finish)
+		end
+		scope.run(function(done)
+			return git.rev_exists(repo_path, "refs/heads/" .. src_branch, done)
+		end, function(exists)
+			if exists then
+				scope.run(function(done)
+					return git.checkout_branch(repo_path, src_branch, done)
+				end, finish)
+				return
+			end
+			scope.run(function(done)
+				return fetch_pr_refs(pr, repo_path, done)
+			end, create_branch)
+		end)
+	end
+
+	-- Prefer the checkout or worktree the user is currently in. Falling back to repo_config.paths
+	-- keeps checkout working when Atlas is opened outside a matching repository.
 	scope.run(function(done)
-		return M.resolve_repo_path_for_pr(pr, { require_existing = true }, done)
-	end, function(mapped_path, resolve_err)
-		if not mapped_path then
-			on_done(nil, resolve_err)
+		return current_repo_path(pr, nil, done)
+	end, function(repo_path)
+		if repo_path then
+			checkout_repo(repo_path)
 			return
 		end
 		scope.run(function(done)
-			return git.repo_root(mapped_path, done)
-		end, function(repo_path)
-			if not repo_path then
-				on_done(nil, string.format("mapped path is not a git repository: %s", mapped_path))
+			return M.resolve_repo_path_for_pr(pr, { require_existing = true }, done)
+		end, function(mapped_path, resolve_err)
+			if not mapped_path then
+				on_done(nil, resolve_err)
 				return
 			end
-			local function finish(ok, err)
-				on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, err)
-			end
-			local function create_branch(err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				scope.run(function(done)
-					return git.checkout_new_branch(repo_path, src_branch, pr.source.commit_hash, done)
-				end, finish)
-			end
 			scope.run(function(done)
-				return git.rev_exists(repo_path, "refs/heads/" .. src_branch, done)
-			end, function(exists)
-				if exists then
-					scope.run(function(done)
-						return git.checkout_branch(repo_path, src_branch, done)
-					end, finish)
+				return git.repo_root(mapped_path, done)
+			end, function(root)
+				if not root then
+					on_done(nil, string.format("mapped path is not a git repository: %s", mapped_path))
 					return
 				end
-				scope.run(function(done)
-					return fetch_pr_refs(pr, repo_path, done)
-				end, create_branch)
+				checkout_repo(root)
 			end)
 		end)
 	end)
+	return scope
+end
+
+---@param remote_url string|nil
+---@param repo_url string|nil
+---@return boolean
+local function matches_remote(remote_url, repo_url)
+	local remote = remote_url and git.parse_remote_url(remote_url) or nil
+	local target = repo_url and providers.resolve(repo_url) or nil
+	return remote ~= nil
+		and target ~= nil
+		and remote.provider == target.provider
+		and remote.host:lower() == target.host:lower()
+		and tostring(remote.repo_full_name):lower() == tostring(target.repo_full_name):lower()
+end
+
+---@param repo_full_name string
+---@param repo_url string|nil Web URL of the repository; the mapped checkout's origin must match it
+---@param on_done fun(root: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.resolve_repo_root(repo_full_name, repo_url, on_done)
+	local paths = (config.options.pulls.repo_config or {}).paths or {}
+	local path, err = M.resolve_repo_path(paths, repo_full_name, { require_existing = true })
+	if not path then
+		on_done(nil, err)
+		return nil
+	end
+
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.repo_root(path, done)
+	end, function(root, root_err)
+		if not root then
+			on_done(nil, root_err)
+			return
+		end
+
+		scope.run(function(done)
+			return git.remote_url(root, "origin", done)
+		end, function(remote)
+			if not matches_remote(remote, repo_url) then
+				on_done(nil, string.format("origin of %s does not match %s", root, repo_full_name))
+				return
+			end
+
+			on_done(root, nil)
+		end)
+	end)
+
+	return scope
+end
+
+---@param root string
+---@param branches { name: string, hash: string }[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_commits(root, branches, on_done)
+	local hashes = {}
+	for _, branch in ipairs(branches) do
+		if branch.hash == "" then
+			on_done(false, "The branch has no commit to load: " .. branch.name)
+			return
+		end
+
+		table.insert(hashes, branch.hash)
+	end
+
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.check_commits(root, hashes, done)
+	end, function(exists, err)
+		if not exists then
+			on_done(false, err)
+			return
+		end
+
+		local refs = {}
+		for index, branch in ipairs(branches) do
+			if not exists[index] then
+				table.insert(refs, "refs/heads/" .. branch.name)
+			end
+		end
+
+		if #refs == 0 then
+			on_done(true, nil)
+			return
+		end
+
+		scope.run(function(done)
+			return git.fetch_refs(root, "origin", refs, done)
+		end, on_done)
+	end)
+
+	return scope
+end
+
+---@param root string
+---@param branch { name: string, hash: string }
+---@param on_done fun(commits: AtlasGitCommit[]|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.branch_history(root, branch, on_done)
+	local scope = requests.new()
+	scope.run(function(done)
+		return M.fetch_commits(root, { branch }, done)
+	end, function(ok, err)
+		if not ok then
+			on_done(nil, err)
+			return
+		end
+
+		scope.run(function(done)
+			return git.branch_commits(root, branch.hash, done)
+		end, on_done)
+	end)
+
+	return scope
+end
+
+---@param root string
+---@param name string Branch name
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.checkout_branch(root, name, on_done)
+	local scope = requests.new()
+	scope.run(function(done)
+		return git.rev_exists(root, "refs/heads/" .. name, done)
+	end, function(exists)
+		if exists then
+			scope.run(function(done)
+				return git.checkout_branch(root, name, done)
+			end, on_done)
+			return
+		end
+
+		local remote_ref = "refs/remotes/origin/" .. name
+		scope.run(function(done)
+			return git.fetch_refs(root, "origin", { "refs/heads/" .. name .. ":" .. remote_ref }, done)
+		end, function(ok, err)
+			if not ok then
+				on_done(false, err)
+				return
+			end
+
+			scope.run(function(done)
+				return git.checkout_new_branch(root, name, remote_ref, done)
+			end, on_done)
+		end)
+	end)
+
 	return scope
 end
 

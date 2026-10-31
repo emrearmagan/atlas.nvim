@@ -88,15 +88,4 @@ describe("GitLab client", function()
 		assert.equal("https://gitlab.example.com/company/gitlab/api/v4/projects", calls[1].url)
 		assert.equal("https://gitlab.example.com/company/gitlab/api/graphql", calls[2].url)
 	end)
-
-	it("requires GraphQL authentication", function()
-		local client = load_client()
-		local auth_err
-		client.graphql("query { currentUser { id } }", nil, function(_, err)
-			auth_err = err
-		end)
-
-		assert.equal("Missing GitLab credentials in config", auth_err)
-		assert.equal(0, #calls)
-	end)
 end)

@@ -21,7 +21,7 @@
 ---@field icon string
 ---@field hl_group string
 ---@field views fun(): AtlasPullsViewConfig[]
----@field view_for_target fun(target: AtlasTarget): AtlasPullsViewConfig
+---@field repository_view fun(repository: AtlasTarget, branch: string|nil): AtlasPullsViewConfig
 ---@field resolve_search fun(view: AtlasPullsViewConfig): string, PullsStateFilter[]
 ---@field capabilities PullsProviderCapabilities
 
@@ -68,7 +68,7 @@
 ---@field review PullsReview|nil
 
 ---@class PullsCommentsCapability
----@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: PullsConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(conversation: PullsConversation|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -85,7 +85,7 @@
 ---@field approve (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field request_changes (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field discard_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field set_file_reviewed (fun(pr: PullRequest, path: string, reviewed: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field set_files_reviewed (fun(pr: PullRequest, paths: string[], reviewed: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsTasksCapability
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -94,4 +94,4 @@
 
 ---@class PullsUICapability
 ---@field detail PullsProviderDetail|nil
----@field repository { pages: fun(pages: table<string, RepositoryPage>): RepositoryPage[] }|nil
+---@field repository { pages: RepositoryPage[] }|nil

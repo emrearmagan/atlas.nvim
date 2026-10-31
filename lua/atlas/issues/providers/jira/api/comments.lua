@@ -5,18 +5,20 @@ local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local markdown = require("atlas.formats.adf.from_markdown")
 
 ---@param raw table
----@param issue_key string
+---@param issue Issue
 ---@return IssueComment[]
-local function map_comments(raw, issue_key)
-	return normalizer.to_comments_list(raw, {
-		issue_key = issue_key,
-		base_url = service.base_url(),
-	})
+local function map_comments(raw, issue)
+	return normalizer.to_comments_list(
+		raw,
+		tostring(issue.key or ""),
+		service.base_url(),
+		issue.reporter and issue.reporter.id
+	)
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: IssueConversation|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -27,24 +29,10 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 	local cache_key = "jira:panel:comments:" .. issue_key
 
-	---@param comments IssueComment[]
-	local function done(comments)
-		local items = {}
-		for _, comment in ipairs(comments) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_at = comment.created_at or "",
-				entity = comment,
-			})
-		end
-		on_done(items, nil)
-	end
-
 	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
-			done(cached)
+			on_done({ comments = cached, activities = {} }, nil)
 			return nil
 		end
 	end
@@ -57,22 +45,23 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 
-		local comments = map_comments(result, issue_key)
+		local comments = map_comments(result, issue)
 		service.set_memory_cache(cache_key, comments)
-		done(comments)
+		on_done({ comments = comments, activities = {} }, nil)
 	end, {
 		action = "Fetch comments",
 		issue_key = issue_key,
 	})
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param comment string
 ---@param comment_id string|nil
 ---@param parent_id string|number|nil
 ---@param callback fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-local function write_comment(issue_key, comment, comment_id, parent_id, callback)
+local function write_comment(issue, comment, comment_id, parent_id, callback)
+	local issue_key = tostring(issue.key or "")
 	if vim.trim(comment) == "" then
 		callback(nil, "Comment cannot be empty")
 		return nil
@@ -94,7 +83,7 @@ local function write_comment(issue_key, comment, comment_id, parent_id, callback
 		end
 
 		service.clear_memory_cache()
-		local comments = map_comments({ comments = { result } }, issue_key)
+		local comments = map_comments({ comments = { result } }, issue)
 		callback(comments[1], nil)
 	end, {
 		action = comment_id and "Edit comment" or "Add comment",
@@ -110,7 +99,7 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.add_comment(issue, content, opts, on_done)
 	local parent = opts and opts.parent
-	return write_comment(tostring(issue.key or ""), content, nil, parent and parent.id, on_done)
+	return write_comment(issue, content, nil, parent and parent.id, on_done)
 end
 
 ---@param issue Issue
@@ -119,7 +108,7 @@ end
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.edit_comment(issue, comment, content, on_done)
-	return write_comment(tostring(issue.key or ""), content, tostring(comment.id), nil, on_done)
+	return write_comment(issue, content, tostring(comment.id), nil, on_done)
 end
 
 ---@param issue Issue

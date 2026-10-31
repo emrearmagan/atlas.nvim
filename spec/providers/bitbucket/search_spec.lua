@@ -2,7 +2,7 @@ local query = require("atlas.providers.bitbucket.query")
 
 describe("Bitbucket pull request search", function()
 	it("parses a project scope", function()
-		local parsed, err = query.parse("project:acme/WEB")
+		local parsed, err = assert(query.parse("project:acme/WEB"))
 
 		assert.is_nil(err)
 		assert.same({ { workspace = "acme", project = "WEB" } }, parsed.targets)
@@ -31,7 +31,7 @@ describe("Bitbucket pull request search", function()
 	end)
 
 	it("parses repository scopes before and after the query", function()
-		local parsed, err = query.parse('repo:acme/core title ~ "atlas" repo:other/app')
+		local parsed, err = assert(query.parse('repo:acme/core title ~ "atlas" repo:other/app'))
 
 		assert.is_nil(err)
 		assert.same({

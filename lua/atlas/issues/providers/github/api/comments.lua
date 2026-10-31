@@ -9,7 +9,7 @@ local normalizer = require("atlas.issues.providers.github.api.mapper")
 local ADD_COMMENT_MUTATION = [[
 mutation($id:ID!,$body:String!){
   addComment(input:{subjectId:$id,body:$body}){
-    commentEdge{node{id url body createdAt author{login ...on User{name databaseId} ...on Bot{databaseId}}}}
+    commentEdge{node{id url body createdAt authorAssociation author{__typename login ...on User{name databaseId} ...on Bot{databaseId}}}}
   }
 }
 ]]
@@ -17,7 +17,7 @@ mutation($id:ID!,$body:String!){
 local UPDATE_COMMENT_MUTATION = [[
 mutation($id:ID!,$body:String!){
   updateIssueComment(input:{id:$id,body:$body}){
-    issueComment{id url body createdAt author{login ...on User{name databaseId} ...on Bot{databaseId}}}
+    issueComment{id url body createdAt authorAssociation author{__typename login ...on User{name databaseId} ...on Bot{databaseId}}}
   }
 }
 ]]
@@ -55,7 +55,7 @@ function M.add(issue, body, _opts, on_done)
 			return
 		end
 		local edge = json.safe_table(json.safe_table(json.safe_table(result.data).addComment).commentEdge)
-		local comment = normalizer.to_comment(edge.node)
+		local comment = normalizer.to_comment(edge.node, issue.reporter and issue.reporter.username)
 		if not comment then
 			on_done(nil, "GitHub did not return the created comment")
 			return
@@ -96,7 +96,7 @@ function M.edit(issue, comment, body, on_done)
 			return
 		end
 		local payload = json.safe_table(json.safe_table(result.data).updateIssueComment)
-		local updated = normalizer.to_comment(payload.issueComment)
+		local updated = normalizer.to_comment(payload.issueComment, issue.reporter and issue.reporter.username)
 		if not updated then
 			on_done(nil, "GitHub did not return the updated comment")
 			return

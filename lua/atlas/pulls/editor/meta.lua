@@ -46,7 +46,10 @@ function M.labels(labels)
 		end
 
 		local text = " " .. label.name .. " "
-		local hl = highlights.chip(label.color, { fg = label.text_color })
+		local hl = highlights.label(label.color)
+		if label.text_color then
+			hl = highlights.chip(label.color, { fg = label.text_color })
+		end
 
 		table.insert(field.spans, { start_col = #field.value, end_col = #field.value + #text, hl_group = hl })
 		field.value = field.value .. text

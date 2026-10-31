@@ -49,6 +49,7 @@ function M.render(lines, highlights, opts)
 						table.insert(groups, span.hl_group)
 					end
 				end
+				---@type string|string[]
 				local group = "Normal"
 				if #groups == 1 then
 					group = groups[1]

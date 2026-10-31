@@ -4,7 +4,6 @@ local completion = require("atlas.completion")
 local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local utils = require("atlas.ui.shared.utils")
-local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local preview_namespace = vim.api.nvim_create_namespace("atlas.editor.preview")
@@ -71,8 +70,8 @@ local function limit_preview(preview, max_lines)
 	end
 
 	local first, last = 1, #preview.lines
-	if preview.selection then
-		local selected = preview.selection
+	local selected = preview.selection
+	if selected then
 		local count = selected.last - selected.first + 1
 		local context = math.max(0, math.min(2, math.floor((max_lines - count) / 2)))
 		first = math.max(1, selected.first - context)
@@ -211,7 +210,6 @@ function M.open(opts)
 	if opts.completion then
 		completion.attach(buf, opts.completion)
 	end
-	statusline.inherit(win, source_win)
 	local function reveal_preview()
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ topline = 1, topfill = preview_height })

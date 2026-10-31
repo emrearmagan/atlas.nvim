@@ -109,3 +109,16 @@ describe("Bitbucket comment display", function()
 		assert.equal("Review @{alice}", content.raw)
 	end)
 end)
+
+describe("Bitbucket comment author roles", function()
+	it("marks comments by the pull request author", function()
+		local comments = mapper.to_comments_list({
+			values = {
+				{ id = 1, user = { account_id = "a1", display_name = "Alice" } },
+				{ id = 2, user = { account_id = "b2", display_name = "Bob" } },
+			},
+		}, "a1")
+		assert.same({ "Author" }, comments[1].author_roles)
+		assert.is_nil(comments[2].author_roles)
+	end)
+end)

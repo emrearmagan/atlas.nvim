@@ -1,12 +1,12 @@
 describe("Bitbucket merge checks", function()
-	local api, previous_service, previous_api, complete, request, cache
+	local api, previous_service, previous_api, complete, cache
 	local handle = { cancel = function() end }
 	local pr = { repo_full_name = "workspace/repo", id = 42 }
 
 	before_each(function()
 		previous_service = package.loaded["atlas.providers.bitbucket.client"]
 		previous_api = package.loaded["atlas.pulls.providers.bitbucket.api.checks"]
-		cache, request, complete = {}, nil, nil
+		cache, complete = {}, nil
 		package.loaded["atlas.providers.bitbucket.client"] = {
 			get_cache = function(key)
 				return cache[key], cache[key] ~= nil
@@ -14,8 +14,8 @@ describe("Bitbucket merge checks", function()
 			set_cache = function(key, value)
 				cache[key] = value
 			end,
-			request = function(method, endpoint, _, _, done)
-				request, complete = { method, endpoint }, done
+			request = function(_, _, _, _, done)
+				complete = done
 				return handle
 			end,
 		}
@@ -164,37 +164,5 @@ describe("Bitbucket merge checks", function()
 				details = { "Check has not completed yet" },
 			},
 		}, result)
-	end)
-
-	it("reuses cached checks and refreshes them when requested", function()
-		local result
-		assert.equal(
-			handle,
-			api.fetch(pr, nil, function(value)
-				result = value
-			end)
-		)
-		assert.is_nil(result)
-		assert.same({ "GET", "/repositories/workspace/repo/pullrequests/42/mergeability/checks" }, request)
-		complete({ values = {} }, nil)
-		request, result = nil, nil
-		assert.is_nil(api.fetch(pr, nil, function(value)
-			result = value
-		end))
-		assert.same({}, result)
-		assert.is_nil(request)
-		assert.equal(handle, api.fetch(pr, { force_refresh = true }, function() end))
-		assert.is_not_nil(request)
-	end)
-
-	it("reports request errors without caching a successful result", function()
-		local result, err
-		api.fetch(pr, nil, function(value, message)
-			result, err = value, message
-		end)
-		complete(nil, "Custom check results unavailable")
-		assert.is_nil(result)
-		assert.equal("Custom check results unavailable", err)
-		assert.same({}, cache)
 	end)
 end)

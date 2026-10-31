@@ -8,18 +8,18 @@ local TIMELINE_QUERY = [[
 query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      id url body createdAt author{...actor}
+      id url body createdAt authorAssociation author{...actor}
       reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
       timelineItems(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{
           __typename
           ...on IssueComment{
-            id url body createdAt author{...actor}
+            id url body createdAt authorAssociation author{...actor}
             reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
           }
           ...on PullRequestReview{id state body submittedAt url commit{oid} author{...actor}}
-          ...on PullRequestCommit{commit{oid message authoredDate author{name}}}
+          ...on PullRequestCommit{commit{oid message authoredDate author{name user{login}}}}
           ...on ReviewDismissedEvent{createdAt actor{...actor} previousReviewState review{id}}
           ...on ReviewRequestedEvent{createdAt actor{...actor} requestedReviewer{...actor}}
           ...on HeadRefForcePushedEvent{createdAt actor{...actor}}
@@ -40,7 +40,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
     }
   }
 }
-fragment actor on Actor{login ...on User{databaseId} ...on Bot{databaseId}}
+fragment actor on Actor{__typename login ...on User{databaseId} ...on Bot{databaseId}}
 ]]
 
 ---@param entries PullsActivityEntry[]
@@ -117,8 +117,8 @@ local function fetch_timeline(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, _opts, on_done)
 	return fetch_timeline(pr, function(pulls, err)
@@ -140,35 +140,15 @@ function M.fetch_conversation(pr, _opts, on_done)
 			end
 		end
 
-		local items, events = {}, {}
-		local description = pulls[1] and mapper.to_description(pulls[1])
-		if description then
-			table.insert(items, {
-				id = "description",
-				kind = "description",
-				created_at = description.created_at,
-				entity = description,
-			})
-		end
+		local comments, reviews, events = {}, {}, {}
 		for _, node in ipairs(nodes) do
 			if node.__typename == "IssueComment" then
-				local comment = mapper.to_comment(node)
-				table.insert(items, {
-					id = "comment:" .. tostring(comment.id),
-					kind = "comment",
-					created_at = comment.created_at,
-					entity = comment,
-				})
+				table.insert(comments, mapper.to_comment(node, pr.author.username))
 			else
 				local review = node.__typename == "PullRequestReview" and mapper.to_conversation_review(node) or nil
 				if review then
 					review.previous_state = dismissed_states[review.id]
-					table.insert(items, {
-						id = "review:" .. review.id,
-						kind = "review",
-						created_at = review.submitted_on,
-						entity = review,
-					})
+					table.insert(reviews, review)
 				else
 					local entry = mapper.to_activity(node)
 					if entry then
@@ -178,17 +158,12 @@ function M.fetch_conversation(pr, _opts, on_done)
 			end
 		end
 
-		for _, entry in ipairs(squash_commits(events)) do
-			local actor_id = entry.actor and entry.actor.id or ""
-			local id = table.concat({ entry.date or "", entry.kind or "", actor_id }, ":")
-			table.insert(items, {
-				id = "activity:" .. id,
-				kind = "activity",
-				created_at = entry.date or "",
-				entity = entry,
-			})
-		end
-		on_done(items, nil)
+		on_done({
+			description = pulls[1] and mapper.to_description(pulls[1], pr.author.username),
+			comments = comments,
+			reviews = reviews,
+			activities = squash_commits(events),
+		}, nil)
 	end)
 end
 

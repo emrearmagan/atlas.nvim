@@ -68,7 +68,7 @@ local function fetch_comments(pr, opts, query, on_done)
 			on_done(nil, err)
 			return
 		end
-		local comments = mapper.to_comments_list(result)
+		local comments = mapper.to_comments_list(result, pr.author.id)
 		service.set_cache(key, comments)
 		on_done(comments, nil)
 	end, { action = "Fetch PR comments", repo = pr.repo_full_name, id = pr.id })
@@ -116,7 +116,7 @@ function M.add_comment(pr, content, opts, on_done)
 			return
 		end
 		service.clear_cache()
-		local comment = mapper.to_comment(result)
+		local comment = mapper.to_comment(result, pr.author.id)
 		if comment == nil then
 			on_done(nil, "Bitbucket did not return the created comment")
 			return
@@ -146,7 +146,7 @@ function M.edit_comment(pr, comment, content, on_done)
 			return
 		end
 		service.clear_cache()
-		local updated = mapper.to_comment(result)
+		local updated = mapper.to_comment(result, pr.author.id)
 		if updated == nil then
 			on_done(nil, "Bitbucket did not return the updated comment")
 			return

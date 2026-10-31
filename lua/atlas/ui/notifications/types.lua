@@ -3,13 +3,14 @@
 ---@field title string
 ---@field subtitle string|nil
 ---@field timestamp string|nil  -- ISO8601
----@field kind "pr"|"issue"|"checks"|nil
+---@field kind "pr"|"issue"|"checks"|"release"|"discussion"|nil
 ---@field unread boolean
 ---@field url string|nil
 
 ---@class AtlasNotificationsCapability
 ---@field fetch fun(opts: { force_refresh: boolean|nil }|nil, on_done: fun(notifications: AtlasNotification[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field mark_read fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field mark_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_done fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field open fun(notification: AtlasNotification): boolean
 
 return {}

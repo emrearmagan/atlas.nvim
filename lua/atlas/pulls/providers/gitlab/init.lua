@@ -34,7 +34,7 @@ local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local request_scope = require("atlas.core.requests")
 local users_api = require("atlas.providers.gitlab.users")
-local gitlab_mapping = require("atlas.providers.gitlab.mapping")
+local gitlab_mapper = require("atlas.providers.gitlab.mapper")
 
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
@@ -90,20 +90,22 @@ local function fetch_pullrequests(view, opts, on_done)
 	return requests
 end
 
----@param target AtlasTarget
+---@param repository AtlasTarget
+---@param branch string|nil
 ---@return AtlasPullsViewConfig
-local function view_for_target(target)
+local function repository_view(repository, branch)
 	return {
 		name = "Search",
 		layout = "compact",
-		project = target.project_path,
+		project = repository.project_path,
 		scope = "all",
+		source_branch = branch,
 	}
 end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
+	repository_view = repository_view,
 	resolve_search = gitlab_query.query,
 	capabilities = {
 		actions = require("atlas.pulls.providers.gitlab.actions.registry"),
@@ -135,7 +137,7 @@ return {
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			reactions = {
-				options = gitlab_mapping.reactions,
+				options = gitlab_mapper.reactions,
 				add = comments_api.add_reaction,
 				remove = comments_api.remove_reaction,
 			},
@@ -151,7 +153,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
-			-- set_file_reviewed = nil,
+			-- set_files_reviewed = nil,
 		},
 		-- tasks = {
 		-- 	add_task = nil,

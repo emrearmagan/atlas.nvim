@@ -22,13 +22,13 @@ function M.on_select(pr, refresh, opts)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
-		state.items = {}
+		state.conversation = { comments = {}, reviews = {}, activities = {} }
 		refresh()
 		return
 	end
 
 	local id = tostring(pr.id or "")
-	state.items = "loading"
+	state.conversation = "loading"
 	notify.loading(string.format("Loading conversation for #%s...", id))
 
 	state.requests.run(function(done)
@@ -37,7 +37,13 @@ function M.on_select(pr, refresh, opts)
 		if not state.is_current(pr) then
 			return
 		end
-		state.items = result or {}
+		state.conversation = result
+			and {
+				description = result.description,
+				comments = vim.list_extend({}, result.comments),
+				reviews = result.reviews,
+				activities = result.activities,
+			}
 
 		state.error = nil
 		if err then
@@ -59,26 +65,17 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry)
-	return entry.conversation_item ~= nil or entry.kind == "activity_gap"
+	return entry.comment ~= nil
+		or entry.review_entry ~= nil
+		or entry.activity_entry ~= nil
+		or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
----@param entry table
+---@param entry PullsConversationLine|nil
 function M.on_enter(_pr, entry)
-	local item = entry and entry.conversation_item or nil
-	if not item then
-		return
-	end
-	local url
-	if item.kind == "comment" or item.kind == "description" then
-		---@type PullsComment
-		local comment = item.entity
-		url = comment.url
-	elseif item.kind == "review" then
-		---@type PullsReviewHistoryEntry
-		local review_entry = item.entity
-		url = review_entry.url
-	end
+	local subject = entry and (entry.comment or entry.review_entry)
+	local url = subject and subject.url
 	if url and url ~= "" then
 		vim.ui.open(url)
 		return true
@@ -87,7 +84,7 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.items == "loading"
+	return state.conversation == "loading"
 end
 
 ---@param buf integer

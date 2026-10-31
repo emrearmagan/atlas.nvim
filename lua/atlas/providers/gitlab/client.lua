@@ -86,7 +86,7 @@ end
 ---@return any|nil, boolean
 function M.get_memory_cache(key)
 	if cache_ttl() <= 0 then
-		return nil
+		return nil, false
 	end
 	local entry = memory_cache.get(key)
 	if not entry then
@@ -119,7 +119,7 @@ end
 ---@return any|nil, boolean
 function M.get_cache(key)
 	if cache_ttl() <= 0 then
-		return nil
+		return nil, false
 	end
 	local entry = cache.get(key)
 	if entry and entry.value ~= nil then

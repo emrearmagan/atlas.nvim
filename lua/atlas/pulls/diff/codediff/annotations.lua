@@ -1,6 +1,5 @@
 local highlights = require("codediff.ui.highlights")
-local ui = require("atlas.pulls.diff.ui.annotations")
-local notes = require("atlas.pulls.notes")
+local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 local has_scroll, scroll = pcall(require, "codediff.ui.scroll")
 
 local M = {}
@@ -71,34 +70,34 @@ local function modified_line(line, changes)
 	return line + offset, false
 end
 
----@param view AtlasDiffCodeDiffView
-function M.clear(view)
-	for buf in pairs(view.annotations) do
+---@param renderer AtlasDiffCodeDiffRenderer
+function M.clear(renderer)
+	for buf in pairs(renderer.annotations) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
 		end
 	end
-	view.annotations = {}
+	renderer.annotations = {}
 end
 
----@param view AtlasDiffCodeDiffView
+---@param renderer AtlasDiffCodeDiffRenderer
 ---@param file AtlasDiffFile
 ---@param session { original_bufnr: integer, modified_bufnr: integer, stored_diff_result: table }
-function M.render(view, file, session)
-	M.clear(view)
+function M.render(renderer, file, session)
+	M.clear(renderer)
 
 	local changes = session.stored_diff_result.changes
-	local panes = { view.right }
-	if view.left.win then
-		table.insert(panes, 1, view.left)
+	local panes = { renderer.right }
+	if renderer.left.win then
+		table.insert(panes, 1, renderer.left)
 	end
 
-	local expanded = view.result.options.comment_display == "virtual_lines"
+	local expanded = renderer.options.comment_display == "virtual_lines"
 	local placed, fillers = {}, {}
 	for _, pane in ipairs(panes) do
-		view.annotations[pane.buf] = {}
+		renderer.annotations[pane.buf] = {}
 		placed[pane.buf] = {}
-		if expanded and view.left.win then
+		if expanded and renderer.left.win then
 			fillers[pane.buf] = native_rows(pane.buf)
 		end
 	end
@@ -107,29 +106,29 @@ function M.render(view, file, session)
 		LEFT = file.status == "added" and 0 or vim.api.nvim_buf_line_count(session.original_bufnr),
 		RIGHT = file.status == "deleted" and 0 or vim.api.nvim_buf_line_count(session.modified_bufnr),
 	}
-	local options = ui.comment_options(view.expanded_threads)
+	local options = annotation_ui.comment_options(renderer.expanded_threads)
 
-	for _, item in ipairs(ui.for_file(view.result, file)) do
-		if item.thread and (file.binary or (item.line and (item.line < 1 or item.line > counts[item.side]))) then
-			item.line = nil
-		elseif item.note then
-			local text = vim.api.nvim_buf_get_lines(view.right.buf, item.note.line - 1, item.note.line, false)[1]
-			item.outdated = notes.is_outdated(item.note, text)
+	for _, item in ipairs(annotation_ui.for_file(renderer.session, file)) do
+		if
+			item.thread
+			and (file.binary or (item.end_line and (item.end_line < 1 or item.end_line > counts[item.side])))
+		then
+			item.end_line = nil
 		end
 
-		local pane = item.side == "LEFT" and view.left.win and view.left or view.right
-		local line, deleted = item.line or 1, false
-		if item.side == "LEFT" and not view.left.win and file.status ~= "deleted" and item.line then
-			line, deleted = modified_line(item.line, changes)
+		local pane = item.side == "LEFT" and renderer.left.win and renderer.left or renderer.right
+		local line, deleted = item.end_line or 1, false
+		if item.side == "LEFT" and not renderer.left.win and file.status ~= "deleted" and item.end_line then
+			line, deleted = modified_line(item.end_line, changes)
 		end
 		line = math.max(1, math.min(line, vim.api.nvim_buf_line_count(pane.buf)))
 
-		local lookup = view.annotations[pane.buf]
+		local lookup = renderer.annotations[pane.buf]
 		lookup[line] = lookup[line] or {}
 		table.insert(lookup[line], item)
 
 		local boundary = line
-		if expanded and not item.line then
+		if expanded and not item.end_line then
 			boundary = 0
 		elseif expanded and deleted then
 			-- CodeDiff owns the deleted block; put its cards beside the adjacent real line.
@@ -150,17 +149,19 @@ function M.render(view, file, session)
 	end
 
 	for _, pane in ipairs(panes) do
-		ui.draw_signs(namespace, pane.buf, view.annotations[pane.buf])
+		annotation_ui.draw_signs(namespace, pane.buf, renderer.annotations[pane.buf])
+		local side = pane == renderer.left and "LEFT" or "RIGHT"
+		annotation_ui.draw_changed_lines(namespace, pane.buf, renderer.session, file, side)
 
 		for line, items in pairs(placed[pane.buf]) do
 			if expanded then
 				local rows = vim.api.nvim_win_call(pane.win, function()
-					return ui.render_virtual_lines(items, vim.api.nvim_win_get_width(pane.win), options)
+					return annotation_ui.render_virtual_lines(items, vim.api.nvim_win_get_width(pane.win), options)
 				end)
 				put_lines(pane, line, rows, false)
 
-				if view.left.win then
-					local other = pane == view.left and view.right or view.left
+				if renderer.left.win then
+					local other = pane == renderer.left and renderer.right or renderer.left
 					local target = line == 0 and 0 or aligned_line(line, fillers[pane.buf], fillers[other.buf])
 					local padding = {}
 					for _ = 1, #rows do
@@ -170,7 +171,7 @@ function M.render(view, file, session)
 				end
 			else
 				vim.api.nvim_buf_set_extmark(pane.buf, namespace, line - 1, 0, {
-					virt_text = ui.render_virtual_text(items),
+					virt_text = annotation_ui.render_virtual_text(items),
 					virt_text_pos = "eol",
 					priority = 1100,
 				})
@@ -198,10 +199,10 @@ function M.render(view, file, session)
 		end)
 	end
 
-	if view.left.win then
-		local leader = vim.api.nvim_get_current_win() == view.left.win and view.left.win or view.right.win
+	if renderer.left.win then
+		local leader = vim.api.nvim_get_current_win() == renderer.left.win and renderer.left.win or renderer.right.win
 		if has_scroll and scroll.refresh then
-			scroll.refresh(view.tabpage, leader)
+			scroll.refresh(renderer.tabpage, leader)
 		else
 			vim.api.nvim_win_call(leader, function()
 				vim.cmd.syncbind()
@@ -210,20 +211,20 @@ function M.render(view, file, session)
 	end
 end
 
----@param view AtlasDiffCodeDiffView
+---@param renderer AtlasDiffCodeDiffRenderer
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@return boolean moved
-function M.navigate(view, direction, kind, from_edge)
+function M.navigate(renderer, direction, kind, from_edge)
 	local rows = {}
-	for index, pane in ipairs({ view.left, view.right }) do
+	for index, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			rows[index] = view.left.win and native_rows(pane.buf) or {}
+			rows[index] = renderer.left.win and native_rows(pane.buf) or {}
 		end
 	end
 
-	return ui.navigate(view, direction, kind, from_edge, function(pane, line)
+	return annotation_ui.navigate(renderer, direction, kind, from_edge, function(pane, line)
 		return display_line(line, rows[pane])
 	end)
 end

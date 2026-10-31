@@ -9,6 +9,7 @@ local users = require("atlas.providers.github.users")
 local highlights = require("atlas.ui.highlights")
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.issues.ui.presentation")
+local keymaps = require("atlas.core.keymaps")
 
 ---@class GitHubIssueEditorValues
 ---@field title string
@@ -61,6 +62,14 @@ end
 ---@return boolean
 local function is_modified(state, editor)
 	return not vim.deep_equal(values(state, editor), state.initial)
+end
+
+---@param state GitHubIssueEditorState
+---@param editor AtlasForm
+---@return boolean
+local function content_modified(state, editor)
+	local current = values(state, editor)
+	return current.title ~= state.initial.title or current.body ~= state.initial.body
 end
 
 ---@param state GitHubIssueEditorState
@@ -264,7 +273,7 @@ local function render_meta(state)
 				labels.value = labels.value .. " "
 			end
 			local text = " " .. label.name .. " "
-			local hl = highlights.chip(label.color)
+			local hl = highlights.label(label.color)
 			table.insert(labels.spans, { start_col = #labels.value, end_col = #labels.value + #text, hl_group = hl })
 			labels.value = labels.value .. text
 		end
@@ -403,7 +412,7 @@ end
 local function close(state, editor)
 	if state.submitting then
 		return
-	elseif not is_modified(state, editor) then
+	elseif not content_modified(state, editor) then
 		form.close(editor)
 	else
 		vim.ui.input({ prompt = "Discard issue changes? [y/N]: " }, function(answer)
@@ -452,8 +461,8 @@ local function open_editor(repo_slug, issue, details, on_done)
 		completion = {
 			context = { provider = "github", repository = repo_slug, issue = issue and { key = issue.key } },
 		},
-		is_modified = issue and function(editor)
-			return is_modified(state, editor)
+		is_modified = function(editor)
+			return content_modified(state, editor)
 		end,
 		meta = function()
 			return render_meta(state)
@@ -472,21 +481,21 @@ local function open_editor(repo_slug, issue, details, on_done)
 		end,
 		keymaps = {
 			{
-				key = "ga",
+				key = keymaps.resolve("editor.assignees"),
 				desc = "assignees",
 				action = function(editor)
 					select_assignees(state, editor)
 				end,
 			},
 			{
-				key = "gl",
+				key = keymaps.resolve("editor.labels"),
 				desc = "labels",
 				action = function(editor)
 					select_labels(state, editor)
 				end,
 			},
 			{
-				key = "gm",
+				key = keymaps.resolve("editor.milestone"),
 				desc = "milestone",
 				action = function(editor)
 					select_milestone(state, editor)

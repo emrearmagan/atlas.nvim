@@ -11,11 +11,12 @@ local request_scope = require("atlas.core.requests")
 ---@field pipelines PullsPipeline[]|"loading"|string|nil
 ---@field pr_loading boolean
 ---@field details_loading boolean
----@field links AtlasDetailLinks|nil
+---@field links { items: AtlasRelatedItem[], loading: boolean, error: string|nil }|nil
 ---@field win integer|nil
 ---@field buf integer|nil
 ---@field provider PullsProvider|nil
 ---@field on_update fun(pr: PullRequest, result: PullsActionResult|nil)|nil
+---@field back fun()|nil
 ---@field requests AtlasRequestScope
 ---@field spinner_timer uv.uv_timer_t|nil
 local M = {

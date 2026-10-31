@@ -1,36 +1,56 @@
 local M = {}
 
-local dashboard_host = require("atlas.ui.dashboard")
-local ui_state = require("atlas.ui.state")
+local window = require("atlas.issues.ui.dashboard.window")
 local utils = require("atlas.ui.shared.utils")
-local statusline = require("atlas.ui.statusline")
+local state = require("atlas.issues.state")
+local renderer = require("atlas.issues.ui.dashboard.renderer")
+local navigation = require("atlas.issues.ui.dashboard.navigation")
+local controller = require("atlas.issues.ui.dashboard.controller")
+local keymaps = require("atlas.issues.ui.dashboard.keymaps")
+local detail = require("atlas.issues.ui.detail")
+local detail_window = require("atlas.issues.ui.detail.window")
+local starred = require("atlas.core.starred")
+local bookmarks = require("atlas.ui.shared.bookmarks")
+local notifications = require("atlas.ui.notifications")
 local ns = vim.api.nvim_create_namespace("atlas.ui")
 
 function M.render()
-	local win = dashboard_host.win()
-	local buf = dashboard_host.buf()
+	local win = window.win()
+	local buf = window.buf()
 	if win == nil or buf == nil then
 		return
 	end
 
 	local width = vim.api.nvim_win_get_width(win)
-	local lines, spans, line_map = require("atlas.issues.ui.dashboard.renderer").render({
+	local lines, spans, line_map = renderer.render({
 		width = width,
 	})
-	ui_state.line_map = line_map
+	window.line_map = line_map
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	require("atlas.ui.navigation").highlight_current_item()
+	navigation.highlight_current_item()
+end
+
+function M.resize()
+	M.render()
+	local win = window.win()
+	if win == nil then
+		return
+	end
+
+	-- When the window gets narrower (like when the detail panel opens) it can stay scrolled sideways, so scroll back.
+	vim.api.nvim_win_call(win, function()
+		vim.fn.winrestview({ leftcol = 0 })
+	end)
+	navigation.keep_board_selection()
 end
 
 ---@param issue Issue
 local function open_detail(issue)
-	local state = require("atlas.issues.state")
-	local controller = require("atlas.issues.ui.dashboard.controller")
-	require("atlas.issues.ui.detail").open(issue, {
+	detail.open(issue, {
 		provider = state.provider,
 		on_update = function(updated, result)
 			if result then
@@ -42,38 +62,31 @@ local function open_detail(issue)
 	})
 end
 
----@param item { kind: string, _issue: Issue|nil }|nil
+---@param item { issue: Issue|nil }|nil
 function M.select(item)
-	local detail = require("atlas.ui.detail")
-	if not detail.is_open(vim.api.nvim_get_current_tabpage()) then
-		return
-	end
-	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
-		open_detail(item._issue)
+	if item and item.issue and detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
+		open_detail(item.issue)
 	end
 end
 
 function M.toggle_detail()
-	local detail = require("atlas.issues.ui.detail")
-	if detail.is_open() then
+	if detail_window.is_open(vim.api.nvim_get_current_tabpage()) then
 		detail.close()
 		return
 	end
-	local item = require("atlas.ui.navigation").current_item()
-	if type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
-		open_detail(item._issue)
+	local item = navigation.current_item()
+	if item and item.issue then
+		open_detail(item.issue)
 	end
 end
 
 function M.next_detail_tab()
-	local detail = require("atlas.issues.ui.detail")
 	if detail.is_open() then
 		detail.next_tab()
 	end
 end
 
 function M.prev_detail_tab()
-	local detail = require("atlas.issues.ui.detail")
 	if detail.is_open() then
 		detail.prev_tab()
 	end
@@ -82,32 +95,26 @@ end
 ---@param provider IssuesProvider
 ---@param opts { initial_view: IssuesViewConfig|nil }|nil
 function M.init(provider, opts)
-	local state = require("atlas.issues.state")
-	local controller = require("atlas.issues.ui.dashboard.controller")
-	local keymaps = require("atlas.issues.ui.dashboard.keymaps")
 	if state.provider ~= provider then
 		state.current_user = nil
 	end
 	state.provider = provider
 	state.views = provider.views()
 	state.query = ""
-
-	local notifications = require("atlas.ui.notifications")
-	notifications.set_provider(provider)
 	state.error = nil
 	state.set_issues({})
 	state.current_page = 1
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
+	navigation.reset()
 
-	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
-	local bookmarks = require("atlas.ui.shared.bookmarks")
+	state.starred_items = starred.list("issues", provider.id) or {}
 	state.bookmarks = bookmarks.new(provider.id, "issues")
 	state.view = (opts and opts.initial_view) or bookmarks.views(state.views, state.bookmarks, state.starred_items)[1]
 
-	statusline.clear_items()
+	window.statusline:clear_items()
 
-	local buf = dashboard_host.buf()
+	local buf = window.buf()
 	if buf ~= nil then
 		keymaps.register(buf, state.views)
 	end
@@ -115,7 +122,7 @@ function M.init(provider, opts)
 	controller.switch_view(state.view)
 
 	if provider.capabilities.notifications then
-		notifications.refresh({ on_done = M.render })
+		notifications.refresh(provider, M.render)
 	end
 end
 

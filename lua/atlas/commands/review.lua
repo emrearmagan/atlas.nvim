@@ -19,6 +19,7 @@ end
 ---@param details PullRequestDetails|nil
 ---@return AtlasPickerPreview
 local function format_preview(pr, details)
+	---@cast pr GitHubPullRequest
 	local author = pr.author.username ~= "" and "@" .. pr.author.username or pr.author.name
 	local status = pr.state .. "   updated " .. ui_utils.relative_time(pr.updated_on)
 	if pr.lines_added ~= nil and pr.lines_removed ~= nil then
@@ -38,22 +39,36 @@ local function format_preview(pr, details)
 	}
 end
 
----@param info AtlasTarget|nil
-local function open_repository(info)
-	if not info then
+---@param pr PullRequest|nil
+local function open_diff(pr)
+	if not pr then
+		return
+	end
+	diff.open_pr(pr, function(err)
+		if err then
+			notify.error("Unable to open diff: " .. tostring(err), { vim_notify = true })
+		end
+	end)
+end
+
+---@param repository AtlasTarget|nil
+---@param branch string|nil
+local function open_repository(repository, branch)
+	if not repository then
 		no_repository()
 		return
 	end
-	if not providers.domain(info.provider, "pulls") or not config.provider_options(info.provider) then
+	if not providers.domain(repository.provider, "pulls") or not config.provider_options(repository.provider) then
 		no_repository()
 		return
 	end
 
-	local provider = assert(providers.load(info.provider, "pulls"))
+	local provider = assert(providers.load(repository.provider, "pulls"))
 	---@cast provider PullsProvider
-	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
-	local view = provider.view_for_target(info)
-	notify.info("Fetching pull requests for " .. repo_full_name .. "...", { vim_notify = true })
+	local repo_full_name = assert(repository.repo_full_name, "Repository target missing repo_full_name")
+	local view = provider.repository_view(repository, branch)
+	local label = branch and (branch .. " in " .. repo_full_name) or repo_full_name
+	notify.info("Fetching pull requests for " .. label .. "...", { vim_notify = true })
 	requests.run(function(done)
 		return provider.capabilities.core.fetch_pullrequests(view, { force_refresh = true, pagelen = 50 }, done)
 	end, function(page, errors)
@@ -70,7 +85,11 @@ local function open_repository(info)
 			end
 		end
 		if #pull_requests == 0 then
-			notify.info("No open pull requests found for " .. repo_full_name, { vim_notify = true })
+			notify.info("No open pull requests found for " .. label, { vim_notify = true })
+			return
+		end
+		if branch and #pull_requests == 1 then
+			open_diff(pull_requests[1])
 			return
 		end
 
@@ -96,40 +115,59 @@ local function open_repository(info)
 					end
 				)
 			end,
-			on_select = function(pr)
-				if not pr then
-					return
-				end
-				diff.open_pr(pr, function(err)
-					if err then
-						notify.error("Unable to open diff: " .. tostring(err), { vim_notify = true })
-					end
-				end)
-			end,
+			on_select = open_diff,
 		})
 	end)
 end
 
----@param url string|nil
-function M.open(url)
+---@param target string|nil A pull request URL, a number in the current repository, "." for the current branch's pull request, or nil to pick one.
+function M.open(target)
 	requests.cancel()
 	requests = request_scope.new()
-	if url then
-		local target, err = providers.resolve(url)
-		if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
-			notify.error(err or "Expected a pull request URL", { vim_notify = true })
+	if not target then
+		requests.run(function(done)
+			return git.local_repository(nil, done)
+		end, open_repository)
+		return
+	end
+	if target == "." then
+		local cwd = git.default_cwd()
+		requests.all({
+			repository = function(done)
+				return git.local_repository(cwd, done)
+			end,
+			branch = function(done)
+				return git.current_branch(cwd, done)
+			end,
+		}, function(values, errors)
+			if values.repository and not values.branch then
+				notify.warn(errors.branch, { vim_notify = true })
+			end
+			open_repository(values.repository, values.branch)
+		end)
+		return
+	end
+
+	local function open_reference(repository)
+		local pr, err = providers.resolve(target, { repository = repository, domain = "pulls" })
+		if not pr or pr.domain ~= "pulls" or pr.entity ~= "pr" then
+			notify.error(err or "Expected a pull request URL or number", { vim_notify = true })
 			return
 		end
-		diff.open_pr(target, function(open_err)
+		diff.open_pr(pr, function(open_err)
 			if open_err then
 				notify.error(open_err, { vim_notify = true })
 			end
 		end)
-		return
 	end
-	requests.run(function(done)
-		return git.local_repository(nil, done)
-	end, open_repository)
+
+	if target:match("^[#!]?%d+$") then
+		requests.run(function(done)
+			return git.local_repository(nil, done)
+		end, open_reference)
+	else
+		open_reference(nil)
+	end
 end
 
 return M

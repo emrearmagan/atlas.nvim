@@ -19,6 +19,17 @@
 ---@field hl_group string|nil
 ---@field display "chip"|"table"
 
+---@class JiraFieldValue
+---@field label string
+---@field value any
+
+---@class JiraMetaField
+---@field name string
+---@field required boolean
+---@field kind "select"|"multi_select"|"sprint"|"text"|"paragraph"|"number"|"date"|"labels"|nil
+---@field options { id: string, name: string }[]
+---@field initial JiraFieldValue|nil
+
 ---@class JiraIssueDetails : IssueDetails
 ---@field type IssueType|nil
 ---@field status string|nil
@@ -43,12 +54,6 @@ local CATEGORY_ORDER = { new = 1, indeterminate = 2, done = 3 }
 local function resolve_search(view)
 	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or view.search or "")
-end
-
----@param target AtlasTarget
----@return AtlasJiraViewConfig
-local function view_for_target(target)
-	return { name = "Search", layout = "compact", jql = "key = " .. target.issue_key }
 end
 
 ---@param target AtlasTarget
@@ -138,7 +143,6 @@ end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
 	issue_ref = target_issue_ref,
 	capabilities = {
 		actions = require("atlas.issues.providers.jira.actions.registry"),

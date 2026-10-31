@@ -12,6 +12,7 @@ local BACKGROUND_HL = "AtlasFooterBackground"
 local instances = {}
 ---@type table<integer, AtlasStatusline>
 local windows = {}
+local lualine_paused = false
 local next_id = 0
 local cached_version = nil
 
@@ -46,7 +47,7 @@ local cached_version = nil
 local Statusline = {}
 Statusline.__index = Statusline
 
----@param context "atlas"|"diff"|nil
+---@param context AtlasStatuslineContext|nil
 local function redraw(context)
 	if M.enabled(context) then
 		vim.cmd("redrawstatus")
@@ -285,10 +286,15 @@ local function notice_style(level)
 	return icons.get(icon_name), highlights[level] or "AtlasFooterText"
 end
 
----@param context "atlas"|"diff"|nil
+---@param context AtlasStatuslineContext|nil
+---@param win integer|nil
 ---@return boolean
-function M.enabled(context)
-	return config.statusline_enabled(context or "atlas")
+function M.enabled(context, win)
+	win = win or vim.api.nvim_get_current_win()
+	if not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+	return config.statusline_enabled(context or "atlas", vim.api.nvim_win_get_buf(win), win)
 end
 
 ---@param options AtlasStatuslineOptions|nil
@@ -307,21 +313,54 @@ function M.new(options)
 	return instance
 end
 
+---@return boolean
+local function current_tab_attached()
+	for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+		if windows[win] then
+			return true
+		end
+	end
+	return false
+end
+
+-- Honestly, I've been fighting my ass off with lualine, which keeps overriding the statusline.
+-- Sure, I could ignore every atlas filetype in the lualine config, but forget to set that and you lose
+-- the included statusline, which holds most of the information.
+-- So instead of making everyone configure that, lualine just takes a nap while an atlas tab is focused.
+local function sync_lualine()
+	local lualine = package.loaded["lualine"]
+	local pause = current_tab_attached()
+	if not lualine or pause == lualine_paused then
+		return
+	end
+
+	lualine_paused = pause
+	local laststatus = vim.o.laststatus
+	lualine.hide({ place = { "statusline" }, unhide = not pause })
+	if pause then
+		vim.o.laststatus = laststatus
+		for win, instance in pairs(windows) do
+			instance:attach(win)
+		end
+	end
+end
+
 ---@param win integer|nil
 function Statusline:attach(win)
-	if not M.enabled(self.options.context) or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
+	if not M.enabled(self.options.context, win) or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 	instances[self.id] = self
 	windows[win] = self
 	vim.api.nvim_set_option_value("statusline", self.expression, { win = win, scope = "local" })
+	sync_lualine()
 end
 
 ---@param win integer|nil
 ---@return boolean
 function Statusline:is_attached(win)
 	win = win or vim.api.nvim_get_current_win()
-	return M.enabled(self.options.context)
+	return M.enabled(self.options.context, win)
 		and not self.disposed
 		and vim.api.nvim_win_is_valid(win)
 		and vim.api.nvim_get_option_value("statusline", { win = win }) == self.expression
@@ -443,6 +482,7 @@ end
 function M.detach(win)
 	if win then
 		windows[win] = nil
+		vim.schedule(sync_lualine)
 	end
 end
 
@@ -508,7 +548,7 @@ vim.api.nvim_create_autocmd("OptionSet", {
 	callback = function()
 		local win = vim.api.nvim_get_current_win()
 		local instance = windows[win]
-		if not instance or not M.enabled(instance.options.context) or instance:is_attached(win) then
+		if not instance or not M.enabled(instance.options.context, win) or instance:is_attached(win) then
 			return
 		end
 
@@ -519,6 +559,11 @@ vim.api.nvim_create_autocmd("OptionSet", {
 			end
 		end)
 	end,
+})
+
+vim.api.nvim_create_autocmd("TabEnter", {
+	group = group,
+	callback = sync_lualine,
 })
 
 vim.api.nvim_create_autocmd("WinClosed", {

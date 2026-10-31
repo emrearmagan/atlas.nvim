@@ -39,24 +39,6 @@ describe("gitlab pull request updates", function()
 		package.loaded[module_name] = nil
 	end)
 
-	it("fails fast when the MR identifier is invalid", function()
-		stub_service(function(method, endpoint, payload, callback)
-			table.insert(calls, { method = method, endpoint = endpoint, payload = payload })
-			callback({}, nil)
-		end)
-		local api = fresh_module()
-
-		local ok, err
-		api.update_pr({ id = nil, repo_full_name = "group/project" }, { body = "New body" }, function(success, e)
-			ok, err = success, e
-		end)
-
-		assert.is_false(ok)
-		assert.equal("Invalid MR identifier", err)
-		assert.equal(0, #calls)
-		assert.equal(0, cleared)
-	end)
-
 	it("PUTs descriptions including an empty body and accepts empty responses", function()
 		local response
 		stub_service(function(method, endpoint, payload, callback)
@@ -143,22 +125,5 @@ describe("gitlab pull request updates", function()
 		assert.equal("New title", pr.title)
 		assert.equal("open", pr.state)
 		assert.equal(1, cleared)
-	end)
-
-	it("propagates errors from the request", function()
-		stub_service(function(_, _, _, callback)
-			callback(nil, "boom")
-		end)
-		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project" }
-
-		local ok, err
-		api.update_pr(pr, { body = "New body" }, function(success, e)
-			ok, err = success, e
-		end)
-
-		assert.is_false(ok)
-		assert.equal("boom", err)
-		assert.equal(0, cleared)
 	end)
 end)

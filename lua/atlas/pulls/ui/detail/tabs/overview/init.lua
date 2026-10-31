@@ -151,18 +151,19 @@ end
 ---@param lines string[]
 ---@param spans table[]
 local function render_reviewers(width, lines, spans)
-	if state.reviewers == nil or state.reviewers == "loading" then
+	local reviewers = state.reviewers
+	if reviewers == nil or reviewers == "loading" then
 		return
 	end
 
-	if type(state.reviewers) == "string" then
-		render_error("Reviewers", state.reviewers, width, lines, spans)
+	if type(reviewers) == "string" then
+		render_error("Reviewers", reviewers, width, lines, spans)
 		return
 	end
 
 	local decisions = {}
 	local others = {}
-	for _, reviewer in ipairs(state.reviewers) do
+	for _, reviewer in ipairs(reviewers) do
 		table.insert(reviewer.role == "participant" and others or decisions, reviewer)
 	end
 	local approved_count = 0
@@ -226,16 +227,17 @@ local MAX_OVERVIEW_JOBS = 5
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if detail.pipelines == nil or detail.pipelines == "loading" then
+	local pipelines = detail.pipelines
+	if pipelines == nil or pipelines == "loading" then
 		return
 	end
 
-	if type(detail.pipelines) == "string" then
-		render_error("Pipelines", detail.pipelines, width, lines, spans)
+	if type(pipelines) == "string" then
+		render_error("Pipelines", pipelines, width, lines, spans)
 		return
 	end
 
-	local entries = pipeline_utils.sort_by_state(detail.pipelines)
+	local entries = pipeline_utils.sort_by_state(pipelines)
 
 	if #entries == 0 then
 		return
@@ -264,6 +266,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			url = tostring(pipeline.url or ""),
 			children = {},
 		}
+		---@type { state: PullsPipelineState, stage: PullsPipelineStage, job: PullsPipelineJob }[]
 		local unnamed_jobs = {}
 		local has_named_stage = false
 		for _, pipeline_stage in ipairs(pipeline.stages) do
@@ -486,13 +489,32 @@ local function render_merge_check_group(check, width)
 		end
 	end
 
+	local indent = "  "
 	for _, message in ipairs(check.details or {}) do
-		local indent = "  "
-		local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
-		for _, detail_line in ipairs(utils.wrap_line(message, detail_width)) do
-			local text = indent .. detail_line
+		if type(message) == "string" then
+			local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
+			for _, detail_line in ipairs(utils.wrap_line(message, detail_width)) do
+				local text = indent .. detail_line
+				table.insert(lines, text)
+				table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+			end
+		else
+			local prefix = indent .. message.icon .. " "
+			local text_width = math.max(2, content_width - vim.api.nvim_strwidth(prefix))
+			local text = prefix .. utils.truncate(message.text, text_width)
 			table.insert(lines, text)
-			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+			table.insert(spans, {
+				line = #lines - 1,
+				start_col = #indent,
+				end_col = #indent + #message.icon,
+				hl_group = message.icon_hl or "AtlasTextMuted",
+			})
+			table.insert(spans, {
+				line = #lines - 1,
+				start_col = #prefix,
+				end_col = #text,
+				hl_group = message.text_hl or "AtlasTextMuted",
+			})
 		end
 	end
 

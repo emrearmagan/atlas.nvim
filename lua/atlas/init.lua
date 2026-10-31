@@ -65,13 +65,12 @@ local function open_with_provider(domain, id, opts)
 		return
 	end
 
-	require("atlas.ui.dashboard").open(domain, provider.id)
 	if domain == "pulls" then
 		---@cast provider PullsProvider
-		require("atlas.pulls").init(provider, opts)
+		require("atlas.pulls").open(provider, opts)
 	else
 		---@cast provider IssuesProvider
-		require("atlas.issues").init(provider, opts)
+		require("atlas.issues").open(provider, opts)
 	end
 end
 

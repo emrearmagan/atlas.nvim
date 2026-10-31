@@ -1,19 +1,10 @@
 local M = {
 	-- list_members = nil,
 }
+---@cast M AtlasUsersCapability
 
 local client = require("atlas.providers.github.client")
-local mapping = require("atlas.providers.github.mapping")
-
----@param raw any
----@return AtlasUser|nil
-function M.to_user(raw)
-	local user = mapping.identity(raw)
-	if not user or user.login == "" then
-		return nil
-	end
-	return { id = user.id, name = user.name, username = user.login }
-end
+local mapper = require("atlas.providers.github.mapper")
 
 ---@param on_done fun(user: AtlasUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -21,7 +12,7 @@ function M.fetch_user(on_done)
 	local cache_key = "github:current_user"
 	local cached, ok = client.get_cache(cache_key)
 	if ok then
-		on_done(M.to_user(cached), nil)
+		on_done(mapper.to_user(cached), nil)
 		return nil
 	end
 
@@ -31,7 +22,7 @@ function M.fetch_user(on_done)
 			return
 		end
 		client.set_cache(cache_key, result)
-		on_done(M.to_user(result), nil)
+		on_done(mapper.to_user(result), nil)
 	end, { action = "Fetch current user" })
 end
 
@@ -57,7 +48,7 @@ function M.get_assignable_users(slug, query, on_done)
 			local users = {}
 			for _, page in ipairs(result) do
 				for _, raw in ipairs(page) do
-					local user = M.to_user(raw)
+					local user = mapper.to_user(raw)
 					if user then
 						if
 							q == ""

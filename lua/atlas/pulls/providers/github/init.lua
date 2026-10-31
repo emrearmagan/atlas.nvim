@@ -1,20 +1,31 @@
+---@class GitHubPullStackEntry
+---@field position integer
+---@field number integer|nil
+
+---@class GitHubPullStack
+---@field position integer
+---@field size integer
+---@field entries GitHubPullStackEntry[]|nil
+
 ---@class GitHubPullRequest : PullRequest
 ---@field node_id string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
 ---@field lines_added number
 ---@field lines_removed number
+---@field stack GitHubPullStack|nil
 
 ---@class GitHubPullRequestDetails : PullRequestDetails
 ---@field assignees AtlasUser[]
 ---@field labels PullsLabel[]
+---@field stack GitHubPullStack|nil
 
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
-local github_mapping = require("atlas.providers.github.mapping")
+local github_mapper = require("atlas.providers.github.mapper")
 local git = require("atlas.core.git")
 local links_api = require("atlas.providers.github.links")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
@@ -77,12 +88,16 @@ local function fetch_pullrequests(view, opts, on_done)
 	return requests
 end
 
----@param target AtlasTarget
+---@param repository AtlasTarget
+---@param branch string|nil
 ---@return AtlasPullsViewConfig
-local function view_for_target(target)
-	local search = string.format("repo:%s/%s is:pr", target.owner, target.repo)
-	if target.number then
-		search = search .. " " .. tostring(target.number)
+local function repository_view(repository, branch)
+	local search = string.format("repo:%s/%s is:pr", repository.owner, repository.repo)
+	if repository.number then
+		search = search .. " " .. tostring(repository.number)
+	end
+	if branch then
+		search = search .. " head:" .. branch
 	end
 	return {
 		name = "Search",
@@ -93,7 +108,7 @@ end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
+	repository_view = repository_view,
 	resolve_search = search_query.query,
 	capabilities = {
 		actions = require("atlas.pulls.providers.github.actions.registry"),
@@ -125,7 +140,7 @@ return {
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			reactions = {
-				options = github_mapping.reactions,
+				options = github_mapper.reactions,
 				add = comments_api.add_reaction,
 				remove = comments_api.remove_reaction,
 			},
@@ -141,7 +156,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
-			set_file_reviewed = reviews_api.set_file_reviewed,
+			set_files_reviewed = reviews_api.set_files_reviewed,
 		},
 		-- tasks = {
 		-- 	add_task = nil,

@@ -595,6 +595,7 @@ function M.fetch_history(context, on_done)
 	local target = context.target
 	local is_branch = type(target) == "string"
 	local pr = not is_branch and target.source and target or nil
+	---@cast pr PullRequest|nil
 	local repo = context.repo_full_name
 	local scope = requests.new()
 	local request_context = { action = "Fetch workflow history", repo = repo }
@@ -632,18 +633,29 @@ function M.fetch_history(context, on_done)
 			local head = pull.head
 			fetch_runs(head.ref, json.safe_str(json.safe_table(head.repo).full_name))
 		end)
-	elseif target.workflow_id then
-		fetch_runs(target.branch, target.source_repository, target.workflow_id)
 	else
-		scope.run(function(done)
-			return cli.gh({ "api", string.format("repos/%s/actions/runs/%s", repo, target.id) }, done, request_context)
-		end, function(run, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			fetch_runs(run.head_branch, json.safe_str(json.safe_table(run.head_repository).full_name), run.workflow_id)
-		end)
+		---@cast target GitHubPipeline
+		if target.workflow_id then
+			fetch_runs(target.branch, target.source_repository, target.workflow_id)
+		else
+			scope.run(function(done)
+				return cli.gh(
+					{ "api", string.format("repos/%s/actions/runs/%s", repo, target.id) },
+					done,
+					request_context
+				)
+			end, function(run, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				fetch_runs(
+					run.head_branch,
+					json.safe_str(json.safe_table(run.head_repository).full_name),
+					run.workflow_id
+				)
+			end)
+		end
 	end
 	return scope
 end

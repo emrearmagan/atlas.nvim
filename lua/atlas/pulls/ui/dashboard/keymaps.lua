@@ -5,19 +5,18 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
 local controller = require("atlas.pulls.ui.dashboard.controller")
+local state = require("atlas.pulls.state")
+local window = require("atlas.pulls.ui.dashboard.window")
+local navigation = require("atlas.pulls.ui.dashboard.navigation")
+local help = require("atlas.ui.popups.help")
 local registrations = {}
 
 ---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
-	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
-	if type(node) ~= "table" then
-		return nil, nil
-	end
-	if (node.kind == "pr" or node.kind == "pr_meta") and type(node.pr) == "table" then
+	if node and node.pr then
 		return node.pr, node.repo
 	end
-	return nil, nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -34,11 +33,114 @@ local function item(action_id, map_item)
 end
 
 ---@param buf integer
+---@return table[]
+local function dashboard_items(buf)
+	local dashboard = require("atlas.pulls.ui.dashboard")
+	local items = {}
+
+	utils.insert_if(
+		items,
+		item("ui.next_item", {
+			desc = "Next item",
+			hidden = true,
+			callback = function()
+				navigation.move_cursor("down")
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.previous_item", {
+			desc = "Previous item",
+			hidden = true,
+			callback = function()
+				navigation.move_cursor("up")
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.first_item", {
+			desc = "Go to first item",
+			hidden = true,
+			callback = function()
+				navigation.focus_first_item()
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.last_item", {
+			desc = "Go to last item",
+			hidden = true,
+			callback = function()
+				navigation.focus_last_item()
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.help", {
+			desc = "Toggle this help popup",
+			index = 100,
+			callback = function()
+				help.toggle({ buffer = buf })
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.close", {
+			desc = "Close Atlas window",
+			index = 101,
+			callback = function()
+				if not help.is_open() then
+					window.close()
+				end
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.toggle_panel", {
+			desc = "Toggle detail panel",
+			index = 12,
+			callback = dashboard.toggle_detail,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.next_panel_tab", {
+			desc = "Next panel tab",
+			index = 11,
+			callback = dashboard.next_detail_tab,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.previous_panel_tab", {
+			desc = "Previous panel tab",
+			index = 10,
+			callback = dashboard.prev_detail_tab,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.notifications.open", {
+			desc = "Open notifications",
+			index = 20,
+			callback = function()
+				require("atlas.ui.notifications").open(state.provider, window.render)
+			end,
+		})
+	)
+	return items
+end
+
+---@param buf integer
 ---@param views AtlasPullsViewConfig[]
 function M.register(buf, views)
-	local help = require("atlas.ui.popups.help")
 	M.remove(buf)
-	local state = require("atlas.pulls.state")
 	local function context(pr)
 		return { provider = state.provider, pr = pr, current_user = state.current_user, buf = buf }
 	end
@@ -99,9 +201,8 @@ function M.register(buf, views)
 			desc = "Run bookmark",
 			index = 2,
 			callback = function()
-				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
-				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
+				if node and (node.kind == "bookmark" or node.kind == "starred") then
 					controller.select_bookmark(node)
 				end
 			end,
@@ -143,9 +244,26 @@ function M.register(buf, views)
 		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
 			index = 7,
-			opts = { nowait = true },
 			callback = function()
 				run_action("open_in_browser", true)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.open_references", {
+			desc = "Open references",
+			index = 11,
+			callback = function()
+				local pr = selected_pr()
+				if not pr then
+					notify.warn("No PR selected")
+					return
+				end
+				if state.provider then
+					require("atlas.ui.links").select(state.provider, pr, "pr")
+				end
 			end,
 		})
 	)
@@ -155,7 +273,6 @@ function M.register(buf, views)
 		item("ui.copy_url", {
 			desc = "Copy PR URL",
 			index = 9,
-			opts = { nowait = true },
 			callback = function()
 				run_action("copy_url", true)
 			end,
@@ -167,7 +284,6 @@ function M.register(buf, views)
 		item("ui.copy_id", {
 			desc = "Copy PR ID",
 			index = 8,
-			opts = { nowait = true },
 			callback = function()
 				run_action("copy_id", true)
 			end,
@@ -179,7 +295,6 @@ function M.register(buf, views)
 		item("pulls.edit_pr", {
 			desc = "Edit PR",
 			index = 5,
-			opts = { nowait = true },
 			callback = function()
 				run_action("edit_pr", true)
 			end,
@@ -191,7 +306,6 @@ function M.register(buf, views)
 		item("ui.show_details", {
 			desc = "Show PR details",
 			index = 3,
-			opts = { nowait = true },
 			callback = function()
 				controller.show_pr_details(buf)
 			end,
@@ -219,7 +333,6 @@ function M.register(buf, views)
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
 			index = 4,
-			opts = { nowait = true },
 			callback = function()
 				run_action("open_diff", true)
 			end,
@@ -231,7 +344,6 @@ function M.register(buf, views)
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
 			index = 6,
-			opts = { nowait = true },
 			callback = function()
 				run_action("checkout", true)
 			end,
@@ -321,10 +433,9 @@ function M.register(buf, views)
 		item("pulls.open_repository", {
 			desc = "Open repository browser",
 			index = 40,
-			opts = { nowait = true, silent = true },
 			callback = function()
-				local node = require("atlas.ui.navigation").current_item()
-				local repo = type(node) == "table" and node.repo or nil
+				local node = navigation.current_item()
+				local repo = node and node.repo
 				if repo == nil then
 					notify.warn("No repository selected")
 					return
@@ -350,13 +461,18 @@ function M.register(buf, views)
 	end)
 
 	registrations[buf] = {
+		{ group = "General", items = dashboard_items(buf), index = 210 },
 		{ group = "General", items = general, index = 1 },
 		{ group = "Filters", items = filters, index = 2 },
 		{ group = "Custom", items = custom, index = 3 },
 	}
 	for _, registration in ipairs(registrations[buf]) do
+		for _, map_item in ipairs(registration.items) do
+			map_item.opts = vim.tbl_extend("force", { nowait = true }, map_item.opts or {})
+		end
 		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
 	end
+	navigation.attach(buf)
 end
 
 ---@param buf integer
@@ -365,7 +481,6 @@ function M.remove(buf)
 	if registered == nil then
 		return
 	end
-	local help = require("atlas.ui.popups.help")
 	for _, registration in ipairs(registered) do
 		help.remove(registration.group, registration.items, { buffer = buf })
 	end

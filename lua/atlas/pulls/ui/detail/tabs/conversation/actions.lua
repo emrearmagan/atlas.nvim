@@ -1,12 +1,15 @@
 local M = {}
 
 local action_runner = require("atlas.core.actions")
-local notify = require("atlas.core.notify")
 local pull_actions = require("atlas.pulls.actions")
 local reactions = require("atlas.ui.shared.reactions")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
+
+---@class PullsConversationLine
+---@field comment PullsComment|nil
+---@field review_entry PullsReviewHistoryEntry|nil
 
 ---@param pr PullRequest
 ---@param comment PullsComment|nil
@@ -16,12 +19,10 @@ local function action_context(pr, comment)
 	if not provider then
 		return nil
 	end
-	local items = state.comments(comment and comment.is_task == true or false)
 	return {
 		provider = provider,
 		pr = pr,
 		comment = comment,
-		items = items,
 		conversation = state.comments(),
 		upsert_comment = function(created)
 			if state.is_current(pr) then
@@ -33,23 +34,7 @@ local function action_context(pr, comment)
 				state.remove_comment(removed)
 			end
 		end,
-		notify = function(level, message, duration)
-			if state.is_current(pr) then
-				notify.show(level, message, { timeout = duration })
-			end
-		end,
 	}
-end
-
----@param pr PullRequest
----@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
----@param result PullsActionResult
-local function complete_action(pr, on_update, result)
-	if on_update then
-		on_update(pr, result)
-	else
-		require("atlas.pulls.ui.detail").refresh()
-	end
 end
 
 ---@param pr PullRequest
@@ -62,7 +47,7 @@ local function on_done(pr, refresh)
 			return
 		end
 		if result.changed_pr then
-			complete_action(pr, on_update, result)
+			require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 		elseif state.is_current(pr) then
 			refresh()
 		end
@@ -79,20 +64,15 @@ function M.add(pr, refresh)
 end
 
 ---@param pr PullRequest
----@param entry table
+---@param entry PullsConversationLine
 ---@param refresh fun()
 function M.reply(pr, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if item and item.kind == "description" then
+	local comment = entry.comment
+	if not comment or comment.is_task then
+		return
+	end
+	if state.is_description(comment) then
 		M.add(pr, refresh)
-		return
-	end
-	if not item or item.kind ~= "comment" then
-		return
-	end
-	---@type PullsComment
-	local comment = item.entity
-	if comment.is_task then
 		return
 	end
 	local context = action_context(pr, comment)
@@ -102,16 +82,11 @@ function M.reply(pr, entry, refresh)
 end
 
 ---@param pr PullRequest
----@param entry table
+---@param entry PullsConversationLine
 ---@param refresh fun()
 function M.edit(pr, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item then
-		return
-	end
-	if item.kind == "review" then
-		---@type PullsReviewHistoryEntry
-		local review_entry = item.entity
+	local review_entry = entry.review_entry
+	if review_entry then
 		local context = action_context(pr, nil)
 		if context then
 			context.review_entry = review_entry
@@ -119,16 +94,15 @@ function M.edit(pr, entry, refresh)
 		end
 		return
 	end
-	if item.kind == "description" then
+	local comment = entry.comment
+	if not comment then
+		return
+	end
+	if state.is_description(comment) then
 		local context = { provider = detail.provider, pr = pr, details = detail.current_details }
 		pull_actions.run("edit_pr", context, on_done(pr, refresh))
 		return
 	end
-	if item.kind ~= "comment" then
-		return
-	end
-	---@type PullsComment
-	local comment = item.entity
 	local context = action_context(pr, comment)
 	if context then
 		action_runner.run(review.edit_comment, context, on_done(pr, refresh))
@@ -136,15 +110,13 @@ function M.edit(pr, entry, refresh)
 end
 
 ---@param pr PullRequest
----@param entry table
+---@param entry PullsConversationLine
 ---@param refresh fun()
 function M.delete(pr, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item or item.kind ~= "comment" then
+	local comment = entry.comment
+	if not comment or state.is_description(comment) then
 		return
 	end
-	---@type PullsComment
-	local comment = item.entity
 	local context = action_context(pr, comment)
 	if context then
 		action_runner.run(review.delete_comment, context, on_done(pr, refresh))
@@ -152,15 +124,13 @@ function M.delete(pr, entry, refresh)
 end
 
 ---@param pr PullRequest
----@param entry table
+---@param entry PullsConversationLine
 ---@param refresh fun()
 function M.react(pr, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "comment" and item.kind ~= "description") or item.entity.deleted then
+	local comment = entry.comment
+	if not comment or comment.deleted then
 		return
 	end
-	---@type PullsComment
-	local comment = item.entity
 	-- TODO: Reacting to the description doesn't update the overview's reactions until the details are reloaded.
 	reactions.pick(detail.provider.capabilities.comments.reactions, pr, comment, function()
 		return state.is_current(pr)
@@ -168,16 +138,11 @@ function M.react(pr, entry, refresh)
 end
 
 ---@param pr PullRequest
----@param entry table
+---@param entry PullsConversationLine
 ---@param refresh fun()
 function M.toggle_task(pr, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item or item.kind ~= "comment" then
-		return
-	end
-	---@type PullsComment
-	local task = item.entity
-	if not task.is_task then
+	local task = entry.comment
+	if not task or not task.is_task then
 		return
 	end
 	local context = action_context(pr, task)

@@ -30,19 +30,22 @@ local function normalize_color(color)
 	return nil
 end
 
----Choose a foreground for a solid chip background.
----@param bg string|integer|nil
----@return string|nil
-function M.foreground_for(bg)
-	local color = normalize_color(bg)
-	if color == nil then
-		return nil
-	end
+---@param color string Normalized "#rrggbb" color
+---@return string
+local function contrast(color)
 	local r = tonumber(color:sub(2, 3), 16)
 	local g = tonumber(color:sub(4, 5), 16)
 	local b = tonumber(color:sub(6, 7), 16)
 	local brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
 	return brightness > 0.6 and "#1e1e2e" or "#ffffff"
+end
+
+---Choose a foreground for a solid chip background.
+---@param bg string|integer|nil
+---@return string|nil
+function M.foreground_for(bg)
+	local color = normalize_color(bg)
+	return color and contrast(color)
 end
 
 ---@param bg string
@@ -184,10 +187,125 @@ function M.chip(bg, opts)
 	if color == nil then
 		return "AtlasTextMuted"
 	end
-	local fg = normalize_color(opts.fg) or M.foreground_for(color)
+	local fg = normalize_color(opts.fg) or contrast(color)
 	local name = "AtlasChip_" .. color:sub(2) .. "_" .. fg:sub(2)
 	generated[name] = { bg = color, fg = fg, bold = true }
 	set_default(name, generated[name])
+	return name
+end
+
+local labels = {}
+
+---@param color string
+---@return integer, integer, integer
+local function channels(color)
+	return tonumber(color:sub(2, 3), 16), tonumber(color:sub(4, 5), 16), tonumber(color:sub(6, 7), 16)
+end
+
+---@param color string
+---@return number, number, number
+local function to_hsl(color)
+	local r, g, b = channels(color)
+	r, g, b = r / 255, g / 255, b / 255
+	local high, low = math.max(r, g, b), math.min(r, g, b)
+	local l = (high + low) / 2
+	if high == low then
+		return 0, 0, l
+	end
+
+	local d = high - low
+	local s = l > 0.5 and d / (2 - high - low) or d / (high + low)
+	local h
+	if high == r then
+		h = (g - b) / d + (g < b and 6 or 0)
+	elseif high == g then
+		h = (b - r) / d + 2
+	else
+		h = (r - g) / d + 4
+	end
+
+	return h / 6, s, l
+end
+
+---@param p number
+---@param q number
+---@param t number
+---@return number
+local function hue_channel(p, q, t)
+	t = t % 1
+	if t < 1 / 6 then
+		return p + (q - p) * 6 * t
+	elseif t < 1 / 2 then
+		return q
+	elseif t < 2 / 3 then
+		return p + (q - p) * (2 / 3 - t) * 6
+	end
+
+	return p
+end
+
+---@param h number
+---@param s number
+---@param l number
+---@return string
+local function from_hsl(h, s, l)
+	local q = l < 0.5 and l * (1 + s) or l + s - l * s
+	local p = 2 * l - q
+	local r, g, b = hue_channel(p, q, h + 1 / 3), hue_channel(p, q, h), hue_channel(p, q, h - 1 / 3)
+	return string.format(
+		"#%02x%02x%02x",
+		math.floor(r * 255 + 0.5),
+		math.floor(g * 255 + 0.5),
+		math.floor(b * 255 + 0.5)
+	)
+end
+
+---@param base string
+---@param color string
+---@param alpha number
+---@return string
+local function mix(base, color, alpha)
+	local base_r, base_g, base_b = channels(base)
+	local r, g, b = channels(color)
+	local function channel(from, to)
+		return math.floor(from + (to - from) * alpha + 0.5)
+	end
+
+	return string.format("#%02x%02x%02x", channel(base_r, r), channel(base_g, g), channel(base_b, b))
+end
+
+---@param color string
+---@return table
+local function label_style(color)
+	if vim.o.background == "light" then
+		return chip_defaults(color)
+	end
+
+	local r, g, b = channels(color)
+	local perceived = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255
+	local h, s, l = to_hsl(color)
+	local page = normalize_color(resolved("Normal").bg) or "#0d1117"
+	return {
+		fg = from_hsl(h, s, math.min(1, l + math.max(0, 0.6 - perceived))),
+		bg = mix(page, color, 0.18),
+		bold = true,
+	}
+end
+
+---@param color string|integer|nil
+---@return string
+function M.label(color)
+	local normalized = normalize_color(color)
+	if normalized == nil then
+		return "AtlasTextMuted"
+	end
+
+	local name = "AtlasLabel_" .. normalized:sub(2)
+	if not labels[name] then
+		labels[name] = normalized
+		vim.api.nvim_set_hl(0, name, label_style(normalized))
+	end
+
 	return name
 end
 
@@ -236,6 +354,9 @@ function M.setup()
 	end
 	for group, name in pairs(derived) do
 		refresh_derived(group, name, resolved(group))
+	end
+	for name, color in pairs(labels) do
+		vim.api.nvim_set_hl(0, name, label_style(color))
 	end
 end
 

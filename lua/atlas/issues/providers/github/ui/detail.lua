@@ -96,15 +96,12 @@ end
 
 ---@param issue Issue
 ---@param details IssueDetails|nil
----@param loading boolean
+---@param _loading boolean
 ---@return IssuesDetailHeaderField[]
 function M.header_fields(issue, details, _loading)
 	---@cast issue GitHubIssue
 	---@cast details GitHubIssueDetails|nil
-	local reporter_name = issue.reporter and issue.reporter.name or ""
-	if reporter_name == "" then
-		reporter_name = "Unknown"
-	end
+	local reporter_name = helper.person_name(issue.reporter)
 
 	local assignees = details and details.assignees or (issue.assignee and { issue.assignee } or {})
 	local assignees_text, assignees_hl = assignees_display(assignees)
@@ -181,7 +178,7 @@ function M.chips(_issue, details, loading)
 	for _, label in ipairs(details and details.labels or {}) do
 		local name = label.name
 		if name ~= "" then
-			table.insert(chips, { label = name, hl = highlights.chip(label.color) })
+			table.insert(chips, { label = name, hl = highlights.label(label.color) })
 		end
 	end
 

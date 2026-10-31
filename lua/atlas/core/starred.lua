@@ -1,7 +1,8 @@
 local M = {}
 local providers = require("atlas.providers")
+local storage = require("atlas.core.storage")
 
-local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v4.json")
+local path = vim.fs.joinpath(storage.root(), "starred-v4.json")
 
 ---@class AtlasStarredItem
 ---@field ref string
@@ -39,52 +40,24 @@ end
 ---@return string|nil
 local function write(values)
 	if next(values) == nil then
-		if vim.fn.filereadable(path) == 1 and vim.fn.delete(path) ~= 0 then
-			return "Unable to delete starred items: " .. path
-		end
-		return nil
+		return storage.delete(path)
 	end
-
-	local directory = vim.fs.dirname(path)
-	local mkdir_ok, created = pcall(vim.fn.mkdir, directory, "p")
-	if not mkdir_ok or (created == 0 and vim.fn.isdirectory(directory) == 0) then
-		return "Unable to create Atlas data directory"
-	end
-
-	local ok, encoded = pcall(vim.json.encode, values)
-	if not ok then
-		return "Unable to encode starred items"
-	end
-	local temp = path .. ".tmp." .. tostring(vim.uv.hrtime())
-	local write_ok, result = pcall(vim.fn.writefile, { encoded }, temp)
-	if not write_ok or result ~= 0 then
-		vim.fn.delete(temp)
-		return "Unable to write starred items"
-	end
-	local renamed, err = vim.uv.fs_rename(temp, path)
-	if not renamed then
-		vim.fn.delete(temp)
-		return "Unable to save starred items: " .. tostring(err)
-	end
-	return nil
+	return storage.write(path, values)
 end
 
 ---@return table<string, AtlasStarredItem>|nil, string|nil
 local function load()
-	if vim.fn.filereadable(path) == 0 then
-		return {}, nil
+	local value, err = storage.read(path)
+	if err then
+		return nil, err
 	end
-	local ok, value = pcall(function()
-		return vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
-	end)
-	local read_error = "Unable to read starred items: " .. path
-	if not ok or type(value) ~= "table" then
-		return nil, read_error
+	if not value then
+		return {}, nil
 	end
 
 	for ref, item in pairs(value) do
 		if type(item) ~= "table" then
-			return nil, read_error
+			return nil, "Unable to read " .. path
 		end
 		item.ref = tostring(ref)
 	end
@@ -150,10 +123,12 @@ end
 
 ---@return boolean, string|nil
 function M.clear_all()
-	if vim.fn.filereadable(path) == 0 or vim.fn.delete(path) == 0 then
-		return true, nil
+	-- TODO: Drop this at some point. It only cleans up the old starred versions.
+	for _, name in ipairs({ "starred.json", "starred-v2.json", "starred-v3.json" }) do
+		vim.fn.delete(vim.fs.joinpath(storage.root(), name))
 	end
-	return false, "Unable to delete starred items: " .. path
+	local err = storage.delete(path)
+	return err == nil, err
 end
 
 return M

@@ -7,17 +7,13 @@
 ---| "open_repo"
 ---| "toggle_subscription"
 
-local M = {}
-
 local actions = require("atlas.pulls.actions")
-local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local cli = require("atlas.providers.github.client")
 local picker = require("atlas.ui.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local users_api = require("atlas.providers.github.users")
-
-local notify = action_utils.notify
 
 ---@param original table<string, boolean>
 ---@param selected table<string, boolean>
@@ -39,7 +35,6 @@ end
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasPullAction
 local function register(action)
@@ -91,7 +86,7 @@ local function reopen_available(ctx)
 	if not ok then
 		return ok, err
 	end
-	if tostring(ctx.pr.state or ""):lower() ~= "declined" then
+	if ctx.pr.state ~= "declined" then
 		return false, "PR is not closed"
 	end
 	return true, nil
@@ -101,16 +96,16 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
 	local pr = assert(ctx.pr)
-	notify(ctx, "loading", "Reopening PR...")
+	notify.loading("Reopening PR...")
 	pullrequests.reopen(pr, function(_, err)
 		if err then
-			notify(ctx, "error", string.format("Reopen failed: %s", tostring(err)))
+			notify.error(string.format("Reopen failed: %s", tostring(err)))
 			done(nil, tostring(err))
 			return
 		end
 
-		notify(ctx, "success", "PR reopened", 1200)
-		done({ changed_pr = true, message = "Reopened" }, nil)
+		notify.success("PR reopened", { timeout = 1200 })
+		done({ changed_pr = true }, nil)
 	end)
 end
 
@@ -124,15 +119,15 @@ local function edit_assignees(ctx, done)
 	local function open_picker(assignees)
 		users_api.get_assignable_users(slug, nil, function(items, err)
 			if err then
-				notify(ctx, "error", string.format("Failed to load assignees: %s", tostring(err)))
+				notify.error(string.format("Failed to load assignees: %s", tostring(err)))
 				done(nil, tostring(err))
 				return
 			end
 
 			items = items or {}
 			if #items == 0 then
-				notify(ctx, "warn", "No assignees available")
-				done({ changed_pr = false, message = "No assignees available" }, nil)
+				notify.warn("No assignees available")
+				done({ changed_pr = false }, nil)
 				return
 			end
 
@@ -145,7 +140,7 @@ local function edit_assignees(ctx, done)
 					table.insert(original, { id = assignee.id, username = login, name = assignee.name })
 				end
 			end
-			notify(ctx, "success", "Assignees loaded", 1200)
+			notify.success("Assignees loaded", { timeout = 1200 })
 
 			picker.multi_select({
 				items = items,
@@ -170,27 +165,27 @@ local function edit_assignees(ctx, done)
 					local adds, removes = selection_diff(original_set, selected_set)
 
 					if #adds == 0 and #removes == 0 then
-						done({ changed_pr = false, message = "No changes" }, nil)
+						done({ changed_pr = false }, nil)
 						return
 					end
 
-					notify(ctx, "loading", string.format("Updating assignees on PR #%s...", tostring(pr.id or "")))
+					notify.loading(string.format("Updating assignees on PR #%s...", tostring(pr.id or "")))
 					pullrequests.update_assignees(pr, adds, removes, function(_, edit_err)
 						if edit_err then
-							notify(ctx, "error", string.format("Update assignees failed: %s", tostring(edit_err)))
+							notify.error(string.format("Update assignees failed: %s", tostring(edit_err)))
 							done(nil, tostring(edit_err))
 							return
 						end
 						local message = string.format("+%d / -%d assignee(s)", #adds, #removes)
-						notify(ctx, "success", message, 1200)
-						done({ changed_pr = true, message = message }, nil)
+						notify.success(message, { timeout = 1200 })
+						done({ changed_pr = true }, nil)
 					end)
 				end,
 			})
 		end)
 	end
 
-	notify(ctx, "loading", "Loading assignees...")
+	notify.loading("Loading assignees...")
 	if ctx.details then
 		local details = ctx.details
 		---@cast details GitHubPullRequestDetails
@@ -200,7 +195,7 @@ local function edit_assignees(ctx, done)
 	pullrequests.fetch_pullrequest(pr, nil, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load pull request")
-			notify(ctx, "error", "Failed to load assignees: " .. message)
+			notify.error("Failed to load assignees: " .. message)
 			done(nil, message)
 			return
 		end
@@ -215,25 +210,18 @@ local function edit_labels(ctx, done)
 	local pr = assert(ctx.pr)
 	local slug = pr.repo_full_name
 
-	notify(ctx, "loading", "Loading labels...")
-	pullrequests.fetch_pullrequest(pr, nil, function(current, current_err)
-		if current_err or current == nil then
-			notify(ctx, "error", current_err or "Failed to load PR labels")
-			done(nil, current_err or "Failed to load PR labels")
-			return
-		end
-		---@cast current GitHubPullRequestDetails
-
+	---@param current GitHubPullRequestDetails
+	local function open_picker(current)
 		pullrequests.list_labels(slug, function(labels, err)
 			if err or labels == nil then
-				notify(ctx, "error", err or "Failed to load labels")
+				notify.error(err or "Failed to load labels")
 				done(nil, err or "Failed to load labels")
 				return
 			end
 
 			if #labels == 0 then
-				notify(ctx, "warn", "No labels available")
-				done({ changed_pr = false, message = "No labels available" }, nil)
+				notify.warn("No labels available")
+				done({ changed_pr = false }, nil)
 				return
 			end
 
@@ -243,7 +231,7 @@ local function edit_labels(ctx, done)
 				table.insert(original, label)
 				original_set[label.name] = true
 			end
-			notify(ctx, "success", "Labels loaded", 1200)
+			notify.success("Labels loaded", { timeout = 1200 })
 
 			picker.multi_select({
 				items = labels,
@@ -264,24 +252,41 @@ local function edit_labels(ctx, done)
 					local adds, removes = selection_diff(original_set, selected_set)
 
 					if #adds == 0 and #removes == 0 then
-						done({ changed_pr = false, message = "No changes" }, nil)
+						done({ changed_pr = false }, nil)
 						return
 					end
 
-					notify(ctx, "loading", string.format("Updating labels on #%s...", tostring(pr.id or "")))
+					notify.loading(string.format("Updating labels on #%s...", tostring(pr.id or "")))
 					pullrequests.update_labels(slug, pr.id, { add = adds, remove = removes }, function(ok, set_err)
 						if not ok then
-							notify(ctx, "error", set_err or "Failed")
+							notify.error(set_err or "Failed")
 							done(nil, set_err or "Failed")
 							return
 						end
 						local message = string.format("+%d / -%d label(s)", #adds, #removes)
-						notify(ctx, "success", message, 1200)
-						done({ changed_pr = true, message = message }, nil)
+						notify.success(message, { timeout = 1200 })
+						done({ changed_pr = true }, nil)
 					end)
 				end,
 			})
 		end)
+	end
+
+	notify.loading("Loading labels...")
+	if ctx.details then
+		local details = ctx.details
+		---@cast details GitHubPullRequestDetails
+		open_picker(details)
+		return
+	end
+	pullrequests.fetch_pullrequest(pr, nil, function(current, current_err)
+		if current_err or current == nil then
+			notify.error(current_err or "Failed to load PR labels")
+			done(nil, current_err or "Failed to load PR labels")
+			return
+		end
+		---@cast current GitHubPullRequestDetails
+		open_picker(current)
 	end)
 end
 
@@ -292,7 +297,7 @@ local function create_issue(ctx, done)
 	local slug = pr.repo_full_name
 
 	require("atlas.issues.providers.github.ui.editor").open(slug)
-	done({ changed_pr = false, message = "Opened issue editor" }, nil)
+	done({ changed_pr = false }, nil)
 end
 
 ---@param opts {
@@ -480,19 +485,16 @@ local function toggle_subscription(ctx, done)
 	---@cast pr GitHubPullRequest
 	---@param details PullRequestDetails
 	local function update(details)
-		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
 		pullrequests.set_subscription(pr, details.is_subscribed ~= true, function(subscribed, err)
 			if err then
-				notify(ctx, "error", tostring(err))
+				notify.error(tostring(err))
 				done(nil, tostring(err))
 				return
 			end
 			details.is_subscribed = subscribed
-			notify(ctx, "success", details.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-			done({
-				changed_pr = true,
-				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
-			}, nil)
+			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			done({ changed_pr = true }, nil)
 		end)
 	end
 
@@ -503,7 +505,7 @@ local function toggle_subscription(ctx, done)
 	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load pull request details")
-			notify(ctx, "error", message)
+			notify.error(message)
 			done(nil, message)
 			return
 		end
@@ -590,7 +592,7 @@ register({
 			title = "Browse Repository",
 			include_all = false,
 			on_select = function(repo)
-				require("atlas.ui.repository").open(repo, ctx.provider)
+				require("atlas.ui.repository").open(repo, ctx.provider, { page = ctx.page })
 				done(nil, nil)
 			end,
 			on_cancel = function()
@@ -653,15 +655,4 @@ register(actions.copy_id)
 register(actions.copy_url)
 register(actions.open_in_browser)
 
----@param id AtlasGitHubActionId
----@return AtlasPullAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

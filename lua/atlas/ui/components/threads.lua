@@ -3,13 +3,13 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local highlights = require("atlas.ui.highlights")
 local markdown = require("atlas.formats.markdown")
+local reactions = require("atlas.ui.shared.reactions")
 
 ---@alias AtlasThreadMode "tree" | "linked"
 
 ---@class AtlasThreadFooterItem
 ---@field text string
 ---@field hl_group string|nil
----@field highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
 
 ---@class AtlasThreadItem
 ---@field icon string|nil Icon string rendered before author
@@ -23,20 +23,20 @@ local markdown = require("atlas.formats.markdown")
 ---@field language string|nil
 ---@field file_path string|nil
 ---@field language_aliases table<string, string>|nil
+---@field reactions AtlasReaction[]|nil
 ---@field footer_items AtlasThreadFooterItem[]|nil
 ---@field children AtlasThreadItem[]|nil Nested replies
 ---@field meta table|nil Arbitrary metadata passed through
 ---@field line_map table|nil Extra fields merged into every line-map entry
 
 ---@class AtlasThreadRenderOpts
----@field padding_x integer|nil Horizontal padding (default 2)
----@field mode AtlasThreadMode|nil Rendering mode (default "tree")
----@field show_connectors boolean|nil Show tree connectors (default true)
----@field separator string|nil Character for root separators (default "─")
----@field content_max_lines integer|fun(item: AtlasThreadItem): integer|nil Max visible content lines per item (nil = unlimited).
----@field content_truncated_key string|nil Key shown when expandable content is truncated.
----@field content_prefix string|nil Prefix placed before root content after padding
+---@field padding_x? integer Horizontal padding (default 2)
+---@field mode? AtlasThreadMode Rendering mode (default "tree")
+---@field content_max_lines? integer|(fun(item: AtlasThreadItem): integer|nil) Max visible content lines per item (nil = unlimited).
+---@field content_truncated_key? string Key shown when expandable content is truncated.
+---@field content_prefix? string Prefix placed before root content after padding
 ---@field content_hl? fun(item: AtlasThreadItem, row: string, row_index: integer): table[]|nil Returns segments for content
+---@field header_fill? string
 
 ---@class AtlasThreadSpan
 ---@field line integer 0-indexed line number
@@ -107,31 +107,18 @@ end
 
 ---@class AtlasThreadPrefixes
 ---@field pad string Left padding
----@field continuation string │  or "   " or ""
+---@field continuation string
 ---@field meta_prefix string Full prefix for the header line
 ---@field body_prefix string Full prefix for content/footer lines
 
 ---@param depth integer
 ---@param branch_prefix string
----@param is_last boolean
 ---@param padding_x integer
----@param show_connectors boolean
 ---@return AtlasThreadPrefixes
-local function compute_prefixes(depth, branch_prefix, is_last, padding_x, show_connectors)
+local function compute_prefixes(depth, branch_prefix, padding_x)
 	local pad = string.rep(" ", padding_x)
-	local connector = ""
-	local continuation = ""
-
-	if depth > 0 then
-		if show_connectors then
-			connector = is_last and "└─ " or "├─ "
-			continuation = is_last and "   " or "│  "
-		else
-			connector = "↳ "
-			continuation = "  "
-		end
-	end
-
+	local connector = depth > 0 and "↳ " or ""
+	local continuation = depth > 0 and "  " or ""
 	local meta_prefix = pad .. branch_prefix .. connector
 	local body_prefix = depth == 0 and pad or (pad .. branch_prefix .. continuation)
 
@@ -190,17 +177,13 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	for _, chunk in ipairs(additional_chunks) do
 		additional = additional .. chunk[1]
 	end
+	local available = width - opts.padding_x - vim.api.nvim_strwidth(header) - 2 - right_text_dw
+	if available <= 0 then
+		additional = ""
+	elseif vim.api.nvim_strwidth(additional) > available then
+		additional = utils.truncate(additional, available)
+	end
 	if additional ~= "" then
-		local padding_x = opts.padding_x
-		local used_dw = vim.api.nvim_strwidth(header)
-		local available = width - padding_x - used_dw - 2 - right_text_dw
-		if available > 0 then
-			local add_dw = vim.api.nvim_strwidth(additional)
-			if add_dw > available then
-				additional = utils.truncate(additional, available)
-			end
-		end
-
 		local add_start = #header + 2
 		header = header .. "  " .. additional
 		local offset = 0
@@ -220,8 +203,13 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		local display_rt = vim.api.nvim_strwidth(right_text)
 		local right_edge = width - opts.padding_x
 		local needed = math.max(2, right_edge - display_so_far - display_rt)
-		local rt_byte_start = #header + needed
-		header = header .. string.rep(" ", needed) .. right_text
+		local fill = depth == 0 and opts.header_fill or nil
+		local gap = " " .. string.rep(fill or " ", needed - 2) .. " "
+		if fill then
+			col_markers[#col_markers + 1] = { #header + 1, #header + #gap - 1, "AtlasBorder" }
+		end
+		local rt_byte_start = #header + #gap
+		header = header .. gap .. right_text
 		for _, chunk in ipairs(right_chunks) do
 			local chunk_end = rt_byte_start + #chunk[1]
 			col_markers[#col_markers + 1] = { rt_byte_start, chunk_end, chunk[2] }
@@ -323,7 +311,7 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	end
 end
 
--- Footer rendering
+-- Reactions rendering
 
 ---@param lines string[]
 ---@param spans AtlasThreadSpan[]
@@ -331,40 +319,75 @@ end
 ---@param item AtlasThreadItem
 ---@param depth integer
 ---@param pfx AtlasThreadPrefixes
----@param has_children boolean
----@param show_connectors boolean
-local function render_footer(lines, spans, line_map, item, depth, pfx, has_children, show_connectors)
-	local footer_items = item.footer_items or {}
-	if #footer_items == 0 then
+local function render_reactions(lines, spans, line_map, item, depth, pfx)
+	local text, reaction_spans = reactions.format(item.reactions)
+	if text == "" then
 		return
 	end
 
-	local footer_prefix = pfx.body_prefix
-	if depth == 0 and has_children and show_connectors then
-		footer_prefix = pfx.pad .. "│ "
-	end
-
-	local line = footer_prefix
+	local prefix = pfx.body_prefix
 	local row = #lines
-	if #footer_prefix > 0 then
-		span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+	if #prefix > 0 then
+		span(spans, row, 0, #prefix, "AtlasTextMuted")
 	end
-	for index, footer_item in ipairs(footer_items) do
-		if index > 1 then
-			line = line .. "   "
-		end
-		local start_col = #line
-		line = line .. footer_item.text
-		if footer_item.highlights and #footer_item.highlights > 0 then
-			for _, highlight in ipairs(footer_item.highlights) do
-				span(spans, row, start_col + highlight.start_col, start_col + highlight.end_col, highlight.hl_group)
-			end
+	for _, reaction_span in ipairs(reaction_spans) do
+		span(spans, row, #prefix + reaction_span.start_col, #prefix + reaction_span.end_col, reaction_span.hl_group)
+	end
+	lines[#lines + 1] = prefix .. text
+	line_map[#lines] = make_line_map(item, "reactions", depth)
+end
+
+-- Footer rendering
+
+local FOOTER_SEPARATOR = "   "
+
+---@param footer_items AtlasThreadFooterItem[]
+---@param width integer
+---@return AtlasThreadFooterItem[][]
+local function footer_rows(footer_items, width)
+	local rows = {}
+	local row_width = 0
+	for _, footer_item in ipairs(footer_items) do
+		local item_width = vim.api.nvim_strwidth(footer_item.text)
+		local row = rows[#rows]
+		if row and row_width + #FOOTER_SEPARATOR + item_width <= width then
+			table.insert(row, footer_item)
+			row_width = row_width + #FOOTER_SEPARATOR + item_width
 		else
+			table.insert(rows, { footer_item })
+			row_width = item_width
+		end
+	end
+	return rows
+end
+
+---@param lines string[]
+---@param spans AtlasThreadSpan[]
+---@param line_map table<integer, AtlasThreadLineMap>
+---@param item AtlasThreadItem
+---@param depth integer
+---@param pfx AtlasThreadPrefixes
+---@param width integer
+local function render_footer(lines, spans, line_map, item, depth, pfx, width)
+	local footer_prefix = pfx.body_prefix
+	local available = width - vim.api.nvim_strwidth(footer_prefix)
+	for _, footer_items in ipairs(footer_rows(item.footer_items or {}, available)) do
+		local line = footer_prefix
+		local row = #lines
+		if #footer_prefix > 0 then
+			span(spans, row, 0, #footer_prefix, "AtlasTextMuted")
+		end
+		for index, footer_item in ipairs(footer_items) do
+			if index > 1 then
+				line = line .. FOOTER_SEPARATOR
+			end
+			local start_col = #line
+			line = line .. footer_item.text
 			span(spans, row, start_col, #line, footer_item.hl_group or "AtlasTextMuted")
 		end
+		lines[#lines + 1] = line
+		line_map[#lines] = make_line_map(item, "footer", depth)
 	end
-	lines[#lines + 1] = line
-	line_map[#lines] = make_line_map(item, "footer", depth)
 end
 
 -- Blank / separator lines
@@ -381,11 +404,10 @@ end
 
 ---@param width integer
 ---@param padding_x integer
----@param sep_char string
 ---@return string
-local function separator_line(width, padding_x, sep_char)
+local function separator_line(width, padding_x)
 	local content_width = math.max(8, width - (padding_x * 2))
-	return string.rep(" ", padding_x) .. string.rep(sep_char, content_width)
+	return string.rep(" ", padding_x) .. string.rep("─", content_width)
 end
 
 ---@param lines string[]
@@ -398,14 +420,11 @@ end
 ---@param opts AtlasThreadRenderOpts
 ---@param width integer
 local function render_item(lines, spans, line_map, item, depth, branch_prefix, is_last, opts, width)
-	local linked = opts.mode == "linked"
-	local show_connectors = opts.show_connectors
-	---@cast show_connectors boolean
-	local pfx = compute_prefixes(depth, branch_prefix, is_last, opts.padding_x, show_connectors)
+	local pfx = compute_prefixes(depth, branch_prefix, opts.padding_x)
 
 	if depth == 0 then
-		if linked then
-			pfx.body_prefix = pfx.pad .. (show_connectors and not is_last and "│ " or "  ")
+		if opts.mode == "linked" then
+			pfx.body_prefix = pfx.pad .. (is_last and "  " or "│ ")
 		end
 		if opts.content_prefix then
 			pfx.body_prefix = pfx.pad .. opts.content_prefix
@@ -414,29 +433,14 @@ local function render_item(lines, spans, line_map, item, depth, branch_prefix, i
 
 	render_header(lines, spans, line_map, item, depth, pfx, opts, width)
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
+	render_reactions(lines, spans, line_map, item, depth, pfx)
+	render_footer(lines, spans, line_map, item, depth, pfx, width - opts.padding_x)
 
 	local children = item.children or {}
-	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0, show_connectors)
-
 	for index, child in ipairs(children) do
-		local gap
-		if not show_connectors then
-			gap = pfx.pad .. branch_prefix .. (depth == 0 and " " or pfx.continuation)
-		elseif depth == 0 then
-			gap = pfx.pad .. "│"
-		else
-			gap = pfx.pad .. branch_prefix .. pfx.continuation
-		end
-		blank_line(lines, spans, gap)
-
+		blank_line(lines, spans, pfx.pad .. branch_prefix .. (depth == 0 and " " or pfx.continuation))
 		local child_branch = branch_prefix .. pfx.continuation
-		-- Linked replies continue to the next root item.
-		local child_is_last = index == #children and (not linked or depth > 0)
-		render_item(lines, spans, line_map, child, depth + 1, child_branch, child_is_last, opts, width)
-	end
-
-	if linked and depth == 0 and #children > 0 then
-		blank_line(lines, spans, pfx.pad .. (show_connectors and "│" or " "))
+		render_item(lines, spans, line_map, child, depth + 1, child_branch, index == #children, opts, width)
 	end
 end
 
@@ -450,8 +454,6 @@ function M.render(items, width, opts)
 	opts = vim.tbl_extend("force", {
 		padding_x = 2,
 		mode = "tree",
-		show_connectors = true,
-		separator = "─",
 		content_hl = noop_hl,
 	}, opts or {})
 
@@ -472,9 +474,9 @@ function M.render(items, width, opts)
 
 		if idx < #list then
 			if is_linked then
-				blank_line(lines, spans, pad .. (opts.show_connectors and "│" or " "))
+				blank_line(lines, spans, pad .. "│")
 			else
-				local sep = separator_line(width, padding_x, opts.separator)
+				local sep = separator_line(width, padding_x)
 				lines[#lines + 1] = sep
 				span(spans, #lines - 1, 0, #sep, "AtlasTextMuted")
 			end
@@ -491,7 +493,7 @@ end
 function M.render_comments(items, width, opts)
 	local padding = string.rep(" ", opts and opts.padding_x or 1)
 	local inner_width = math.max(1, width - #padding * 2 - 4)
-	opts = vim.tbl_extend("force", opts or {}, { padding_x = 0, show_connectors = false })
+	opts = vim.tbl_extend("force", opts or {}, { padding_x = 0, header_fill = "─" })
 
 	local lines, spans, line_map = {}, {}, {}
 	local content_offset = #padding + #"│ "

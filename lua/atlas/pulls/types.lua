@@ -72,11 +72,17 @@
 -- Merge check
 --------------------------------------------------------------------------------
 
+---@class PullsMergeCheckDetail
+---@field text string
+---@field text_hl string|nil
+---@field icon string
+---@field icon_hl string|nil
+
 ---@class PullsMergeCheck
 ---@field key string
 ---@field state "successful"|"failed"|"inprogress"|"warning"|"muted"
 ---@field label string
----@field details string[]|nil
+---@field details (string|PullsMergeCheckDetail)[]|nil
 
 --------------------------------------------------------------------------------
 -- Diffstat
@@ -148,13 +154,14 @@
 ---@field parent_id number|string|nil
 ---@field thread_id string|nil
 ---@field author AtlasUser|nil
+---@field author_roles string[]|nil
 ---@field body string
 ---@field body_display string|nil
 ---@field created_at string
 ---@field resolved_at string|nil
 ---@field resolved_by AtlasUser|nil
 ---@field inline PullsInlineCommentPosition|nil
----@field hunk DiffHunk|nil
+---@field hunk DiffHunkLines|nil
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field state "RESOLVED"|"OUTDATED"|nil                -- nil = active/open
@@ -197,19 +204,18 @@
 ---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
----@field reviewed_files table<string, boolean>|nil
+---@field reviewed_files table<string, boolean>
+---@field outdated_files table<string, string|true> The version you reviewed: a blob or "<commit>:<path>". true when unknown.
 
 --------------------------------------------------------------------------------
 -- Conversation
 --------------------------------------------------------------------------------
 
----@alias PullsConversationItemKind "description"|"comment"|"review"|"activity"
-
----@class PullsConversationItem
----@field id string
----@field kind PullsConversationItemKind
----@field created_at string
----@field entity PullsComment|PullsReviewHistoryEntry|PullsActivityEntry
+---@class PullsConversation
+---@field description PullsComment|nil
+---@field comments PullsComment[]
+---@field reviews PullsReviewHistoryEntry[]
+---@field activities PullsActivityEntry[]
 
 --------------------------------------------------------------------------------
 -- Commit
@@ -239,10 +245,16 @@
 ---@field label string
 ---@field hl string|nil
 
+---@class PullsDetailKeymap
+---@field key string|string[]
+---@field desc string
+---@field callback fun()
+
 ---@class PullsProviderDetail
 ---@field header_fields (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailHeaderField[])|nil
 ---@field chips (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailChip[])|nil
 ---@field tabs (fun(): PullsDetailTab[])|nil
+---@field keymaps (fun(): PullsDetailKeymap[])|nil
 
 ---@class PullsDetailTabModule
 ---@field render fun(pr: PullRequest, details: PullRequestDetails|nil, width: integer): string[], table[], table<integer, table>|nil

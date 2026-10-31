@@ -23,6 +23,7 @@ function M.render(pane)
 			hl_group = row == pane.selected and "Normal" or "AtlasTextMuted",
 		})
 	end
+
 	vim.bo[pane.buf].modifiable = false
 end
 

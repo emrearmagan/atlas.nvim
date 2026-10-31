@@ -2,23 +2,6 @@ local M = {}
 
 local url = require("atlas.providers.url")
 
----@param project_path string|nil
----@return string|nil, string|nil
-local function split_project(project_path)
-	if project_path == nil then
-		return nil, nil
-	end
-	return project_path:match("^(.+)/([^/]+)$")
-end
-
----@param parsed AtlasParsedUrl
----@param project_path string
----@return string, string
-local function repository(parsed, project_path)
-	local web_url = url.base_url("gitlab", parsed.host, "gitlab.com") .. "/" .. project_path
-	return web_url, web_url .. ".git"
-end
-
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -26,14 +9,11 @@ function M.resolve(value, parsed)
 	if parsed == nil then
 		return nil, nil
 	end
-	local base = url.configured_base("gitlab")
-	if base == nil then
-		base = { host = "gitlab.com", path = "", remote = false }
-	end
+	local base = url.configured_base("gitlab") or { host = "gitlab.com", path = "", remote = false }
 	if parsed.host ~= base.host then
 		return nil, nil
 	end
-	local path = url.path(parsed, base)
+	local path = url.relative_path(parsed, base)
 	if path == nil and parsed.remote then
 		path = parsed.path
 	end
@@ -41,68 +21,68 @@ function M.resolve(value, parsed)
 		return nil, nil
 	end
 
-	local project_path
 	if parsed.remote then
-		project_path = path:gsub("^/", ""):gsub("%.git$", "")
-	elseif not path:find("/-/", 1, true) then
-		project_path = path:match("^/(.+/.+)$")
+		path = path:gsub("%.git$", "")
 	end
-	local owner, repo = split_project(project_path)
-	if owner then
-		local web_url, repository_url = repository(parsed, project_path)
-		return {
-			provider = "gitlab",
-			domain = "pulls",
-			entity = "repo",
-			url = web_url,
-			repository_url = repository_url,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			project_path = project_path,
-			repo_full_name = project_path,
-		}
+	local project_path, rest = path:match("^/(.-)/%-(/.*)$")
+	if project_path == nil then
+		project_path, rest = path:sub(2), ""
 	end
-	if parsed.remote then
+	local owner, repo = project_path:match("^(.+)/([^/]+)$")
+	if parsed.remote and (owner == nil or rest ~= "") then
 		return nil, "Unsupported GitLab remote. Expected group/repository"
 	end
+	if owner == nil or project_path:match("^groups/") then
+		return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"
+	end
 
-	local number, tail
-	project_path, number, tail = path:match("^/(.-)/%-/merge_requests/(%d+)(.*)$")
-	local domain, entity = "pulls", "pr"
-	if project_path == nil then
-		project_path, number, tail = path:match("^/(.-)/%-/issues/(%d+)(.*)$")
-		domain, entity = "issues", "issue"
+	local web_url = url.base_url("gitlab", parsed.host) .. "/" .. project_path
+	---@type AtlasTarget
+	local target = {
+		provider = "gitlab",
+		domain = "pulls",
+		entity = "repo",
+		url = web_url,
+		repository_url = web_url .. ".git",
+		host = parsed.host,
+		owner = owner,
+		repo = repo,
+		project_path = project_path,
+		repo_full_name = project_path,
+	}
+
+	local entity, number, tail = "pr", rest:match("^/merge_requests/(%d+)(.*)$")
+	if number == nil then
+		entity, number, tail = "issue", rest:match("^/issues/(%d+)(.*)$")
 	end
-	if project_path == nil and not path:match("^/groups/") then
-		project_path, number, tail = path:match("^/(.-)/%-/work_items/(%d+)(.*)$")
-		domain, entity = "issues", "issue"
+	if number == nil then
+		entity, number, tail = "issue", rest:match("^/work_items/(%d+)(.*)$")
 	end
-	if project_path == nil then
-		project_path, number, tail = path:match("^/(.-)/%-/pipelines/(%d+)(.*)$")
-		domain, entity = "pulls", "pipeline"
+	if number == nil then
+		entity, number, tail = "pipeline", rest:match("^/pipelines/(%d+)(.*)$")
 	end
-	owner, repo = split_project(project_path)
-	if owner then
+	if number then
 		if not url.valid_tail(tail) then
 			return nil, "Unsupported GitLab URL"
 		end
-		local id = assert(tonumber(number))
-		local _, repository_url = repository(parsed, project_path)
-		return {
-			provider = "gitlab",
-			domain = domain,
-			entity = entity,
-			url = value,
-			repository_url = repository_url,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			project_path = project_path,
-			repo_full_name = project_path,
-			id = entity ~= "issue" and id or nil,
-			number = id,
-		}
+		target.domain = entity == "issue" and "issues" or "pulls"
+		target.entity = entity
+		target.url = value
+		target.number = assert(tonumber(number))
+		target.id = entity ~= "issue" and target.number or nil
+		return target
+	end
+
+	target.page = ({
+		issues = "issues",
+		merge_requests = "pulls",
+		pipelines = "builds",
+		releases = "releases",
+		tags = "tags",
+		branches = "branches",
+	})[rest:match("^/([^/]+)") or ""]
+	if rest == "" or target.page then
+		return target
 	end
 
 	return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"

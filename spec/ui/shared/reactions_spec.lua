@@ -36,14 +36,14 @@ describe("ui.shared.reactions", function()
 		local thumbsup, fire = emojis.get("thumbsup"), emojis.get("fire")
 		local text, spans = reactions.format({ { name = "thumbsup", count = 2 }, { name = "fire", count = 1 } })
 		local second = #thumbsup + 4
-		assert.equals(thumbsup .. " 2  " .. fire .. " 1", text)
+		assert.equal(thumbsup .. " 2  " .. fire .. " 1", text)
 		assert.same({
 			{ line = 0, start_col = 0, end_col = #thumbsup, hl_group = "AtlasLogInfo" },
 			{ line = 0, start_col = #thumbsup, end_col = #thumbsup + 2, hl_group = "AtlasTextMuted" },
 			{ line = 0, start_col = second, end_col = second + #fire, hl_group = "AtlasLogInfo" },
 			{ line = 0, start_col = second + #fire, end_col = second + #fire + 2, hl_group = "AtlasTextMuted" },
 		}, spans)
-		assert.equals("", reactions.format(nil))
+		assert.equal("", reactions.format(nil))
 	end)
 
 	it("adds the API key and updates the comment's counts", function()
@@ -73,7 +73,7 @@ describe("ui.shared.reactions", function()
 			{ { name = "thumbsup", count = 2, reacted = true }, { name = "tada", count = 1, reacted = true } },
 			comment.reactions
 		)
-		assert.equals(2, done)
+		assert.equal(2, done)
 	end)
 
 	it("removes your own reaction when you pick it again", function()
@@ -99,8 +99,8 @@ describe("ui.shared.reactions", function()
 			return true
 		end, function() end)
 
-		assert.equals("React", select.title)
-		assert.equals(emojis.get("thumbsup") .. " thumbsup by alice +1 (you)", (select.format_item(select.items[1])))
+		assert.equal("React", select.title)
+		assert.equal(emojis.get("thumbsup") .. " thumbsup by alice +1 (you)", (select.format_item(select.items[1])))
 		select.on_select(select.items[1])
 		select.on_select(select.items[2])
 
@@ -132,18 +132,18 @@ describe("ui.shared.reactions", function()
 			names[#names + 1] = item.name
 		end
 		assert.same({ "heart", "fire", "thumbsup", "eyes" }, names)
-		assert.equals("+1", select.items[3].key)
+		assert.equal("+1", select.items[3].key)
 
 		local icon = emojis.get("thumbsup")
 		local text, chunks = select.format_item(select.items[3])
-		assert.equals(icon .. " thumbsup by alice, Bob, carol +2", text)
+		assert.equal(icon .. " thumbsup by alice, Bob, carol +2", text)
 		assert.same({
 			{ icon, "AtlasLogInfo" },
 			{ " thumbsup", "Normal" },
 			{ " by alice, Bob, carol +2", "AtlasTextMuted" },
 		}, chunks)
-		assert.equals(emojis.get("heart") .. " heart    by 2 users", (select.format_item(select.items[1])))
-		assert.equals(emojis.get("eyes") .. " eyes", (select.format_item(select.items[4])))
+		assert.equal(emojis.get("heart") .. " heart    by 2 users", (select.format_item(select.items[1])))
+		assert.equal(emojis.get("eyes") .. " eyes", (select.format_item(select.items[4])))
 	end)
 
 	it("leaves counts alone when adding fails or the view moved on", function()
@@ -166,7 +166,7 @@ describe("ui.shared.reactions", function()
 		end
 
 		assert.is_nil(comment.reactions)
-		assert.equals(0, done)
+		assert.equal(0, done)
 		assert.same(
 			{ "loading: Adding reaction...", "error: Reaction failed: boom", "loading: Adding reaction..." },
 			notified

@@ -6,6 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 
 local STAR_ICON, STAR_HIGHLIGHT = icons.get("star")
+local STACK_ICON = icons.get("stack")
 local STATE_ICONS = {
 	open = { icons.get("pr") },
 	draft = { icons.get("draft_pr") },
@@ -40,9 +41,14 @@ end
 
 ---@param pr PullRequest
 ---@param reference string
+---@param suffix string|nil
 ---@return string
-function M.title(pr, reference)
-	return (pr.is_starred and STAR_ICON .. " " or "") .. reference .. tostring(pr.id) .. " " .. pr.title
+function M.title(pr, reference, suffix)
+	local title = (pr.is_starred and STAR_ICON .. " " or "") .. reference .. tostring(pr.id) .. " " .. pr.title
+	if suffix then
+		title = title .. "  " .. suffix
+	end
+	return title
 end
 
 ---@param pr PullRequest
@@ -81,15 +87,15 @@ end
 
 local function cell_highlights(row, column, context, opts)
 	local pr = row.kind == "pr" and row._item.pr or nil
-	if column.key == "repo_pr" and context.text:find(STAR_ICON, 1, true) == 1 then
-		return { { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_HIGHLIGHT } }
-	end
-
 	if column.key == "name" and row.kind == "repo" then
-		return { { start_col = 0, end_col = #context.text, hl_group = "AtlasSectionHeader" } }
+		local name_end = math.min(#row._item.repo.full_name, #context.text)
+		return {
+			{ start_col = 0, end_col = name_end, hl_group = "AtlasColumnHeader" },
+			{ start_col = name_end, end_col = #context.text, hl_group = "AtlasTextMuted" },
+		}
 	end
 
-	if column.key == "name" and pr then
+	if (column.key == "name" or column.key == "repo_pr") and pr then
 		local icon, icon_hl = M.pull_icon(pr, opts)
 		local spans = { { start_col = 0, end_col = #icon, hl_group = icon_hl } }
 
@@ -97,11 +103,12 @@ local function cell_highlights(row, column, context, opts)
 			table.insert(spans, { start_col = #icon + 1, end_col = #icon + 1 + #STAR_ICON, hl_group = STAR_HIGHLIGHT })
 		end
 
-		return spans
-	end
+		local stack_start = context.text:find(STACK_ICON, 1, true)
+		if stack_start then
+			table.insert(spans, { start_col = stack_start - 1, end_col = #context.text, hl_group = "AtlasTextMuted" })
+		end
 
-	if column.key == "pr_icon" then
-		return pr and select(2, M.pull_icon(pr, opts)) or "AtlasTextMuted"
+		return spans
 	end
 
 	if column.key == "created" or column.key == "updated" or (row.kind == "meta" and column.key == "repo_pr") then

@@ -32,7 +32,6 @@ end
 
 M.github = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "comments", name = icons.get("comment"), min_width = 2, can_grow = false },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
@@ -65,11 +64,10 @@ M.github = {
 		end
 		---@cast issue GitHubIssue
 
-		if column.key == "icon" then
+		if column.key == "name" then
 			local icon, icon_hl = github_issue_icon(issue)
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
-			return utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
+			local spans = utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
 		elseif column.key == "comments" or column.key == "created" or column.key == "updated" then
 			return "AtlasTextMuted"
 		elseif column.key == "status" then
@@ -82,7 +80,6 @@ M.github = {
 
 M.gitlab = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
@@ -108,11 +105,10 @@ M.gitlab = {
 			return nil
 		end
 
-		if column.key == "icon" then
+		if column.key == "name" then
 			local icon, icon_hl = utils.state_icon(issue.status_id)
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
-			return utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
+			local spans = utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
 		elseif column.key == "status" then
 			return utils.status_hl(issue, opts, utils.state_chip_hl(issue.status_id))
 		end
@@ -123,7 +119,6 @@ M.gitlab = {
 
 M.jira = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
@@ -149,11 +144,10 @@ M.jira = {
 		end
 		---@cast issue JiraIssue
 
-		if column.key == "icon" then
+		if column.key == "name" then
 			local icon, icon_hl = utils.type_icon(issue)
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
 			local spans = utils.key_title_highlights(context.text, issue.key, presentation.issue_hl(issue.key))
+			utils.highlight_match(spans, context.text, icon, icon_hl)
 			if issue.priority and issue.priority ~= "" then
 				local priority, priority_hl = icons.get(issue.priority, "priority")
 				utils.highlight_match(spans, context.text, priority, priority_hl)
@@ -204,7 +198,6 @@ M.azure = {
 
 M.default = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
@@ -214,8 +207,8 @@ M.default = {
 		return {
 			icon = "",
 			name = (issue.key or "") .. " " .. issue.title,
-			assignee = issue.assignee and issue.assignee.name or "Unassigned",
-			reporter = issue.reporter and issue.reporter.name or "Unknown",
+			assignee = issue.assignee and presentation.person_name(issue.assignee) or "Unassigned",
+			reporter = presentation.person_name(issue.reporter),
 			status = string.format(" %s ", issue.status or ""),
 			_meta = meta_text(issue, { issue.type and issue.type.name or "" }),
 		}
@@ -231,20 +224,19 @@ function M.render(opts, issues, provider)
 
 	for _, issue in ipairs(issues) do
 		local row = provider.values(issue, opts)
-		if issue.is_starred then
-			row.name = STAR_ICON .. " " .. row.name
-		end
+		local star = issue.is_starred and (STAR_ICON .. " ") or ""
+		row.name = (row.icon ~= "" and (row.icon .. " ") or "") .. star .. row.name
 
-		row._item = { kind = "issue", key = issue.key, _issue = issue }
+		row._item = { kind = "issue", issue = issue }
 		row._issue = issue
 		table.insert(rows, row)
 
 		if row._meta ~= "" then
 			local meta = utils.blank_row(provider.columns)
 			meta.kind = "meta"
-			meta.name = row._meta
+			meta.name = (row.icon ~= "" and "  " or "") .. row._meta
 			meta.separator = true
-			meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
+			meta._item = { kind = "issue_meta", issue = issue }
 			table.insert(rows, meta)
 		else
 			row.separator = true
@@ -268,8 +260,7 @@ function M.render(opts, issues, provider)
 
 			local spans = provider.highlights and provider.highlights(row, column, context, opts) or nil
 			if column.key == "name" and row._issue and row._issue.is_starred then
-				spans = spans or {}
-				table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_HIGHLIGHT })
+				spans = utils.highlight_match(spans or {}, context.text, STAR_ICON, STAR_HIGHLIGHT)
 			end
 
 			return spans

@@ -41,14 +41,9 @@ end
 ---@param task PullsComment
 ---@param width integer
 local function emit_task(lines, spans, line_map, task, width)
-	local task_lines, task_spans, task_map = comment_threads.render_task_compact(
-		{ comment = task, children = {} },
-		width,
-		{
-			padding_x = PADDING_X,
-			show_task_label = false,
-		}
-	)
+	local task_lines, task_spans, task_map = comment_threads.render({ { comment = task, children = {} } }, width, {
+		padding_x = PADDING_X,
+	})
 	local offset = #lines
 	utils.append_block(lines, spans, { lines = task_lines, highlights = task_spans })
 	for line, entry in pairs(task_map) do
@@ -63,7 +58,9 @@ end
 ---@param width integer
 local function emit_comments(lines, spans, line_map, nodes, width)
 	local provider = detail.provider
-	local tasks = provider and provider.capabilities.tasks
+	local capabilities = provider and provider.capabilities
+	local tasks = capabilities and capabilities.tasks
+	local can_react = capabilities and capabilities.comments and capabilities.comments.reactions ~= nil
 	local thread_lines, thread_spans, thread_map = comment_threads.render(nodes, math.max(1, width - 4), {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
@@ -75,6 +72,7 @@ local function emit_comments(lines, spans, line_map, nodes, width)
 			edit = action_key("ui.comments.edit"),
 			delete = action_key("ui.delete"),
 			add_task = tasks and tasks.add_task and action_key("pulls.review.add_task") or nil,
+			react = can_react and action_key("ui.comments.react") or nil,
 			toggle_resolved = action_key("pulls.review.toggle_resolved"),
 		},
 	})
@@ -89,9 +87,9 @@ local function emit_comments(lines, spans, line_map, nodes, width)
 	end
 end
 
----@param hunk DiffHunk
+---@param hunk DiffHunkLines
 ---@param position PullsInlineCommentPosition
----@return DiffHunk|nil
+---@return DiffHunkLines|nil
 local function surrounding_hunk(hunk, position)
 	local line_field = position.to and "new_line" or "old_line"
 	local end_line = position.to or position.from

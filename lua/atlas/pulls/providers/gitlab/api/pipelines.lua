@@ -347,6 +347,7 @@ function M.fetch_history(context, on_done)
 	local is_branch = type(target) == "string"
 	local pr = not is_branch and target.source and target or nil
 	local pipeline = not is_branch and not pr and target or nil
+	---@cast pipeline GitLabPipeline|nil
 	local path = (pipeline and pipeline.project_path) or context.repo_full_name
 	local branch = is_branch and target or (pipeline and pipeline.branch)
 	local scope = requests.new()

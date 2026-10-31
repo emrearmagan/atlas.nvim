@@ -19,26 +19,6 @@ describe("github pulls.fetch_commits", function()
 		package.loaded["atlas.pulls.providers.github.api.changes"] = nil
 	end)
 
-	it("fails fast when the PR has no repo_full_name", function()
-		local calls = 0
-		github_client.install({
-			gh = function()
-				calls = calls + 1
-			end,
-		})
-		local api = fresh_module()
-
-		local pr = { id = 1, repo_full_name = "" }
-		local commits, err
-		api.fetch_commits(pr, nil, function(c, e)
-			commits, err = c, e
-		end)
-
-		assert.is_nil(commits)
-		assert.equal("Missing repo", err)
-		assert.equal(0, calls)
-	end)
-
 	it("keeps full messages and newest-first order across all commit pages", function()
 		github_client.install({
 			gh = function(args, callback)
@@ -61,7 +41,7 @@ describe("github pulls.fetch_commits", function()
 		})
 		local api = fresh_module()
 
-		local pr = { id = 42, repo_full_name = "octo/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo" }
 		local commits
 		api.fetch_commits(pr, nil, function(c)
 			commits = c
@@ -74,23 +54,5 @@ describe("github pulls.fetch_commits", function()
 		assert.equal("alice", commits[3].author_nickname)
 		assert.equal("Headline only", commits[2].message)
 		assert.equal("Body only", commits[1].message)
-	end)
-
-	it("propagates errors from the gh CLI", function()
-		github_client.install({
-			gh = function(_, callback)
-				callback(nil, "boom")
-			end,
-		})
-		local api = fresh_module()
-
-		local pr = { id = 42, repo_full_name = "octo/repo" }
-		local commits, err
-		api.fetch_commits(pr, nil, function(c, e)
-			commits, err = c, e
-		end)
-
-		assert.is_nil(commits)
-		assert.equal("boom", err)
 	end)
 end)

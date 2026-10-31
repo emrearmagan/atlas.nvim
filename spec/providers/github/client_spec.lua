@@ -54,6 +54,7 @@ describe("GitHub client host routing", function()
 			assert.are.equal('{"ok":true}', value)
 			return { ok = true }
 		end
+		---@diagnostic disable-next-line: redundant-parameter
 		vim.system = function(cmd, opts, on_exit)
 			local call = { cmd = cmd, opts = opts, on_exit = on_exit }
 			table.insert(calls, call)

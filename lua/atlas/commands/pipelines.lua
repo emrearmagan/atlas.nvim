@@ -60,6 +60,7 @@ local function open_target(target, branch)
 	end
 
 	if branch or target.entity == "pipeline" then
+		---@type string|PullsPipeline|nil
 		local pipeline_target = branch
 		if target.entity == "pipeline" then
 			local id = tostring(assert(target.id))
@@ -94,10 +95,22 @@ local function open_target(target, branch)
 	end)
 end
 
----@param value string
+local function prompt()
+	vim.ui.input({ prompt = "Branch, pull request, or pipeline URL: " }, function(input)
+		if input and vim.trim(input) ~= "" then
+			M.open(vim.trim(input))
+		end
+	end)
+end
+
+---@param value string|nil A branch, pull request reference, pipeline URL, "." for the current branch, or nil to ask.
 function M.open(value)
 	requests.cancel()
 	requests = request_scope.new()
+	if not value then
+		prompt()
+		return
+	end
 	value = vim.trim(value)
 
 	local function open_reference(repository)
@@ -112,9 +125,10 @@ function M.open(value)
 	if value == "." then
 		requests.run(function(done)
 			return git.repo_root(nil, done)
-		end, function(root, err)
+		end, function(root)
 			if not root then
-				notify.error(err, { vim_notify = true })
+				notify.warn("No supported Git repository found", { vim_notify = true })
+				prompt()
 				return
 			end
 			requests.all({
@@ -125,8 +139,10 @@ function M.open(value)
 					return git.local_repository(root, done)
 				end,
 			}, function(values, errors)
-				if not values.branch then
-					notify.error(errors.branch, { vim_notify = true })
+				if not values.repository or not values.branch then
+					local reason = values.repository and errors.branch or "No supported Git repository found"
+					notify.warn(reason, { vim_notify = true })
+					prompt()
 					return
 				end
 				open_target(values.repository, values.branch)

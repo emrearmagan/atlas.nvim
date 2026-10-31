@@ -13,7 +13,7 @@ local function text(value, marks)
 end
 
 local function converts(content, expected)
-	assert.equals(expected, adf.to_markdown(doc(content)))
+	assert.equal(expected, adf.to_markdown(doc(content)))
 end
 
 local function list_item(value)
@@ -212,8 +212,8 @@ describe("Jira ADF to Markdown", function()
 	end)
 
 	it("handles nil and node arrays", function()
-		assert.equals("", adf.to_markdown(nil))
-		assert.equals(
+		assert.equal("", adf.to_markdown(nil))
+		assert.equal(
 			"a\n\nb",
 			adf.to_markdown({
 				paragraph({ text("a") }),

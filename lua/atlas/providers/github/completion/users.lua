@@ -1,7 +1,7 @@
 local client = require("atlas.providers.github.client")
 local issue_mapper = require("atlas.issues.providers.github.api.mapper")
 local json = require("atlas.core.json")
-local users_api = require("atlas.providers.github.users")
+local mapper = require("atlas.providers.github.mapper")
 
 local USERS_QUERY = [[
 query($owner: String!, $repo: String!, $search: String!, $number: Int!, $fetchParticipants: Boolean!) {
@@ -33,7 +33,7 @@ query($owner: String!, $repo: String!, $search: String!, $number: Int!, $fetchPa
 local function completion_items(users)
 	local items, seen = {}, {}
 	for _, raw in ipairs(users) do
-		local user = users_api.to_user(raw)
+		local user = mapper.to_user(raw)
 		if user and user.username and user.username ~= "" and not seen[user.username] then
 			seen[user.username] = true
 			items[#items + 1] = {

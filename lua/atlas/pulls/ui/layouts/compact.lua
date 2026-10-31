@@ -1,5 +1,6 @@
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.pulls.ui.presentation")
+local stack = require("atlas.pulls.providers.github.stack")
 local ui_utils = require("atlas.ui.shared.utils")
 local utils = require("atlas.pulls.ui.layouts.utils")
 
@@ -25,7 +26,6 @@ local azure_merge_states = {
 M.github = {
 	reference = "#",
 	columns = {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false },
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{ key = "conversation", name = icons.get("conversation"), min_width = 2, can_grow = false },
 		{ key = "review", name = icons.get("success"), min_width = 1, can_grow = false },
@@ -43,8 +43,7 @@ M.github = {
 		local diff, diff_hl = utils.diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 
 		return {
-			pr_icon = icon,
-			repo_pr = utils.title(pr, "#"),
+			repo_pr = icon .. " " .. utils.title(pr, "#", stack.indicator(pr.stack)),
 			conversation = tostring(pr.comments_count),
 			review = review,
 			review_hl = review_hl,
@@ -71,7 +70,6 @@ M.github = {
 M.gitlab = {
 	reference = "!",
 	columns = {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false },
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{ key = "conversation", name = icons.get("comment"), min_width = 2, can_grow = false },
 		{ key = "ci", name = icons.get("pipeline"), min_width = 1, can_grow = false },
@@ -89,8 +87,7 @@ M.gitlab = {
 		end
 
 		return {
-			pr_icon = icon,
-			repo_pr = utils.title(pr, "!"),
+			repo_pr = icon .. " " .. utils.title(pr, "!"),
 			conversation = tostring(pr.comments_count),
 			ci = ci,
 			ci_hl = ci_hl,
@@ -109,7 +106,6 @@ M.gitlab = {
 M.bitbucket = {
 	reference = "#",
 	columns = {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false },
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{ key = "conversation", name = icons.get("comment"), min_width = 2, can_grow = false },
 		{ key = "tasks", name = icons.get("tasks"), min_width = 2, can_grow = false },
@@ -134,8 +130,7 @@ M.bitbucket = {
 		local review, review_hl = utils.status_icon(status)
 
 		return {
-			pr_icon = icon,
-			repo_pr = utils.title(pr, "#"),
+			repo_pr = icon .. " " .. utils.title(pr, "#"),
 			conversation = tostring(pr.comments_count or 0),
 			tasks = tostring(pr.tasks_count or 0),
 			author = utils.author(pr),
@@ -204,7 +199,6 @@ M.azure = {
 M.default = {
 	reference = "#",
 	columns = {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false },
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{ key = "conversation", name = icons.get("conversation"), min_width = 2, can_grow = false },
 		{ key = "author", name = icons.get("user") .. " Author", min_width = 10, can_grow = false },
@@ -215,8 +209,7 @@ M.default = {
 		local icon = utils.pull_icon(pr, opts)
 
 		return {
-			pr_icon = icon,
-			repo_pr = utils.title(pr, "#"),
+			repo_pr = icon .. " " .. utils.title(pr, "#"),
 			conversation = tostring(pr.comments_count),
 			author = utils.author(pr),
 			created = ui_utils.relative_time(pr.created_on),
@@ -239,8 +232,7 @@ function M.render(opts, pulls, provider)
 		table.insert(rows, row)
 		table.insert(rows, {
 			kind = "meta",
-			pr_icon = "",
-			repo_pr = pr.repo.full_name,
+			repo_pr = "  " .. pr.repo.full_name,
 			separator = true,
 			_item = { kind = "pr_meta", id = pr.id, repo = pr.repo, pr = pr },
 		})

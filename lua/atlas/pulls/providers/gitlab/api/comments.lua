@@ -18,7 +18,9 @@ query($path:ID!,$iid:String!,$after:String){
           body
           createdAt
           url
-          author{id name username}
+          maxAccessLevelOfAuthor
+          authorIsContributor
+          author{id name username bot}
           awardEmoji(first:100){nodes{name user{name username}}}
           position{positionType oldPath newPath oldLine newLine diffRefs{headSha}}
           discussion{
@@ -56,7 +58,9 @@ query($path:ID!,$iid:String!,$after:String){
           createdAt
           url
           position{positionType}
-          author{id name username}
+          maxAccessLevelOfAuthor
+          authorIsContributor
+          author{id name username bot}
           awardEmoji(first:100){nodes{name user{name username}}}
           discussion{
             id
@@ -81,7 +85,9 @@ mutation($noteableId:NoteableID!,$body:String!,$discussionId:DiscussionID){
       body
       createdAt
       url
-      author{id name username}
+      maxAccessLevelOfAuthor
+      authorIsContributor
+      author{id name username bot}
       discussion{
         id
         resolved
@@ -193,12 +199,13 @@ function M.fetch_review_comments(pr, opts, on_done)
 		for _, discussion in ipairs(values.discussions) do
 			local notes = discussion.notes
 			if #notes > 0 and notes[1].system ~= true then
-				local root = mapper.to_discussion_note(notes[1], discussion, pr.link.html)
+				local root = mapper.to_discussion_note(notes[1], discussion, pr.link.html, pr.author.username)
 				roots[root.thread_id] = root
 				table.insert(result, root)
 				for i = 2, #notes do
 					if notes[i].system ~= true then
-						local comment = mapper.to_discussion_note(notes[i], discussion, pr.link.html)
+						local comment =
+							mapper.to_discussion_note(notes[i], discussion, pr.link.html, pr.author.username)
 						table.insert(result, inherit_thread_context(comment, root))
 					end
 				end
@@ -286,7 +293,7 @@ function M.fetch_review_threads(pr, opts, on_done)
 		end
 		local comments, roots = {}, {}
 		for _, note in ipairs(values.notes) do
-			local comment = mapper.to_comment(note, viewer)
+			local comment = mapper.to_comment(note, viewer, pr.author.username)
 			table.insert(comments, comment)
 			if comment.parent_id == nil then
 				roots[comment.thread_id] = comment
@@ -388,11 +395,11 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 			end
 
 			local viewer = json.safe_str(json.safe_table(result.currentUser).username)
-			description = description or mapper.to_description(merge_request, viewer)
+			description = description or mapper.to_description(merge_request, viewer, pr.author.username)
 			local notes = json.safe_table(merge_request.notes)
 			for _, note in ipairs(json.safe_table(notes.nodes)) do
 				if note.system ~= true and json.nilify(note.position) == nil then
-					table.insert(comments, mapper.to_comment(note, viewer))
+					table.insert(comments, mapper.to_comment(note, viewer, pr.author.username))
 				end
 			end
 
@@ -509,7 +516,7 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				on_done(nil, "Created discussion has no comment")
 				return
 			end
-			on_done(mapper.to_discussion_note(first, result, pr.link.html), nil)
+			on_done(mapper.to_discussion_note(first, result, pr.link.html, pr.author.username), nil)
 		end)
 	end
 
@@ -609,7 +616,7 @@ function M.add_comment(pr, content, opts, on_done)
 			on_done(nil, err or "GitLab did not return the created comment")
 			return
 		end
-		on_done(inherit_thread_context(mapper.to_comment(note), parent), nil)
+		on_done(inherit_thread_context(mapper.to_comment(note, nil, pr.author.username), parent), nil)
 	end)
 end
 

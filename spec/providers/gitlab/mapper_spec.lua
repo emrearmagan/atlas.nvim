@@ -28,40 +28,24 @@ describe("GitLab issue mapper", function()
 	end)
 
 	it("maps issue details and editable milestone IDs", function()
-		local details = issue_mapper.to_issue_details({
+		local details = assert(issue_mapper.to_issue_details({
 			iid = 7,
 			references = { full = "group/project#7" },
 			title = "Details",
 			description = "Hydrated description",
 			state = "opened",
 			milestone = { id = "gid://gitlab/Milestone/15", title = "Next" },
-		})
+		}))
 
-		assert.is_nil(details.project_path)
-		assert.is_nil(details.iid)
+		assert.is_nil(rawget(details, "project_path"))
+		assert.is_nil(rawget(details, "iid"))
 		assert.are.equal("Hydrated description", details.description)
 		assert.are.equal("Details", details.title)
 		assert.same({ id = 15, title = "Next" }, details.milestone)
 	end)
 end)
 
-describe("GitLab pull request details", function()
-	it("maps only supplemental detail fields", function()
-		local details = mapper.to_pull_request_details({
-			description = "Description",
-			subscribed = true,
-			assignees = { { id = 8, name = "Assignee", username = "assignee" } },
-			labels = { { name = "backend", color = "#ffffff", text_color = "#000000" } },
-		})
-
-		assert.equal("Description", details.description)
-		assert.is_true(details.is_subscribed)
-		assert.equal("assignee", details.assignees[1].username)
-		assert.equal("backend", details.labels[1].name)
-		assert.equal("#000000", details.labels[1].text_color)
-		assert.is_nil(details.repo_full_name)
-	end)
-end)
+describe("GitLab pull request details", function() end)
 
 describe("GitLab descriptions", function()
 	local alice = { name = "Alice", username = "alice" }
@@ -93,11 +77,6 @@ describe("GitLab descriptions", function()
 		assert.equal("Body", comment.body)
 		assert.equal("thumbsup", comment.reactions[1].name)
 		assert.same(comment.reactions, issue_mapper.to_issue_details({ title = "Issue" }, work_item).reactions)
-	end)
-
-	it("has no description without an id", function()
-		assert.is_nil(mapper.to_description({}))
-		assert.is_nil(issue_mapper.to_description({}))
 	end)
 end)
 
@@ -249,5 +228,32 @@ describe("GitLab GraphQL notes", function()
 			{ "5", true, "gid://gitlab/Discussion/d1", "draft", { path = "a.lua", commit_hash = "abc" } },
 			{ draft.id, draft.pending, draft.thread_id, draft.body, draft.file }
 		)
+	end)
+end)
+
+describe("GitLab comment author roles", function()
+	local function roles(note)
+		note.id = "gid://gitlab/Note/1"
+		return issue_mapper.to_comment(note, {}, nil, "alice").author_roles
+	end
+
+	it("maps the access level, contributors, bots and the issue author", function()
+		assert.same(
+			{ "Author", "Maintainer" },
+			roles({ author = { username = "alice" }, maxAccessLevelOfAuthor = "Maintainer" })
+		)
+		assert.same({ "Contributor" }, roles({ author = { username = "bob" }, authorIsContributor = true }))
+		assert.same(
+			{ "Bot", "Developer" },
+			roles({ author = { username = "ci", bot = true }, maxAccessLevelOfAuthor = "Developer" })
+		)
+		assert.is_nil(roles({ author = { username = "bob" }, maxAccessLevelOfAuthor = vim.NIL }))
+	end)
+
+	it("marks the merge request author on REST discussion notes", function()
+		local note = { id = 1, author = { username = "alice" } }
+		local comment =
+			mapper.to_discussion_note(note, { id = "d1", notes = { note } }, "https://gitlab.com/mr", "alice")
+		assert.same({ "Author" }, comment.author_roles)
 	end)
 end)

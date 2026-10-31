@@ -3,37 +3,30 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 
-local PADDING_X = 2
+local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
+
+---@param text string
+---@param hl_group string
+---@return string[] lines, table[] spans, table<integer, AtlasNotification> line_map
+function M.message(text, hl_group)
+	local line = PADDING .. text
+	return { line }, { { line = 0, start_col = 0, end_col = #line, hl_group = hl_group } }, {}
+end
 
 ---@param notifications AtlasNotification[]
 ---@param width integer
----@return string[] lines, table[] spans, table<integer, table> line_map
+---@return string[] lines, table[] spans, table<integer, AtlasNotification> line_map
 function M.render(notifications, width)
+	if #notifications == 0 then
+		return M.message("No notifications.", "AtlasTextMuted")
+	end
+
 	local lines = {}
 	local spans = {}
 	local line_map = {}
 
-	if #notifications == 0 then
-		local empty = PADDING .. "No notifications."
-		table.insert(lines, empty)
-		table.insert(spans, {
-			line = 0,
-			start_col = 0,
-			end_col = #empty,
-			hl_group = "AtlasTextMuted",
-		})
-		table.insert(lines, "")
-		return lines, spans, line_map
-	end
-
 	for i, n in ipairs(notifications) do
-		local dot, dot_hl = " ", "AtlasTextMuted"
-		if n.unread then
-			dot = icons.get("dot")
-			dot_hl = "AtlasLogInfo"
-		end
-
 		local type_icon, type_hl = icons.get("info")
 		if n.kind == "pr" then
 			type_icon, type_hl = icons.get("pr")
@@ -41,31 +34,25 @@ function M.render(notifications, width)
 			type_icon, type_hl = icons.get("issue")
 		elseif n.kind == "checks" then
 			type_icon, type_hl = icons.get("tasks")
+		elseif n.kind == "release" then
+			type_icon, type_hl = icons.get("tag")
+		elseif n.kind == "discussion" then
+			type_icon, type_hl = icons.get("conversation")
 		end
 
-		local prefix
-		if type_icon ~= "" then
-			prefix = PADDING .. dot .. " " .. type_icon .. "  "
-		else
-			prefix = PADDING .. dot .. " "
-		end
+		local prefix = type_icon ~= "" and PADDING .. type_icon .. " " or PADDING
 		local prefix_w = vim.api.nvim_strwidth(prefix)
 		local prefix_bytes = #prefix
 
-		local raw_timestamp = tostring(n.timestamp or "")
-		local timestamp = ""
-		if raw_timestamp ~= "" then
-			local formatted = utils.relative_time_text(raw_timestamp)
-			if formatted ~= "" and formatted ~= "-" then
-				timestamp = formatted
-			end
+		local timestamp = n.timestamp and utils.relative_time_text(n.timestamp) or ""
+		if timestamp == "-" then
+			timestamp = ""
 		end
 		local timestamp_w = timestamp ~= "" and vim.api.nvim_strwidth(timestamp) or 0
 		local timestamp_pad = timestamp ~= "" and 2 or 0
 
-		local title = tostring(n.title or "")
 		local title_max = math.max(1, width - prefix_w - PADDING_X - timestamp_w - timestamp_pad)
-		local title_display = utils.truncate(title, title_max)
+		local title_display = utils.truncate(n.title, title_max)
 		local title_w = vim.api.nvim_strwidth(title_display)
 
 		local line1 = prefix .. title_display
@@ -76,14 +63,13 @@ function M.render(notifications, width)
 		table.insert(lines, line1)
 		local lnum1 = #lines - 1
 
-		local dot_start = PADDING_X
-		local dot_end = dot_start + #dot
-		table.insert(spans, { line = lnum1, start_col = dot_start, end_col = dot_end, hl_group = dot_hl })
-
 		if type_icon ~= "" then
-			local icon_start = dot_end + 1
-			local icon_end = icon_start + #type_icon
-			table.insert(spans, { line = lnum1, start_col = icon_start, end_col = icon_end, hl_group = type_hl })
+			table.insert(spans, {
+				line = lnum1,
+				start_col = PADDING_X,
+				end_col = PADDING_X + #type_icon,
+				hl_group = n.unread and type_hl or "AtlasTextMuted",
+			})
 		end
 
 		if not n.unread then
@@ -105,9 +91,9 @@ function M.render(notifications, width)
 			})
 		end
 
-		line_map[#lines] = { kind = "notification", notification = n }
+		line_map[#lines] = n
 
-		local subtitle = tostring(n.subtitle or "")
+		local subtitle = n.subtitle or ""
 		if subtitle ~= "" then
 			local indent = string.rep(" ", prefix_w)
 			local subtitle_max = math.max(1, width - prefix_w - PADDING_X)
@@ -122,17 +108,15 @@ function M.render(notifications, width)
 				end_col = prefix_w + #subtitle_display,
 				hl_group = "AtlasTextMuted",
 			})
-			line_map[#lines] = { kind = "notification", notification = n }
+			line_map[#lines] = n
 		end
 
 		if i < #notifications then
-			local sep_w = math.max(8, width - (PADDING_X * 2))
-			local sep = PADDING .. string.rep("─", sep_w)
+			local sep = string.rep("─", width)
 			table.insert(lines, sep)
 			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #sep, hl_group = "AtlasBorder" })
 		end
 	end
-	table.insert(lines, "")
 
 	return lines, spans, line_map
 end

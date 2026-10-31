@@ -12,7 +12,7 @@ function M.resolve(value, parsed)
 		if base == nil then
 			return nil, "Missing Jira base_url"
 		end
-		local base_url = url.base_url("jira", base.host, nil)
+		local base_url = url.base_url("jira", base.host)
 		return {
 			provider = "jira",
 			domain = "issues",
@@ -26,7 +26,7 @@ function M.resolve(value, parsed)
 	if parsed == nil then
 		return nil, nil
 	end
-	local path = url.path(parsed, base)
+	local path = url.relative_path(parsed, base)
 	if path == nil then
 		return nil, nil
 	end

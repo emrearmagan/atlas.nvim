@@ -39,7 +39,7 @@ function M.search_view()
 	local bookmarks = M.bookmarks
 	if bookmarks ~= nil and M.view == bookmarks.tab then
 		local selection = bookmarks.selection
-		return selection and selection.kind == "bookmark" and selection.view or nil
+		return selection and selection.kind == "bookmark" and selection.view --[[@as AtlasPullsViewConfig]] or nil
 	end
 	return M.view
 end

@@ -95,6 +95,9 @@ _G.vim = {
 		dirname = function(path)
 			return path:match("^(.+)/[^/]*$") or (path:sub(1, 1) == "/" and "/" or ".")
 		end,
+		joinpath = function(...)
+			return (table.concat({ ... }, "/"):gsub("//+", "/"))
+		end,
 	},
 
 	filetype = {
@@ -137,6 +140,16 @@ _G.vim = {
 		local out = {}
 		for key, value in pairs(values) do
 			out[key] = fn(value)
+		end
+		return out
+	end,
+
+	tbl_filter = function(fn, values)
+		local out = {}
+		for _, value in ipairs(values) do
+			if fn(value) then
+				table.insert(out, value)
+			end
 		end
 		return out
 	end,

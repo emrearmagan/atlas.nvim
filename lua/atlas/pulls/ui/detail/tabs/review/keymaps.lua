@@ -52,6 +52,7 @@ function M.setup(buf, refresh)
 	local tasks = provider and provider.capabilities.tasks
 	local edit_description = tasks and tasks.edit_task and "Edit comment / task" or "Edit comment"
 	local delete_description = tasks and tasks.delete_task and "Delete comment / task" or "Delete comment"
+	local can_react = provider and provider.capabilities.comments and provider.capabilities.comments.reactions ~= nil
 
 	local items = {}
 	utils.insert_if(
@@ -115,6 +116,23 @@ function M.setup(buf, refresh)
 			end,
 		})
 	)
+	if can_react then
+		utils.insert_if(
+			items,
+			from_action("ui.comments.react", {
+				desc = "Add reaction",
+				index = 23,
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = detail.current_pr
+					local entry = cursor_entry()
+					if pr and entry then
+						tab.react(pr, entry, refresh)
+					end
+				end,
+			})
+		)
+	end
 	utils.insert_if(
 		items,
 		from_action("pulls.review.toggle_resolved", {
@@ -222,6 +240,7 @@ function M.teardown(buf)
 	utils.insert_if(items, remove_item("ui.comments.edit"))
 	utils.insert_if(items, remove_item("pulls.review.add_task"))
 	utils.insert_if(items, remove_item("ui.delete"))
+	utils.insert_if(items, remove_item("ui.comments.react"))
 	utils.insert_if(items, remove_item("pulls.review.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))

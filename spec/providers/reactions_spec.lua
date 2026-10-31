@@ -1,5 +1,5 @@
-local github = require("atlas.providers.github.mapping")
-local gitlab = require("atlas.providers.gitlab.mapping")
+local github = require("atlas.providers.github.mapper")
+local gitlab = require("atlas.providers.gitlab.mapper")
 
 describe("provider reactions", function()
 	it("maps GitHub GraphQL reaction groups with the returned reactors and the viewer's own", function()

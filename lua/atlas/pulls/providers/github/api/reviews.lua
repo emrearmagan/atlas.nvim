@@ -4,7 +4,7 @@ local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local diff_parser = require("atlas.core.git.diff_parser")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
-local github_mapping = require("atlas.providers.github.mapping")
+local github_mapper = require("atlas.providers.github.mapper")
 local request_scope = require("atlas.core.requests")
 
 local REVIEW_QUERY = [[
@@ -37,7 +37,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String,$includeHunks:
               diffHunk @include(if:$includeHunks)
               url
               createdAt
-              author{login ... on User{databaseId} ... on Bot{databaseId}}
+              authorAssociation author{__typename login ... on User{databaseId} ... on Bot{databaseId}}
               replyTo{id}
               pullRequestReview{id state}
               reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
@@ -55,6 +55,7 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$repo){
     pullRequest(number:$number){
       id
+      viewerLatestReview{state commit{oid}}
       files(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{path viewerViewedState}
@@ -153,19 +154,6 @@ local function reviewer_query(query)
 	return query
 end
 
-local SET_FILE_REVIEWED_MUTATIONS = {
-	[true] = [[
-mutation($pullRequestId:ID!,$path:String!){
-  markFileAsViewed(input:{pullRequestId:$pullRequestId,path:$path}){clientMutationId}
-}
-]],
-	[false] = [[
-mutation($pullRequestId:ID!,$path:String!){
-  unmarkFileAsViewed(input:{pullRequestId:$pullRequestId,path:$path}){clientMutationId}
-}
-]],
-}
-
 ---@param node table|nil
 ---@return PullsReview
 local function from_node(node)
@@ -186,7 +174,7 @@ local function review_author(raw)
 	if type(raw) ~= "table" then
 		return nil
 	end
-	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
+	local user = github_mapper.identity(raw) or { id = "", login = "", name = "" }
 	local slug = json.safe_str(raw.slug) or ""
 	local organization = json.safe_table(raw.organization)
 	local organization_login = json.safe_str(organization.login) or ""
@@ -554,8 +542,8 @@ local function review_details(pages)
 		for _, node in ipairs(((current.reviews or {}).nodes or {})) do
 			table.insert(review_nodes, node)
 			local state = HISTORY_STATES[tostring(node.state or "")]
-			local body = json.safe_str(node.body) or ""
-			if vim.trim(body) == "" then
+			local body = json.safe_str(node.body)
+			if body and vim.trim(body) == "" then
 				body = nil
 			end
 			if state then
@@ -800,7 +788,7 @@ local function fetch_comments(pr, include_hunks, on_done)
 			local nodes = thread.comments and thread.comments.nodes or {}
 			for index, node in ipairs(nodes) do
 				local root_id = index > 1 and nodes[1] and nodes[1].id or nil
-				local comment = mapper.to_review_comment(node, thread, root_id)
+				local comment = mapper.to_review_comment(node, thread, root_id, pr.author.username)
 				table.insert(comments, comment)
 				if include_hunks then
 					comment.hunk = diff_parser.parse_hunk(json.safe_str(node.diffHunk) or "")
@@ -870,36 +858,46 @@ function M.fetch_threads(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param path string
+---@param paths string[]
 ---@param reviewed boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_file_reviewed(pr, path, reviewed, on_done)
+function M.set_files_reviewed(pr, paths, reviewed, on_done)
 	---@cast pr GitHubPullRequest
 	local pull_request_id = pr.node_id
 	if not pull_request_id then
 		on_done(false, "Missing pull request node id")
 		return nil
 	end
-	return cli.gh({
-		"api",
-		"graphql",
+
+	local mutation = reviewed and "markFileAsViewed" or "unmarkFileAsViewed"
+	local variables, fields = { "$pullRequestId:ID!" }, {}
+	local args = { "api", "graphql", "-f", "pullRequestId=" .. pull_request_id }
+	for index, path in ipairs(paths) do
+		variables[#variables + 1] = string.format("$path%d:String!", index)
+		fields[#fields + 1] = string.format(
+			"  file%d: %s(input:{pullRequestId:$pullRequestId,path:$path%d}){clientMutationId}",
+			index,
+			mutation,
+			index
+		)
+		vim.list_extend(args, { "-f", string.format("path%d=%s", index, path) })
+	end
+	vim.list_extend(args, {
 		"-f",
-		"query=" .. SET_FILE_REVIEWED_MUTATIONS[reviewed],
-		"-f",
-		"pullRequestId=" .. pull_request_id,
-		"-f",
-		"path=" .. path,
-	}, function(_, err)
+		string.format("query=mutation(%s){\n%s\n}", table.concat(variables, ","), table.concat(fields, "\n")),
+	})
+
+	return cli.gh(args, function(_, err)
 		if err == nil then
 			cli.delete_mem(string.format("github:review-context:%s:%s", pr.repo_full_name, tostring(pr.id)))
 		end
 		on_done(err == nil, err)
 	end, {
-		action = reviewed and "Mark file reviewed" or "Mark file unreviewed",
+		action = reviewed and "Mark files reviewed" or "Mark files unreviewed",
 		repo = pr.repo_full_name,
 		number = pr.id,
-		path = path,
+		files = #paths,
 	})
 end
 
@@ -1095,6 +1093,7 @@ function M.fetch_context(pr, opts, on_done)
 		end
 		local pull_request
 		local reviewed_files = {}
+		local outdated_files = {}
 		for _, page in ipairs(pages) do
 			local data = json.safe_table(json.safe_table(page).data)
 			local current = json.nilify(json.safe_table(data.repository).pullRequest)
@@ -1106,6 +1105,8 @@ function M.fetch_context(pr, opts, on_done)
 			for _, file in ipairs(((current.files or {}).nodes or {})) do
 				if file.viewerViewedState == "VIEWED" then
 					reviewed_files[tostring(file.path)] = true
+				elseif file.viewerViewedState == "DISMISSED" then
+					outdated_files[tostring(file.path)] = true
 				end
 			end
 		end
@@ -1114,7 +1115,15 @@ function M.fetch_context(pr, opts, on_done)
 			return
 		end
 		pr.node_id = tostring(pull_request.id or "")
-		local context = { reviewed_files = reviewed_files }
+		-- Outdated files are compared from the commit of your last submitted review, if there is one.
+		local latest = json.safe_table(pull_request.viewerLatestReview)
+		local review_commit = json.safe_str(json.safe_table(latest.commit).oid)
+		if review_commit and latest.state ~= "PENDING" then
+			for path in pairs(outdated_files) do
+				outdated_files[path] = review_commit .. ":" .. path
+			end
+		end
+		local context = { reviewed_files = reviewed_files, outdated_files = outdated_files }
 		cli.set_mem(cache_key, context, cli.cache_ttl())
 		on_done(context, nil)
 	end, { action = "Fetch PR reviewed files", repo = repo_slug, number = pr.id })

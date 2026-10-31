@@ -34,7 +34,7 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
       comments(last:1){
         nodes{
           id body url createdAt
-          author{login ...on User{databaseId} ...on Bot{databaseId}}
+          authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}
           pullRequestReview{id state commit{oid}}
         }
       }
@@ -106,7 +106,7 @@ local function add_review_thread(pr, content, target, file_level, review_id, pen
 		thread.startDiffSide = thread.startDiffSide or (start_line and side or nil)
 		local review = json.safe_table(node.pullRequestReview)
 		reviews.update(pending_review, review)
-		local created = mapper.to_review_comment(node, thread, nil)
+		local created = mapper.to_review_comment(node, thread, nil, pr.author.username)
 		on_done(created, nil)
 	end, {
 		action = "Add pending comment",
@@ -165,7 +165,7 @@ end
 local ADD_COMMENT_MUTATION = [[
 mutation($id:ID!,$body:String!){
   addComment(input:{subjectId:$id,body:$body}){
-    commentEdge{node{id url body createdAt author{login ...on User{databaseId} ...on Bot{databaseId}}}}
+    commentEdge{node{id url body createdAt authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}}}
   }
 }
 ]]
@@ -227,7 +227,7 @@ function M.add_comment(pr, content, opts, on_done)
 			on_done(nil, "GitHub did not return the created comment")
 			return
 		end
-		on_done(mapper.to_comment(node), nil)
+		on_done(mapper.to_comment(node, pr.author.username), nil)
 	end, {
 		action = "Add comment",
 		repo = pr.repo_full_name,
@@ -241,7 +241,7 @@ mutation($commentId:ID!,$body:String!){
   updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$commentId,body:$body}){
     pullRequestReviewComment{
       id body url createdAt
-      author{login ...on User{databaseId} ...on Bot{databaseId}}
+      authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}
       reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
       pullRequestReview{id state commit{oid}}
     }
@@ -260,7 +260,7 @@ mutation($commentId:ID!){
 local UPDATE_COMMENT_MUTATION = [[
 mutation($commentId:ID!,$body:String!){
   updateIssueComment(input:{id:$commentId,body:$body}){
-    issueComment{id url body createdAt author{login ...on User{databaseId} ...on Bot{databaseId}}}
+    issueComment{id url body createdAt authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}}
   }
 }
 ]]
@@ -300,7 +300,7 @@ local function edit_review_comment(pr, comment, content, on_done)
 			on_done(nil, "GitHub did not return the updated comment")
 			return
 		end
-		local updated = mapper.to_thread_comment(node, comment, comment.parent_id)
+		local updated = mapper.to_thread_comment(node, comment, comment.parent_id, pr.author.username)
 		updated.resolved_by = comment.resolved_by
 		on_done(updated, nil)
 	end, {
@@ -341,7 +341,7 @@ function M.edit_comment(pr, comment, content, on_done)
 			on_done(nil, "GitHub did not return the updated comment")
 			return
 		end
-		local updated = mapper.to_comment(node)
+		local updated = mapper.to_comment(node, pr.author.username)
 		updated.reactions = comment.reactions
 		on_done(updated, nil)
 	end, {
@@ -431,7 +431,7 @@ mutation($threadId:ID!,$reviewId:ID!,$body:String!){
   }){
     comment{
       id body url createdAt
-      author{login ...on User{databaseId} ...on Bot{databaseId}}
+      authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}
       pullRequestReview{id state commit{oid}}
     }
   }
@@ -490,7 +490,8 @@ reply_comment = function(pr, parent, content, opts, on_done)
 				if pending then
 					reviews.update(opts.review, review)
 				end
-				local created = mapper.to_thread_comment(reply, parent, parent.parent_id or parent.id)
+				local created =
+					mapper.to_thread_comment(reply, parent, parent.parent_id or parent.id, pr.author.username)
 				done(created, nil)
 			end, {
 				action = "Reply comment",

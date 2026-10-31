@@ -128,6 +128,7 @@ end
 function M.edit(default, on_submit)
 	prompt.open({
 		name = "AtlasGitHubSearch",
+		prompt = "GitHub search: ",
 		complete = complete_cmdline,
 		on_submit = function(query)
 			query = vim.trim(tostring(query or ""))

@@ -1,7 +1,7 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local github_mapping = require("atlas.providers.github.mapping")
+local github_mapper = require("atlas.providers.github.mapper")
 
 ---@param value any
 ---@return string
@@ -21,14 +21,14 @@ end
 ---@param raw any
 ---@return AtlasUser
 local function pull_author(raw)
-	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
+	local user = github_mapper.identity(raw) or { id = "", login = "", name = "" }
 	return { name = user.name, id = user.id, username = user.login }
 end
 
 ---@param raw any
 ---@return AtlasUser
 local function comment_author(raw)
-	local user = github_mapping.identity(raw) or { id = "", login = "" }
+	local user = github_mapper.identity(raw) or { id = "", login = "" }
 	return { name = user.login, id = user.id, username = user.login }
 end
 
@@ -40,7 +40,7 @@ local function pull_assignees(raw)
 	end
 
 	local assignees = {}
-	for _, node in ipairs(github_mapping.connection_nodes(raw.assignees)) do
+	for _, node in ipairs(github_mapper.connection_nodes(raw.assignees)) do
 		local assignee = pull_author(node)
 		if assignee.username ~= "" then
 			table.insert(assignees, assignee)
@@ -57,7 +57,7 @@ local function pull_labels(raw)
 	end
 
 	local labels = {}
-	for _, node in ipairs(github_mapping.connection_nodes(raw.labels)) do
+	for _, node in ipairs(github_mapper.connection_nodes(raw.labels)) do
 		local name = json.safe_str(node.name)
 		if name and name ~= "" then
 			table.insert(labels, { name = name, color = json.safe_str(node.color) })
@@ -106,7 +106,7 @@ local function pull_reviewer(raw, decision, role)
 		return nil
 	end
 
-	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
+	local user = github_mapper.identity(raw) or { id = "", login = "", name = "" }
 	local slug = json.safe_str(raw.slug) or ""
 	local combined_slug = json.safe_str(raw.combinedSlug) or ""
 	local organization_login = json.safe_str(json.safe_table(raw.organization).login) or ""
@@ -139,7 +139,7 @@ function M.to_reviewers(raw)
 	end
 
 	local requested = {}
-	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
+	for _, node in ipairs(github_mapper.connection_nodes(raw.reviewRequestEvents)) do
 		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
 		if reviewer then
 			requested[reviewer.provider_id:lower()] = true
@@ -147,7 +147,7 @@ function M.to_reviewers(raw)
 	end
 
 	local active = {}
-	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequests)) do
+	for _, node in ipairs(github_mapper.connection_nodes(raw.reviewRequests)) do
 		local reviewer = pull_reviewer(node.requestedReviewer or node, "pending", "reviewer")
 		if reviewer then
 			requested[reviewer.provider_id:lower()] = true
@@ -155,7 +155,7 @@ function M.to_reviewers(raw)
 		end
 	end
 
-	for _, node in ipairs(github_mapping.connection_nodes(raw.reviews)) do
+	for _, node in ipairs(github_mapper.connection_nodes(raw.reviews)) do
 		local state = tostring(node.state or ""):upper()
 		local decision = state == "APPROVED" and "approved"
 			or state == "CHANGES_REQUESTED" and "changes_requested"
@@ -179,6 +179,49 @@ function M.to_reviewers(raw)
 	return reviewers
 end
 
+---@param raw any
+---@param include_entries boolean|nil
+---@return GitHubPullStack|nil
+local function pull_stack(raw, include_entries)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local stack = json.nilify(raw.stack)
+	if type(stack) ~= "table" then
+		return nil
+	end
+	local position = tonumber(raw.position)
+	local size = tonumber(stack.size)
+	if position == nil or size == nil then
+		return nil
+	end
+
+	---@type GitHubPullStack
+	local result = {
+		position = position,
+		size = size,
+	}
+
+	if include_entries then
+		result.entries = {}
+		for _, node in ipairs(github_mapper.connection_nodes(stack.entries)) do
+			local entry = json.nilify(node)
+			if type(entry) == "table" then
+				---@type GitHubPullStackEntry
+				local item = { position = tonumber(entry.position) or 0 }
+				local pr = json.nilify(entry.pullRequest)
+				if type(pr) == "table" then
+					item.number = tonumber(pr.number)
+				end
+				table.insert(result.entries, item)
+			end
+		end
+	end
+
+	return result
+end
+
 ---@param raw table
 ---@return GitHubPullRequest
 function M.to_pull_request(raw)
@@ -197,7 +240,7 @@ function M.to_pull_request(raw)
 	end
 
 	local raw_repository = json.safe_table(raw.repository)
-	local owner, repo_name, repo_full_name = github_mapping.repository(raw_repository)
+	local owner, repo_name, repo_full_name = github_mapper.repository(raw_repository)
 	local repository_url = json.safe_str(raw_repository.url)
 	local https_url = repository_url
 	if https_url and https_url ~= "" and not https_url:match("%.git$") then
@@ -240,6 +283,7 @@ function M.to_pull_request(raw)
 		},
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
+		stack = pull_stack(raw.stackEntry),
 		node_id = json.safe_str(raw.id),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
@@ -254,9 +298,10 @@ function M.to_pull_request_details(raw)
 	---@type GitHubPullRequestDetails
 	local details = {
 		description = json.safe_str(raw.body) or "",
-		reactions = github_mapping.graphql_reactions(raw.reactionGroups),
+		reactions = github_mapper.graphql_reactions(raw.reactionGroups),
 		assignees = pull_assignees(raw) or {},
 		labels = pull_labels(raw) or {},
+		stack = pull_stack(raw.stackEntry, true),
 	}
 	local subscription = tostring(raw.viewerSubscription or "")
 	if subscription ~= "" then
@@ -319,7 +364,8 @@ function M.to_activity(node)
 		local msg = (json.safe_str(commit.message) or ""):match("([^\n]+)") or ""
 		local sha = (json.safe_str(commit.oid) or ""):sub(1, 8)
 		entry.kind = "committed"
-		entry.actor = actor_from_login(json.safe_str(author.name) or "")
+		local login = json.safe_str(json.safe_table(author.user).login) or json.safe_str(author.name) or ""
+		entry.actor = actor_from_login(login)
 		entry.date = json.safe_str(commit.authoredDate) or ""
 		entry.label = sha ~= "" and string.format("%s %s", sha, msg) or msg
 	elseif event == "LabeledEvent" or event == "UnlabeledEvent" then
@@ -361,25 +407,28 @@ function M.to_activity(node)
 end
 
 ---@param node table GraphQL `IssueComment`
+---@param author_login string|nil
 ---@return PullsComment
-function M.to_comment(node)
+function M.to_comment(node, author_login)
 	return {
 		id = node.id,
 		author = comment_author(node.author),
+		author_roles = github_mapper.author_roles(node, author_login),
 		body = body_text(node.body),
 		created_at = json.safe_str(node.createdAt) or "",
 		url = json.safe_str(node.url) or "",
-		reactions = github_mapping.graphql_reactions(node.reactionGroups),
+		reactions = github_mapper.graphql_reactions(node.reactionGroups),
 	}
 end
 
 ---@param raw table GraphQL `PullRequest`
+---@param author_login string|nil
 ---@return PullsComment|nil
-function M.to_description(raw)
+function M.to_description(raw, author_login)
 	if json.nilify(raw.id) == nil then
 		return nil
 	end
-	return M.to_comment(raw)
+	return M.to_comment(raw, author_login)
 end
 
 ---@param node table GraphQL `PullRequestReview`
@@ -408,8 +457,9 @@ end
 ---@param node table GraphQL `PullRequestReviewComment`
 ---@param thread table GraphQL `PullRequestReviewThread`
 ---@param fallback_parent number|string|nil
+---@param author_login string|nil
 ---@return PullsComment
-function M.to_review_comment(node, thread, fallback_parent)
+function M.to_review_comment(node, thread, fallback_parent, author_login)
 	local path = json.safe_str(thread.path)
 	local anchor = json.nilify(thread.line) or json.nilify(thread.originalLine)
 	local start_line = json.nilify(thread.startLine) or json.nilify(thread.originalStartLine)
@@ -440,6 +490,7 @@ function M.to_review_comment(node, thread, fallback_parent)
 	local result = {
 		id = node.id,
 		author = comment_author(node.author),
+		author_roles = github_mapper.author_roles(node, author_login),
 		body = body_text(node.body),
 		created_at = json.safe_str(node.createdAt) or "",
 		url = json.safe_str(node.url) or "",
@@ -449,7 +500,7 @@ function M.to_review_comment(node, thread, fallback_parent)
 		pending = json.safe_table(node.pullRequestReview).state == "PENDING",
 		outdated = outdated,
 		state = resolved and "RESOLVED" or (outdated and "OUTDATED" or nil),
-		reactions = github_mapping.graphql_reactions(node.reactionGroups),
+		reactions = github_mapper.graphql_reactions(node.reactionGroups),
 		thread_id = json.safe_str(thread.id),
 	}
 	local resolved_by = comment_author(json.nilify(thread.resolvedBy))
@@ -462,9 +513,10 @@ end
 ---@param node table GraphQL `PullRequestReviewComment` returned by a mutation, which has no thread
 ---@param sibling PullsComment A comment from the same thread
 ---@param parent_id number|string|nil
+---@param author_login string|nil
 ---@return PullsComment
-function M.to_thread_comment(node, sibling, parent_id)
-	local result = M.to_review_comment(node, { id = sibling.thread_id }, parent_id)
+function M.to_thread_comment(node, sibling, parent_id, author_login)
+	local result = M.to_review_comment(node, { id = sibling.thread_id }, parent_id, author_login)
 	result.file = sibling.file
 	result.inline = sibling.inline
 	result.outdated = sibling.outdated

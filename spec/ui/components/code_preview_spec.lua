@@ -103,11 +103,11 @@ describe("ui.components.code_preview", function()
 			background_hl_group = "DiffChange",
 		})
 		assert.same({ " 12    local x = 1  ", "123    print(x)  ", "124    return x  " }, result.lines)
-		assert.equals("local x = 1\nprint(x)\nreturn x", parsed_source)
-		assert.equals("DiffChange", result.highlights[1].line_hl_group)
-		assert.equals("CursorLineNr", result.highlights[2].hl_group)
-		assert.equals("CursorLineNr", result.highlights[4].hl_group)
-		assert.equals("AtlasTextMuted", result.highlights[6].hl_group)
+		assert.equal("local x = 1\nprint(x)\nreturn x", parsed_source)
+		assert.equal("DiffChange", result.highlights[1].line_hl_group)
+		assert.equal("CursorLineNr", result.highlights[2].hl_group)
+		assert.equal("CursorLineNr", result.highlights[4].hl_group)
+		assert.equal("AtlasTextMuted", result.highlights[6].hl_group)
 		assert.same({ { line = 0, start_col = 7, end_col = 12, hl_group = "@keyword.lua" } }, syntax_spans(result))
 	end)
 
@@ -123,7 +123,7 @@ describe("ui.components.code_preview", function()
 				padding = 2,
 			})
 			assert.same(case[2], result.lines)
-			assert.equals("AtlasCodeBackground", result.highlights[1].line_hl_group)
+			assert.equal("AtlasCodeBackground", result.highlights[1].line_hl_group)
 			assert.same({
 				{ line = 0, start_col = case[3], end_col = case[3] + 5, hl_group = "@keyword.lua" },
 			}, syntax_spans(result))
@@ -143,7 +143,7 @@ describe("ui.components.code_preview", function()
 			width = 8,
 		})
 		assert.same({ " local ", " value ", "  " }, result.lines)
-		assert.equals("local value\n", parsed_source)
+		assert.equal("local value\n", parsed_source)
 		assert.same({
 			{ line = 0, line_hl_group = "AtlasCodeBackground" },
 			{ line = 1, line_hl_group = "AtlasCodeBackground" },
@@ -166,14 +166,14 @@ describe("ui.components.code_preview", function()
 			cs = "c_sharp",
 		}) do
 			preview.render({ lines = { "code" }, language = alias, file_path = "wrong.lua" })
-			assert.equals(language, parsed_language)
+			assert.equal(language, parsed_language)
 		end
 
 		vim.treesitter.language.get_lang = function(filetype)
 			return filetype == "js" and "custom_parser" or filetype
 		end
 		preview.render({ lines = { "code" }, language = "js" })
-		assert.equals("custom_parser", parsed_language)
+		assert.equal("custom_parser", parsed_language)
 	end)
 
 	it("applies capture metadata and splits multiline Unicode into byte ranges", function()

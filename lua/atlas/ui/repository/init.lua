@@ -1,13 +1,19 @@
 local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
-local detail = require("atlas.ui.detail")
 local loading = require("atlas.ui.loading")
-local pages = require("atlas.ui.repository.pages")
 local keymaps = require("atlas.ui.repository.keymaps")
 local sidebar = require("atlas.ui.repository.sidebar")
 local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
+
+---@class RepositoryPage
+---@field key string
+---@field label string
+---@field icon string
+---@field open fun(opts: { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline, ctx: table })
+---@field render fun(buf: integer) Redraws the page, e.g. after the content window was resized
+---@field close fun(buf: integer) Runs before the content buffer is wiped and the window options are reset for the next page
 
 ---@class RepositoryBrowser
 ---@field tab integer
@@ -54,15 +60,18 @@ local function setup_windows(session)
 	session.content.win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(session.content.win, session.content.buf)
 	utils.buffer.delete(placeholder)
+
 	session.sidebar.win = vim.api.nvim_open_win(session.sidebar.buf, true, {
 		split = "left",
 		win = session.content.win,
 		width = math.min(22, math.max(14, math.floor(vim.o.columns * 0.2))),
 	})
+
 	for _, pane in ipairs({ session.sidebar, session.content }) do
 		setup_window(pane.win)
 		session.statusline:attach(pane.win)
 	end
+
 	vim.wo[session.sidebar.win].winfixwidth = true
 	vim.wo[session.sidebar.win].cursorline = true
 	vim.wo[session.sidebar.win].winbar = "Repository"
@@ -70,65 +79,93 @@ local function setup_windows(session)
 end
 
 ---@param session RepositoryBrowser
+local function close_details(session)
+	require("atlas.pulls.ui.detail.window").close(session.tab)
+	require("atlas.issues.ui.detail.window").close(session.tab)
+end
+
+---@param session RepositoryBrowser
+local function close_tab(session)
+	if not utils.tab.valid(session.tab) then
+		return
+	end
+
+	if #vim.api.nvim_list_tabpages() > 1 then
+		vim.cmd(vim.api.nvim_tabpage_get_number(session.tab) .. "tabclose")
+		return
+	end
+
+	for _, pane in ipairs({ session.sidebar, session.content }) do
+		if utils.window.valid(pane.win) then
+			if #vim.api.nvim_tabpage_list_wins(session.tab) > 1 then
+				vim.api.nvim_win_close(pane.win, true)
+			else
+				vim.api.nvim_win_set_buf(pane.win, vim.api.nvim_create_buf(true, false))
+			end
+		end
+	end
+end
+
+---@param session RepositoryBrowser
 local function close(session)
 	if session.closed then
 		return
 	end
+
 	session.closed = true
 	vim.api.nvim_del_augroup_by_id(session.group)
-	detail.close(session.tab)
+	close_details(session)
 	if session.page then
 		session.page.close(session.content.buf)
 	end
+
 	session.statusline:dispose()
-	if utils.tab.valid(session.tab) then
-		if #vim.api.nvim_list_tabpages() > 1 then
-			vim.cmd(vim.api.nvim_tabpage_get_number(session.tab) .. "tabclose")
-		else
-			for _, pane in ipairs({ session.sidebar, session.content }) do
-				if utils.window.valid(pane.win) then
-					if #vim.api.nvim_tabpage_list_wins(session.tab) > 1 then
-						vim.api.nvim_win_close(pane.win, true)
-					else
-						vim.api.nvim_win_set_buf(pane.win, vim.api.nvim_create_buf(true, false))
-					end
-				end
-			end
-		end
-	end
+	close_tab(session)
 	utils.buffer.delete(session.sidebar.buf)
 	utils.buffer.delete(session.content.buf)
 end
 
 ---@param session RepositoryBrowser
+---@param page RepositoryPage
+local function replace_content_buffer(session, page)
+	local previous_buf = session.content.buf
+	session.content.buf =
+		utils.buffer.create("atlas://repository/" .. session.tab .. "/content/" .. page.key, "atlas-ui.repository")
+	vim.api.nvim_win_set_buf(session.content.win, session.content.buf)
+	utils.buffer.delete(previous_buf)
+end
+
+---@param session RepositoryBrowser
 ---@param index integer
-local function select_page(session, index)
+---@param ctx table|nil
+local function select_page(session, index, ctx)
 	local page = session.sidebar.pages[index]
 	if session.page == page then
 		return
 	end
+
 	if session.page then
-		detail.close(session.tab)
-		local previous_buf = session.content.buf
-		session.page.close(previous_buf)
-		session.content.buf =
-			utils.buffer.create("atlas://repository/" .. session.tab .. "/content/" .. page.key, "atlas-ui.repository")
-		vim.api.nvim_win_set_buf(session.content.win, session.content.buf)
-		utils.buffer.delete(previous_buf)
+		close_details(session)
+		session.page.close(session.content.buf)
+		replace_content_buffer(session, page)
 	end
+
 	session.page = page
 	session.sidebar.selected = index
 	sidebar.render(session.sidebar)
 	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
+
 	setup_window(session.content.win)
 	session.statusline:attach(session.content.win)
 	vim.wo[session.content.win].winbar = page.label:gsub("%%", "%%%%")
 	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
+
 	keymaps.setup(session, function()
 		close(session)
 	end, function(next_index)
 		select_page(session, next_index)
 	end)
+
 	page.open({
 		buf = session.content.buf,
 		win = session.content.win,
@@ -136,12 +173,24 @@ local function select_page(session, index)
 		repo = session.repo,
 		provider = session.provider,
 		statusline = session.statusline,
+		ctx = ctx or {},
 	})
 end
 
 ---@param session RepositoryBrowser
 local function setup_events(session)
 	session.group = vim.api.nvim_create_augroup("AtlasRepository" .. session.tab, { clear = true })
+
+	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+		group = session.group,
+		callback = function(event)
+			local resized = event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, session.content.win)
+			if session.page and resized then
+				session.page.render(session.content.buf)
+			end
+		end,
+	})
+
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = session.group,
 		pattern = { tostring(session.sidebar.win), tostring(session.content.win) },
@@ -155,48 +204,56 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param provider PullsProvider|IssuesProvider
+---@param pages RepositoryPage[]
 ---@param page_key string|nil
-local function show(repo, provider, page_key)
+---@param ctx table|nil
+local function show(repo, provider, pages, page_key, ctx)
 	vim.cmd("tabnew")
 	local session = {
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
 		repo = repo,
 		provider = provider,
-		sidebar = { pages = pages.get(provider), selected = 1 },
+		sidebar = { pages = pages, selected = 1 },
 		content = {},
 		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
 	}
 	---@cast session RepositoryBrowser
+
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)
 	session.statusline:set_items({
 		{ text = repo.full_name, hl_group = "AtlasFooterText" },
 	})
+
 	for index, page in ipairs(session.sidebar.pages) do
 		if page.key == (page_key or "overview") then
-			select_page(session, index)
+			select_page(session, index, ctx)
 			return
 		end
 	end
+
 	select_page(session, 1)
 end
 
 ---@param repo_full_name string
 ---@param provider PullsProvider|IssuesProvider
----@param opts { page?: string }|nil
+---@param opts { page?: string, ctx?: table }|nil
 function M.open(repo_full_name, provider, opts)
 	local repository = provider.capabilities.repository
-	if not repository then
+	local ui = provider.capabilities.ui and provider.capabilities.ui.repository
+	if not repository or not ui then
 		notify.error("Repository details are not available")
 		return
 	end
+
 	local owner, name = repo_full_name:match("^(.+)/([^/]+)$")
 	if not owner or not name then
 		notify.error("Repository must use owner/name")
 		return
 	end
+
 	local repo = { id = repo_full_name, full_name = repo_full_name, name = name, owner = owner, repo_name = name }
 	local requests = request_scope.new()
 	local view = loading.open("Loading repository...", requests.cancel)
@@ -208,7 +265,8 @@ function M.open(repo_full_name, provider, opts)
 			notify.error(err or "Failed to load repository")
 			return
 		end
-		show(details, provider, opts and opts.page)
+
+		show(details, provider, ui.pages, opts and opts.page, opts and opts.ctx)
 		view:finish()
 	end)
 end

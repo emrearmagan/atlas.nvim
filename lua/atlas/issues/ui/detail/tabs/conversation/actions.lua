@@ -9,6 +9,10 @@ local reactions = require("atlas.ui.shared.reactions")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 local detail = require("atlas.issues.ui.detail.state")
 
+---@class IssuesConversationLine
+---@field comment IssueComment|nil
+---@field thread_root IssueComment|nil
+
 ---@param issue Issue
 ---@param amount integer
 local function adjust_comment_count(issue, amount)
@@ -59,19 +63,17 @@ function M.add(issue, refresh)
 end
 
 ---@param issue Issue
----@param entry table
+---@param entry IssuesConversationLine
 ---@param refresh fun()
 function M.reply(issue, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if item and item.kind == "description" then
+	local comment = entry.comment
+	if not comment then
+		return
+	end
+	if state.is_description(comment) then
 		M.add(issue, refresh)
 		return
 	end
-	if not item or item.kind ~= "comment" then
-		return
-	end
-	---@type IssueComment
-	local comment = item.entity
 	local comments = detail.provider.capabilities.comments
 	local mention = completion.format_mention(detail.provider, comment.author)
 
@@ -111,28 +113,19 @@ function M.reply(issue, entry, refresh)
 end
 
 ---@param issue Issue
----@param entry table
+---@param entry IssuesConversationLine
 ---@param refresh fun()
 function M.edit(issue, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if item and item.kind == "description" then
+	local comment = entry.comment
+	if not comment then
+		return
+	end
+	if state.is_description(comment) then
 		issue_actions.run("edit_issue", { provider = detail.provider, issue = issue }, function(result)
-			if not result or not result.issue_key then
-				return
-			end
-			if detail.on_update then
-				detail.on_update(issue, result)
-			else
-				require("atlas.issues.ui.detail").refresh(issue)
-			end
+			require("atlas.issues.ui.detail").apply_action_result(issue, detail.on_update, result)
 		end)
 		return
 	end
-	if not item or item.kind ~= "comment" then
-		return
-	end
-	---@type IssueComment
-	local comment = item.entity
 	local comments = detail.provider.capabilities.comments
 	md_editor.open({
 		key = "issue-comment-edit-" .. tostring(comment.id),
@@ -169,15 +162,13 @@ function M.edit(issue, entry, refresh)
 end
 
 ---@param issue Issue
----@param entry table
+---@param entry IssuesConversationLine
 ---@param refresh fun()
 function M.delete(issue, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item or item.kind ~= "comment" then
+	local comment = entry.comment
+	if not comment or state.is_description(comment) then
 		return
 	end
-	---@type IssueComment
-	local comment = item.entity
 	local comments = detail.provider.capabilities.comments
 
 	vim.ui.input({ prompt = "Delete comment? [y/N]: " }, function(input)
@@ -203,16 +194,11 @@ function M.delete(issue, entry, refresh)
 end
 
 ---@param issue Issue
----@param entry table
+---@param entry IssuesConversationLine
 ---@param refresh fun()
 function M.react(issue, entry, refresh)
-	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
-		return
-	end
-	---@type IssueComment
-	local comment = item.entity
-	if comment.deleted then
+	local comment = entry.comment
+	if not comment or comment.deleted then
 		return
 	end
 	-- TODO: Reacting to the description doesn't update the overview's reactions until the details are reloaded.
