@@ -1,6 +1,7 @@
 local M = {}
 
 local form = require("atlas.ui.form")
+local github_stack = require("atlas.pulls.providers.github.stack")
 local keymaps = require("atlas.core.keymaps")
 local meta = require("atlas.pulls.editor.meta")
 local notify = require("atlas.core.notify")
@@ -35,6 +36,17 @@ local function sorted_values(items, key)
 	end
 	table.sort(values)
 	return values
+end
+
+---@param state PullsEditPRState
+---@return boolean
+local function is_stacked(state)
+	if state.provider.id ~= "github" then
+		return false
+	end
+	local pr = state.pr
+	---@cast pr GitHubPullRequest
+	return github_stack.is_stacked(pr.stack)
 end
 
 ---@param state PullsEditPRState
@@ -314,7 +326,9 @@ local function submit(state, editor)
 		assignees = write.fetch_assignees and state.assignees or nil,
 	}
 	if state.pr.state == "open" or state.pr.state == "draft" then
-		opts.base = state.base.branch
+		if state.base.branch ~= state.pr.destination.branch then
+			opts.base = state.base.branch
+		end
 		opts.draft = state.draft
 		opts.reviewers = state.reviewer_selection
 	end
@@ -371,11 +385,17 @@ local function render_meta(state)
 	local reviewers = meta.people("Reviewers:", reviewer_names, "None")
 	reviewers.loading = state.loading == "reviewers"
 
+	local base = { key = "Base:", value = state.base.branch, loading = state.loading == "base" }
+	if is_stacked(state) then
+		base.value = base.value .. " (stacked)"
+		base.spans = { { start_col = #state.base.branch, end_col = #base.value, hl_group = "AtlasTextMuted" } }
+	end
+
 	local rows = {
 		{ { key = "Repo:", value = pr.repo_full_name, hl = presentation.repo_hl(pr.repo_full_name) } },
 		{
 			{ key = "Head:", value = pr.source.branch },
-			{ key = "Base:", value = state.base.branch, loading = state.loading == "base" },
+			base,
 		},
 		{
 			{
@@ -409,7 +429,7 @@ local function open_editor(state)
 	local write = state.write
 	local form_keymaps = {}
 	if state.pr.state == "open" or state.pr.state == "draft" then
-		if state.provider.capabilities.repository then
+		if state.provider.capabilities.repository and not is_stacked(state) then
 			form_keymaps[#form_keymaps + 1] = {
 				key = "gb",
 				desc = "base",
