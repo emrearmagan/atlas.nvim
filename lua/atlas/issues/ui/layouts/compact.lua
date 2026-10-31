@@ -163,7 +163,6 @@ M.jira = {
 
 M.azure = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
@@ -171,7 +170,7 @@ M.azure = {
 	},
 	values = function(issue, opts)
 		return {
-			icon = icons.get("issue"),
+			icon = utils.type_icon(issue),
 			name = issue.key .. " " .. issue.title,
 			assignee = utils.person_value(issue.assignee, "Unassigned"),
 			reporter = utils.person_value(issue.reporter, "Unknown"),
@@ -179,15 +178,16 @@ M.azure = {
 			_meta = meta_text(issue, { issue.type and issue.type.name or "" }),
 		}
 	end,
-	highlights = function(row, column, _, opts)
+	highlights = function(row, column, context, opts)
 		local issue = row._issue
 		if issue == nil then
 			return nil
 		end
 
-		if column.key == "icon" then
-			local _, icon_hl = icons.get("issue")
-			return icon_hl
+		if column.key == "name" then
+			local icon, icon_hl = utils.type_icon(issue)
+			local spans = utils.key_title_highlights(context.text, issue.key, "AtlasTextMuted")
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
 		elseif column.key == "status" then
 			return utils.status_hl(issue, opts, presentation.status_hl(issue.status_id))
 		end

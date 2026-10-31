@@ -154,7 +154,6 @@ M.bitbucket = {
 M.azure = {
 	reference = "!",
 	columns = {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false },
 		{ key = "repo_pr", name = "Title", min_width = 42 },
 		{ key = "merge", name = icons.get("merge", "actions"), min_width = 1, can_grow = false },
 		{ key = "review", name = icons.get("success"), min_width = 1, can_grow = false },
@@ -177,8 +176,7 @@ M.azure = {
 		local review, review_hl = utils.status_icon(status)
 
 		return {
-			pr_icon = icon,
-			repo_pr = utils.title(pr, "!"),
+			repo_pr = icon .. " " .. utils.title(pr, "!"),
 			merge = merge,
 			merge_hl = merge_hl or "AtlasTextMuted",
 			review = review,
