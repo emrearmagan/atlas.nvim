@@ -81,21 +81,12 @@ up and what's missing.
 >lua
   require("atlas").setup({
     ui = {
-      -- Return false to keep your existing statusline for that buffer/window.
       statusline = {
-        -- `context` is "atlas" for dashboards/details and "diff" for diff views.
-        ---@param buf integer
-        ---@param win integer
-        ---@param context "atlas"|"diff"
-        ---@return boolean
-        enable = function(buf, win, context)
-          return true
-        end,
+        -- false keeps your existing statusline. A function(buf, win, context)
+        -- decides per window; `context` is "atlas" for dashboards/details and
+        -- "diff" for diff views.
+        enable = true,
         -- For example, keep your statusline in Atlas detail views:
-        -- ---@param buf integer
-        -- ---@param win integer
-        -- ---@param context "atlas"|"diff"
-        -- ---@return boolean
         -- enable = function(buf, win, context)
         --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
         -- end,

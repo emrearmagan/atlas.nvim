@@ -141,8 +141,6 @@
 
 ---@class AtlasUIStatuslineConfig
 ---@field enable? boolean|AtlasStatuslineEnable Predicate for where Atlas's statusline is shown (default: true)
----@field atlas? boolean Deprecated: use `enable`.
----@field diff? boolean Deprecated: use `enable`.
 
 ---@class AtlasUIConfig
 ---@field statusline AtlasUIStatuslineConfig|nil
@@ -158,15 +156,10 @@
 
 local M = {}
 
----@type AtlasStatuslineEnable
-local function default_statusline_enable(_, _, _)
-	return true
-end
-
 ---@type AtlasConfig
 local defaults = {
 	ui = {
-		statusline = { enable = default_statusline_enable },
+		statusline = { enable = true },
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -386,15 +379,9 @@ M.options = vim.deepcopy(defaults)
 ---@param win integer|nil
 ---@return boolean
 function M.statusline_enabled(context, buf, win)
-	local statusline = M.options.ui.statusline
-	-- Keep honoring the old context booleans for existing configurations.
-	if statusline.enable == false or statusline[context] == false then
-		return false
-	end
-
-	local enable = statusline.enable
+	local enable = M.options.ui.statusline.enable
 	if type(enable) ~= "function" then
-		return true
+		return enable ~= false
 	end
 
 	if not win or not vim.api.nvim_win_is_valid(win) then
@@ -453,9 +440,7 @@ function M.setup(opts)
 		project.issue_types = issue_types
 	end
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
-	local statusline = M.options.ui.statusline
-	local legacy_disabled = statusline.atlas == false and statusline.diff == false
-	if statusline.enable ~= false and not legacy_disabled then
+	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
 	end
 end

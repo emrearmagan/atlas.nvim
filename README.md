@@ -301,21 +301,11 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    -- Return false to keep your existing statusline for that buffer/window.
     statusline = {
+      -- false keeps your existing statusline. A function(buf, win, context) decides per window;
       -- `context` is "atlas" for dashboards/details and "diff" for diff views.
-      ---@param buf integer
-      ---@param win integer
-      ---@param context "atlas"|"diff"
-      ---@return boolean
-      enable = function(buf, win, context)
-        return true
-      end,
+      enable = true,
       -- For example, keep your statusline in Atlas detail views:
-      -- ---@param buf integer
-      -- ---@param win integer
-      -- ---@param context "atlas"|"diff"
-      -- ---@return boolean
       -- enable = function(buf, win, context)
       --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
       -- end,
