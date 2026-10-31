@@ -4,17 +4,15 @@
 ---| "labels"
 ---| "open_repo"
 
-local M = {}
-
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local search = require("atlas.pulls.providers.azure.actions.search")
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasPullAction
 local function register(action)
@@ -34,19 +32,19 @@ register({
 		local pr = assert(ctx.pr)
 		require("atlas.pulls.ui.merge").open(pr, {
 			on_cancel = function()
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
+				done({ changed_pr = false }, nil)
 			end,
 			on_submit = function(options, completed)
-				action_utils.notify(ctx, "loading", "Completing PR...")
+				notify.loading("Completing PR...")
 				pullrequests_api.merge(pr, options, function(ok, err)
 					if not ok then
-						action_utils.notify(ctx, "error", err or "Completion failed")
+						notify.error(err or "Completion failed")
 						completed(false)
 						return
 					end
 					completed(true)
-					action_utils.notify(ctx, "success", "Completion requested", 1500)
-					done({ changed_pr = true, message = "Completion requested" }, nil)
+					notify.success("Completion requested", { timeout = 1500 })
+					done({ changed_pr = true }, nil)
 				end)
 			end,
 		})
@@ -61,15 +59,15 @@ register({
 		return ctx.pr ~= nil and ctx.pr.state == "declined"
 	end,
 	run = function(ctx, done)
-		action_utils.notify(ctx, "loading", "Reopening PR...")
+		notify.loading("Reopening PR...")
 		pullrequests_api.reopen(assert(ctx.pr), function(ok, err)
 			if not ok then
-				action_utils.notify(ctx, "error", err or "Reopen failed")
+				notify.error(err or "Reopen failed")
 				done(nil, err or "Reopen failed")
 				return
 			end
-			action_utils.notify(ctx, "success", "PR reopened", 1200)
-			done({ changed_pr = true, message = "Reopened" }, nil)
+			notify.success("PR reopened", { timeout = 1200 })
+			done({ changed_pr = true }, nil)
 		end)
 	end,
 })
@@ -81,10 +79,10 @@ register({
 	is_available = action_utils.has_pr,
 	run = function(ctx, done)
 		local pr = assert(ctx.pr)
-		action_utils.notify(ctx, "loading", "Loading tags...")
+		notify.loading("Loading tags...")
 		pullrequests_api.fetch_labels(pr, function(labels, err)
 			if err then
-				action_utils.notify(ctx, "error", err)
+				notify.error(err)
 				done(nil, err)
 				return
 			end
@@ -92,10 +90,10 @@ register({
 			local names = vim.tbl_map(function(label)
 				return label.name
 			end, labels)
-			action_utils.notify(ctx, "success", "Tags loaded", 1200)
+			notify.success("Tags loaded", { timeout = 1200 })
 			vim.ui.input({ prompt = "Tags (separated by ;): ", default = table.concat(names, "; ") }, function(input)
 				if input == nil then
-					done({ changed_pr = false, message = "Edit tags cancelled" }, nil)
+					done({ changed_pr = false }, nil)
 					return
 				end
 				local selected = {}
@@ -105,15 +103,15 @@ register({
 						table.insert(selected, tag)
 					end
 				end
-				action_utils.notify(ctx, "loading", "Updating tags...")
+				notify.loading("Updating tags...")
 				pullrequests_api.update_labels(pr, selected, labels, function(ok, update_err)
 					if not ok then
-						action_utils.notify(ctx, "error", update_err or "Update tags failed")
+						notify.error(update_err or "Update tags failed")
 						done(nil, update_err or "Update tags failed")
 						return
 					end
-					action_utils.notify(ctx, "success", "Tags updated", 1200)
-					done({ changed_pr = true, message = "Tags updated" }, nil)
+					notify.success("Tags updated", { timeout = 1200 })
+					done({ changed_pr = true }, nil)
 				end)
 			end)
 		end)
@@ -150,15 +148,4 @@ register(actions.copy_id)
 register(actions.copy_url)
 register(actions.open_in_browser)
 
----@param id AtlasAzureActionId
----@return AtlasPullAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

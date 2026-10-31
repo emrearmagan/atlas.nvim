@@ -22,17 +22,6 @@ local function views()
 end
 
 ---@param target AtlasTarget
----@return AtlasAzureIssuesViewConfig
-local function view_for_target(target)
-	return {
-		name = "Search",
-		layout = "plain",
-		project = target.project_path,
-		search = "SELECT [System.Id] FROM WorkItems WHERE [System.Id] = " .. target.number,
-	}
-end
-
----@param target AtlasTarget
 ---@return IssueRef|nil
 local function issue_ref(target)
 	if target.number then
@@ -42,7 +31,6 @@ end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {

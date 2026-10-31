@@ -70,21 +70,23 @@ local function fetch_pullrequests(view, opts, on_done)
 	return requests
 end
 
----@param target AtlasTarget
+---@param repository AtlasTarget
+---@param branch string|nil
 ---@return AtlasAzurePullsViewConfig
-local function view_for_target(target)
+local function repository_view(repository, branch)
 	return {
 		name = "Search",
 		layout = "compact",
-		project = target.owner,
-		repository = target.repo,
+		project = repository.owner,
+		repository = repository.repo,
 		scope = "all",
+		extra_params = branch and { ["searchCriteria.sourceRefName"] = "refs/heads/" .. branch } or nil,
 	}
 end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
+	repository_view = repository_view,
 	resolve_search = search_query.query,
 	capabilities = {
 		actions = require("atlas.pulls.providers.azure.actions.registry"),

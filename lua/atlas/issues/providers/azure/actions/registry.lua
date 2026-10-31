@@ -1,5 +1,3 @@
-local M = {}
-
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
@@ -9,7 +7,6 @@ local search = require("atlas.issues.providers.azure.actions.search")
 
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasIssueAction
 local function register(action)
@@ -261,14 +258,4 @@ register(actions.browse_issue)
 register(actions.copy_issue_key)
 register(actions.copy_issue_url)
 
----@param id string
----@return AtlasIssueAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-end
-
-return M
+return ACTIONS
