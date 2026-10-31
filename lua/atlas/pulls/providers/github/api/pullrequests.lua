@@ -1,6 +1,7 @@
 local M = {}
 
 local cli = require("atlas.providers.github.client")
+local create_remotes = require("atlas.pulls.create.remotes")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
@@ -543,6 +544,17 @@ function M.decline(pr, on_done)
 	})
 end
 
+---@param slug string
+---@param err string|nil
+---@return string|nil
+local function reviewer_candidates_error(slug, err)
+	local text = tostring(err or "")
+	if text:match("403") or text:lower():match("push access") then
+		return "Reviewer suggestions require push access to " .. slug
+	end
+	return err
+end
+
 ---@param opts { repo_slug: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -561,7 +573,7 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				{ "api", "--paginate", "--slurp", string.format("repos/%s/collaborators?per_page=100", slug) },
 				function(result, err)
 					if err or type(result) ~= "table" then
-						done(nil, err or "Failed to fetch repository collaborators")
+						done(nil, reviewer_candidates_error(slug, err) or "Failed to fetch repository collaborators")
 						return
 					end
 					done(result, nil)
@@ -820,13 +832,15 @@ function M.create_pr(opts, on_done)
 		return nil
 	end
 
+	local head = create_remotes.head_ref(slug, opts.head_repo_slug, tostring(opts.head or ""))
+
 	local args = {
 		"pr",
 		"create",
 		"--repo",
 		slug,
 		"--head",
-		opts.head,
+		head,
 		"--base",
 		opts.base,
 		"--title",

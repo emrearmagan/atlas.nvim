@@ -137,7 +137,12 @@ local function select_reviewers(state, editor)
 		state.loading = nil
 		if err then
 			form.render_meta(editor)
-			editor.statusline:notify("error", err)
+			editor.statusline:notify("warn", err)
+			return
+		end
+		if #items == 0 then
+			form.render_meta(editor)
+			editor.statusline:notify("warn", "No reviewer candidates available")
 			return
 		end
 		if not state.reviewer_selection then

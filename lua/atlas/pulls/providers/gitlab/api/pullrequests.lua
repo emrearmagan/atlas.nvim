@@ -751,30 +751,57 @@ function M.create_pr(opts, on_done)
 
 	local endpoint = string.format("/projects/%s/merge_requests", service.url_encode(path))
 
-	return service.request("POST", endpoint, payload, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local mr = mapper.to_pull_request(result)
-		if mr == nil then
-			on_done(nil, "GitLab returned an invalid merge request")
-			return
-		end
-		local iid = tonumber(mr.id)
-		service.clear_cache("gitlab_pulls:merge_requests:gql:")
-		on_done({
-			id = iid,
-			url = mr.link.html,
-			message = "Merge request created",
-		}, nil)
-	end, {
-		action = "Create MR",
-		path = path,
-		source = source,
-		target = target,
-		draft = opts.draft == true,
-	})
+	local function submit()
+		return service.request("POST", endpoint, payload, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local mr = mapper.to_pull_request(result)
+			if mr == nil then
+				on_done(nil, "GitLab returned an invalid merge request")
+				return
+			end
+			local iid = tonumber(mr.id)
+			service.clear_cache("gitlab_pulls:merge_requests:gql:")
+			on_done({
+				id = iid,
+				url = mr.link.html,
+				message = "Merge request created",
+			}, nil)
+		end, {
+			action = "Create MR",
+			path = path,
+			source = source,
+			target = target,
+			draft = opts.draft == true,
+		})
+	end
+
+	local head_slug = opts.head_repo_slug
+	if head_slug and head_slug ~= "" and head_slug ~= path then
+		return service.request(
+			"GET",
+			string.format("/projects/%s", service.url_encode(head_slug)),
+			nil,
+			function(result, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				local project_id = type(result) == "table" and tonumber(result.id) or nil
+				if not project_id then
+					on_done(nil, "Could not resolve source project: " .. head_slug)
+					return
+				end
+				payload.source_project_id = project_id
+				submit()
+			end,
+			{ action = "Resolve source project", path = head_slug }
+		)
+	end
+
+	return submit()
 end
 
 return M
