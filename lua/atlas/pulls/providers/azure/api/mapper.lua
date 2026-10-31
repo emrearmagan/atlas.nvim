@@ -332,50 +332,26 @@ function M.to_diff_files(raw_list)
 	return files
 end
 
----@param raw table
----@param thread table
----@param pr PullRequest
----@return PullsConversationItem|nil
-local function to_conversation_item(raw, thread, pr)
-	local id = thread.id .. ":" .. raw.id
-	if raw.commentType == "text" then
-		return {
-			id = "comment:" .. id,
-			kind = "comment",
-			created_at = raw.publishedDate,
-			entity = M.to_comment(raw, thread, pr),
-		}
-	elseif raw.commentType == "system" and not raw.isDeleted then
-		return {
-			id = "activity:" .. id,
-			kind = "activity",
-			created_at = raw.publishedDate,
-			entity = to_activity(raw, thread),
-		}
-	end
-	return nil
-end
-
 ---@param raw_list table[]
 ---@param pr PullRequest
----@return PullsConversationItem[]
+---@return PullsConversation
 function M.to_conversation(raw_list, pr)
-	local items = {}
+	local conversation = { comments = {}, reviews = {}, activities = {} }
 	local authors = mention_authors(pr, raw_list)
 	for _, thread in ipairs(raw_list) do
 		if not thread.isDeleted and json.nilify(thread.threadContext) == nil then
 			for _, raw in ipairs(thread.comments) do
-				local item = to_conversation_item(raw, thread, pr)
-				if item then
-					if item.kind == "comment" then
-						item.entity.body_display = users.resolve_mentions(item.entity.body, authors)
-					end
-					table.insert(items, item)
+				if raw.commentType == "text" then
+					local comment = M.to_comment(raw, thread, pr)
+					comment.body_display = users.resolve_mentions(comment.body, authors)
+					table.insert(conversation.comments, comment)
+				elseif raw.commentType == "system" and not raw.isDeleted then
+					table.insert(conversation.activities, to_activity(raw, thread))
 				end
 			end
 		end
 	end
-	return items
+	return conversation
 end
 
 return M

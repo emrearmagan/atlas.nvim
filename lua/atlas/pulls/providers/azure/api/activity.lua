@@ -5,7 +5,7 @@ local mapper = require("atlas.pulls.providers.azure.api.mapper")
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, opts, on_done)
 	opts = opts or {}
@@ -29,9 +29,9 @@ function M.fetch_conversation(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local items = mapper.to_conversation(result.value, pr)
-		service.set_cache(cache_key, items)
-		on_done(items, nil)
+		local conversation = mapper.to_conversation(result.value, pr)
+		service.set_cache(cache_key, conversation)
+		on_done(conversation, nil)
 	end, { action = "Fetch pull request conversation", repo = pr.repo_full_name, id = pr.id })
 end
 
