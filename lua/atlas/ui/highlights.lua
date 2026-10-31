@@ -1,17 +1,27 @@
 local M = {}
 
-local dynamic_palette = {
-	"#91d7e3",
-	"#7dc4e4",
-	"#8bd5ca",
-	"#eed49f",
-	"#f5a97f",
-	"#f5bde6",
-	"#c6a0f6",
-	"#8aadf4",
-	"#b7bdf8",
-	"#f0c6c6",
-	"#f4dbd6",
+-- Atlas follows the active colorscheme. Most groups link to standard Neovim
+-- groups; the rest read the colors of those groups so light and dark
+-- backgrounds stay readable. Provider brand hues are the only fixed colors.
+local BRAND = {
+	gitlab = "#fc6d26",
+	bitbucket = "#2684ff",
+	jira = "#2684ff",
+}
+
+-- Standard groups used for stable per-author and per-status colors.
+local dynamic_groups = {
+	"Function",
+	"Statement",
+	"DiagnosticOk",
+	"DiagnosticWarn",
+	"DiagnosticInfo",
+	"String",
+	"Constant",
+	"Type",
+	"Identifier",
+	"Special",
+	"DiagnosticHint",
 }
 
 ---@param color string|integer|nil
@@ -37,7 +47,40 @@ local function contrast(color)
 	local g = tonumber(color:sub(4, 5), 16)
 	local b = tonumber(color:sub(6, 7), 16)
 	local brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	return brightness > 0.6 and "#1e1e2e" or "#ffffff"
+	return brightness > 0.6 and "#000000" or "#ffffff"
+end
+
+---@param name string
+---@return table
+local function resolved(name)
+	return vim.api.nvim_get_hl(0, { name = name, link = false, create = false })
+end
+
+---@param name string
+---@return string|nil
+local function foreground(name)
+	return normalize_color(resolved(name).fg)
+end
+
+---@param name string
+---@return string|nil
+local function background(name)
+	return normalize_color(resolved(name).bg)
+end
+
+---Blend `color` into `base`.
+---@param base string
+---@param color string
+---@param alpha number
+---@return string
+local function blend(base, color, alpha)
+	local function channel(offset)
+		local from = tonumber(base:sub(offset, offset + 1), 16)
+		local to = tonumber(color:sub(offset, offset + 1), 16)
+		return math.floor(from + (to - from) * alpha + 0.5)
+	end
+
+	return string.format("#%02x%02x%02x", channel(2), channel(4), channel(6))
 end
 
 ---Choose a foreground for a solid chip background.
@@ -48,149 +91,11 @@ function M.foreground_for(bg)
 	return color and contrast(color)
 end
 
----@param bg string
+---@param color string|nil
 ---@return table
-local function chip_defaults(bg)
-	return { bg = bg, fg = M.foreground_for(bg), bold = true }
-end
-
----Read theme colors during setup so a colorscheme change uses fresh defaults.
----@return table<string, table>
-local function default_groups()
-	local function theme(group)
-		return vim.api.nvim_get_hl(0, { name = group, link = false, create = false })
-	end
-
-	return {
-		-- Shared UI
-		AtlasCodeBackground = { bg = vim.o.background == "dark" and "#20242d" or "#f1f2f4" },
-		AtlasTabInactive = { link = "CursorLine" },
-		AtlasColumnHeader = { fg = "#7f849c", bold = true },
-		AtlasSectionHeader = { fg = "#7f849c", bold = true, underline = true },
-		AtlasBorder = { fg = theme("FloatBorder").fg },
-		AtlasTextMuted = { fg = "#7f849c" },
-		AtlasTextMutedStrikethrough = { fg = "#7f849c", strikethrough = true },
-		AtlasTextPositive = { fg = theme("DiagnosticOk").fg, italic = false },
-		AtlasTextNote = { fg = "#f5bde6", bold = true },
-		AtlasTextWarning = { fg = "#f9e2af", bold = true },
-
-		-- Provider themes
-		AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
-		AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
-		AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
-		AtlasJiraTheme = chip_defaults("#1e3a8a"),
-
-		-- Chips
-		AtlasChipActive = chip_defaults("#89b4fa"),
-		AtlasRelatedChip = chip_defaults("#202635"),
-
-		-- Issues and Jira fields
-		AtlasIssueOpen = { fg = "#a6e3a1", bold = true },
-		AtlasIssueClosed = { fg = "#a371f7", bold = true },
-		AtlasIssueOpenChip = chip_defaults("#a6e3a1"),
-		AtlasIssueClosedChip = chip_defaults("#a371f7"),
-		AtlasJiraKey = { fg = "#89b4fa", bold = true },
-		AtlasJiraEpic = { link = "AtlasLogWarn" },
-		AtlasJiraChipStoryPoints = chip_defaults("#f38ba8"),
-		AtlasJiraChipDueDate = chip_defaults("#313244"),
-		AtlasJiraChipParent = { link = "AtlasJiraTheme" },
-
-		-- Pull requests
-		AtlasPROpen = { fg = "#86efac" },
-		AtlasPRMerged = { fg = "#93c5fd" },
-		AtlasPRDeclined = { fg = "#fca5a5" },
-		AtlasPRDraft = { fg = "#fcd34d" },
-		AtlasPROpenChip = chip_defaults("#86efac"),
-		AtlasPRMergedChip = chip_defaults("#93c5fd"),
-		AtlasPRDeclinedChip = chip_defaults("#fca5a5"),
-		AtlasPRDraftChip = chip_defaults("#fcd34d"),
-
-		-- Logs
-		AtlasLogInfo = { fg = "#89b4fa", italic = false },
-		AtlasLogWarn = { fg = theme("DiagnosticWarn").fg, italic = false },
-		AtlasLogError = { fg = theme("DiagnosticError").fg, italic = false },
-		AtlasLogErrorLine = {
-			fg = theme("DiagnosticVirtualTextError").fg,
-			bg = theme("DiagnosticVirtualTextError").bg,
-			italic = false,
-		},
-		AtlasLogGroup = { fg = "#cdd6f4", bg = "#313244", bold = true },
-		AtlasLogCommand = { fg = "#89b4fa" },
-		AtlasLogDebug = { link = "AtlasTextMuted" },
-
-		-- Footer
-		AtlasFooterBackground = { bg = "#202635" },
-		AtlasFooterText = { fg = "#7f849c", bg = "#202635" },
-		AtlasFooterActive = { fg = "#cdd6f4", bg = "#202635", bold = true },
-		AtlasFooterInfo = { fg = "#89b4fa", bg = "#202635", bold = true },
-		AtlasFooterNote = { fg = "#f5bde6", bg = "#202635", bold = true },
-		AtlasFooterWarning = { fg = "#f9e2af", bg = "#202635", bold = true },
-		AtlasFooterError = { fg = "#f38ba8", bg = "#202635", bold = true },
-		AtlasFooterSuccess = { fg = "#a6da95", bg = "#202635", bold = true },
-	}
-end
-
-local generated = {}
-local derived = {}
-
-local function set_default(name, opts)
-	vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
-end
-
-local function resolved(group)
-	return vim.api.nvim_get_hl(0, { name = group, link = false, create = false })
-end
-
-local function needs_foreground(opts)
-	return opts.bg ~= nil and opts.fg == nil and not opts.reverse and not opts.standout and (opts.blend or 0) == 0
-end
-
-local function refresh_derived(group, name, opts)
-	if needs_foreground(opts) then
-		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { fg = M.foreground_for(opts.bg), default = false }))
-	else
-		-- Existing spans must follow the source even when it no longer needs a foreground.
-		vim.api.nvim_set_hl(0, name, { link = group })
-	end
-end
-
----Use a configured Jira highlight, adding a missing foreground in a separate group.
----@param group string
----@return string
-function M.chip_from_group(group)
-	if group == "" then
-		return group
-	end
-	local opts = resolved(group)
-	local name = derived[group]
-	if needs_foreground(opts) then
-		name = name or ("AtlasChipGroup_" .. group)
-		derived[group] = name
-		refresh_derived(group, name, opts)
-		return name
-	end
-	if name then
-		refresh_derived(group, name, opts)
-	end
-	return group
-end
-
----Create a reusable label highlight, preserving a provider's explicit text color.
----Missing or invalid background colors use AtlasTextMuted.
----@param bg string|integer|nil
----@param opts { fg?: string|integer }|nil
----@return string
-function M.chip(bg, opts)
-	opts = opts or {}
-	local color = normalize_color(bg)
-	if color == nil then
-		return "AtlasTextMuted"
-	end
-	local fg = normalize_color(opts.fg) or contrast(color)
-	local name = "AtlasChip_" .. color:sub(2) .. "_" .. fg:sub(2)
-	generated[name] = { bg = color, fg = fg, bold = true }
-	set_default(name, generated[name])
-	return name
+local function chip_style(color)
+	color = normalize_color(color)
+	return { bg = color, fg = color and contrast(color) or nil, bold = true }
 end
 
 local labels = {}
@@ -259,38 +164,199 @@ local function from_hsl(h, s, l)
 	)
 end
 
----@param base string
----@param color string
----@param alpha number
----@return string
-local function mix(base, color, alpha)
-	local base_r, base_g, base_b = channels(base)
-	local r, g, b = channels(color)
-	local function channel(from, to)
-		return math.floor(from + (to - from) * alpha + 0.5)
-	end
-
-	return string.format("#%02x%02x%02x", channel(base_r, r), channel(base_g, g), channel(base_b, b))
-end
-
+---A label chip that stays readable on the current background.
 ---@param color string
 ---@return table
 local function label_style(color)
-	if vim.o.background == "light" then
-		return chip_defaults(color)
+	local page = background("Normal")
+	if vim.o.background == "light" or page == nil then
+		return chip_style(color)
 	end
 
 	local r, g, b = channels(color)
 	local perceived = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255
 	local h, s, l = to_hsl(color)
-	local page = normalize_color(resolved("Normal").bg) or "#0d1117"
 	return {
 		fg = from_hsl(h, s, math.min(1, l + math.max(0, 0.6 - perceived))),
-		bg = mix(page, color, 0.18),
+		bg = blend(page, color, 0.18),
 		bold = true,
 	}
 end
 
+---A subtle background used for code blocks and secondary rows.
+---@return string|nil
+local function line_background()
+	return background("Pmenu") or background("CursorLine") or background("NormalFloat")
+end
+
+---@return string|nil
+local function footer_background()
+	return background("StatusLine") or line_background()
+end
+
+---Groups that map one to one onto a standard Neovim highlight.
+---@return table<string, string>
+local function links()
+	return {
+		-- Shared UI
+		AtlasTabInactive = "CursorLine",
+
+		-- Text
+		AtlasTextPositive = "DiagnosticOk",
+
+		-- Issues and pull requests
+		AtlasIssueOpen = "DiagnosticOk",
+		AtlasPROpen = "DiagnosticOk",
+		AtlasPRMerged = "DiagnosticInfo",
+		AtlasPRDeclined = "DiagnosticError",
+		AtlasPRDraft = "DiagnosticWarn",
+
+		-- Logs
+		AtlasLogInfo = "DiagnosticInfo",
+		AtlasLogWarn = "DiagnosticWarn",
+		AtlasLogError = "DiagnosticError",
+		AtlasLogCommand = "Function",
+		AtlasLogDebug = "AtlasTextMuted",
+
+		-- Jira
+		AtlasJiraEpic = "AtlasLogWarn",
+		AtlasJiraChipParent = "AtlasJiraTheme",
+	}
+end
+
+---Groups that need attributes or a background. Their colors are read from the
+---active colorscheme, so they adapt to light and dark themes.
+---@return table<string, table>
+local function styles()
+	local line = line_background()
+	local footer = footer_background()
+	-- Use Comment's color without its attributes so muted text stays upright.
+	local muted = foreground("Comment") or foreground("NonText")
+	local text = foreground("Normal") or muted
+	local accent = foreground("Function") or foreground("Identifier")
+	local ok = foreground("DiagnosticOk") or foreground("String")
+	local info = foreground("DiagnosticInfo") or accent
+	local warn = foreground("DiagnosticWarn") or foreground("Type")
+	local warn_icon = foreground("Special") or info
+	local err = foreground("DiagnosticError") or foreground("ErrorMsg")
+	local page = background("Normal")
+
+	local error_line = { fg = foreground("DiagnosticVirtualTextError") or err }
+	if page ~= nil and error_line.fg ~= nil then
+		error_line.bg = blend(page, error_line.fg, 0.15)
+	end
+
+	return {
+		-- Shared UI
+		AtlasCodeBackground = { bg = line },
+		AtlasBorder = { fg = foreground("FloatBorder") or muted },
+		AtlasColumnHeader = { fg = muted, bold = true },
+		AtlasSectionHeader = { fg = muted, bold = true, underline = true },
+		AtlasTextMuted = { fg = muted },
+		AtlasTextMutedStrikethrough = { fg = muted, strikethrough = true },
+		AtlasTextNote = { fg = warn_icon, bold = true },
+		AtlasTextWarning = { fg = warn, bold = true },
+
+		-- Provider badges
+		AtlasGitHubTheme = { bg = line, fg = text, bold = true },
+		AtlasGitLabTheme = chip_style(BRAND.gitlab),
+		AtlasBitbucketTheme = chip_style(BRAND.bitbucket),
+		AtlasJiraTheme = chip_style(BRAND.jira),
+
+		-- Chips
+		AtlasChipActive = chip_style(info),
+		AtlasRelatedChip = { bg = line, fg = muted, bold = true },
+
+		-- Issues and Jira fields
+		AtlasIssueClosed = { fg = warn_icon, bold = true },
+		AtlasIssueOpenChip = chip_style(ok),
+		AtlasIssueClosedChip = chip_style(warn_icon),
+		AtlasJiraKey = { fg = accent, bold = true },
+		AtlasJiraChipStoryPoints = chip_style(err),
+		AtlasJiraChipDueDate = { bg = line, fg = muted, bold = true },
+
+		-- Pull requests
+		AtlasPROpenChip = chip_style(ok),
+		AtlasPRMergedChip = chip_style(info),
+		AtlasPRDeclinedChip = chip_style(err),
+		AtlasPRDraftChip = chip_style(warn),
+
+		-- Logs
+		AtlasLogErrorLine = error_line,
+		AtlasLogGroup = { fg = text, bg = line, bold = true },
+
+		-- Footer
+		AtlasFooterBackground = { bg = footer },
+		AtlasFooterText = { fg = muted, bg = footer },
+		AtlasFooterActive = { fg = text, bg = footer, bold = true },
+		AtlasFooterInfo = { fg = info, bg = footer, bold = true },
+		AtlasFooterNote = { fg = warn_icon, bg = footer, bold = true },
+		AtlasFooterWarning = { fg = warn, bg = footer, bold = true },
+		AtlasFooterError = { fg = err, bg = footer, bold = true },
+		AtlasFooterSuccess = { fg = ok, bg = footer, bold = true },
+	}
+end
+
+local generated = {}
+local derived = {}
+
+local function set_default(name, opts)
+	vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
+end
+
+local function needs_foreground(opts)
+	return opts.bg ~= nil and opts.fg == nil and not opts.reverse and not opts.standout and (opts.blend or 0) == 0
+end
+
+local function refresh_derived(group, name, opts)
+	if needs_foreground(opts) then
+		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { fg = M.foreground_for(opts.bg), default = false }))
+	else
+		-- Existing spans must follow the source even when it no longer needs a foreground.
+		vim.api.nvim_set_hl(0, name, { link = group })
+	end
+end
+
+---Use a configured Jira highlight, adding a missing foreground in a separate group.
+---@param group string
+---@return string
+function M.chip_from_group(group)
+	if group == "" then
+		return group
+	end
+	local opts = resolved(group)
+	local name = derived[group]
+	if needs_foreground(opts) then
+		name = name or ("AtlasChipGroup_" .. group)
+		derived[group] = name
+		refresh_derived(group, name, opts)
+		return name
+	end
+	if name then
+		refresh_derived(group, name, opts)
+	end
+	return group
+end
+
+---Create a reusable label highlight, preserving a provider's explicit text color.
+---Missing or invalid background colors use AtlasTextMuted.
+---@param bg string|integer|nil
+---@param opts { fg?: string|integer }|nil
+---@return string
+function M.chip(bg, opts)
+	opts = opts or {}
+	local color = normalize_color(bg)
+	if color == nil then
+		return "AtlasTextMuted"
+	end
+	local text = normalize_color(opts.fg) or contrast(color)
+	local name = "AtlasChip_" .. color:sub(2) .. "_" .. text:sub(2)
+	generated[name] = { bg = color, fg = text, bold = true }
+	set_default(name, generated[name])
+	return name
+end
+
+---Create a reusable label highlight from a provider-supplied label color.
 ---@param color string|integer|nil
 ---@return string
 function M.label(color)
@@ -315,7 +381,7 @@ local function palette_index(text)
 	for i = 1, #text do
 		hash = (hash * 31 + string.byte(text, i)) % 2147483647
 	end
-	return (hash % #dynamic_palette) + 1
+	return (hash % #dynamic_groups) + 1
 end
 
 ---Same identifier always maps to the same palette color.
@@ -338,12 +404,15 @@ function M.dynamic_for_bg(identifier)
 end
 
 function M.setup()
-	for name, opts in pairs(default_groups()) do
+	for name, target in pairs(links()) do
+		set_default(name, { link = target })
+	end
+	for name, opts in pairs(styles()) do
 		set_default(name, opts)
 	end
-	for idx, color in ipairs(dynamic_palette) do
-		set_default(string.format("AtlasDynColor%02d", idx), { fg = color })
-		set_default(string.format("AtlasDynBgColor%02d", idx), { bg = color, fg = M.foreground_for(color) })
+	for index, group in ipairs(dynamic_groups) do
+		set_default(string.format("AtlasDynColor%02d", index), { link = group })
+		set_default(string.format("AtlasDynBgColor%02d", index), chip_style(foreground(group)))
 	end
 	require("atlas.formats.markdown.highlights").setup()
 

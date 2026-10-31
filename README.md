@@ -359,6 +359,14 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 }
 ```
 
+### Highlights
+
+Atlas uses your colorscheme's standard highlight groups, so it adapts to light and dark backgrounds. Every `Atlas*` group is defined as a default, so you can override any of them after calling `setup()`:
+
+```lua
+vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+```
+
 ## Commands
 
 - `:Atlas` - Pick a command
