@@ -198,6 +198,7 @@ local function clear_issue()
 	state.current_details = nil
 	state.details_loading = false
 	state.issue_loading = false
+	state.issue_error = nil
 	state.line_map = {}
 	state.links = { items = {}, loading = false }
 end
@@ -333,13 +334,13 @@ function M.open_ref(ref, opts)
 		end
 		local loaded_issue = issues and issues[1] or nil
 		if loaded_issue == nil then
-			pending_ref = nil
 			state.issue_loading = false
 			state.details_loading = false
 			state.current_details = nil
+			state.issue_error = tostring(err or "Failed to load issue")
 			update_spinner()
 			render()
-			notify.error(tostring(err or "Failed to load issue"))
+			notify.error(state.issue_error)
 			return
 		end
 		show_issue(loaded_issue, force_refresh)
@@ -350,6 +351,16 @@ end
 function M.refresh(ref)
 	local issue = state.current_issue
 	local provider = state.provider
+	if
+		M.is_open()
+		and issue == nil
+		and state.issue_error
+		and pending_ref
+		and (ref == nil or same_ref(pending_ref, ref))
+	then
+		M.open_ref(pending_ref, { force_refresh = true })
+		return
+	end
 	if not M.is_open() or issue == nil or provider == nil or (ref ~= nil and not same_ref(issue, ref)) then
 		return
 	end

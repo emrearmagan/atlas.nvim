@@ -60,6 +60,90 @@ describe("Jira issue mapping", function()
 		assert.is_nil(rawget(details, "_raw"))
 	end)
 
+	it("maps create metadata fields to kinds and options", function()
+		local function kind(schema, allowed_values)
+			return mapper.to_meta_field({ schema = schema, allowedValues = allowed_values }).kind
+		end
+
+		assert.same(
+			{
+				name = "Team",
+				required = true,
+				kind = "select",
+				options = { { id = "1", name = "Platform" }, { id = "2", name = "High" } },
+			},
+			mapper.to_meta_field({
+				name = "Team",
+				required = true,
+				schema = { type = "option" },
+				allowedValues = { { id = "1", value = "Platform" }, { id = 2, name = "High" }, { name = "No id" } },
+			})
+		)
+		assert.same(
+			{ label = "Medium", value = { id = "3" } },
+			mapper.to_meta_field(
+				{ schema = { type = "priority" }, allowedValues = { { id = "3", name = "Medium" } } },
+				{ id = "3", name = "Medium" }
+			).initial
+		)
+		assert.same(
+			{ label = "A, B", value = { { id = "1" }, { id = "2" } } },
+			mapper.to_meta_field({
+				schema = { type = "array", items = "option" },
+				allowedValues = { { id = "1", value = "A" }, { id = "2", value = "B" } },
+			}, { { id = "1", value = "A" }, { id = "2", value = "B" } }).initial
+		)
+		assert.same(
+			{ label = "one, two", value = { "one", "two" } },
+			mapper.to_meta_field({ schema = { type = "array", items = "string" } }, { "one", "two" }).initial
+		)
+		assert.same({ label = "5", value = 5 }, mapper.to_meta_field({ schema = { type = "number" } }, 5).initial)
+		assert.same(
+			{ label = "Sprint 3", value = 3 },
+			mapper.to_meta_field({ schema = { custom = "com.pyxis.greenhopper.jira:gh-sprint" } }, {
+				{ id = 2, name = "Sprint 2", state = "closed" },
+				{ id = 3, name = "Sprint 3", state = "active" },
+			}).initial
+		)
+		assert.is_nil(
+			mapper.to_meta_field(
+				{ schema = { custom = "com.pyxis.greenhopper.jira:gh-sprint" } },
+				{ { id = 2, name = "Sprint 2", state = "closed" } }
+			).initial
+		)
+		local document = {
+			type = "doc",
+			version = 1,
+			content = { { type = "paragraph", content = { { type = "text", text = "macOS 15" } } } },
+		}
+		assert.same(
+			{ label = "macOS 15", value = document },
+			mapper.to_meta_field({ schema = { type = "string", system = "environment" } }, document).initial
+		)
+		assert.is_nil(mapper.to_meta_field({ schema = { type = "array", items = "string" } }, {}).initial)
+		assert.is_nil(mapper.to_meta_field({ schema = { type = "user" } }, "someone").initial)
+		assert.is_nil(mapper.to_meta_field({ schema = { type = "option" } }, vim.NIL).initial)
+		assert.equal("multi_select", kind({ type = "array", items = "option" }, { { id = "1", value = "A" } }))
+		assert.equal(
+			"text",
+			kind({ type = "string", custom = "com.atlassian.jira.plugin.system.customfieldtypes:textfield" })
+		)
+		assert.equal("number", kind({ type = "number" }))
+		assert.equal("date", kind({ type = "date" }))
+		assert.equal("labels", kind({ type = "array", items = "string" }))
+		assert.equal(
+			"sprint",
+			kind({ type = "array", items = "json", custom = "com.pyxis.greenhopper.jira:gh-sprint" })
+		)
+		assert.equal("paragraph", kind({ type = "string", system = "environment" }))
+		assert.equal(
+			"paragraph",
+			kind({ type = "string", custom = "com.atlassian.jira.plugin.system.customfieldtypes:textarea" })
+		)
+		assert.is_nil(kind({ type = "string", custom = "com.pyxis.greenhopper.jira:jsw-issue-color" }))
+		assert.is_nil(kind({ type = "user" }))
+	end)
+
 	it("uses the generic icon and a dynamic color for custom issue types", function()
 		local icon = assert(mapper.to_issue_type({ id = "10002", name = "Custom" }).icon)
 

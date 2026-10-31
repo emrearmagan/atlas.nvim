@@ -10,6 +10,7 @@ local users = require("atlas.providers.gitlab.users")
 local highlights = require("atlas.ui.highlights")
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.issues.ui.presentation")
+local keymaps = require("atlas.core.keymaps")
 
 ---@class GitLabIssueEditorResult
 ---@field key string
@@ -67,6 +68,14 @@ end
 ---@return boolean
 local function is_modified(state, editor)
 	return not vim.deep_equal(values(state, editor), state.initial)
+end
+
+---@param state GitLabIssueEditorState
+---@param editor AtlasForm
+---@return boolean
+local function content_modified(state, editor)
+	local current = values(state, editor)
+	return current.title ~= state.initial.title or current.body ~= state.initial.body
 end
 
 ---@param state GitLabIssueEditorState
@@ -432,7 +441,7 @@ end
 local function close(state, editor)
 	if state.submitting then
 		return
-	elseif not is_modified(state, editor) then
+	elseif not content_modified(state, editor) then
 		form.close(editor)
 	else
 		vim.ui.input({ prompt = "Discard issue changes? [y/N]: " }, function(answer)
@@ -481,8 +490,8 @@ local function open_editor(project_path, issue, details, on_done)
 		completion = {
 			context = { provider = "gitlab", repository = project_path, issue = issue and { key = issue.key } },
 		},
-		is_modified = issue and function(editor)
-			return is_modified(state, editor)
+		is_modified = function(editor)
+			return content_modified(state, editor)
 		end,
 		meta = function()
 			return render_meta(state)
@@ -501,21 +510,21 @@ local function open_editor(project_path, issue, details, on_done)
 		end,
 		keymaps = {
 			{
-				key = "ga",
+				key = keymaps.resolve("editor.assignees"),
 				desc = "assignees",
 				action = function(editor)
 					select_assignees(state, editor)
 				end,
 			},
 			{
-				key = "gl",
+				key = keymaps.resolve("editor.labels"),
 				desc = "labels",
 				action = function(editor)
 					select_labels(state, editor)
 				end,
 			},
 			{
-				key = "gm",
+				key = keymaps.resolve("editor.milestone"),
 				desc = "milestone",
 				action = function(editor)
 					select_milestone(state, editor)

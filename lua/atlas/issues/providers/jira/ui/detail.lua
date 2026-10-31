@@ -1,11 +1,25 @@
 ---@type IssuesProviderDetail
 local M = {}
 
+local config = require("atlas.config")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.highlights")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.presentation")
 local spinner = require("atlas.ui.components.spinner")
+
+---@param issue JiraIssue
+---@param display "chip"|"table"
+---@return boolean
+local function has_fields(issue, display)
+	local project_key = issue.project and issue.project.key or issue.key:match("^([^-]+)-")
+	for _, field in pairs((config.options.issues.jira.project_config[project_key] or {}).fields or {}) do
+		if (field.display or "chip") == display then
+			return true
+		end
+	end
+	return false
+end
 
 -- Header fields
 
@@ -42,11 +56,13 @@ function M.header_fields(issue, details, loading)
 	}
 
 	if loading then
-		table.insert(fields, {
-			label = "Fields",
-			value = spinner.with_text("Loading..."),
-			hl = "AtlasTextMuted",
-		})
+		if has_fields(issue, "table") then
+			table.insert(fields, {
+				label = "Fields",
+				value = spinner.with_text("Loading..."),
+				hl = "AtlasTextMuted",
+			})
+		end
 	elseif details then
 		---@cast details JiraIssueDetails
 		for _, field in ipairs(details.custom_fields) do
@@ -70,6 +86,7 @@ end
 ---@param loading boolean
 ---@return IssuesDetailChip[]
 function M.chips(issue, details, loading)
+	---@cast issue JiraIssue
 	local chips = {}
 
 	local parent_key = issue.parent and issue.parent.key or nil
@@ -97,7 +114,9 @@ function M.chips(issue, details, loading)
 	end
 
 	if loading then
-		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
+		if has_fields(issue, "chip") then
+			table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
+		end
 	elseif details then
 		---@cast details JiraIssueDetails
 		for _, field in ipairs(details.custom_fields) do

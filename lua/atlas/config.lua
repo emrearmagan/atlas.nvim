@@ -368,6 +368,18 @@ local defaults = {
 			edit_issue = "ge",
 			create_issue = "c",
 		},
+		editor = {
+			assignees = "ga",
+			labels = "gl",
+			milestone = "gm",
+			reporter = "gr",
+			reviewers = "gr",
+			base = "gb",
+			draft = "gD",
+			issue_type = "gt",
+			fields = "gf",
+			templates = "gT",
+		},
 	},
 }
 
@@ -423,14 +435,6 @@ end
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
 	local resolved = vim.deepcopy(opts or {})
-	local project = vim.tbl_get(resolved, "issues", "jira", "project_config")
-	if project and project.issue_types then
-		local issue_types = {}
-		for name, style in pairs(project.issue_types) do
-			issue_types[name:lower()] = style
-		end
-		project.issue_types = issue_types
-	end
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3

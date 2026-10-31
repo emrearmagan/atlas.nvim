@@ -83,7 +83,6 @@ local function dashboard_items(buf)
 		item("ui.help", {
 			desc = "Toggle this help popup",
 			index = 100,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				help.toggle({ buffer = buf })
 			end,
@@ -94,7 +93,6 @@ local function dashboard_items(buf)
 		item("ui.close", {
 			desc = "Close Atlas window",
 			index = 101,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				if not help.is_open() then
 					window.close()
@@ -115,7 +113,6 @@ local function dashboard_items(buf)
 		item("ui.next_panel_tab", {
 			desc = "Next panel tab",
 			index = 11,
-			opts = { nowait = true },
 			callback = dashboard.next_detail_tab,
 		})
 	)
@@ -124,7 +121,6 @@ local function dashboard_items(buf)
 		item("ui.previous_panel_tab", {
 			desc = "Previous panel tab",
 			index = 10,
-			opts = { nowait = true },
 			callback = dashboard.prev_detail_tab,
 		})
 	)
@@ -248,7 +244,6 @@ function M.register(buf, views)
 		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
 			index = 7,
-			opts = { nowait = true },
 			callback = function()
 				run_action("open_in_browser", true)
 			end,
@@ -260,7 +255,6 @@ function M.register(buf, views)
 		item("ui.open_references", {
 			desc = "Open references",
 			index = 11,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = selected_pr()
 				if not pr then
@@ -279,7 +273,6 @@ function M.register(buf, views)
 		item("ui.copy_url", {
 			desc = "Copy PR URL",
 			index = 9,
-			opts = { nowait = true },
 			callback = function()
 				run_action("copy_url", true)
 			end,
@@ -291,7 +284,6 @@ function M.register(buf, views)
 		item("ui.copy_id", {
 			desc = "Copy PR ID",
 			index = 8,
-			opts = { nowait = true },
 			callback = function()
 				run_action("copy_id", true)
 			end,
@@ -303,7 +295,6 @@ function M.register(buf, views)
 		item("pulls.edit_pr", {
 			desc = "Edit PR",
 			index = 5,
-			opts = { nowait = true },
 			callback = function()
 				run_action("edit_pr", true)
 			end,
@@ -315,7 +306,6 @@ function M.register(buf, views)
 		item("ui.show_details", {
 			desc = "Show PR details",
 			index = 3,
-			opts = { nowait = true },
 			callback = function()
 				controller.show_pr_details(buf)
 			end,
@@ -343,7 +333,6 @@ function M.register(buf, views)
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
 			index = 4,
-			opts = { nowait = true },
 			callback = function()
 				run_action("open_diff", true)
 			end,
@@ -355,7 +344,6 @@ function M.register(buf, views)
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
 			index = 6,
-			opts = { nowait = true },
 			callback = function()
 				run_action("checkout", true)
 			end,
@@ -445,7 +433,6 @@ function M.register(buf, views)
 		item("pulls.open_repository", {
 			desc = "Open repository browser",
 			index = 40,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				local node = navigation.current_item()
 				local repo = node and node.repo
@@ -480,6 +467,9 @@ function M.register(buf, views)
 		{ group = "Custom", items = custom, index = 3 },
 	}
 	for _, registration in ipairs(registrations[buf]) do
+		for _, map_item in ipairs(registration.items) do
+			map_item.opts = vim.tbl_extend("force", { nowait = true }, map_item.opts or {})
+		end
 		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
 	end
 	navigation.attach(buf)

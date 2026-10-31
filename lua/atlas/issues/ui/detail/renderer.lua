@@ -80,6 +80,8 @@ function M.render()
 	if issue == nil then
 		if state.issue_loading then
 			utils.push(lines, spans, spinner.with_text("Loading issue..."), "AtlasTextMuted", PADDING_X)
+		elseif state.issue_error then
+			utils.push(lines, spans, state.issue_error, "AtlasLogError", PADDING_X)
 		else
 			lines = { "", "  Nothing selected..." }
 		end
