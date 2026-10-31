@@ -3,6 +3,7 @@ local M = {}
 local form = require("atlas.ui.form")
 local icons = require("atlas.ui.shared.icons")
 local issues = require("atlas.issues.providers.azure.api.issues")
+local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local requests = require("atlas.core.requests")
@@ -58,7 +59,7 @@ local function open_editor(project, item_types, issue, details, on_done)
 		end,
 		keymaps = {
 			{
-				key = "gt",
+				key = keymaps.resolve("editor.issue_type"),
 				desc = "work item type",
 				action = function(editor)
 					if submitting then

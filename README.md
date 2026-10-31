@@ -1010,7 +1010,7 @@ keymaps = {
     reviewers = "gr", -- Pull requests only.
     base = "gb", -- Pull requests only.
     draft = "gD", -- Pull requests only.
-    issue_type = "gt", -- Jira only.
+    issue_type = "gt", -- Jira and Azure DevOps only.
     fields = "gf", -- Jira only.
     templates = "gT",
   },
