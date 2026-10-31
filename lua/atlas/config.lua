@@ -136,9 +136,11 @@
 
 -- Config
 
+---@alias AtlasStatuslineContext "atlas"|"diff"
+---@alias AtlasStatuslineEnable fun(buf: integer, win: integer, context: AtlasStatuslineContext): boolean
+
 ---@class AtlasUIStatuslineConfig
----@field atlas? boolean Show the statusline in Atlas's main UI (default: true)
----@field diff? boolean Show the statusline in Atlas-owned diff/review sessions (default: true)
+---@field enable? boolean|AtlasStatuslineEnable Predicate for where Atlas's statusline is shown (default: true)
 
 ---@class AtlasUIConfig
 ---@field statusline AtlasUIStatuslineConfig|nil
@@ -157,7 +159,7 @@ local M = {}
 ---@type AtlasConfig
 local defaults = {
 	ui = {
-		statusline = { atlas = true, diff = true },
+		statusline = { enable = true },
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -372,10 +374,16 @@ local defaults = {
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
 
----@param context "atlas"|"diff"
+---@param context AtlasStatuslineContext
+---@param buf integer
+---@param win integer
 ---@return boolean
-function M.statusline_enabled(context)
-	return M.options.ui.statusline[context] ~= false
+function M.statusline_enabled(context, buf, win)
+	local enable = M.options.ui.statusline.enable
+	if type(enable) ~= "function" then
+		return enable ~= false
+	end
+	return enable(buf, win, context) == true
 end
 
 ---@return string
@@ -424,7 +432,7 @@ function M.setup(opts)
 		project.issue_types = issue_types
 	end
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
-	if M.statusline_enabled("atlas") or M.statusline_enabled("diff") then
+	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
 	end
 end

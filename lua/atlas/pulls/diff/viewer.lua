@@ -81,9 +81,7 @@ end
 local function close_tab(tabpage)
 	if #vim.api.nvim_list_tabpages() == 1 then
 		vim.cmd.tabnew()
-		if statusline.enabled("diff") then
-			vim.wo.statusline = vim.go.statusline
-		end
+		vim.wo.statusline = vim.go.statusline
 	end
 
 	vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(tabpage) } })
@@ -99,9 +97,7 @@ local function open_command(session, command)
 	local opened, err = pcall(function()
 		vim.bo.bufhidden = "wipe"
 		vim.bo.buflisted = false
-		if statusline.enabled("diff") then
-			vim.wo.statusline = vim.go.statusline
-		end
+		vim.wo.statusline = vim.go.statusline
 		vim.wo.statuscolumn = vim.go.statuscolumn
 		vim.wo.winbar = vim.go.winbar
 
@@ -669,9 +665,7 @@ function Viewer:open_file()
 
 	vim.cmd.tabedit({ args = { path } })
 	local options = vim.wo[0][0]
-	if statusline.enabled("diff") then
-		options.statusline = vim.go.statusline
-	end
+	options.statusline = vim.go.statusline
 	options.winbar = vim.go.winbar
 	options.winhighlight = vim.go.winhighlight
 end

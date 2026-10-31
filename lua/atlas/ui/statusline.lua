@@ -47,7 +47,7 @@ local cached_version = nil
 local Statusline = {}
 Statusline.__index = Statusline
 
----@param context "atlas"|"diff"|nil
+---@param context AtlasStatuslineContext|nil
 local function redraw(context)
 	if M.enabled(context) then
 		vim.cmd("redrawstatus")
@@ -286,10 +286,15 @@ local function notice_style(level)
 	return icons.get(icon_name), highlights[level] or "AtlasFooterText"
 end
 
----@param context "atlas"|"diff"|nil
+---@param context AtlasStatuslineContext|nil
+---@param win integer|nil
 ---@return boolean
-function M.enabled(context)
-	return config.statusline_enabled(context or "atlas")
+function M.enabled(context, win)
+	win = win or vim.api.nvim_get_current_win()
+	if not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+	return config.statusline_enabled(context or "atlas", vim.api.nvim_win_get_buf(win), win)
 end
 
 ---@param options AtlasStatuslineOptions|nil
@@ -342,7 +347,7 @@ end
 
 ---@param win integer|nil
 function Statusline:attach(win)
-	if not M.enabled(self.options.context) or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
+	if not M.enabled(self.options.context, win) or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 	instances[self.id] = self
@@ -355,7 +360,7 @@ end
 ---@return boolean
 function Statusline:is_attached(win)
 	win = win or vim.api.nvim_get_current_win()
-	return M.enabled(self.options.context)
+	return M.enabled(self.options.context, win)
 		and not self.disposed
 		and vim.api.nvim_win_is_valid(win)
 		and vim.api.nvim_get_option_value("statusline", { win = win }) == self.expression
@@ -543,7 +548,7 @@ vim.api.nvim_create_autocmd("OptionSet", {
 	callback = function()
 		local win = vim.api.nvim_get_current_win()
 		local instance = windows[win]
-		if not instance or not M.enabled(instance.options.context) or instance:is_attached(win) then
+		if not instance or not M.enabled(instance.options.context, win) or instance:is_attached(win) then
 			return
 		end
 
