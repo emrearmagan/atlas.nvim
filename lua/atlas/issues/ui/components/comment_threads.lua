@@ -1,7 +1,6 @@
 local M = {}
 
 local threads = require("atlas.ui.components.threads")
-local reactions = require("atlas.ui.shared.reactions")
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -15,18 +14,10 @@ local function comment_item(comment)
 		content = "(empty comment)"
 	end
 
-	local footer_items = {}
-	if not deleted then
-		local reaction_text, reaction_highlights = reactions.format(comment.reactions)
-		if reaction_text ~= "" then
-			table.insert(footer_items, { text = reaction_text, highlights = reaction_highlights })
-		end
-	end
-
 	local author = helper.person_name(comment.author)
 	local author_hl = helper.person_hl(author)
 	local user_icon = icons.get("user")
-	return {
+	local item = {
 		icon = user_icon,
 		icon_hl = author_hl,
 		author = author,
@@ -35,11 +26,16 @@ local function comment_item(comment)
 		right_text = { { utils.relative_time(comment.created_at), "AtlasTextMuted" } },
 		content = content,
 		markdown = not deleted,
-		footer_items = footer_items,
+		footer_items = {},
 		children = {},
 		line_map = { comment = comment, entity_kind = "comment" },
 		meta = { deleted = deleted },
 	}
+
+	if not deleted then
+		item.reactions = comment.reactions
+	end
+	return item
 end
 
 ---@param padding_x integer

@@ -1,5 +1,6 @@
 local resolver = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
+local providers = require("atlas.providers")
 
 local M = {}
 
@@ -150,6 +151,20 @@ function M.setup(state, callbacks)
 				dispatch("add_task", entry)
 			end
 		end)
+
+		local pr = state.session.source.pr
+		---@cast pr PullRequest
+		local provider = providers.load(pr.provider, "pulls")
+		---@cast provider PullsProvider
+		local comments = provider.capabilities.comments
+		if comments and comments.reactions then
+			add(items, "ui.comments.react", "Add reaction", 37, function()
+				local entry = current(state)
+				if entry and entry.comment and not entry.comment.is_task then
+					dispatch("react", entry)
+				end
+			end)
+		end
 	end
 
 	add(items, "ui.comments.edit", "Edit review item", 36, function()

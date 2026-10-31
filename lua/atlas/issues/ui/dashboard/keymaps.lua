@@ -83,7 +83,6 @@ local function dashboard_items(buf)
 		item("ui.help", {
 			desc = "Toggle this help popup",
 			index = 100,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				help.toggle({ buffer = buf })
 			end,
@@ -94,7 +93,6 @@ local function dashboard_items(buf)
 		item("ui.close", {
 			desc = "Close Atlas window",
 			index = 101,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				if not help.is_open() then
 					window.close()
@@ -115,7 +113,6 @@ local function dashboard_items(buf)
 		item("ui.next_panel_tab", {
 			desc = "Next panel tab",
 			index = 11,
-			opts = { nowait = true },
 			callback = dashboard.next_detail_tab,
 		})
 	)
@@ -124,7 +121,6 @@ local function dashboard_items(buf)
 		item("ui.previous_panel_tab", {
 			desc = "Previous panel tab",
 			index = 10,
-			opts = { nowait = true },
 			callback = dashboard.prev_detail_tab,
 		})
 	)
@@ -295,7 +291,6 @@ function M.register(buf, views)
 		item("ui.show_details", {
 			desc = "Show issue details",
 			index = 3,
-			opts = { nowait = true },
 			callback = function()
 				controller.show_issue_details(buf)
 			end,
@@ -354,7 +349,6 @@ function M.register(buf, views)
 		item("ui.copy_id", {
 			desc = "Copy issue key",
 			index = 8,
-			opts = { nowait = true },
 			callback = run_with_issue("copy_issue_key"),
 		})
 	)
@@ -364,7 +358,6 @@ function M.register(buf, views)
 		item("ui.copy_url", {
 			desc = "Copy issue URL",
 			index = 9,
-			opts = { nowait = true },
 			callback = run_with_issue("copy_issue_url"),
 		})
 	)
@@ -418,7 +411,6 @@ function M.register(buf, views)
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
 			index = 7,
-			opts = { nowait = true },
 			callback = run_with_issue("browse_issue"),
 		})
 	)
@@ -428,7 +420,6 @@ function M.register(buf, views)
 		item("ui.open_references", {
 			desc = "Open references",
 			index = 11,
-			opts = { nowait = true, silent = true },
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
@@ -471,6 +462,9 @@ function M.register(buf, views)
 		{ group = "Custom", items = custom, index = 3 },
 	}
 	for _, registration in ipairs(registrations[buf]) do
+		for _, map_item in ipairs(registration.items) do
+			map_item.opts = vim.tbl_extend("force", { nowait = true }, map_item.opts or {})
+		end
 		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
 	end
 	navigation.attach(buf)

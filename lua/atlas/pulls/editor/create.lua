@@ -297,14 +297,14 @@ end
 local function open_editor(state, content)
 	local form_keymaps = {
 		{
-			key = "gb",
+			key = keymaps.resolve("editor.base"),
 			desc = "base",
 			action = function(editor)
 				select_base(state, editor)
 			end,
 		},
 		{
-			key = "gD",
+			key = keymaps.resolve("editor.draft"),
 			desc = "draft",
 			action = function(editor)
 				if state.submitting then
@@ -317,7 +317,7 @@ local function open_editor(state, content)
 	}
 	if state.write.fetch_reviewer_candidates then
 		table.insert(form_keymaps, 2, {
-			key = "gr",
+			key = keymaps.resolve("editor.reviewers"),
 			desc = "reviewers",
 			action = function(editor)
 				select_reviewers(state, editor)

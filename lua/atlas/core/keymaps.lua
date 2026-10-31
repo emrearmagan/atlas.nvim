@@ -159,11 +159,24 @@ local config = require("atlas.config")
 ---@field edit_issue? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
 
+---@class AtlasEditorKeymaps
+---@field assignees? AtlasKeymapValue
+---@field labels? AtlasKeymapValue
+---@field milestone? AtlasKeymapValue
+---@field reporter? AtlasKeymapValue
+---@field reviewers? AtlasKeymapValue
+---@field base? AtlasKeymapValue
+---@field draft? AtlasKeymapValue
+---@field issue_type? AtlasKeymapValue
+---@field fields? AtlasKeymapValue
+---@field templates? AtlasKeymapValue
+
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
 ---@field picker? AtlasPickerKeymaps
 ---@field pulls? AtlasPullsKeymaps
 ---@field issues? AtlasIssuesKeymaps
+---@field editor? AtlasEditorKeymaps
 
 ---@alias AtlasKeymapActionId
 ---| "ui.next_item"
@@ -269,6 +282,16 @@ local config = require("atlas.config")
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
 ---| "issues.create_issue"
+---| "editor.assignees"
+---| "editor.labels"
+---| "editor.milestone"
+---| "editor.reporter"
+---| "editor.reviewers"
+---| "editor.base"
+---| "editor.draft"
+---| "editor.issue_type"
+---| "editor.fields"
+---| "editor.templates"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil
@@ -346,6 +369,7 @@ function M.validate()
 		{ "ui.previous_panel_tab", "pulls.pipelines.previous_job" },
 		{ "ui.comments.reply", "issues.create_issue" },
 		{ "ui.comments.react", "issues.change_reporter" },
+		{ "editor.reporter", "editor.reviewers" },
 	}
 
 	local function conflict_allowed(actions)
@@ -441,6 +465,13 @@ function M.validate()
 			"pulls.review.comment_templates",
 		})),
 		issues = conflicts_for(actions_for({ "ui", "issues" })),
+		editor = conflicts_for(vim.list_extend(actions_for({ "editor" }), {
+			"ui.submit",
+			"ui.close",
+			"ui.help",
+			"ui.toggle_description_mode",
+			"pulls.open_diff",
+		})),
 		notifications = conflicts_for({
 			"ui.notifications.mark_read",
 			"ui.notifications.mark_done",

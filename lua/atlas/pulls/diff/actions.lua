@@ -8,6 +8,7 @@ local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
+local reactions = require("atlas.ui.shared.reactions")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -18,6 +19,7 @@ local M = {}
 ---| "edit_comment"
 ---| "edit_review"
 ---| "delete_comment"
+---| "react"
 ---| "toggle_task"
 ---| "toggle_resolved"
 ---| "start_review"
@@ -409,6 +411,43 @@ M.toggle_note_resolved = {
 		local message = resolved and "Note resolved" or "Note reopened"
 		notify.success(message, { timeout = 1200 })
 		on_done({ changed_pr = false }, nil)
+		return true
+	end,
+}
+
+---@param context AtlasDiffActionContext
+---@return AtlasReactionsCapability|nil
+local function reactions_capability(context)
+	local pr = context.session.source.pr
+	local provider = pr and providers.load(pr.provider, "pulls")
+	---@cast provider PullsProvider|nil
+	local comments = provider and provider.capabilities.comments
+	return comments and comments.reactions
+end
+
+---@type AtlasDiffAction
+M.react = {
+	id = "react",
+	label = "Add reaction",
+	is_available = function(context)
+		if not reactions_capability(context) then
+			return false, "Reactions are unavailable"
+		end
+		local comment = context.comment
+		return comment ~= nil and not comment.deleted and not comment.is_task, "Select a comment"
+	end,
+	run = function(context, on_done)
+		local session = context.session
+		local capability = assert(reactions_capability(context))
+		reactions.pick(capability, assert(session.source.pr), assert(context.comment), function()
+			return not session.closed
+		end, function()
+			if context.on_submit then
+				context.on_submit()
+			end
+
+			on_done({ changed_pr = false }, nil)
+		end)
 		return true
 	end,
 }

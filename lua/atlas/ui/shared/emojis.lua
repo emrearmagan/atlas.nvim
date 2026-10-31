@@ -36,6 +36,7 @@ local GLYPHS = {
 	mega = "",
 	speech_balloon = "",
 	ballot_box = "",
+	arrow_up = "",
 }
 
 local FALLBACK = "󰼇"

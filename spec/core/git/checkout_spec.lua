@@ -82,7 +82,7 @@ describe("core.git.checkout", function()
 
 	describe("mapped pull request workflows", function()
 		local original_options, original_isdirectory, original_git
-		local pending, cancelled, checked_commits, checked_out, pr
+		local pending, pending_root, current_root, cancelled, checked_commits, checked_out, pr
 		local cases = {
 			{ provider = "github", host = "github.com", repo = "owner/repo", path = "pull/1" },
 			{ provider = "gitlab", host = "gitlab.com", repo = "group/subgroup/repo", path = "-/merge_requests/1" },
@@ -101,7 +101,8 @@ describe("core.git.checkout", function()
 
 		before_each(function()
 			original_options, original_isdirectory = config.options, vim.fn.isdirectory
-			pending, cancelled, checked_commits, checked_out = nil, false, false, false
+			pending, pending_root, current_root, cancelled, checked_commits, checked_out =
+				nil, nil, nil, false, false, false
 			config.options = {
 				providers = {
 					github = { hostname = "github.com" },
@@ -118,8 +119,10 @@ describe("core.git.checkout", function()
 			-- Keep the real remote lookup and provider resolvers; finish Git asynchronously.
 			local stubs = {
 				run = function(args, _, done)
-					assert.same({ "-C", "/mapped", "remote", "get-url", "origin" }, args)
-					pending = done
+					local root = args[2]
+					assert.is_true(root == "/mapped" or (current_root ~= nil and root == current_root))
+					assert.same({ "-C", root, "remote", "get-url", "origin" }, args)
+					pending, pending_root = done, root
 					return {
 						cancel = function()
 							cancelled = true
@@ -127,7 +130,11 @@ describe("core.git.checkout", function()
 					}
 				end,
 				repo_root = function(root, done)
-					done(root == "/mapped" and root or nil)
+					if root == nil then
+						done(current_root)
+					else
+						done(root == "/mapped" and root or nil)
+					end
 				end,
 				check_commits = function(root, revisions, done)
 					assert.equal("/mapped", root)
@@ -187,6 +194,34 @@ describe("core.git.checkout", function()
 			assert.is_nil(result)
 			assert.equal("mapped repository does not match the pull request remote: /mapped", failure)
 			assert.is_false(checked_out)
+		end)
+
+		it("checks out a PR in the current matching worktree before the configured mapping", function()
+			current_root = "/worktree"
+			local result, failure
+			checkout.checkout_pr(pr, function(value, err)
+				result, failure = value, err
+			end)
+			assert.equal("/worktree", pending_root)
+			complete_remote("https://github.com/owner/repo.git")
+			assert.is_nil(failure)
+			assert.same({ repo_path = "/worktree", local_branch = "feature" }, result)
+			assert.same({ repo_path = "/worktree", local_branch = "feature" }, checked_out)
+		end)
+
+		it("falls back to the configured mapping when the current checkout has another remote", function()
+			current_root = "/other"
+			local result, failure
+			checkout.checkout_pr(pr, function(value, err)
+				result, failure = value, err
+			end)
+			assert.equal("/other", pending_root)
+			complete_remote("https://gitlab.com/owner/repo.git")
+			assert.equal("/mapped", pending_root)
+			complete_remote("https://github.com/owner/repo.git")
+			assert.is_nil(failure)
+			assert.same({ repo_path = "/mapped", local_branch = "feature" }, result)
+			assert.same({ repo_path = "/mapped", local_branch = "feature" }, checked_out)
 		end)
 
 		it("stops a cancelled diff before fetching or opening the mapped repository", function()

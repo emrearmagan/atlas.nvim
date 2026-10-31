@@ -92,7 +92,7 @@ local function restore_options()
 	end
 	statusline.detach(win)
 	for name, value in pairs(state.options) do
-		if name ~= "statusline" or statusline.enabled() then
+		if name ~= "statusline" or statusline.enabled("atlas", win) then
 			set_option(win, name, value)
 		end
 	end

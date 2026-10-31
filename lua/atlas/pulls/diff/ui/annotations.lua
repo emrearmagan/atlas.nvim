@@ -501,6 +501,8 @@ function M.open(owner, pr, path, items, on_action)
 	---@cast provider PullsProvider|nil
 	local tasks = provider and provider.capabilities.tasks
 	local can_add_task = tasks and tasks.add_task ~= nil
+	local comments = provider and provider.capabilities.comments
+	local can_react = comments and comments.reactions ~= nil
 
 	local keys = {
 		close = keymaps.resolve("ui.close"),
@@ -508,6 +510,7 @@ function M.open(owner, pr, path, items, on_action)
 		add_task = can_add_task and keymaps.resolve("pulls.review.add_task") or nil,
 		edit = keymaps.resolve("ui.comments.edit"),
 		delete = keymaps.resolve("ui.delete"),
+		react = can_react and keymaps.resolve("ui.comments.react") or nil,
 		toggle_resolved = keymaps.resolve("pulls.review.toggle_resolved"),
 	}
 	local labels = {}
@@ -650,6 +653,7 @@ function M.open(owner, pr, path, items, on_action)
 	map(keys.add_task, action("add_task"))
 	map(keys.edit, action("edit_comment"))
 	map(keys.delete, action("delete_comment"))
+	map(keys.react, action("react"))
 	map(keys.toggle_resolved, action("toggle_resolved"))
 end
 

@@ -15,6 +15,7 @@ local request_scope = require("atlas.core.requests")
 ---@field details_loading boolean
 ---@field links { items: AtlasRelatedItem[], loading: boolean, error: string|nil }|nil
 ---@field issue_loading boolean
+---@field issue_error string|nil
 ---@field requests AtlasRequestScope
 ---@field spinner_timer uv.uv_timer_t|nil
 local M = {
@@ -30,6 +31,7 @@ local M = {
 	line_map = {},
 	details_loading = false,
 	issue_loading = false,
+	issue_error = nil,
 	requests = request_scope.new(),
 	spinner_timer = nil,
 }
@@ -58,6 +60,7 @@ function M.reset()
 	M.details_loading = false
 	M.links = nil
 	M.issue_loading = false
+	M.issue_error = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 	M.spinner_timer = nil

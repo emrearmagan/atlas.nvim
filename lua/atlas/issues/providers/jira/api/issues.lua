@@ -187,7 +187,7 @@ function M.fetch_issue(ref, opts, callback)
 	end
 
 	local project_key = issue_key:match("^([^-]+)-")
-	local configured = config.options.issues.jira.project_config[project_key] or {}
+	local configured = (config.options.issues.jira.project_config[project_key] or {}).fields or {}
 	local extra_fields = custom_field_ids(configured)
 	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(extra_fields), ","))
 
@@ -216,20 +216,45 @@ function M.fetch_by_refs(refs, opts, on_done)
 		return nil
 	end
 
-	local quoted = {}
-	for _, ref in ipairs(refs) do
-		table.insert(quoted, string.format('"%s"', ref.key:gsub('"', '\\"')))
+	local keys = vim.tbl_map(function(ref)
+		return ref.key
+	end, refs)
+	local cache_key = "jira:issues:" .. table.concat(keys, ",")
+	if opts.force_refresh then
+		service.clear_memory_cache()
+	else
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
-	return M.search_issues("key in (" .. table.concat(quoted, ",") .. ")", function(page, err)
-		if err or page == nil then
+	local story_points_field = config.options.issues.jira.project_config.story_points_field
+	local fields = search_fields(story_points_field)
+	local endpoint = "/issue/bulkfetch"
+	local data = { issueIdsOrKeys = keys, fields = fields }
+	if service.is_server() then
+		local quoted = {}
+		for _, key in ipairs(keys) do
+			table.insert(quoted, string.format('"%s"', key:gsub('"', '\\"')))
+		end
+		endpoint = "/search"
+		data = { jql = "key in (" .. table.concat(quoted, ",") .. ")", fields = fields, maxResults = #keys }
+	end
+
+	return service.request("POST", endpoint, data, function(result, err)
+		if err or not result then
 			on_done({}, err or "Failed to fetch issues")
 			return
 		end
-		on_done(page.items, nil)
+
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
+		service.set_memory_cache(cache_key, items)
+		on_done(items, nil)
 	end, {
-		force_refresh = opts.force_refresh == true,
-		pagelen = #refs,
+		action = "Fetch issues",
+		keys = table.concat(keys, ","),
 	})
 end
 
@@ -380,7 +405,7 @@ end
 ---@param project_key string
 ---@param callback fun(issue_types: IssueType[]|nil, err: string|nil)
 ---@return AtlasRequestScope|nil
-function M.get_create_meta(project_key, callback)
+function M.get_issue_types(project_key, callback)
 	if project_key == "" then
 		callback(nil, "Missing project key")
 		return nil
@@ -396,7 +421,7 @@ function M.get_create_meta(project_key, callback)
 				string.format("%s?startAt=%d&maxResults=100", endpoint, start_at),
 				nil,
 				done,
-				{ action = "Fetch create metadata", project_key = project_key }
+				{ action = "Fetch issue types", project_key = project_key }
 			)
 		end, function(result, err)
 			if err or not result then
@@ -416,6 +441,118 @@ function M.get_create_meta(project_key, callback)
 	end
 	fetch(0)
 	return requests
+end
+
+---@param project_key string
+---@param issue_type_id string
+---@param callback fun(fields: table<string, JiraMetaField>|nil, err: string|nil)
+---@return AtlasRequestScope|nil
+function M.get_create_fields(project_key, issue_type_id, callback)
+	local endpoint =
+		string.format("/issue/createmeta/%s/issuetypes/%s", url_encode(project_key), url_encode(issue_type_id))
+	local requests = request_scope.new()
+	local fields = {}
+	local function fetch(start_at)
+		requests.run(function(done)
+			return service.request(
+				"GET",
+				string.format("%s?startAt=%d&maxResults=100", endpoint, start_at),
+				nil,
+				done,
+				{ action = "Fetch create fields", project_key = project_key, issue_type_id = issue_type_id }
+			)
+		end, function(result, err)
+			if err or not result then
+				callback(nil, err or "Empty response")
+				return
+			end
+
+			local raw_fields = (service.is_server() and result.values or result.fields) or {}
+			for _, raw in ipairs(raw_fields) do
+				fields[raw.fieldId] = normalizer.to_meta_field(raw, raw.defaultValue)
+			end
+			local next_start = start_at + #raw_fields
+			if #raw_fields > 0 and result.isLast ~= true and next_start < result.total then
+				fetch(next_start)
+			else
+				callback(fields, nil)
+			end
+		end)
+	end
+	fetch(0)
+	return requests
+end
+
+---@param project_key string
+---@param callback fun(sprints: { id: string, name: string }[]|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.get_sprints(project_key, callback)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request(
+			"GET",
+			"/rest/agile/1.0/board?type=scrum,simple&projectKeyOrId=" .. url_encode(project_key),
+			nil,
+			done,
+			{ action = "Fetch boards", project_key = project_key }
+		)
+	end, function(boards, err)
+		-- Just the first board for now. Company-managed projects could have more I guess, but one has been enough so far (for me :))
+		local board = boards and (boards.values or {})[1]
+		if err or not boards then
+			callback(nil, err or "Empty response")
+			return
+		elseif not board then
+			callback({}, nil)
+			return
+		end
+
+		requests.run(function(done)
+			return service.request(
+				"GET",
+				string.format("/rest/agile/1.0/board/%s/sprint?state=active,future", board.id),
+				nil,
+				done,
+				{ action = "Fetch sprints", board_id = board.id }
+			)
+		end, function(sprints, sprints_err)
+			if sprints_err or not sprints then
+				callback(nil, sprints_err or "Empty response")
+				return
+			end
+			callback(
+				vim.tbl_map(function(sprint)
+					return { id = tostring(sprint.id), name = tostring(sprint.name) }
+				end, sprints.values or {}),
+				nil
+			)
+		end)
+	end)
+	return requests
+end
+
+---@param issue_key string
+---@param callback fun(fields: table<string, JiraMetaField>|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.get_edit_fields(issue_key, callback)
+	local endpoint = string.format("/issue/%s?expand=editmeta&fields=*all", issue_key)
+
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or not result then
+			callback(nil, err or "Empty response")
+			return
+		end
+
+		local values = result.fields or {}
+		local fields = {}
+		for field_id, raw in pairs((result.editmeta or {}).fields or {}) do
+			fields[field_id] = normalizer.to_meta_field(raw, values[field_id])
+		end
+		callback(fields, nil)
+	end, {
+		action = "Fetch edit fields",
+		issue_key = issue_key,
+	})
 end
 
 ---@param opts { project: string|nil, issue_key: string|nil }

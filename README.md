@@ -301,10 +301,14 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    -- Set either to false to keep your existing statusline.
     statusline = {
-      atlas = true, -- Dashboards, details, and other non-diff Atlas views.
-      diff = true, -- Diff and review views.
+      -- false keeps your existing statusline. A function(buf, win, context) decides per window;
+      -- `context` is "atlas" for dashboards/details and "diff" for diff views.
+      enable = true,
+      -- For example, keep your statusline in Atlas detail views:
+      -- enable = function(buf, win, context)
+      --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
+      -- end,
     },
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
@@ -441,6 +445,7 @@ pulls = {
   },
   repo_config = {
     -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- PR checkout prefers the matching checkout or worktree Atlas is run from, then falls back here.
     -- Diffs of other repositories use a clone in the cache, removed after 30 days without a review.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
@@ -676,7 +681,7 @@ issues = {
     project_config = {
       -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
       story_points_field = "customfield_10016",
-      -- Override issue type styles by name (case-insensitive).
+      -- Override issue type styles by name (lowercase).
       issue_types = {
         bug = { icon = "" },
         maintenance = { icon = "", hl_group = "AtlasTextWarning" },
@@ -691,26 +696,60 @@ issues = {
         ["Blocked"] = "",
       },
 
-      -- Custom fields to display per project; replace KAN with your project key.
-      KAN = {
-        customfield_10003 = {
-          name = "Approvers",
-          format = function(value)
-            if type(value) ~= "table" or #value == 0 then
-              return nil -- nil hides the field
-            end
-            return table.concat(value, ", ")
-          end,
-          hl_group = "AtlasChipActive",
-          display = "chip", -- "chip" or "table"
-        },
-      },
+      -- Fields and defaults per project; see "Project fields" below.
+      KAN = { ... },
     },
   },
 },
 ```
 
 <img alt="jira" src="https://github.com/user-attachments/assets/5268d7d7-b16d-4f1d-9650-87db31bf5a2d" />
+
+**Project fields**
+
+Custom fields to display go under `fields` in the project's entry, keyed by Jira field ID. Replace `KAN` with your project key.
+
+```lua
+KAN = {
+  fields = {
+    customfield_10003 = {
+      name = "Approvers", -- the field's label
+      format = function(value) -- what the detail panel shows
+        if type(value) ~= "table" or #value == 0 then
+          return nil -- nil hides the field
+        end
+        return table.concat(value, ", ")
+      end,
+      hl_group = "AtlasChipActive",
+      display = "chip", -- "chip" or "table"
+    },
+  },
+  -- Pre-fills new issues, with values as Jira shows them.
+  defaults = {
+    issue_type = "Story",
+    fields = {
+      priority = "High",
+      labels = { "backend" },
+      components = { "Backend", "Frontend" },
+      customfield_10050 = "Platform",
+    },
+  },
+},
+```
+
+To find out which custom fields your project has, expand the field names of any issue: `https://your-site.atlassian.net/rest/api/3/issue/KAN-1?expand=names`. `names` maps each field ID to its name, and `fields` holds the value `format` receives.
+
+If you came here to replace the browser with this plugin, here's a curl for you:
+
+```sh
+curl -s -u "you@example.com:your_jira_api_token" \
+  "https://your-site.atlassian.net/rest/api/3/issue/KAN-1?expand=names" \
+  | jq .names
+```
+
+Once you have the ID, use `jq .fields.customfield_10003` to see the value `format` receives.
+
+On Jira Server/Data Center, use `/rest/api/2/`, and with bearer auth `-H "Authorization: Bearer your_jira_api_token"`.
 
 </details>
 
@@ -885,6 +924,18 @@ keymaps = {
     change_reporter = "gr",
     edit_issue = "ge",
     create_issue = "c",
+  },
+  editor = {
+    assignees = "ga",
+    labels = "gl", -- GitHub and GitLab only.
+    milestone = "gm", -- GitHub and GitLab only.
+    reporter = "gr", -- Jira only.
+    reviewers = "gr", -- Pull requests only.
+    base = "gb", -- Pull requests only.
+    draft = "gD", -- Pull requests only.
+    issue_type = "gt", -- Jira only.
+    fields = "gf", -- Jira only.
+    templates = "gT",
   },
   pulls = {
     open_diff = "gd",
