@@ -731,15 +731,9 @@ function M.update_pr(pr, opts, on_done)
 	local context = { action = "Update PR", repo = pr.repo_full_name, number = pr.id }
 	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
 	for _, field in ipairs({ "title", "body", "base" }) do
-		local value = opts[field]
-		-- Sending baseRefName is rejected for stacked PRs, even when unchanged,
-		-- so only pass --base when the target branch actually changed.
-		if field == "base" and value ~= nil and pr.destination and pr.destination.branch == value then
-			value = nil
-		end
-		if value ~= nil then
+		if opts[field] ~= nil then
 			args[#args + 1] = "--" .. field
-			args[#args + 1] = value
+			args[#args + 1] = opts[field]
 		end
 	end
 	if #args > 5 then

@@ -46,32 +46,6 @@ describe("github pull request updates", function()
 		assert.equal(3, #calls)
 	end)
 
-	it("only passes --base when the target branch changed", function()
-		github_client.install({
-			gh = function(args, callback)
-				table.insert(calls, args)
-				callback(nil, nil)
-			end,
-		})
-		local api = fresh_module()
-		local pr = { id = 42, repo_full_name = "owner/repo", destination = { branch = "xyz" } }
-
-		local ok, err
-		api.update_pr(pr, { title = "New title", base = "xyz" }, function(success, e)
-			ok, err = success, e
-		end)
-		assert.is_true(ok)
-		assert.is_nil(err)
-		assert.same({ "pr", "edit", "42", "--repo", "owner/repo", "--title", "New title" }, calls[1])
-
-		api.update_pr(pr, { title = "New title", base = "main" }, function(success, e)
-			ok, err = success, e
-		end)
-		assert.is_true(ok)
-		assert.is_nil(err)
-		assert.same({ "pr", "edit", "42", "--repo", "owner/repo", "--title", "New title", "--base", "main" }, calls[2])
-	end)
-
 	it("passes merge messages to gh", function()
 		github_client.install({
 			gh = function(args, callback)

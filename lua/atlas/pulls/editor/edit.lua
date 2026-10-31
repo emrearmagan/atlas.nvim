@@ -38,9 +38,13 @@ local function sorted_values(items, key)
 	return values
 end
 
----@param pr PullRequest
+---@param state PullsEditPRState
 ---@return boolean
-local function base_locked(pr)
+local function is_stacked(state)
+	if state.provider.id ~= "github" then
+		return false
+	end
+	local pr = state.pr
 	---@cast pr GitHubPullRequest
 	return github_stack.is_stacked(pr.stack)
 end
@@ -382,9 +386,8 @@ local function render_meta(state)
 	reviewers.loading = state.loading == "reviewers"
 
 	local base = { key = "Base:", value = state.base.branch, loading = state.loading == "base" }
-	if base_locked(pr) then
-		local suffix = " (stacked)"
-		base.value = base.value .. suffix
+	if is_stacked(state) then
+		base.value = base.value .. " (stacked)"
 		base.spans = { { start_col = #state.base.branch, end_col = #base.value, hl_group = "AtlasTextMuted" } }
 	end
 
@@ -426,7 +429,7 @@ local function open_editor(state)
 	local write = state.write
 	local form_keymaps = {}
 	if state.pr.state == "open" or state.pr.state == "draft" then
-		if state.provider.capabilities.repository and not base_locked(state.pr) then
+		if state.provider.capabilities.repository and not is_stacked(state) then
 			form_keymaps[#form_keymaps + 1] = {
 				key = "gb",
 				desc = "base",
