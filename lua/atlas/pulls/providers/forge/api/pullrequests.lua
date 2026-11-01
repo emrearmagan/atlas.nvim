@@ -4,10 +4,12 @@ local request_scope = require("atlas.core.requests")
 
 ---@param service ForgeService
 ---@param mapper ForgePullMapper
+---@return ForgePullRequestsApi
 local function new(service, mapper)
 	local provider = service.id
 	local provider_name = service.name
 	local invalid_repository = "Invalid " .. provider_name .. " repository"
+	---@class ForgePullRequestsApi
 	local M = {}
 
 	local function cache_scope()
@@ -129,8 +131,9 @@ local function new(service, mapper)
 			title = with_draft_state(title, opts.draft == true),
 			body = opts.body,
 		}
-		if provider == "gitea" then
-			payload.reviewers = reviewer_logins(opts.reviewers)
+		local reviewers = reviewer_logins(opts.reviewers)
+		if #reviewers > 0 then
+			payload.reviewers = reviewers
 			payload.team_reviewers = {}
 		end
 
@@ -140,16 +143,11 @@ local function new(service, mapper)
 				return
 			end
 			invalidate_list_cache()
-			local result = { id = raw.number, url = raw.html_url, message = "Pull request created" }
-			local warnings = {}
+			local message = "Pull request created"
 			if (raw.draft == true) ~= (opts.draft == true) then
-				table.insert(warnings, "draft state could not be applied (check draft_prefix)")
+				message = message .. "; draft state could not be applied (check draft_prefix)"
 			end
-			result.message = "Pull request created"
-			if #warnings > 0 then
-				result.message = result.message .. "; " .. table.concat(warnings, "; ")
-			end
-			on_done(result, nil)
+			on_done({ id = raw.number, url = raw.html_url, message = message }, nil)
 		end)
 	end
 
@@ -166,15 +164,7 @@ local function new(service, mapper)
 		pr.merge_base = updated.merge_base
 		pr.lines_added = updated.lines_added
 		pr.lines_removed = updated.lines_removed
-		if provider == "gitea" then
-			pr.updated_on = updated.updated_on
-		end
-	end
-
-	local function copy_gitea_mutation_metadata(pr, raw)
-		if provider == "gitea" then
-			copy_provider_metadata(pr, mapper.to_pull_request(raw))
-		end
+		pr.updated_on = updated.updated_on
 	end
 
 	local function list_cache_key(view, statuses, global, page, pagelen)
@@ -372,10 +362,6 @@ local function new(service, mapper)
 	---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 	---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 	function M.fetch_reviewer_candidates(opts, on_done)
-		if provider == "forgejo" and not opts.pr then
-			on_done({}, nil)
-			return nil
-		end
 		local endpoint = repo_endpoint(opts.repo_slug)
 		if not endpoint then
 			on_done(nil, invalid_repository)
@@ -655,7 +641,7 @@ local function new(service, mapper)
 						on_done(false, patch_err)
 						return
 					end
-					copy_gitea_mutation_metadata(pr, raw)
+					copy_provider_metadata(pr, mapper.to_pull_request(raw))
 					service.delete_memory_cache(detail_cache_key(pr))
 					invalidate_list_cache()
 					save_reviewers()

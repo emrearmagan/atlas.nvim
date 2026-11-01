@@ -1,8 +1,9 @@
+local mapper = require("atlas.issues.providers.forge.api.mapper")
+
 local M = {}
 
 ---@param service ForgeService
----@param mapper ForgeIssueMapper
-function M.new(service, mapper)
+function M.new(service)
 	local provider_name = service.name
 	local api = {}
 

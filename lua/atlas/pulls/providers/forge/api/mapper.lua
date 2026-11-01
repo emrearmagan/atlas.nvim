@@ -119,15 +119,13 @@ local function new(provider)
 			from = positive_line(raw.original_position),
 			to = positive_line(raw.position),
 		}
-		if provider == "forgejo" then
-			local extra_lines = json.nilify(raw.extra_lines_count) or 0
-			if extra_lines > 0 and lines.from then
-				lines.start_from = lines.from
-				lines.from = lines.from + extra_lines
-			elseif extra_lines > 0 and lines.to then
-				lines.start_to = lines.to
-				lines.to = lines.to + extra_lines
-			end
+		local extra_lines = json.nilify(raw.extra_lines_count) or 0
+		if extra_lines > 0 and lines.from then
+			lines.start_from = lines.from
+			lines.from = lines.from + extra_lines
+		elseif extra_lines > 0 and lines.to then
+			lines.start_to = lines.to
+			lines.to = lines.to + extra_lines
 		end
 		return lines
 	end
@@ -469,7 +467,7 @@ local function new(provider)
 			outdated = outdated,
 			url = json.nilify(raw.html_url),
 		}
-		if provider == "forgejo" and inline then
+		if inline then
 			local review_id = json.nilify(raw.pull_request_review_id) or (review and json.nilify(review.id)) or nil
 			comment.thread_id = review_id and tostring(review_id) or nil
 		end

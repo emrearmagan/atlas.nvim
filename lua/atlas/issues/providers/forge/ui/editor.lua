@@ -530,9 +530,7 @@ function M.new(service, api)
 				end
 				notify.clear()
 				local current = vim.tbl_extend("force", {}, issue)
-				if service.id == "gitea" then
-					current.content_version = details.content_version
-				end
+				current.content_version = details.content_version
 				open(
 					{ repo_slug = issue.repo_full_name, issue = current, details = details, on_done = on_done },
 					service,

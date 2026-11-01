@@ -72,13 +72,12 @@ local function external_pipeline(raw, index)
 		name = name ~= "" and name or "Commit status",
 		state = M.state(raw.status),
 		url = service.absolute_url(raw.target_url),
-		job_count = 0,
 		stages = {},
 	}
 end
 
 ---@param result table[]
----@param sha string
+---@param _sha string
 ---@param slug string|nil
 ---@return PullsPipeline[]
 function M.map(result, _sha, slug)
@@ -114,7 +113,7 @@ function M.map(result, _sha, slug)
 			end
 
 			table.insert(pipeline.stages[1].jobs, {
-				id = tostring(job_id or raw.id or string.format("summary:%s:%d", run_id, index)),
+				id = job_id or string.format("summary:%s:%s:%d", run_id, tostring(raw.id or context), index),
 				name = job_name or (context ~= "" and context or "Job"),
 				state = M.state(raw.status),
 				url = target_url,

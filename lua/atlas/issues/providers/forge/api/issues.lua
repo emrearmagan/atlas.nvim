@@ -1,4 +1,5 @@
 local json = require("atlas.core.json")
+local mapper = require("atlas.issues.providers.forge.api.mapper")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -48,9 +49,8 @@ local M = {}
 ---@field set_subscription fun(issue: GiteaIssue|ForgejoIssue, login: string, subscribe: boolean, on_done: fun(ok: boolean, err: string|nil)): ForgeRequestHandle|nil
 
 ---@param service ForgeService
----@param mapper ForgeIssueMapper
 ---@return ForgeIssuesApi
-function M.new(service, mapper)
+function M.new(service)
 	local provider_id = service.id
 	local provider_name = service.name
 	---@type ForgeIssuesApi
@@ -356,12 +356,9 @@ function M.new(service, mapper)
 	---@param changes ForgeIssuePatch
 	---@param on_done fun(issue: GiteaIssue|ForgejoIssue|nil, err: string|nil)
 	function api.update_issue(issue, changes, on_done)
-		local payload = changes
-		if provider_id == "gitea" then
-			---@cast issue GiteaIssue
-			payload = vim.tbl_extend("force", {}, changes)
-			payload.content_version = issue.content_version
-		end
+		---@cast issue GiteaIssue
+		local payload = vim.tbl_extend("force", {}, changes)
+		payload.content_version = issue.content_version
 		return update(issue, payload, on_done)
 	end
 
@@ -407,29 +404,27 @@ function M.new(service, mapper)
 		end)
 	end
 
-	if provider_id == "gitea" then
-		---@param issue GiteaIssue
-		---@param locked boolean
-		---@param reason string|nil
-		---@param on_done fun(ok: boolean, err: string|nil)
-		function api.set_locked(issue, locked, reason, on_done)
-			local endpoint, _, _, key = issue_endpoint(issue)
-			if not endpoint then
-				on_done(false, "Invalid Gitea issue key")
-				return nil
-			end
-			local body
-			if locked then
-				reason = vim.trim(reason or "")
-				body = reason ~= "" and { lock_reason = reason } or vim.empty_dict()
-			end
-			return service.request(locked and "PUT" or "DELETE", endpoint .. "/lock", body, function(_, err)
-				if not err then
-					clear_issue_cache(key)
-				end
-				on_done(err == nil, err)
-			end)
+	---@param issue GiteaIssue
+	---@param locked boolean
+	---@param reason string|nil
+	---@param on_done fun(ok: boolean, err: string|nil)
+	function api.set_locked(issue, locked, reason, on_done)
+		local endpoint, _, _, key = issue_endpoint(issue)
+		if not endpoint then
+			on_done(false, "Invalid " .. provider_name .. " issue key")
+			return nil
 		end
+		local body
+		if locked then
+			reason = vim.trim(reason or "")
+			body = reason ~= "" and { lock_reason = reason } or vim.empty_dict()
+		end
+		return service.request(locked and "PUT" or "DELETE", endpoint .. "/lock", body, function(_, err)
+			if not err then
+				clear_issue_cache(key)
+			end
+			on_done(err == nil, err)
+		end)
 	end
 
 	---@param issue GiteaIssue|ForgejoIssue

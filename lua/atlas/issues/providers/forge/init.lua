@@ -1,16 +1,18 @@
 local M = {}
 
+local comments_api = require("atlas.issues.providers.forge.api.comments")
 local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local query = require("atlas.issues.providers.forge.query")
+local timeline_api = require("atlas.issues.providers.forge.api.timeline")
 
 ---@param service ForgeService
----@param api table
+---@param issues ForgeIssuesApi
 ---@return table
-function M.new(service, api)
+function M.new(service, issues)
 	local provider_id = service.id
-	local issues = api.issues
-	local comments = api.comments
+	local comments = comments_api.new(service)
+	local timeline = timeline_api.new(service)
 
 	local function resolve_view(view, on_done)
 		if not view.current_repo then
@@ -53,7 +55,7 @@ function M.new(service, api)
 	end
 
 	local function fetch_conversation(issue, opts, on_done)
-		return api.timeline.list(issue, opts, function(result, err)
+		return timeline.list(issue, opts, function(result, err)
 			if err then
 				on_done(nil, err)
 				return

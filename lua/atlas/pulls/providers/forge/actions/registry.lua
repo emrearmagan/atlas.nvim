@@ -12,7 +12,7 @@ local M = {}
 ---@field find fun(id: string): AtlasPullAction|nil
 
 ---@param service ForgeService
----@param pullrequests table
+---@param pullrequests ForgePullRequestsApi
 ---@return ForgePullActionsRegistry
 function M.new(service, pullrequests)
 	local provider_id = service.id

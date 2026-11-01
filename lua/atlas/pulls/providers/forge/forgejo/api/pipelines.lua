@@ -1,6 +1,6 @@
-local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local api = require("atlas.pulls.providers.forge.forgejo.api")
 local service = require("atlas.providers.forge.forgejo.api")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local pullrequests = api.pullrequests
 local request_scope = require("atlas.core.requests")
 
@@ -8,7 +8,7 @@ local M = {}
 
 ---@param slug string|nil
 ---@param value string|nil
----@return string|nil run_number, string|nil run_url
+---@return string|nil run_number, string|nil run_url, string|nil job_id
 function M.actions_run(slug, value)
 	local owner, repo = tostring(slug or ""):match("^([^/]+)/([^/]+)$")
 	local url = service.absolute_url(value)
@@ -21,10 +21,11 @@ function M.actions_run(slug, value)
 		return nil, nil
 	end
 	local run_number, tail = url:sub(#prefix + 1):match("^(%d+)(.*)$")
-	if not run_number or (tail ~= "" and tail ~= "/" and not tail:match("^/jobs/%d+/?$")) then
+	local job_id = tail and tail:match("^/jobs/(%d+)/?$")
+	if not run_number or (tail ~= "" and tail ~= "/" and not job_id) then
 		return nil, nil
 	end
-	return run_number, prefix .. run_number
+	return run_number, prefix .. run_number, job_id
 end
 
 ---@param value string|nil
@@ -51,13 +52,11 @@ end
 ---@param index integer
 ---@return PullsPipeline
 local function external_pipeline(raw, index)
-	local context = tostring(raw.context or "")
-	local provider_id = tostring(raw.id or "")
-	local name = context ~= "" and context or tostring(raw.description or "")
-	local id = provider_id ~= "" and ("status:" .. provider_id)
-		or string.format("status:%s:%d", name ~= "" and name or "external", index)
+	local context = raw.context or ""
+	local id = tostring(raw.id or "")
+	local name = context ~= "" and context or (raw.description or "")
 	return {
-		id = id,
+		id = "status:" .. (id ~= "" and id or (context ~= "" and context or tostring(index))),
 		name = name ~= "" and name or "Commit status",
 		state = M.state(raw.status),
 		url = service.absolute_url(raw.target_url),
@@ -75,11 +74,11 @@ function M.map(result, _sha, slug)
 
 	for index, raw in ipairs(result) do
 		local target_url = service.absolute_url(raw.target_url)
-		local run_number, run_url = M.actions_run(slug, target_url)
+		local run_number, run_url, job_id = M.actions_run(slug, target_url)
 		if not run_number then
 			table.insert(pipelines, external_pipeline(raw, index))
 		else
-			local context = tostring(raw.context or "")
+			local context = raw.context or ""
 			local workflow, job_name = context:match("^(.-)%s+/%s+(.+)$")
 			local pipeline = actions_runs[run_number]
 			if not pipeline then
@@ -90,17 +89,19 @@ function M.map(result, _sha, slug)
 					url = run_url,
 					job_count = 0,
 					stages = {
-						{ name = nil, state = "UNKNOWN", jobs = {} },
+						{
+							name = nil,
+							state = "UNKNOWN",
+							jobs = {},
+						},
 					},
 				}
 				actions_runs[run_number] = pipeline
 				table.insert(pipelines, pipeline)
 			end
 
-			local job_id = target_url and target_url:match("/jobs/(%d+)")
-				or string.format("summary:%s:%s:%d", run_number, tostring(raw.id or context), index)
 			table.insert(pipeline.stages[1].jobs, {
-				id = job_id,
+				id = job_id or string.format("summary:%s:%s:%d", run_number, tostring(raw.id or context), index),
 				name = job_name or (context ~= "" and context or "Job"),
 				state = M.state(raw.status),
 				url = target_url,
@@ -110,8 +111,8 @@ function M.map(result, _sha, slug)
 
 	for _, pipeline in ipairs(pipelines) do
 		local stage = pipeline.stages[1]
-		if stage then
-			stage.state = #stage.jobs > 0 and pipeline_utils.aggregate_state(stage.jobs) or "UNKNOWN"
+		if stage and #stage.jobs > 0 then
+			stage.state = pipeline_utils.aggregate_state(stage.jobs)
 			pipeline.state = stage.state
 			pipeline.job_count = #stage.jobs
 		end
@@ -229,9 +230,10 @@ end
 ---@return string|nil
 local function repo_endpoint(context)
 	local owner, repo = context.repo_full_name:match("^([^/]+)/([^/]+)$")
-	if owner then
-		return string.format("/repos/%s/%s", service.url_encode(owner), service.url_encode(repo))
+	if not owner then
+		return nil
 	end
+	return string.format("/repos/%s/%s", service.url_encode(owner), service.url_encode(repo))
 end
 
 ---@param context PullsPipelineContext
@@ -336,14 +338,14 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local base = repo_endpoint(context)
-	local job_id = tostring(job.id)
-	if not base or not job_id:match("^%d+$") or not M.parse_run_number(context, pipeline) then
+	local job_id = tonumber(job.id)
+	if base == nil or M.parse_run_number(context, pipeline) == nil or job_id == nil then
 		on_done(nil, "Invalid Forgejo Actions job")
 		return nil
 	end
 	return service.request_text(
 		"GET",
-		string.format("%s/actions/jobs/%s/logs", base, job_id),
+		string.format("%s/actions/jobs/%d/logs", base, job_id),
 		function(raw, err, status)
 			on_done(raw and { raw = raw } or nil, err, status)
 		end
