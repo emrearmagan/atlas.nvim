@@ -360,7 +360,7 @@ function M.new(service, api)
 	register({
 		id = "close",
 		label = "Close Issue",
-		confirmation = true,
+		confirm = "Close this issue?",
 		icon = icons.get("close", "actions"),
 		is_available = function(ctx)
 			local ok, err = has_issue(ctx)
@@ -606,7 +606,7 @@ function M.new(service, api)
 		id = "delete_issue",
 		label = "Delete Issue",
 		icon = icons.get("delete", "actions"),
-		confirmation = true,
+		confirm = "Delete this issue?",
 		is_available = has_issue,
 		run = function(ctx, done)
 			local issue = assert(ctx.issue)

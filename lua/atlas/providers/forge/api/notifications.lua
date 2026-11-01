@@ -83,6 +83,16 @@ function M.new(service)
 	notifications.mark_read = mark_read
 	notifications.mark_done = mark_read
 
+	---@param notification AtlasNotification
+	---@return boolean
+	function notifications.open(notification)
+		if notification.url == nil or (notification.kind ~= "pr" and notification.kind ~= "issue") then
+			return false
+		end
+		require("atlas.commands.open").open(notification.url)
+		return true
+	end
+
 	return notifications
 end
 
