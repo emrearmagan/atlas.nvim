@@ -5,6 +5,7 @@ local parser = require("atlas.pulls.pipelines.bitbucket.parser")
 ---@type PullsPipelineBackend
 return {
 	fetch = api.fetch,
+	fetch_pipeline = api.fetch_pipeline,
 	fetch_history = api.fetch_history,
 	fetch_config = api.fetch_config,
 	fetch_job = api.fetch_job,

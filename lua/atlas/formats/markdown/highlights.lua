@@ -38,50 +38,56 @@ M.groups = {
 	table_border = "AtlasMarkdownTableBorder",
 }
 
-local function foreground(group)
-	return vim.api.nvim_get_hl(0, { name = group, link = false }).fg
+---@param name string
+---@return table
+local function resolved(name)
+	return vim.api.nvim_get_hl(0, { name = name, link = false, create = false })
+end
+
+---Use the foreground of a standard group, keeping the given attributes.
+---@param name string
+---@param opts table
+---@return table
+local function styled(name, opts)
+	opts.fg = resolved(name).fg
+	return opts
 end
 
 function M.setup()
-	local dark = vim.o.background == "dark"
-	local inline_bg = dark and "#2b2d3a" or "#e3e5e8"
-	local blue = foreground("Function")
-	local muted = foreground("Comment")
-
 	local groups = {
 		AtlasMarkdownStrong = { bold = true },
 		AtlasMarkdownEmphasis = { italic = true },
-		AtlasMarkdownStrike = { fg = muted, strikethrough = true },
-		AtlasMarkdownLink = { fg = blue, underline = true },
-		AtlasMarkdownImage = { fg = muted },
-		AtlasMarkdownInlineCode = { fg = foreground("Constant"), bg = inline_bg },
+		AtlasMarkdownStrike = { strikethrough = true },
+		AtlasMarkdownLink = styled("Function", { underline = true }),
+		AtlasMarkdownImage = styled("Comment", {}),
+		AtlasMarkdownInlineCode = { link = "AtlasCodeBackground" },
 		AtlasMarkdownComment = { link = "Comment" },
 
 		AtlasMarkdownHeading1 = { link = "Title" },
-		AtlasMarkdownHeading2 = { fg = foreground("Statement"), bold = true },
-		AtlasMarkdownHeading3 = { fg = foreground("String"), bold = true },
-		AtlasMarkdownHeading4 = { fg = foreground("Type"), bold = true },
-		AtlasMarkdownHeading5 = { fg = foreground("Constant"), bold = true, italic = true },
-		AtlasMarkdownHeading6 = { fg = foreground("Special"), italic = true },
+		AtlasMarkdownHeading2 = styled("Function", { bold = true }),
+		AtlasMarkdownHeading3 = styled("String", { bold = true }),
+		AtlasMarkdownHeading4 = styled("Type", { bold = true }),
+		AtlasMarkdownHeading5 = styled("Constant", { bold = true, italic = true }),
+		AtlasMarkdownHeading6 = styled("Special", { italic = true }),
 
-		AtlasMarkdownList = { fg = blue, bold = true },
-		AtlasMarkdownTaskDone = { fg = foreground("DiagnosticOk") },
-		AtlasMarkdownTaskTodo = { fg = muted },
+		AtlasMarkdownList = styled("Function", { bold = true }),
+		AtlasMarkdownTaskDone = { link = "DiagnosticOk" },
+		AtlasMarkdownTaskTodo = styled("Comment", {}),
 
-		AtlasMarkdownQuote = { fg = muted, italic = true },
+		AtlasMarkdownQuote = styled("Comment", { italic = true }),
 		AtlasMarkdownQuoteBar = { link = "Comment" },
 		AtlasMarkdownRule = { link = "NonText" },
 
 		AtlasMarkdownCode = { link = "AtlasCodeBackground" },
-		AtlasMarkdownCodeLabel = { fg = muted, italic = true },
+		AtlasMarkdownCodeLabel = styled("Comment", { italic = true }),
 
-		AtlasMarkdownNote = { fg = foreground("DiagnosticInfo"), bold = true },
-		AtlasMarkdownTip = { fg = foreground("DiagnosticOk"), bold = true },
-		AtlasMarkdownImportant = { fg = foreground("Statement"), bold = true },
-		AtlasMarkdownWarning = { fg = foreground("DiagnosticWarn"), bold = true },
-		AtlasMarkdownCaution = { fg = foreground("DiagnosticError"), bold = true },
+		AtlasMarkdownNote = styled("DiagnosticInfo", { bold = true }),
+		AtlasMarkdownTip = styled("DiagnosticOk", { bold = true }),
+		AtlasMarkdownImportant = styled("Statement", { bold = true }),
+		AtlasMarkdownWarning = styled("DiagnosticWarn", { bold = true }),
+		AtlasMarkdownCaution = styled("DiagnosticError", { bold = true }),
 
-		AtlasMarkdownTableHeader = { fg = blue, bold = true },
+		AtlasMarkdownTableHeader = styled("Function", { bold = true }),
 		AtlasMarkdownTableRow = { link = "AtlasCodeBackground" },
 		AtlasMarkdownTableBorder = { link = "NonText" },
 	}

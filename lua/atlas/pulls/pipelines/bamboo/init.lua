@@ -110,17 +110,16 @@ local function parse_pipeline(web_base, result, name)
 		number = tonumber(result.buildNumber or result.number) or tonumber(key:match("%-(%d+)$")),
 		commit = json.safe_str(result.vcsRevisionKey),
 		started_at = json.safe_str(result.buildStartedTime),
+		duration = tonumber(result.buildDurationInSeconds),
 		stages = {},
 	}
 end
 
 ---@param web_base string
 ---@param body table
----@return PullsPipelineStage[] stages
----@return integer job_count
+---@return PullsPipelineStage[]
 local function parse_stages(web_base, body)
 	local stages = {}
-	local job_count = 0
 	local raw_stages = (body.stages or {}).stage or {}
 	for _, stage in ipairs(raw_stages) do
 		local jobs = {}
@@ -128,14 +127,13 @@ local function parse_stages(web_base, body)
 		for _, result in ipairs(results) do
 			table.insert(jobs, parse_job(web_base, result))
 		end
-		job_count = job_count + #jobs
 		table.insert(stages, {
 			name = stage.name,
 			state = map_state(stage),
 			jobs = jobs,
 		})
 	end
-	return stages, job_count
+	return stages
 end
 
 ---@param opts { host: string, user: string, password: string }
@@ -183,7 +181,7 @@ function M.new(opts)
 			for key, value in pairs(parse_pipeline(web_base, body, pipeline.name)) do
 				pipeline[key] = value
 			end
-			pipeline.stages, pipeline.job_count = parse_stages(web_base, body)
+			pipeline.stages = parse_stages(web_base, body)
 			on_done(pipeline, nil)
 		end)
 	end
@@ -308,18 +306,22 @@ function M.new(opts)
 		return scope
 	end
 
+	---@param _context PullsPipelineContext
+	---@param pipeline PullsPipeline
+	---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
+	---@return { cancel: fun() }|nil
+	local function fetch_pipeline(_context, pipeline, on_done)
+		if not pipeline.id:match("^[%w%-_]+%-%d+$") then
+			on_done(pipeline, nil)
+			return nil
+		end
+		return fetch_result(vim.tbl_extend("force", {}, pipeline), on_done)
+	end
+
 	local function fetch(context, fetch_opts, on_done)
 		if context.provider ~= "bitbucket" then
 			on_done(nil, "The Bamboo backend currently supports Bitbucket only.")
 			return nil
-		end
-
-		local target = context.target
-		local pipeline = (fetch_opts and fetch_opts.pipeline) or (type(target) == "table" and target.stages and target)
-		if pipeline and pipeline.id:match("^[%w%-_]+%-%d+$") then
-			return fetch_result(vim.tbl_extend("force", {}, pipeline), function(result, err)
-				on_done(result and { result } or nil, err)
-			end)
 		end
 
 		local scope = requests.new()
@@ -457,6 +459,7 @@ function M.new(opts)
 
 	return {
 		fetch = fetch,
+		fetch_pipeline = fetch_pipeline,
 		fetch_history = fetch_history,
 		fetch_config = fetch_config,
 		fetch_job = fetch_job,

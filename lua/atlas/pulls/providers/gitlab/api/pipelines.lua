@@ -20,26 +20,44 @@ local PIPELINE_STATES = {
 	CANCELING = "INPROGRESS",
 }
 
-local JOB_FIELDS = [[
-  nodes { id name status webPath startedAt duration stage { name status } }
-  pageInfo { hasNextPage endCursor }
-]]
-
-local PIPELINE_FIELDS = [[
-  id name status path sha ref startedAt createdAt
-  project { fullPath ciConfigPathOrDefault }
-  stages(first:100) { nodes { name status } }
-  jobs(first:100,retried:false,jobKind:BUILD) {
-]] .. JOB_FIELDS .. [[
-  }
-]]
-
-local PIPELINES_QUERY = [[
+local MERGE_REQUEST_QUERY = [[
 query($path:ID!,$iid:String!){
   project(fullPath:$path){
     mergeRequest(iid:$iid){
-      head_pipeline:headPipeline {
-]] .. PIPELINE_FIELDS .. [[
+      headPipeline {
+        id iid name status source path sha ref startedAt createdAt duration
+        commit { title }
+        project { fullPath ciConfigPathOrDefault }
+        stages(first:100) { nodes { name status } }
+        jobs(first:100,retried:false) {
+          nodes {
+            id name kind status webPath startedAt duration stage { name status }
+            downstreamPipeline { id iid project { fullPath } }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+}
+]]
+
+local BRANCH_QUERY = [[
+query($path:ID!,$ref:String!){
+  project(fullPath:$path){
+    pipelines(ref:$ref,first:1) {
+      nodes {
+        id iid name status source path sha ref startedAt createdAt duration
+        commit { title }
+        project { fullPath ciConfigPathOrDefault }
+        stages(first:100) { nodes { name status } }
+        jobs(first:100,retried:false) {
+          nodes {
+            id name kind status webPath startedAt duration stage { name status }
+            downstreamPipeline { id iid project { fullPath } }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
       }
     }
   }
@@ -47,21 +65,65 @@ query($path:ID!,$iid:String!){
 ]]
 
 local PIPELINE_QUERY = [[
-query($path:ID!,$pipelineId:CiPipelineID!){
+query($path:ID!,$iid:ID!){
   project(fullPath:$path){
-    pipeline(id:$pipelineId) {
-]] .. PIPELINE_FIELDS .. [[
+    pipeline(iid:$iid) {
+      id iid name status source path sha ref startedAt createdAt duration
+      commit { title }
+      project { fullPath ciConfigPathOrDefault }
+      stages(first:100) { nodes { name status } }
+      jobs(first:100,retried:false) {
+        nodes {
+          id name kind status webPath startedAt duration stage { name status }
+          downstreamPipeline { id iid project { fullPath } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
     }
   }
 }
 ]]
 
 local JOBS_QUERY = [[
-query($path:ID!,$pipelineId:CiPipelineID!,$cursor:String!){
+query($path:ID!,$iid:ID!,$cursor:String!){
   project(fullPath:$path){
-    pipeline(id:$pipelineId) {
-      jobs(first:100,after:$cursor,retried:false,jobKind:BUILD) {
-]] .. JOB_FIELDS .. [[
+    pipeline(iid:$iid) {
+      jobs(first:100,after:$cursor,retried:false) {
+        nodes {
+          id name kind status webPath startedAt duration stage { name status }
+          downstreamPipeline { id iid project { fullPath } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+]]
+
+local BRANCH_HISTORY_QUERY = [[
+query($path:ID!,$ref:String!){
+  project(fullPath:$path){
+    pipelines(ref:$ref,first:30) {
+      nodes {
+        id iid name status source path sha ref startedAt createdAt duration
+        commit { title }
+        project { fullPath }
+      }
+    }
+  }
+}
+]]
+
+local MERGE_REQUEST_HISTORY_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      pipelines(first:30) {
+        nodes {
+          id iid name status source path sha ref startedAt createdAt duration
+          commit { title }
+          project { fullPath }
+        }
       }
     }
   }
@@ -89,26 +151,40 @@ local function web_url(path)
 end
 
 ---@param item table
----@param raw_jobs table[]
 ---@return GitLabPipeline
-local function parse_pipeline(item, raw_jobs)
+local function parse_pipeline(item)
 	local id = (json.safe_str(item.id) or ""):match("(%d+)$") or ""
-	local pipeline = {
+	local project = json.safe_table(item.project)
+	local source = json.safe_str(item.source)
+	local config_path = json.safe_str(project.ciConfigPathOrDefault)
+	if source == "parent_pipeline" then
+		config_path = nil
+	end
+	return {
 		id = id,
-		name = "Pipeline #" .. id,
+		iid = json.safe_str(item.iid),
+		name = json.safe_str(item.name) or "Pipeline",
 		number = tonumber(id),
 		commit = json.safe_str(item.sha),
+		title = json.safe_str(json.safe_table(item.commit).title),
 		branch = json.safe_str(item.ref),
+		trigger = source and (source:gsub("_event$", ""):gsub("_", " ")),
 		started_at = json.safe_str(item.startedAt) or json.safe_str(item.createdAt),
-		title = json.safe_str(item.name),
+		duration = tonumber(json.nilify(item.duration)),
 		state = M.to_pipeline_state(item.status),
 		status = json.safe_str(item.status) or "",
-		project_path = item.project.fullPath,
-		config_path = item.project.ciConfigPathOrDefault,
+		project_path = json.safe_str(project.fullPath),
+		config_path = config_path,
 		url = web_url(item.path),
-		job_count = #raw_jobs,
 		stages = {},
 	}
+end
+
+---@param item table
+---@param raw_jobs table[]
+---@return GitLabPipeline
+local function parse_pipeline_with_jobs(item, raw_jobs)
+	local pipeline = parse_pipeline(item)
 	local stages_by_name = {}
 	for _, raw_stage in ipairs(json.safe_table(json.safe_table(item.stages).nodes)) do
 		local stage = {
@@ -121,24 +197,28 @@ local function parse_pipeline(item, raw_jobs)
 	end
 
 	for _, raw_job in ipairs(raw_jobs) do
-		local raw_stage = json.safe_table(raw_job.stage)
-		local stage_name = json.safe_str(raw_stage.name) or "Unknown stage"
-		local stage = stages_by_name[stage_name]
-		if not stage then
-			stage = { name = stage_name, state = M.to_pipeline_state(raw_stage.status), jobs = {} }
-			stages_by_name[stage_name] = stage
-			table.insert(pipeline.stages, stage)
+		local downstream = json.nilify(raw_job.downstreamPipeline)
+		if raw_job.kind ~= "BRIDGE" or downstream then
+			local raw_stage = json.safe_table(raw_job.stage)
+			local stage_name = json.safe_str(raw_stage.name) or "Unknown stage"
+			local stage = stages_by_name[stage_name]
+			if not stage then
+				stage = { name = stage_name, state = M.to_pipeline_state(raw_stage.status), jobs = {} }
+				stages_by_name[stage_name] = stage
+				table.insert(pipeline.stages, stage)
+			end
+			table.insert(stage.jobs, {
+				id = (json.safe_str(raw_job.id) or ""):match("(%d+)$") or "",
+				name = json.safe_str(raw_job.name) or "Job",
+				state = M.to_pipeline_state(raw_job.status),
+				status = json.safe_str(raw_job.status) or "",
+				project_path = pipeline.project_path,
+				url = web_url(raw_job.webPath),
+				started_at = json.safe_str(raw_job.startedAt),
+				duration = tonumber(json.nilify(raw_job.duration)),
+				downstream = downstream and parse_pipeline(downstream) or nil,
+			})
 		end
-		table.insert(stage.jobs, {
-			id = (json.safe_str(raw_job.id) or ""):match("(%d+)$") or "",
-			name = json.safe_str(raw_job.name) or "Job",
-			state = M.to_pipeline_state(raw_job.status),
-			status = json.safe_str(raw_job.status) or "",
-			project_path = pipeline.project_path,
-			url = web_url(raw_job.webPath),
-			started_at = json.safe_str(raw_job.startedAt),
-			duration = tonumber(json.nilify(raw_job.duration)),
-		})
 	end
 	return pipeline
 end
@@ -159,11 +239,74 @@ local function next_cursor(connection, previous)
 end
 
 ---@param scope AtlasRequestScope
----@param raw_pipeline table
+---@param path string|nil
+---@param iid string|nil
 ---@param request_context table
----@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
-local function fetch_jobs(scope, raw_pipeline, request_context, on_done)
+---@param on_done fun(item: table|nil, err: string|nil)
+local function query_pipeline(scope, path, iid, request_context, on_done)
+	scope.run(function(done)
+		return service.graphql(PIPELINE_QUERY, { path = path, iid = iid }, done, request_context)
+	end, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local project = json.safe_table(result).project
+		local item = json.nilify(json.safe_table(project).pipeline)
+		if not item then
+			on_done(nil, "Pipeline not found")
+			return
+		end
+		on_done(item, nil)
+	end)
+end
+
+---@param scope AtlasRequestScope
+---@param item table
+---@param request_context table
+---@param on_done fun(pipeline: GitLabPipeline|nil, err: string|nil)
+local function load_pipeline(scope, item, request_context, on_done)
 	local jobs = {}
+
+	---@param job PullsPipelineJob
+	---@param done fun(pipeline: GitLabPipeline|nil, err: string|nil)
+	local function load_child(job, done)
+		local downstream = job.downstream
+		---@cast downstream GitLabPipeline
+		query_pipeline(scope, downstream.project_path, downstream.iid, request_context, function(child, err)
+			if not child then
+				done(nil, err)
+				return
+			end
+			load_pipeline(scope, child, request_context, function(loaded, load_err)
+				job.downstream = loaded
+				done(loaded, load_err)
+			end)
+		end)
+	end
+
+	local function load_downstream()
+		local pipeline = parse_pipeline_with_jobs(item, jobs)
+		local starts = {}
+		for _, stage in ipairs(pipeline.stages) do
+			for _, job in ipairs(stage.jobs) do
+				if job.downstream then
+					starts[job.downstream.id] = function(done)
+						load_child(job, done)
+					end
+				end
+			end
+		end
+		scope.all(starts, function(_, errors)
+			local _, err = next(errors)
+			if err then
+				on_done(nil, err)
+			else
+				on_done(pipeline, nil)
+			end
+		end)
+	end
+
 	local function fetch_page(connection, cursor)
 		connection = json.safe_table(connection)
 		vim.list_extend(jobs, json.safe_table(connection.nodes))
@@ -173,11 +316,15 @@ local function fetch_jobs(scope, raw_pipeline, request_context, on_done)
 			return
 		end
 		if not next_page then
-			on_done(parse_pipeline(raw_pipeline, jobs), nil)
+			load_downstream()
 			return
 		end
 
-		local variables = { path = raw_pipeline.project.fullPath, pipelineId = raw_pipeline.id, cursor = next_page }
+		local variables = {
+			path = json.safe_table(item.project).fullPath,
+			iid = json.safe_str(item.iid),
+			cursor = next_page,
+		}
 		scope.run(function(done)
 			return service.graphql(JOBS_QUERY, variables, done, request_context)
 		end, function(result, err)
@@ -186,70 +333,73 @@ local function fetch_jobs(scope, raw_pipeline, request_context, on_done)
 				return
 			end
 			local project = json.safe_table(result).project
-			local item = json.nilify(json.safe_table(project).pipeline)
-			if not item then
+			local pipeline = json.nilify(json.safe_table(project).pipeline)
+			if not pipeline then
 				on_done(nil, "Pipeline not found while loading jobs")
 				return
 			end
-			fetch_page(item.jobs, next_page)
+			fetch_page(pipeline.jobs, next_page)
 		end)
 	end
 
-	fetch_page(raw_pipeline.jobs)
+	fetch_page(item.jobs)
 end
 
 ---@param context PullsPipelineContext
----@param pipeline { id: string, project_path?: string }
----@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
+---@param pipeline PullsPipeline
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_pipeline(context, pipeline, on_done)
-	local id = tonumber(pipeline.id)
+function M.fetch_pipeline(context, pipeline, on_done)
+	---@cast pipeline GitLabPipeline
 	local path = pipeline.project_path or context.repo_full_name
-	if id == nil then
-		on_done(nil, "Missing pipeline ID")
-		return nil
-	end
+	local id = tonumber(pipeline.id)
 	if not path or path == "" then
 		on_done(nil, "Pipeline project not found")
 		return nil
 	end
+	if not pipeline.iid and id == nil then
+		on_done(nil, "Missing pipeline ID")
+		return nil
+	end
 
 	local scope = requests.new()
-	local request_context = { action = "Fetch pipeline", project_path = path, pipeline_id = id }
-	local variables = { path = path, pipelineId = "gid://gitlab/Ci::Pipeline/" .. id }
-	scope.run(function(done)
-		return service.graphql(PIPELINE_QUERY, variables, done, request_context)
-	end, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local project = json.safe_table(result).project
-		local item = json.nilify(json.safe_table(project).pipeline)
-		if not item or not json.nilify(item.project) then
-			on_done(nil, "Pipeline not found")
-			return
-		end
-		fetch_jobs(scope, item, request_context, function(updated, jobs_err)
-			on_done(updated and { updated } or nil, jobs_err)
+	local request_context = { action = "Fetch pipeline", project_path = path, pipeline_id = pipeline.id }
+
+	local function load(iid)
+		query_pipeline(scope, path, iid, request_context, function(item, err)
+			if not item then
+				on_done(nil, err)
+				return
+			end
+			load_pipeline(scope, item, request_context, on_done)
 		end)
-	end)
+	end
+
+	if pipeline.iid then
+		load(pipeline.iid)
+	else
+		scope.run(function(done)
+			local endpoint = string.format("/projects/%s/pipelines/%d", service.url_encode(path), id)
+			return service.request("GET", endpoint, nil, done, request_context)
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			load(json.safe_str(json.safe_table(result).iid))
+		end)
+	end
 	return { cancel = scope.cancel }
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
+---@param opts { force_refresh?: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	local target = context.target
-	local selected = (opts or {}).pipeline or (type(target) == "table" and target.stages and target or nil)
-	if selected then
-		---@cast selected PullsPipeline
-		return fetch_pipeline(context, selected, on_done)
-	end
-
-	local pr = type(target) == "table" and target.source and target or nil
+	local pr = type(target) == "table" and target or nil
+	---@cast pr PullRequest|nil
 	local path = tostring(context.repo_full_name or "")
 	local iid = pr and tonumber(pr.id)
 	local branch = type(target) == "string" and target or nil
@@ -284,54 +434,30 @@ function M.fetch(context, opts, on_done)
 		on_done(pipelines, nil)
 	end
 
-	if not pr then
-		---@cast branch string
-		local endpoint = string.format(
-			"/projects/%s/pipelines?ref=%s&per_page=1&order_by=id&sort=desc",
-			service.url_encode(path),
-			service.url_encode(branch)
-		)
-		scope.run(function(done)
-			return service.request("GET", endpoint, nil, done, request_context)
-		end, function(result, err)
-			if err then
-				finish(nil, err)
-				return
-			end
-			local latest = json.safe_table(result)[1]
-			if not latest then
-				finish()
-				return
-			end
-			scope.run(function(done)
-				return fetch_pipeline(context, { id = tostring(latest.id) }, done)
-			end, function(pipelines, pipeline_err)
-				finish(pipelines and pipelines[1], pipeline_err)
-			end)
-		end)
-		return { cancel = scope.cancel }
-	end
-
 	scope.run(function(done)
-		return service.graphql(PIPELINES_QUERY, { path = path, iid = tostring(iid) }, done, request_context)
+		if pr then
+			return service.graphql(MERGE_REQUEST_QUERY, { path = path, iid = tostring(iid) }, done, request_context)
+		end
+		return service.graphql(BRANCH_QUERY, { path = path, ref = branch }, done, request_context)
 	end, function(result, err)
 		if err then
 			finish(nil, err)
 			return
 		end
-		local project = json.safe_table(result).project
-		local mr = json.nilify(json.safe_table(project).mergeRequest)
-		if not mr then
-			finish(nil, "Merge request not found")
-			return
-		end
-		local raw_pipeline = json.nilify(mr.head_pipeline)
-		if raw_pipeline then
-			if not json.nilify(raw_pipeline.project) then
-				finish(nil, "Pipeline project not found")
+		local project = json.safe_table(json.safe_table(result).project)
+		local item
+		if pr then
+			local mr = json.nilify(project.mergeRequest)
+			if not mr then
+				finish(nil, "Merge request not found")
 				return
 			end
-			fetch_jobs(scope, raw_pipeline, request_context, finish)
+			item = json.nilify(mr.headPipeline)
+		else
+			item = json.safe_table(json.safe_table(project.pipelines).nodes)[1]
+		end
+		if item then
+			load_pipeline(scope, item, request_context, finish)
 		else
 			finish()
 		end
@@ -354,46 +480,22 @@ function M.fetch_history(context, on_done)
 	local request_context = { action = "Fetch pipeline history", project_path = path }
 
 	local function fetch_runs(ref)
-		local endpoint = pr
-				and string.format(
-					"/projects/%s/merge_requests/%s/pipelines?per_page=30",
-					service.url_encode(path),
-					pr.id
-				)
-			or string.format(
-				"/projects/%s/pipelines?ref=%s&per_page=30&order_by=id&sort=desc",
-				service.url_encode(path),
-				service.url_encode(ref)
-			)
 		scope.run(function(done)
-			return service.request("GET", endpoint, nil, done, request_context)
+			if pr then
+				local variables = { path = path, iid = tostring(pr.id) }
+				return service.graphql(MERGE_REQUEST_HISTORY_QUERY, variables, done, request_context)
+			end
+			return service.graphql(BRANCH_HISTORY_QUERY, { path = path, ref = ref }, done, request_context)
 		end, function(result, err)
 			if err then
 				on_done(nil, err)
 				return
 			end
+			local project = json.safe_table(json.safe_table(result).project)
+			local connection = pr and json.safe_table(project.mergeRequest).pipelines or project.pipelines
 			local pipelines = {}
-			for _, item in ipairs(result) do
-				local id = tostring(item.id)
-				local url = web_url(item.web_url)
-				local base_url = service.base_url()
-				local project_path = url
-					and url:sub(1, #base_url + 1) == base_url .. "/"
-					and url:sub(#base_url + 1):match("^/(.-)/%-/pipelines/%d+")
-				table.insert(pipelines, {
-					id = id,
-					name = "Pipeline #" .. id,
-					number = tonumber(id),
-					commit = json.safe_str(item.sha),
-					branch = json.safe_str(item.ref),
-					started_at = json.safe_str(item.started_at) or json.safe_str(item.created_at),
-					title = json.safe_str(item.name),
-					state = M.to_pipeline_state(item.status),
-					status = json.safe_str(item.status) or "",
-					project_path = project_path or (not pr and path) or nil,
-					url = url,
-					stages = {},
-				})
+			for _, item in ipairs(json.safe_table(json.safe_table(connection).nodes)) do
+				table.insert(pipelines, parse_pipeline(item))
 			end
 			on_done(pipelines, nil)
 		end)
@@ -422,9 +524,13 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_config(context, pipeline, on_done)
 	---@cast pipeline GitLabPipeline
-	local path = pipeline.config_path or ".gitlab-ci.yml"
+	local path = pipeline.config_path
 	local project = pipeline.project_path or context.repo_full_name
 	local ref = pipeline.commit
+	if not path then
+		on_done(nil, "No configuration file for this pipeline")
+		return nil
+	end
 	if not ref or ref == "" then
 		on_done(nil, "Missing pipeline commit")
 		return nil

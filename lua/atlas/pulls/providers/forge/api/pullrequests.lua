@@ -1,4 +1,5 @@
 local config = require("atlas.config")
+local create_remotes = require("atlas.pulls.create.remotes")
 local json = require("atlas.core.json")
 local mapping = require("atlas.providers.forge.mapping")
 local request_scope = require("atlas.core.requests")
@@ -118,12 +119,13 @@ local function new(service, mapper)
 			return nil
 		end
 		local title = vim.trim(opts.title)
-		local head = vim.trim(opts.head)
+		local branch = vim.trim(opts.head)
 		local base = vim.trim(opts.base)
-		if title == "" or head == "" or base == "" then
+		if title == "" or branch == "" or base == "" then
 			on_done(nil, "Title, head, and base are required")
 			return nil
 		end
+		local head = create_remotes.head_ref(opts.repo_slug, opts.head_repo_slug, branch)
 		if head == base then
 			on_done(nil, "Head and base branches must differ")
 			return nil

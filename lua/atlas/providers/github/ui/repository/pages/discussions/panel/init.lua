@@ -26,6 +26,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.repository.discussions.pa
 local function configure(win)
 	vim.wo[win].number = false
 	vim.wo[win].relativenumber = false
+	vim.wo[win].list = false
 	vim.wo[win].signcolumn = "no"
 	vim.wo[win].foldcolumn = "0"
 	vim.wo[win].wrap = true

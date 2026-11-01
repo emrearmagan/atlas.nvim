@@ -155,6 +155,16 @@ up and what's missing.
 <
 
 ------------------------------------------------------------------------------
+HIGHLIGHTS                                                  *atlas-highlights*
+
+Atlas uses your colorscheme's standard highlight groups, so it adapts to
+light and dark backgrounds. Every `Atlas*` group is defined as a default, so
+you can override any of them after calling `setup()`: >lua
+
+  vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+<
+
+------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*
                        *atlas-pulls-custom-actions* *atlas-issues-custom-actions*
 
@@ -254,9 +264,9 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
 
 :Atlas pipelines [target|.]
         Open pipelines by branch name, PR URL or number (`123`, `#123`, or
-        GitLab `!123`), or a GitHub Actions, GitLab pipeline, or Bitbucket
-        Pipelines build URL. Branch names use the local repository;
-        `.` uses the current branch.
+        GitLab `!123`), or a GitHub Actions, GitLab pipeline, Bitbucket
+        Pipelines, or Gitea/Forgejo Actions build URL. Branch names use the
+        local repository; `.` uses the current branch.
 
 :Atlas notes [target|.]
         Open the notes manager, optionally filtered to a pull request. `.`
@@ -435,8 +445,12 @@ with `host`, `user`, and `password`.
       ci = {
         backend = {
           fetch = function(context, opts, done)
-            -- Fetch pipelines with their stages and jobs.
+            -- Fetch the pull request's or branch's pipelines with their stages and jobs.
             done({}, nil)
+          end,
+          fetch_pipeline = function(context, pipeline, done)
+            -- Fetch one pipeline with its stages and jobs.
+            done(pipeline, nil)
           end,
           fetch_job = function(context, pipeline, job, done)
             -- Fetch the updated job, including any steps.
@@ -977,6 +991,7 @@ These `User` events fire after setup or cleanup completes:
           show_history         = "gH",
           toggle_raw_logs      = "gL",
           toggle_auto_refresh  = "gR",
+          toggle_config        = "gC",
         },
         review = {
           show_details = "K", -- File/commit details.

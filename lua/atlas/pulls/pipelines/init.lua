@@ -7,10 +7,11 @@
 ---@field url string|nil
 ---@field number integer|nil
 ---@field commit string|nil
+---@field title string|nil Commit title.
 ---@field branch string|nil
+---@field trigger string|nil
 ---@field started_at string|nil
----@field title string|nil
----@field job_count integer|nil
+---@field duration number|nil Seconds
 ---@field stages PullsPipelineStage[]
 
 ---@class PullsPipelineStage
@@ -26,6 +27,7 @@
 ---@field started_at string|nil
 ---@field duration number|nil Seconds
 ---@field steps PullsPipelineStep[]|nil
+---@field downstream PullsPipeline|nil
 
 ---@class PullsPipelineStep
 ---@field name string
@@ -42,16 +44,18 @@
 ---@field backend PullsPipelineBackend|nil
 ---@field highlights AtlasLogRule[]|nil
 
----@alias PullsPipelineFetch fun(context: PullsPipelineContext, opts: { force_refresh?: boolean, pipeline?: PullsPipeline }|nil, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@alias PullsPipelineFetch fun(context: PullsPipelineContext, opts: { force_refresh?: boolean }|nil, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@alias PullsPipelineFetchPipeline fun(context: PullsPipelineContext, pipeline: PullsPipeline, on_done: fun(pipeline: PullsPipeline|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchHistory fun(context: PullsPipelineContext, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchJob fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(job: PullsPipelineJob|nil, err: string|nil)): { cancel: fun() }|nil
----@alias PullsPipelineFetchJobLog fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: PullsLog|nil, err: string|nil, status?: integer)): { cancel: fun() }|nil
+---@alias PullsPipelineFetchJobLog fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: PullsLog|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchConfig fun(context: PullsPipelineContext, pipeline: PullsPipeline, on_done: fun(file: { path: string, content: string }|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineParse fun(log: PullsLog): table<integer, PullsLogLine|PullsLogGroup>
 ---@alias PullsPipelineFetchCommitStatus fun(commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil
 
 ---@class PullsPipelineBackend
 ---@field fetch PullsPipelineFetch
+---@field fetch_pipeline PullsPipelineFetchPipeline
 ---@field fetch_history PullsPipelineFetchHistory|nil
 ---@field fetch_job PullsPipelineFetchJob|nil
 ---@field fetch_job_log PullsPipelineFetchJobLog|nil

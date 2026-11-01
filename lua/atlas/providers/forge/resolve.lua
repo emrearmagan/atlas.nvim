@@ -77,6 +77,10 @@ function M.new(service)
 			owner, repo, number, tail = path:match("^/([^/]+)/([^/]+)/issues/(%d+)(.*)$")
 			domain, entity = "issues", "issue"
 		end
+		if owner == nil then
+			owner, repo, number, tail = path:match("^/([^/]+)/([^/]+)/actions/runs/(%d+)(.*)$")
+			domain, entity = "pulls", "pipeline"
+		end
 		if owner then
 			if not url.valid_tail(tail) then
 				return nil, "Unsupported " .. provider_name .. " URL"
@@ -93,7 +97,7 @@ function M.new(service)
 				owner = owner,
 				repo = repo,
 				repo_full_name = full_name,
-				id = entity == "pr" and id or nil,
+				id = entity ~= "issue" and id or nil,
 				number = id,
 				issue_key = entity == "issue" and string.format("%s#%d", full_name, id) or nil,
 			}
@@ -104,6 +108,7 @@ function M.new(service)
 		local page = ({
 			issues = "issues",
 			pulls = "pulls",
+			actions = "builds",
 			releases = "releases",
 			tags = "tags",
 			branches = "branches",
@@ -124,7 +129,8 @@ function M.new(service)
 			}
 		end
 
-		return nil, "Unsupported " .. provider_name .. " URL. Expected a repository, issue, or pull request URL"
+		return nil,
+			"Unsupported " .. provider_name .. " URL. Expected a repository, issue, pull request, or pipeline URL"
 	end
 
 	return resolver

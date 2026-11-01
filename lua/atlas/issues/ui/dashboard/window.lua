@@ -107,6 +107,7 @@ local function configure_window()
 	for name, value in pairs({
 		number = false,
 		relativenumber = false,
+		list = false,
 		signcolumn = "no",
 		statuscolumn = "",
 		foldcolumn = "0",

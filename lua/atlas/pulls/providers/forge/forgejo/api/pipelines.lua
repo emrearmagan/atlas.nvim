@@ -87,7 +87,6 @@ function M.map(result, _sha, slug)
 					name = workflow or ("Actions run #" .. run_number),
 					state = "UNKNOWN",
 					url = run_url,
-					job_count = 0,
 					stages = {
 						{
 							name = nil,
@@ -114,28 +113,18 @@ function M.map(result, _sha, slug)
 		if stage and #stage.jobs > 0 then
 			stage.state = pipeline_utils.aggregate_state(stage.jobs)
 			pipeline.state = stage.state
-			pipeline.job_count = #stage.jobs
 		end
 	end
 	return pipelines
 end
 
-local fetch_details
-
 ---@param context PullsPipelineContext
----@param opts { force_refresh?: boolean, pipeline?: PullsPipeline }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	opts = opts or {}
 	local target = context.target
-	local pipeline = opts.pipeline or (type(target) == "table" and target.stages and target or nil)
-	if pipeline then
-		return fetch_details(context, pipeline, function(result, err)
-			on_done(result and { result } or nil, err)
-		end)
-	end
-
 	local pr = type(target) == "table" and target.source and target or nil
 	local branch = type(target) == "string" and target or nil
 	local owner, repo = context.repo_full_name:match("^([^/]+)/([^/]+)$")
@@ -162,11 +151,11 @@ function M.fetch(context, opts, on_done)
 			local tasks = {}
 			for index, item in ipairs(M.map(statuses, sha, context.repo_full_name)) do
 				tasks[index] = function(done)
-					return fetch_details(context, item, function(detailed, detail_err)
+					return M.fetch_pipeline(context, item, function(detailed, detail_err)
 						-- Status links remain useful when Actions details are inaccessible.
 						-- Browser job indexes must never be used as API job IDs.
 						if detail_err then
-							done(vim.tbl_extend("force", {}, item, { stages = {}, job_count = 0 }), nil)
+							done(vim.tbl_extend("force", {}, item, { stages = {} }), nil)
 						else
 							done(detailed, nil)
 						end
@@ -279,11 +268,53 @@ local function resolve_run(context, pipeline, on_done)
 	end)
 end
 
+---@param value string|nil
+---@return string|nil
+local function timestamp(value)
+	if
+		value == nil
+		or value == ""
+		or value:match("^0001%-01%-01T00:00:00")
+		or value:match("^1970%-01%-01T00:00:00")
+	then
+		return nil
+	end
+	return value
+end
+
+---@param event string|nil
+---@return string|nil
+local function trigger(event)
+	return event and event ~= "" and (event:gsub("_", " ")) or nil
+end
+
+---@param run table Actions run from the API.
+---@return PullsPipeline
+local function map_run(run)
+	local started_at = timestamp(run.started)
+	local number = tostring(run.index_in_repo or "")
+	local workflow = tostring(run.workflow_id or "")
+	return {
+		id = number,
+		name = workflow ~= "" and workflow or ("Actions run #" .. number),
+		state = M.state(run.status),
+		url = service.absolute_url(run.html_url),
+		number = tonumber(run.index_in_repo),
+		commit = run.commit_sha,
+		title = run.title,
+		branch = run.prettyref,
+		trigger = trigger(run.trigger_event or run.event),
+		started_at = started_at,
+		duration = pipeline_utils.duration(started_at, timestamp(run.stopped)),
+		stages = {},
+	}
+end
+
 ---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
 ---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function fetch_details(context, pipeline, on_done)
+function M.fetch_pipeline(context, pipeline, on_done)
 	local base = repo_endpoint(context)
 	if not base or not M.parse_run_number(context, pipeline) then
 		on_done(pipeline, nil)
@@ -318,13 +349,14 @@ function fetch_details(context, pipeline, on_done)
 				})
 			end
 			local stage_state = #jobs > 0 and pipeline_utils.aggregate_state(jobs) or M.state(run.status)
-			local detailed = vim.tbl_extend("force", {}, pipeline)
-			detailed.name = tostring(run.name or "") ~= "" and tostring(run.name) or pipeline.name
-			detailed.state = M.state(run.status)
-			detailed.job_count = #jobs
-			detailed.stages = {
-				{ name = nil, state = stage_state, jobs = jobs },
-			}
+			local detailed = vim.tbl_extend("force", {}, pipeline, map_run(run), {
+				id = pipeline.id,
+				name = tostring(run.name or "") ~= "" and tostring(run.name) or pipeline.name,
+				url = pipeline.url,
+				stages = {
+					{ name = nil, state = stage_state, jobs = jobs },
+				},
+			})
 			on_done(detailed, nil)
 		end)
 	end)
@@ -332,9 +364,34 @@ function fetch_details(context, pipeline, on_done)
 end
 
 ---@param context PullsPipelineContext
+---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_history(context, on_done)
+	local base = repo_endpoint(context)
+	local target = context.target
+	local branch = type(target) == "string" and target or (target.source and target.source.branch) or target.branch
+	if base == nil or not branch or branch == "" then
+		on_done(nil, "Forgejo build history needs a branch")
+		return nil
+	end
+	local endpoint = base .. "/actions/runs" .. service.query({ ref = "refs/heads/" .. branch, limit = 30 })
+	return service.request("GET", endpoint, nil, function(raw, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local runs = {}
+		for _, run in ipairs(type(raw) == "table" and raw.workflow_runs or {}) do
+			table.insert(runs, map_run(run))
+		end
+		on_done(runs, nil)
+	end, { action = "Fetch workflow history", repo = context.repo_full_name })
+end
+
+---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
 ---@param job PullsPipelineJob
----@param on_done fun(log: PullsLog|nil, err: string|nil, status?: integer)
+---@param on_done fun(log: PullsLog|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local base = repo_endpoint(context)
@@ -343,13 +400,9 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 		on_done(nil, "Invalid Forgejo Actions job")
 		return nil
 	end
-	return service.request_text(
-		"GET",
-		string.format("%s/actions/jobs/%d/logs", base, job_id),
-		function(raw, err, status)
-			on_done(raw and { raw = raw } or nil, err, status)
-		end
-	)
+	return service.request_text("GET", string.format("%s/actions/jobs/%d/logs", base, job_id), function(raw, err)
+		on_done(raw and { raw = raw } or nil, err)
+	end)
 end
 
 ---@param context PullsPipelineContext

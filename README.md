@@ -159,8 +159,12 @@ providers = {
     ci = {
       backend = {
         fetch = function(context, opts, done)
-          -- Fetch pipelines with their stages and jobs.
+          -- Fetch the pull request's or branch's pipelines with their stages and jobs.
           done({}, nil)
+        end,
+        fetch_pipeline = function(context, pipeline, done)
+          -- Fetch one pipeline with its stages and jobs.
+          done(pipeline, nil)
         end,
         fetch_job = function(context, pipeline, job, done)
           -- Fetch the updated job, including any steps.
@@ -376,6 +380,14 @@ Save provider searches or Jira JQL as bookmarks, or press `*` to star a pull req
 }
 ```
 
+### Highlights
+
+Atlas uses your colorscheme's standard highlight groups, so it adapts to light and dark backgrounds. Every `Atlas*` group is defined as a default, so you can override any of them after calling `setup()`:
+
+```lua
+vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+```
+
 ## Commands
 
 - `:Atlas` - Pick a command
@@ -407,6 +419,7 @@ pulls = {
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
+
 
   description = {
     include_summary = true,
@@ -1154,6 +1167,7 @@ keymaps = {
       show_history = "gH",
       toggle_raw_logs = "gL",
       toggle_auto_refresh = "gR",
+      toggle_config = "gC",
     },
     filters = {
       open = "gpo",
