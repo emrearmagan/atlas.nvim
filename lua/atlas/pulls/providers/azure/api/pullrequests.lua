@@ -277,15 +277,50 @@ function M.create_pr(opts, on_done)
 		isDraft = opts.draft == true,
 		reviewers = reviewers,
 	}
-	return service.request("POST", endpoint, body, function(result, err)
+
+	local scope = request_scope.new()
+	local function submit()
+		scope.run(function(done)
+			return service.request("POST", endpoint, body, done, {
+				action = "Create PR",
+				repo = opts.repo_slug,
+				head = opts.head,
+				base = opts.base,
+			})
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			service.clear_cache()
+			local pr = mapper.to_pull_request(result)
+			on_done({ id = pr.id, url = pr.link.html, message = "PR created" }, nil)
+		end)
+	end
+
+	local head_slug = opts.head_repo_slug
+	if not head_slug or head_slug == "" or head_slug == opts.repo_slug then
+		submit()
+		return scope
+	end
+
+	local fork_project, fork_repository = head_slug:match("^([^/]+)/(.+)$")
+	local fork_endpoint = string.format(
+		"/%s/_apis/git/repositories/%s",
+		service.url_encode(fork_project),
+		service.url_encode(fork_repository)
+	)
+	scope.run(function(done)
+		return service.request("GET", fork_endpoint, nil, done, { action = "Fetch fork repository", repo = head_slug })
+	end, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
-		local pr = mapper.to_pull_request(result)
-		on_done({ id = pr.id, url = pr.link.html, message = "PR created" }, nil)
-	end, { action = "Create PR", repo = opts.repo_slug, head = opts.head, base = opts.base })
+		body.forkSource = { repository = { id = result.id } }
+		submit()
+	end)
+	return scope
 end
 
 ---@param opts { repo_slug: string, pr: PullRequest|nil }

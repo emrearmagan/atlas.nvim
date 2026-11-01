@@ -41,6 +41,29 @@ describe("Azure pull request API logic", function()
 		end
 	end)
 
+	it("creates fork pull requests with the fork repository as source", function()
+		local requests = {}
+		client.request = function(method, url, payload, done)
+			requests[#requests + 1] = { url = url, payload = payload }
+			if method == "GET" then
+				done({ id = "fork-id" })
+			else
+				done(nil, "Stop")
+			end
+		end
+		require("atlas.pulls.providers.azure.api.pullrequests").create_pr({
+			repo_slug = "Platform/api",
+			head_repo_slug = "Forks/api",
+			head = "feature",
+			base = "main",
+			title = "Title",
+			body = "",
+		}, function() end)
+		assert.equal("/Forks/_apis/git/repositories/api", requests[1].url)
+		assert.equal("/Platform/_apis/git/repositories/api/pullrequests", requests[2].url)
+		assert.same({ repository = { id = "fork-id" } }, requests[2].payload.forkSource)
+	end)
+
 	it("maps all pull request commits", function()
 		client.fetch_all = function(url, _, _, done)
 			assert.equal(endpoint .. "/commits", url)

@@ -69,6 +69,7 @@ describe("Azure repositories and builds", function()
 			status = "completed",
 			result = "succeeded",
 			sourceVersion = source,
+			repository = { id = "repo-id" },
 			queueTime = "2026-01-01",
 			_links = { web = { href = "https://example/build/" .. id } },
 		}
@@ -144,16 +145,53 @@ describe("Azure repositories and builds", function()
 
 	it("refreshes the selected build instead of the latest build", function()
 		local result
-		pipelines.fetch(context, { pipeline = { id = "12" }, force_refresh = true }, function(value, err)
+		pipelines.fetch_pipeline(context, { id = "12" }, function(value, err)
 			assert.is_nil(err)
 			result = value
 		end)
 		assert.equal("/Project/_apis/build/builds/12", requests[1].endpoint)
-		requests[1].done(build(12, "merge-sha"))
+		requests[1].done(vim.tbl_extend("force", build(12, "merge-sha"), {
+			sourceBranch = "refs/heads/feature",
+			reason = "individualCI",
+		}))
 		assert.equal("/Project/_apis/build/builds/12/timeline", requests[2].endpoint)
 		requests[2].done(timeline())
-		assert.equal(1, #result)
-		assert.equal("12", result[1].id)
+		assert.equal("12", result.id)
+		assert.equal("feature", result.branch)
+		assert.equal("individual ci", result.trigger)
+		assert.equal(1, #result.stages[1].jobs)
+	end)
+
+	it("loads branch history with the repository GUID", function()
+		local result
+		pipelines.fetch_history(
+			{ provider = "azure", repo_full_name = "Project/Repo", target = "main" },
+			function(value, err)
+				assert.is_nil(err)
+				result = value
+			end
+		)
+		assert.equal("/Project/_apis/git/repositories/Repo", requests[1].endpoint)
+		requests[1].done({ id = "repo-guid" })
+		assert.is_truthy(requests[2].endpoint:find("repositoryId=repo-guid", 1, true))
+		assert.is_truthy(requests[2].endpoint:find("branchName=refs%2Fheads%2Fmain", 1, true))
+		requests[2].done({ value = { build(7, "sha") } })
+		assert.same({ "7" }, { result[1].id })
+	end)
+
+	it("reads the definition YAML at the build commit", function()
+		local result
+		local pipeline = { id = "5", definition_id = 1, repository_id = "repo-id", commit = "sha" }
+		pipelines.fetch_config(context, pipeline, function(value, err)
+			assert.is_nil(err)
+			result = value
+		end)
+		assert.equal("/Project/_apis/build/definitions/1", requests[1].endpoint)
+		requests[1].done({ process = { yamlFilename = "azure-pipelines.yml" } })
+		assert.is_truthy(requests[2].endpoint:find("/Project/_apis/git/repositories/repo-id/items?", 1, true))
+		assert.is_truthy(requests[2].endpoint:find("versionDescriptor.version=sha", 1, true))
+		requests[2].done({ content = "trigger: none" })
+		assert.same({ path = "azure-pipelines.yml", content = "trigger: none" }, result)
 	end)
 
 	it("sends the Azure cancellation payload and reports rejection", function()
