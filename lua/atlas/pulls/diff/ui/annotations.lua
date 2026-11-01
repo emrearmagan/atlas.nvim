@@ -629,7 +629,7 @@ function M.open(owner, pr, path, items, on_action)
 					local note_action = name == "edit_comment" and "edit_note" or "delete_note"
 					on_action(note_action, { note = entry.note }, close)
 				elseif name == "add_comment" then
-					on_action("note_to_comment", { note = entry.note, pending = true }, close)
+					on_action("note_to_comment", { note = entry.note, pending = pending_reviews }, close)
 				end
 			elseif entry.comment then
 				local target = entry.comment
