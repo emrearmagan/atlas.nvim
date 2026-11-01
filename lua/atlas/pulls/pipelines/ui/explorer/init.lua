@@ -197,7 +197,7 @@ local function finish_loading(pane, pipelines, err)
 	stop_spinner(pane)
 	pane.pipelines = err or pipelines or {}
 	local target = pane.context.target
-	if not err and type(target) == "table" and target.stages and pipelines and pipelines[1] then
+	if not err and type(target) == "table" and not target.source and pipelines and pipelines[1] then
 		pane.context.target = pipelines[1]
 	end
 	local selection = pane.selection
@@ -226,7 +226,14 @@ function M.refresh(pane, selection)
 		return
 	end
 
+	local target = pane.context.target
 	pane.requests.run(function(done)
+		if type(target) == "table" and not target.source then
+			---@cast target PullsPipeline
+			return backend.fetch_pipeline(pane.context, target, function(pipeline, err)
+				done(pipeline and { pipeline } or nil, err)
+			end)
+		end
 		return backend.fetch(pane.context, { force_refresh = true }, done)
 	end, function(pipelines, err)
 		finish_loading(pane, pipelines, err)
@@ -243,13 +250,12 @@ local function load_pipeline(pane, run, index)
 	local pipelines = index and pane.pipelines or {}
 	begin_loading(pane)
 	pane.requests.run(function(done)
-		return pane.backend.fetch(pane.context, { pipeline = run, force_refresh = true }, done)
-	end, function(result, err)
+		return pane.backend.fetch_pipeline(pane.context, run, done)
+	end, function(loaded, err)
 		if err then
 			finish_loading(pane, nil, err)
 			return
 		end
-		local loaded = result[1]
 		pipelines[index or 1] = loaded
 		finish_loading(pane, pipelines, nil)
 		if loaded and not pane.selection then

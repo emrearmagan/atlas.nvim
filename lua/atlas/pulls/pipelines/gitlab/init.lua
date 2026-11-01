@@ -3,17 +3,19 @@ local actions = require("atlas.pulls.pipelines.gitlab.actions")
 local parser = require("atlas.pulls.pipelines.gitlab.parser")
 
 ---@class GitLabPipeline : PullsPipeline
+---@field iid string|nil
 ---@field status string
----@field project_path string
----@field config_path string
+---@field project_path string|nil
+---@field config_path string|nil
 
 ---@class GitLabPipelineJob : PullsPipelineJob
 ---@field status string
----@field project_path string
+---@field project_path string|nil
 
 ---@type PullsPipelineBackend
 return {
 	fetch = api.fetch,
+	fetch_pipeline = api.fetch_pipeline,
 	fetch_history = api.fetch_history,
 	fetch_config = api.fetch_config,
 	fetch_job = api.fetch_job,

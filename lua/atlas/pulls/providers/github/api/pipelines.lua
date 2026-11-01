@@ -354,11 +354,37 @@ local function map_job(check, pipeline_id, job_id, index)
 end
 
 ---@param checks table[]
+---@return string|nil started_at
+---@return number|nil duration
+local function run_times(checks)
+	local first, last, finished = nil, nil, true
+	for _, check in ipairs(checks) do
+		local started = json.safe_str(check.startedAt)
+		local completed = json.safe_str(check.completedAt)
+		if started and (not first or started < first) then
+			first = started
+		end
+		if completed and (not last or completed > last) then
+			last = completed
+		end
+		finished = finished and completed ~= nil
+	end
+	return first, finished and pipeline_utils.duration(first, last) or nil
+end
+
+---@param event string|nil
+---@return string|nil
+local function trigger(event)
+	return event and (event:gsub("_", " "))
+end
+
+---@param checks table[]
 ---@param metadata table|nil
 ---@return PullsPipeline[]
 local function map_pipelines(checks, metadata)
 	local pipelines = {}
 	local pipelines_by_id = {}
+	local checks_by_id = {}
 	for index, check in ipairs(checks) do
 		local run = json.safe_table(json.safe_table(check.checkSuite).workflowRun)
 		local url = json.safe_str(check.detailsUrl or check.targetUrl)
@@ -372,29 +398,32 @@ local function map_pipelines(checks, metadata)
 				id = pipeline_id,
 				node_id = json.safe_str(run.id),
 				workflow_id = json.safe_str(json.safe_table(run.workflow).databaseId),
-				event = json.safe_str(run.event),
 				name = run_id and (name ~= "External checks" and name or "GitHub Actions") or name,
 				number = tonumber(json.nilify(run.runNumber)),
+				trigger = trigger(json.safe_str(run.event)),
 				started_at = json.safe_str(run.createdAt),
 				state = "UNKNOWN",
 				url = json.safe_str(run.url) or run_url or url,
 				workflow_file = json.nilify(run.file),
-				job_count = 0,
 				stages = { { state = "UNKNOWN", jobs = {} } },
 			})
 			pipelines_by_id[pipeline_id] = pipeline
+			checks_by_id[pipeline_id] = {}
 			table.insert(pipelines, pipeline)
 		end
 
 		table.insert(pipeline.stages[1].jobs, map_job(check, pipeline_id, run_id and job_id or nil, index))
+		table.insert(checks_by_id[pipeline_id], check)
 	end
 
 	for _, pipeline in ipairs(pipelines) do
 		local stage = pipeline.stages[1]
 		local state = pipeline_utils.aggregate_state(stage.jobs)
+		local started_at, duration = run_times(checks_by_id[pipeline.id])
 		stage.state = state
 		pipeline.state = state
-		pipeline.job_count = #stage.jobs
+		pipeline.started_at = started_at or pipeline.started_at
+		pipeline.duration = duration
 	end
 
 	return pipelines
@@ -407,12 +436,12 @@ local function map_run(run)
 		id = tostring(run.id),
 		node_id = json.safe_str(run.node_id),
 		workflow_id = json.safe_str(run.workflow_id),
-		event = json.safe_str(run.event),
 		source_repository = json.safe_str(json.safe_table(run.head_repository).full_name),
 		name = json.safe_str(run.name) or "GitHub Actions",
 		number = tonumber(json.nilify(run.run_number)),
 		commit = json.safe_str(run.head_sha),
 		branch = json.safe_str(run.head_branch),
+		trigger = trigger(json.safe_str(run.event)),
 		started_at = json.safe_str(run.run_started_at) or json.safe_str(run.created_at),
 		title = json.safe_str(run.display_title),
 		state = check_state(run.status, run.conclusion),
@@ -423,14 +452,14 @@ end
 
 ---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
----@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_run(context, pipeline, on_done)
+function M.fetch_pipeline(context, pipeline, on_done)
 	---@cast pipeline GitHubPipeline
 	if not pipeline.node_id then
 		local run_id = tonumber(pipeline.id)
 		if not run_id then
-			on_done(nil, "Missing workflow run ID")
+			on_done(pipeline, nil)
 			return nil
 		end
 		local scope = requests.new()
@@ -452,7 +481,7 @@ local function fetch_run(context, pipeline, on_done)
 				return
 			end
 			scope.run(function(done)
-				return fetch_run(context, result, done)
+				return M.fetch_pipeline(context, result, done)
 			end, on_done)
 		end)
 		return scope
@@ -474,7 +503,7 @@ local function fetch_run(context, pipeline, on_done)
 		end
 
 		local result = vim.deepcopy(pipeline)
-		local jobs = {}
+		local jobs, checks = {}, {}
 		for _, page in ipairs(pages) do
 			local run = json.safe_table(json.safe_table(page.data).node)
 			if not json.nilify(run.checkSuite) then
@@ -487,16 +516,19 @@ local function fetch_run(context, pipeline, on_done)
 			for _, check in ipairs(json.safe_table(json.safe_table(suite.checkRuns).nodes)) do
 				local _, job_id = action_ids(json.safe_str(check.detailsUrl))
 				jobs[#jobs + 1] = map_job(check, pipeline.id, job_id or json.safe_str(check.databaseId), #jobs + 1)
+				checks[#checks + 1] = check
 			end
 		end
-		result.job_count = #jobs
+		local started_at, duration = run_times(checks)
+		result.started_at = started_at or result.started_at
+		result.duration = duration
 		result.stages = { { state = result.state, jobs = jobs } }
-		on_done({ result }, nil)
+		on_done(result, nil)
 	end, { action = "Fetch workflow run", repo = context.repo_full_name, pipeline_id = pipeline.id })
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
+---@param opts { force_refresh?: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
@@ -508,11 +540,6 @@ function M.fetch(context, opts, on_done)
 	end
 
 	local target = context.target
-	local pipeline = opts.pipeline or (type(target) == "table" and target.stages and target or nil)
-	if pipeline then
-		---@cast pipeline PullsPipeline
-		return fetch_run(context, pipeline, on_done)
-	end
 	local pr = type(target) == "table" and target.source and target or nil
 	local branch = type(target) == "string" and target or nil
 	if not pr and (not branch or branch == "") then

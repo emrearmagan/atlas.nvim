@@ -156,8 +156,12 @@ providers = {
     ci = {
       backend = {
         fetch = function(context, opts, done)
-          -- Fetch pipelines with their stages and jobs.
+          -- Fetch the pull request's or branch's pipelines with their stages and jobs.
           done({}, nil)
+        end,
+        fetch_pipeline = function(context, pipeline, done)
+          -- Fetch one pipeline with its stages and jobs.
+          done(pipeline, nil)
         end,
         fetch_job = function(context, pipeline, job, done)
           -- Fetch the updated job, including any steps.
@@ -1012,6 +1016,7 @@ keymaps = {
       show_history = "gH",
       toggle_raw_logs = "gL",
       toggle_auto_refresh = "gR",
+      toggle_config = "gC",
     },
     filters = {
       open = "gpo",

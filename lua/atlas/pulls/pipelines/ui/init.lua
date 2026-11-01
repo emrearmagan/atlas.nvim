@@ -5,6 +5,7 @@ local config = require("atlas.pulls.pipelines.ui.config")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local keymaps = require("atlas.pulls.pipelines.ui.keymaps")
 local logs = require("atlas.pulls.pipelines.ui.logs")
+local overview = require("atlas.pulls.pipelines.ui.overview")
 local icons = require("atlas.ui.shared.icons")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local statusline = require("atlas.ui.statusline")
@@ -16,6 +17,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field group integer|nil
 ---@field explorer PullsPipelinesExplorer
 ---@field logs PullsPipelinesLogs
+---@field overview PullsPipelinesOverview
 ---@field config PullsPipelinesConfig
 ---@field statusline AtlasStatusline
 ---@field action PullsPipelineAction|nil
@@ -171,6 +173,7 @@ local function setup_buffers(session)
 	local prefix = string.format("atlas://pipelines/%d", session.tab)
 	session.explorer.buf = utils.buffer.create(prefix .. "/pipelines", "atlas-ui.pipelines")
 	session.logs.buf = utils.buffer.create(prefix .. "/logs", "atlas-ui.pipeline-log")
+	session.overview.buf = utils.buffer.create(prefix .. "/overview", "atlas-ui.pipeline-overview")
 	session.config.buf = utils.buffer.create(prefix .. "/config", "")
 	vim.bo[session.config.buf].readonly = true
 	vim.bo[session.explorer.buf].bufhidden = "wipe"
@@ -180,6 +183,7 @@ end
 local function setup_windows(session)
 	local placeholder_buf = vim.api.nvim_get_current_buf()
 	session.logs.win = vim.api.nvim_get_current_win()
+	session.overview.win = session.logs.win
 	session.config.win = session.logs.win
 	vim.api.nvim_win_set_buf(session.logs.win, session.logs.buf)
 	utils.buffer.delete(placeholder_buf)
@@ -231,6 +235,7 @@ local function close(session)
 	end
 	utils.buffer.delete(session.explorer.buf)
 	utils.buffer.delete(session.logs.buf)
+	utils.buffer.delete(session.overview.buf)
 	utils.buffer.delete(session.config.buf)
 end
 
@@ -259,7 +264,7 @@ local function setup_events(session)
 			on_close(session)
 		end,
 	})
-	for _, pane in ipairs({ session.explorer, session.logs, session.config }) do
+	for _, pane in ipairs({ session.explorer, session.logs, session.overview, session.config }) do
 		vim.api.nvim_create_autocmd("BufWipeout", {
 			group = session.group,
 			buffer = pane.buf,
@@ -268,6 +273,44 @@ local function setup_events(session)
 			end,
 		})
 	end
+end
+
+---@param session PullsPipelinesSession
+---@param buf integer
+local function show_buffer(session, buf)
+	vim.api.nvim_win_set_buf(session.logs.win, buf)
+	session.statusline:attach(session.logs.win)
+end
+
+---@param session PullsPipelinesSession
+---@param selection PullsPipelinesSelection|nil
+---@param opts { force_refresh?: boolean, background?: boolean }|nil
+local function show_selection(session, selection, opts)
+	config.clear(session.config)
+	if selection and selection.pipeline and not selection.job then
+		show_buffer(session, session.overview.buf)
+		logs.show(session.logs, nil)
+		overview.show(session.overview, selection)
+	else
+		show_buffer(session, session.logs.buf)
+		logs.show(session.logs, selection, opts)
+	end
+end
+
+---@param session PullsPipelinesSession
+---@param selection PullsPipelinesSelection|nil
+local function toggle_config(session, selection)
+	if utils.window.has_buffer(session.logs.win, session.config.buf) then
+		show_selection(session, session.explorer.selection)
+		return
+	end
+	if not selection or not selection.pipeline then
+		notify.warn("No pipeline selected")
+		return
+	end
+	show_buffer(session, session.config.buf)
+	logs.show(session.logs, nil)
+	config.show(session.config, selection)
 end
 
 ---@param session PullsPipelinesSession
@@ -281,15 +324,7 @@ local function setup_panes(session)
 		explorer.reload_job(session.explorer, selection, opts)
 	end)
 	explorer.setup(session.explorer, function(selection, opts)
-		if selection and selection.pipeline and not selection.job then
-			vim.api.nvim_win_set_buf(session.config.win, session.config.buf)
-			logs.show(session.logs, nil)
-			config.show(session.config, selection)
-		else
-			config.clear(session.config)
-			vim.api.nvim_win_set_buf(session.logs.win, session.logs.buf)
-			logs.show(session.logs, selection, opts)
-		end
+		show_selection(session, selection, opts)
 	end, function()
 		update_statusline(session)
 	end)
@@ -307,6 +342,7 @@ function M.open(context, backend, opts)
 		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
 		explorer = { context = context, backend = backend, pipelines = "loading", line_map = {} },
 		logs = { context = context, backend = backend, collapsed = {}, line_map = {}, entry_rows = {} },
+		overview = { line_map = {} },
 		config = { context = context, backend = backend },
 	}
 	---@cast session PullsPipelinesSession
@@ -318,6 +354,8 @@ function M.open(context, backend, opts)
 		close(session)
 	end, function(selection)
 		open_actions(session, selection)
+	end, function(selection)
+		toggle_config(session, selection)
 	end)
 	explorer.refresh(
 		session.explorer,

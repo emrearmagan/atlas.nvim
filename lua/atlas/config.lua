@@ -303,6 +303,7 @@ local defaults = {
 				show_history = "gH",
 				toggle_raw_logs = "gL",
 				toggle_auto_refresh = "gR",
+				toggle_config = "gC",
 			},
 			review = {
 				show_details = "K", -- File/commit details.
