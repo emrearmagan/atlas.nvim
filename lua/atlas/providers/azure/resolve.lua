@@ -25,7 +25,7 @@ function M.resolve(value, parsed)
 				path:match("^/([^/]+)/([^/]+)/_git/([^/]+)/pullrequest/(%d+)(.*)$")
 		end
 		if organization == nil then
-			organization, project, repo = path:match("^/([^/]+)/([^/]+)/_git/([^/]+)$")
+			organization, project, repo, tail = path:match("^/([^/]+)/([^/]+)/_git/([^/]+)(.*)$")
 		end
 		if organization == nil then
 			return nil, "Unsupported Azure DevOps URL. Expected a repository, pull request, or work item URL"
@@ -64,7 +64,8 @@ function M.resolve(value, parsed)
 		utils.url_encode(repo)
 	)
 	local id = number and assert(tonumber(number)) or nil
-	return {
+	---@type AtlasTarget
+	local target = {
 		provider = "azure",
 		domain = "pulls",
 		entity = id and "pr" or "repo",
@@ -78,6 +79,19 @@ function M.resolve(value, parsed)
 		id = id,
 		number = id,
 	}
+	if id then
+		return target
+	end
+
+	target.page = ({
+		branches = "branches",
+		tags = "tags",
+	})[(tail or ""):match("^/([^/]+)") or ""]
+	if not tail or tail == "" or target.page then
+		return target
+	end
+
+	return nil, "Unsupported Azure DevOps URL. Expected a repository, pull request, or work item URL"
 end
 
 return M

@@ -25,8 +25,9 @@ local function comments_endpoint(issue)
 end
 
 ---@param raw table
+---@param issue AzureIssue
 ---@return AzureIssueComment
-local function to_comment(raw)
+local function to_comment(raw, issue)
 	local reactions = {}
 	for _, reaction in ipairs(json.safe_table(raw.reactions)) do
 		local count = tonumber(reaction.count) or 0
@@ -43,9 +44,11 @@ local function to_comment(raw)
 	local author = users.to_user(raw.createdBy)
 	local authors = {}
 	users.add_mention_name(authors, author)
+	local reporter_id = issue.reporter and issue.reporter.id
 	return {
 		id = tostring(raw.id),
 		author = author,
+		author_roles = author and author.id and author.id == reporter_id and { "Author" } or nil,
 		body = raw.text or "",
 		body_display = users.resolve_mentions(raw.text or "", authors),
 		body_format = (raw.format or "html"):lower(),
@@ -115,7 +118,7 @@ function M.fetch_conversation(issue, opts, on_done)
 				scope.run(function(done)
 					return markdown.to_markdown(raw.text or "", raw.format, done)
 				end, function(body, format)
-					local comment = to_comment(raw)
+					local comment = to_comment(raw, issue)
 					comment.body = body
 					comment.body_format = format
 					table.insert(comments, comment)
@@ -146,7 +149,7 @@ function M.add_comment(issue, text, _opts, on_done)
 				return
 			end
 			service.clear_cache()
-			on_done(to_comment(result), nil)
+			on_done(to_comment(result, issue), nil)
 		end,
 		{ action = "Add work item comment", issue_key = issue.key },
 		"7.1-preview.4"
@@ -169,7 +172,7 @@ function M.edit_comment(issue, comment, text, on_done)
 			return
 		end
 		service.clear_cache()
-		on_done(to_comment(result), nil)
+		on_done(to_comment(result, issue), nil)
 	end, { action = "Edit work item comment", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.4")
 end
 

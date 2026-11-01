@@ -353,6 +353,13 @@ describe("providers.resolve", function()
 			end
 		end)
 
+		it("resolves repository pages", function()
+			local base = "https://dev.azure.com/acme/platform/_git/api"
+			assert.are.equal("branches", assert(providers.resolve(base .. "/branches")).page)
+			assert.are.equal("tags", assert(providers.resolve(base .. "/tags")).page)
+			assert.is_nil(providers.resolve(base .. "/commits"))
+		end)
+
 		it("rejects other organizations", function()
 			local target, err = providers.resolve("https://dev.azure.com/other/platform/_git/api/pullrequest/17")
 			assert.is_nil(target)

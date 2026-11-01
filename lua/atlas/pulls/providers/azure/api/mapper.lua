@@ -214,11 +214,13 @@ function M.to_comment(raw, thread, pr, viewer, authors)
 		table.insert(liked, author)
 		reacted = reacted or (viewer ~= nil and author.id == viewer)
 	end
+	local author = to_author(raw.author)
 	local comment = {
 		id = thread.id .. ":" .. raw.id,
 		parent_id = raw.parentCommentId > 0 and (thread.id .. ":" .. raw.parentCommentId) or nil,
 		thread_id = tostring(thread.id),
-		author = to_author(raw.author),
+		author = author,
+		author_roles = author.id and author.id == pr.author.id and { "Author" } or nil,
 		body = raw.isDeleted and "" or raw.content,
 		created_at = raw.publishedDate,
 		state = not raw.isDeleted and thread_states[thread.status] or nil,
