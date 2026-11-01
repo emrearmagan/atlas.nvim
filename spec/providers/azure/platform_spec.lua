@@ -79,7 +79,7 @@ describe("Azure repositories and builds", function()
 		for index = 1, 2 do
 			local request = requests[index]
 			local is_pr = request.endpoint:find("reasonFilter=pullRequest", 1, true)
-			request.done(is_pr and { build(5, "merge-sha"), build(9, "old-sha") } or {})
+			request.done(is_pr and { build(5, "old-merge-sha") } or { build(9, "old-sha") })
 		end
 	end
 
@@ -109,7 +109,7 @@ describe("Azure repositories and builds", function()
 		}
 	end
 
-	it("filters builds by commit and maps timeline tasks to job logs", function()
+	it("keeps the latest PR build, drops stale branch builds and maps job logs", function()
 		local result
 		pipelines.fetch(context, {}, function(value, err)
 			assert.is_nil(err)

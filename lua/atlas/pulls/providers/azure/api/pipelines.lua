@@ -189,9 +189,7 @@ local function fetch_pr(context, pr, opts, on_done)
 		end
 		local builds = {}
 		for _, build in ipairs(results.pullrequest) do
-			if build.sourceVersion == pr.merge_commit_hash then
-				table.insert(builds, build)
-			end
+			table.insert(builds, build)
 		end
 		for _, build in ipairs(results.branch) do
 			if build.sourceVersion == pr.source.commit_hash then
