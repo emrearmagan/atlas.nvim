@@ -25,6 +25,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field cursors table<integer, string>
 ---@field next_cursor string|nil
 ---@field root string|nil
+---@field remote string|nil
 ---@field root_loading boolean
 ---@field root_error string|nil
 ---@field root_request AtlasRequestScope
@@ -142,7 +143,7 @@ local function load_history(state, branch)
 	state.commits = "loading"
 	state.statusline:notify("loading", "Loading commits...")
 	render(state)
-	state.commit_request = checkout.branch_history(root, branch, function(result, err)
+	state.commit_request = checkout.branch_history(root, state.remote, branch, function(result, err)
 		if not state.busy then
 			state.statusline:clear_notice()
 		end
@@ -335,7 +336,7 @@ local function open_diff(state)
 
 			state.statusline:notify("loading", "Preparing branch diff...")
 			state.requests.run(function(done)
-				return checkout.fetch_commits(root, { base, branch }, done)
+				return checkout.fetch_commits(root, state.remote, { base, branch }, done)
 			end, function(ok, err)
 				state.statusline:clear_notice()
 				if not ok then
@@ -390,7 +391,7 @@ local function checkout_branch(state, branch)
 	state.busy = true
 	state.statusline:notify("loading", "Checking out " .. branch.name .. "...")
 	state.requests.run(function(done)
-		return checkout.checkout_branch(root, branch.name, done)
+		return checkout.checkout_branch(root, state.remote, branch.name, done)
 	end, function(ok, err)
 		state.busy = false
 		state.statusline:clear_notice()
@@ -567,12 +568,13 @@ function M.open(opts)
 	load(state)
 	state.root_request.run(function(done)
 		return checkout.resolve_repo_root(opts.repo.full_name, opts.repo.html_url, done)
-	end, function(root, err)
+	end, function(root, err, remote)
 		if state.closed or not utils.window.has_buffer(state.win, state.buf) then
 			return
 		end
 
 		state.root = root
+		state.remote = remote
 		state.root_error = err
 		state.root_loading = false
 		render(state)
