@@ -66,16 +66,10 @@
 ---@field pipeline PullsPipeline
 ---@field stage PullsPipelineStage|nil
 ---@field job PullsPipelineJob|nil
----@field notify fun(level: AtlasNotifyLevel, message: string, duration: integer|nil)|nil
 
----@class PullsPipelineAction
----@field id string
----@field label string
----@field icon string|nil
----@field hidden boolean|nil
----@field confirm string|nil
+---@class PullsPipelineAction: AtlasAction
 ---@field is_available (fun(ctx: PullsPipelineActionContext): boolean, string|nil)|nil
----@field run fun(ctx: PullsPipelineActionContext, done: fun(result: nil, err: string|nil)): boolean|{ cancel: fun() }|nil
+---@field run fun(ctx: PullsPipelineActionContext, done: fun(ok: boolean, err: string|nil)): boolean|{ cancel: fun() }|nil
 
 local M = {}
 

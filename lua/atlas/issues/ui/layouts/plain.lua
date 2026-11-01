@@ -19,21 +19,19 @@ end
 
 M.github = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "comments", name = icons.get("comment"), min_width = 2, can_grow = false },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "status", name = " Status", can_grow = false },
 	},
-	values = function(issue, opts, is_child)
+	values = function(issue, opts)
 		---@cast issue GitHubIssue
 		local label = string.format("#%d", issue.number)
-		local icon = github_issue_icon(issue)
 
 		return {
-			icon = is_child and "" or icon,
-			name = (is_child and "  " .. icon .. "  " or "") .. label .. " " .. issue.title,
+			icon = github_issue_icon(issue),
+			name = label .. " " .. issue.title,
 			_key_label = label,
 			comments = tostring(tonumber(issue.comment_count) or 0),
 			assignee = utils.person_value(issue.assignee, "Unassigned"),
@@ -48,15 +46,10 @@ M.github = {
 		end
 		---@cast issue GitHubIssue
 
-		local icon, icon_hl = github_issue_icon(issue)
-		if column.key == "icon" then
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
+		if column.key == "name" then
+			local icon, icon_hl = github_issue_icon(issue)
 			local spans = utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
-			if row._is_child then
-				utils.highlight_match(spans, context.text, icon, icon_hl)
-			end
-			return spans
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
 		elseif column.key == "comments" then
 			return "AtlasTextMuted"
 		elseif column.key == "status" then
@@ -72,20 +65,18 @@ M.forgejo = M.github
 
 M.gitlab = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "status", name = " Status", can_grow = false },
 	},
-	values = function(issue, opts, is_child)
+	values = function(issue, opts)
 		---@cast issue GitLabIssue
 		local label = string.format("#%d", issue.iid)
-		local icon = utils.state_icon(issue.status_id)
 
 		return {
-			icon = is_child and "" or icon,
-			name = (is_child and "  " .. icon .. "  " or "") .. label .. " " .. issue.title,
+			icon = utils.state_icon(issue.status_id),
+			name = label .. " " .. issue.title,
 			_key_label = label,
 			assignee = utils.person_value(issue.assignee, "Unassigned"),
 			reporter = utils.person_value(issue.reporter, "Unknown"),
@@ -98,15 +89,10 @@ M.gitlab = {
 			return nil
 		end
 
-		local icon, icon_hl = utils.state_icon(issue.status_id)
-		if column.key == "icon" then
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
+		if column.key == "name" then
+			local icon, icon_hl = utils.state_icon(issue.status_id)
 			local spans = utils.key_title_highlights(context.text, row._key_label, "AtlasTextMuted")
-			if row._is_child then
-				utils.highlight_match(spans, context.text, icon, icon_hl)
-			end
-			return spans
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
 		elseif column.key == "status" then
 			return utils.status_hl(issue, opts, utils.state_chip_hl(issue.status_id))
 		end
@@ -118,21 +104,18 @@ M.gitlab = {
 M.jira = {
 	tree_indicator = true,
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "status", name = " Status", can_grow = false },
 	},
-	values = function(issue, opts, is_child)
+	values = function(issue, opts)
 		---@cast issue JiraIssue
-		local icon = utils.type_icon(issue)
 		local priority = icons.get(issue.priority or "", "priority")
-		local title = utils.join({ issue.key .. " " .. issue.title, priority, utils.due_text(issue) })
 
 		return {
-			icon = is_child and "" or icon,
-			name = (is_child and "  " .. icon .. " " or "") .. title,
+			icon = utils.type_icon(issue),
+			name = utils.join({ issue.key .. " " .. issue.title, priority, utils.due_text(issue) }),
 			assignee = utils.person_value(issue.assignee, "Unassigned"),
 			reporter = utils.person_value(issue.reporter, "Unknown"),
 			status = utils.status_value(issue, opts),
@@ -145,15 +128,11 @@ M.jira = {
 		end
 		---@cast issue JiraIssue
 
-		local icon, icon_hl = utils.type_icon(issue)
-		if column.key == "icon" then
-			return utils.highlight_match({}, context.text, icon, icon_hl)
-		elseif column.key == "name" then
+		if column.key == "name" then
+			local icon, icon_hl = utils.type_icon(issue)
 			local key_hl = presentation.issue_hl(row._is_child and "" or issue.key)
 			local spans = utils.key_title_highlights(context.text, issue.key, key_hl)
-			if row._is_child then
-				utils.highlight_match(spans, context.text, icon, icon_hl)
-			end
+			utils.highlight_match(spans, context.text, icon, icon_hl)
 			if issue.priority and issue.priority ~= "" then
 				local priority, priority_hl = icons.get(issue.priority, "priority")
 				utils.highlight_match(spans, context.text, priority, priority_hl)
@@ -169,7 +148,6 @@ M.jira = {
 
 M.default = {
 	columns = {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
 		{ key = "name", name = "Issue", min_width = 42 },
 		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
 		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
@@ -179,8 +157,8 @@ M.default = {
 		return {
 			icon = "",
 			name = (issue.key or "") .. " " .. issue.title,
-			assignee = issue.assignee and issue.assignee.name or "Unassigned",
-			reporter = issue.reporter and issue.reporter.name or "Unknown",
+			assignee = issue.assignee and presentation.person_name(issue.assignee) or "Unassigned",
+			reporter = presentation.person_name(issue.reporter),
 			status = string.format(" %s ", issue.status or ""),
 		}
 	end,
@@ -200,45 +178,39 @@ function M.render(opts, issues, provider)
 	end
 
 	local collapsed = opts.collapsed or {}
+	local child_indent = provider.tree_indicator and "    " or "  "
 	local rows = {}
 	local show_indicator = false
 
-	local function issue_row(issue, is_child)
-		local row = provider.values(issue, opts, is_child)
-		if issue.is_starred then
-			row.name = STAR_ICON .. " " .. row.name
-		end
-
-		row._item = { kind = "issue", key = issue.key, _issue = issue }
+	local function issue_row(issue, prefix, fold, fold_hl)
+		local row = provider.values(issue, opts)
+		local icon = fold or row.icon
+		local star = issue.is_starred and (STAR_ICON .. " ") or ""
+		row.name = prefix .. (icon ~= "" and (icon .. " ") or "") .. star .. row.name
+		row._fold_icon, row._fold_icon_hl = fold, fold_hl
+		row._item = { kind = "issue", issue = issue }
 		row._issue = issue
-		row._is_child = is_child
+		row._is_child = prefix ~= ""
 		row.children = {}
 
 		return row
 	end
 
-	for index, group in ipairs(groups) do
-		local row = issue_row(group.issue, false)
-
-		for _, child in ipairs(group.children) do
-			table.insert(row.children, issue_row(child, true))
-		end
-
+	for _, group in ipairs(groups) do
+		local fold, fold_hl
 		if #group.children > 0 then
 			if provider.tree_indicator then
 				show_indicator = true
 			else
-				row.icon, row._fold_icon_hl = icons.get(collapsed[group.issue.key] and "fold_closed" or "fold_open")
+				fold, fold_hl = icons.get(collapsed[group.issue.key] and "fold_closed" or "fold_open")
 			end
 		end
 
-		table.insert(rows, row)
-
-		if index < #groups then
-			local separator = utils.blank_row(provider.columns)
-			separator.kind = "separator"
-			table.insert(rows, separator)
+		local row = issue_row(group.issue, "", fold, fold_hl)
+		for _, child in ipairs(group.children) do
+			table.insert(row.children, issue_row(child, child_indent))
 		end
+		table.insert(rows, row)
 	end
 
 	if opts.loading then
@@ -252,7 +224,7 @@ function M.render(opts, issues, provider)
 		rows = rows,
 		hide_columns = { "reporter", "assignee" },
 		tree = {
-			column_key = "icon",
+			column_key = "name",
 			children_key = "children",
 			default_expanded = true,
 			indent = "",
@@ -263,14 +235,15 @@ function M.render(opts, issues, provider)
 			end,
 		},
 		cell_hl = function(row, column, context)
-			if column.key == "icon" and row._fold_icon_hl then
-				return row._fold_icon_hl
-			end
-
 			local spans = provider.highlights and provider.highlights(row, column, context, opts) or nil
-			if column.key == "name" and row._issue and row._issue.is_starred then
+			if column.key == "name" and row._issue then
 				spans = spans or {}
-				table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_HIGHLIGHT })
+				if row._fold_icon then
+					utils.highlight_match(spans, context.text, row._fold_icon, row._fold_icon_hl)
+				end
+				if row._issue.is_starred then
+					utils.highlight_match(spans, context.text, STAR_ICON, STAR_HIGHLIGHT)
+				end
 			end
 
 			return spans

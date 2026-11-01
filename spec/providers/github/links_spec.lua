@@ -14,7 +14,7 @@ end
 
 local function response(fields)
 	local item = {
-		url = "https://github.com/octo/repo/issues/1",
+		url = "https://github.com/owner/repo/issues/1",
 		subIssues = { nodes = {} },
 		closedByPullRequestsReferences = { nodes = {} },
 		blockedBy = { nodes = {} },
@@ -63,15 +63,15 @@ describe("GitHub related issues and pull requests", function()
 			assert.matches("includeClosedPrs: true", table.concat(call.args, " "), 1, true)
 			call.callback(response({
 				parent = parent,
-				subIssues = { nodes = { subject("issue", "octo/repo", 3) } },
+				subIssues = { nodes = { subject("issue", "owner/repo", 3) } },
 				closedByPullRequestsReferences = { nodes = { pr } },
-				blockedBy = { nodes = { subject("issue", "octo/repo", 4) } },
-				blocking = { nodes = { subject("issue", "octo/repo", 4) } },
+				blockedBy = { nodes = { subject("issue", "owner/repo", 4) } },
+				blocking = { nodes = { subject("issue", "owner/repo", 4) } },
 				timelineItems = { nodes = { { source = pr }, { source = subject("issue", "elsewhere/repo", 8) } } },
 			}))
 		end
 		local links, err
-		require(MODULE).fetch_issue({ key = "octo/repo#1" }, nil, function(result, error)
+		require(MODULE).fetch_issue({ key = "owner/repo#1" }, nil, function(result, error)
 			links, err = result, error
 		end)
 		assert.is_nil(err)
@@ -90,7 +90,7 @@ describe("GitHub related issues and pull requests", function()
 		handler = function(call)
 			local event = { source = subject("issue", "other/repo", 3) }
 			call.callback(response({
-				url = "https://github.com/octo/repo/pull/10",
+				url = "https://github.com/owner/repo/pull/10",
 				closingIssuesReferences = {
 					nodes = { subject("issue", "other/repo", 1), subject("issue", "other/repo", 2) },
 				},
@@ -98,7 +98,7 @@ describe("GitHub related issues and pull requests", function()
 			}))
 		end
 		local links
-		require(MODULE).fetch_pr({ repo_full_name = "octo/repo", id = "10" }, nil, function(result, err)
+		require(MODULE).fetch_pr({ repo_full_name = "owner/repo", id = "10" }, nil, function(result, err)
 			assert.is_nil(err)
 			links = result
 		end)

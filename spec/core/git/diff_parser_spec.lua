@@ -9,8 +9,8 @@ describe("core.git.diff_parser", function()
 		}) do
 			local hunk = parser.parse("diff --git a/x b/x\n" .. case[1])[1].hunks[1]
 			assert.same(case[2], { hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count })
-			assert.equals(case[3], hunk.context)
-			assert.equals(case[1], hunk.header)
+			assert.equal(case[3], hunk.context)
+			assert.equal(case[1], hunk.header)
 		end
 	end)
 
@@ -34,8 +34,8 @@ describe("core.git.diff_parser", function()
 			{ kind = "add", content = "delta", text = "+delta", new_line = 22 },
 			{ kind = "meta", content = "\\ No newline at end of file", text = "\\ No newline at end of file" },
 		}, hunk.lines)
-		assert.equals(2, hunk.additions)
-		assert.equals(1, hunk.deletions)
+		assert.equal(2, hunk.additions)
+		assert.equal(1, hunk.deletions)
 	end)
 
 	it("preserves header-like source lines in full diffs and standalone hunks", function()
@@ -43,15 +43,15 @@ describe("core.git.diff_parser", function()
 		local file =
 			parser.parse("diff --git a/source.lua b/source.lua\n--- a/source.lua\n+++ b/source.lua\n" .. raw_hunk)[1]
 
-		assert.equals("source.lua", file.path)
-		assert.equals("modified", file.status)
+		assert.equal("source.lua", file.path)
+		assert.equal("modified", file.status)
 		assert.is_nil(file.old_path)
 		assert.same({
 			{ kind = "remove", text = "--- a/old", content = "-- a/old", old_line = 1 },
 			{ kind = "add", text = "+++ b/new", content = "++ b/new", new_line = 1 },
 		}, file.hunks[1].lines)
-		assert.equals(1, file.hunks[1].additions)
-		assert.equals(1, file.hunks[1].deletions)
+		assert.equal(1, file.hunks[1].additions)
+		assert.equal(1, file.hunks[1].deletions)
 		assert.same(file.hunks[1], parser.parse_hunk(raw_hunk))
 	end)
 
@@ -80,10 +80,10 @@ describe("core.git.diff_parser", function()
 			},
 		}) do
 			local file = parser.parse(case[1])[1]
-			assert.equals(case[2], file.status)
-			assert.equals(case[3], file.path)
+			assert.equal(case[2], file.status)
+			assert.equal(case[3], file.path)
 			if case[4] then
-				assert.equals(case[4], file.old_path)
+				assert.equal(case[4], file.old_path)
 			end
 		end
 	end)
@@ -104,11 +104,11 @@ describe("core.git.diff_parser", function()
 			"+2!",
 		}, "\n"))
 
-		assert.equals(2, #files)
-		assert.equals("a.lua", files[1].path)
-		assert.equals("b.lua", files[2].path)
-		assert.equals(1, #files[1].hunks)
-		assert.equals(1, #files[2].hunks)
+		assert.equal(2, #files)
+		assert.equal("a.lua", files[1].path)
+		assert.equal("b.lua", files[2].path)
+		assert.equal(1, #files[1].hunks)
+		assert.equal(1, #files[2].hunks)
 	end)
 
 	it("keeps multiple hunks in one file", function()
@@ -123,9 +123,9 @@ describe("core.git.diff_parser", function()
 			"+X",
 		}, "\n"))[1].hunks
 
-		assert.equals(2, #hunks)
-		assert.equals(1, hunks[1].new_start)
-		assert.equals(50, hunks[2].new_start)
+		assert.equal(2, #hunks)
+		assert.equal(1, hunks[1].new_start)
+		assert.equal(50, hunks[2].new_start)
 	end)
 
 	it("returns no files for an empty diff", function()
@@ -139,8 +139,8 @@ describe("core.git.diff_parser", function()
 			"Binary files /dev/null and b/empty.bin differ",
 		}, "\n"))
 
-		assert.equals(1, #files)
-		assert.equals("added", files[1].status)
+		assert.equal(1, #files)
+		assert.equal("added", files[1].status)
 		assert.same({}, files[1].hunks)
 	end)
 end)

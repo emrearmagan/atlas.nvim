@@ -24,7 +24,9 @@ local GQL_DISCUSSIONS = [[
 								body
 								system
 								createdAt
-								author { username name }
+								maxAccessLevelOfAuthor
+								authorIsContributor
+								author { username name bot }
 								awardEmoji { nodes { name user { name username } } }
 							}
 						}
@@ -42,7 +44,7 @@ local CREATE_NOTE_MUTATION = [[
 mutation($noteableId:NoteableID!,$body:String!,$discussionId:DiscussionID){
   createNote(input:{noteableId:$noteableId,body:$body,discussionId:$discussionId}){
     errors
-    note{id body createdAt author{username name} discussion{id notes(first:1){nodes{id}}}}
+    note{id body createdAt maxAccessLevelOfAuthor authorIsContributor author{username name bot} discussion{id notes(first:1){nodes{id}}}}
   }
 }
 ]]
@@ -51,7 +53,7 @@ local UPDATE_NOTE_MUTATION = [[
 mutation($id:NoteID!,$body:String!){
   updateNote(input:{id:$id,body:$body}){
     errors
-    note{id body createdAt author{username name} discussion{id notes(first:1){nodes{id}}}}
+    note{id body createdAt maxAccessLevelOfAuthor authorIsContributor author{username name bot} discussion{id notes(first:1){nodes{id}}}}
   }
 }
 ]]
@@ -100,7 +102,12 @@ local function fetch_discussions(issue, opts, on_done)
 		local work_items = json.safe_table(json.safe_table(project).workItems).nodes
 		local viewer = json.safe_str(json.safe_table(json.safe_table(data).currentUser).username)
 		local result = {
-			description = normalizer.to_description(raw_issue, json.safe_table(work_items)[1], viewer),
+			description = normalizer.to_description(
+				raw_issue,
+				json.safe_table(work_items)[1],
+				viewer,
+				issue.reporter and issue.reporter.username
+			),
 			discussions = json.safe_table(json.safe_table(discussions).nodes),
 			viewer = viewer,
 		}
@@ -115,42 +122,32 @@ end
 
 ---@param discussions table[]
 ---@param viewer string|nil
----@return IssueConversationItem[]
-local function map_discussions(discussions, viewer)
-	local items = {}
-	local events = {}
+---@param author_username string|nil
+---@return IssueComment[] comments, IssueActivityEntry[] activities
+local function map_discussions(discussions, viewer, author_username)
+	local comments, activities = {}, {}
 	for _, discussion_value in ipairs(discussions) do
 		local discussion = json.safe_table(discussion_value)
 		for _, raw in ipairs(json.safe_table(json.safe_table(discussion.notes).nodes)) do
 			if raw.system == true then
 				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
-					table.insert(events, {
-						id = table.concat({ "activity", entry.date or "", #events + 1 }, ":"),
-						kind = "activity",
-						created_at = entry.date or "",
-						entity = entry,
-					})
+					table.insert(activities, entry)
 				end
 			else
-				local comment = normalizer.to_comment(raw, discussion, viewer)
+				local comment = normalizer.to_comment(raw, discussion, viewer, author_username)
 				if comment then
-					table.insert(items, {
-						id = "comment:" .. tostring(comment.id),
-						kind = "comment",
-						created_at = comment.created_at or "",
-						entity = comment,
-					})
+					table.insert(comments, comment)
 				end
 			end
 		end
 	end
-	return vim.list_extend(items, events)
+	return comments, activities
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: IssueConversation|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	return fetch_discussions(issue, opts, function(result, err)
@@ -158,17 +155,9 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local items = map_discussions(result.discussions, result.viewer)
-		local description = result.description
-		if description then
-			table.insert(items, 1, {
-				id = "description",
-				kind = "description",
-				created_at = description.created_at,
-				entity = description,
-			})
-		end
-		on_done(items, nil)
+		local comments, activities =
+			map_discussions(result.discussions, result.viewer, issue.reporter and issue.reporter.username)
+		on_done({ description = result.description, comments = comments, activities = activities }, nil)
 	end)
 end
 
@@ -207,7 +196,8 @@ function M.add_comment(issue, body, opts, on_done)
 	local variables = { noteableId = issue.node_id, body = body, discussionId = parent and parent.thread_id }
 	local ctx = { action = parent and "Reply in discussion" or "Add discussion" }
 	return mutate(issue, CREATE_NOTE_MUTATION, variables, "createNote", ctx, function(note, err)
-		local comment = note and normalizer.to_comment(note, note.discussion)
+		local comment = note
+			and normalizer.to_comment(note, note.discussion, nil, issue.reporter and issue.reporter.username)
 		if not comment then
 			on_done(nil, err or "GitLab did not return the created comment")
 			return
@@ -229,7 +219,8 @@ function M.edit_comment(issue, comment, body, on_done)
 	local variables = { id = comment.id, body = body }
 	local ctx = { action = "Edit note", note_id = comment.id }
 	return mutate(issue, UPDATE_NOTE_MUTATION, variables, "updateNote", ctx, function(note, err)
-		local updated = note and normalizer.to_comment(note, note.discussion)
+		local updated = note
+			and normalizer.to_comment(note, note.discussion, nil, issue.reporter and issue.reporter.username)
 		if not updated then
 			on_done(nil, err or "GitLab did not return the updated comment")
 			return

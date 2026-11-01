@@ -96,7 +96,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch_conversation(pr, opts, on_done)
 	local requests = request_scope.new()
@@ -117,10 +117,10 @@ function M.fetch_conversation(pr, opts, on_done)
 		end
 
 		local global_comments, global_tasks = global_items(values.comments or {}, values.tasks or {})
-		local timeline = {}
+		local activities = {}
 		for _, event in ipairs(values.events or {}) do
 			if event.kind ~= "comment" then
-				table.insert(timeline, event)
+				table.insert(activities, event)
 			end
 		end
 
@@ -130,32 +130,11 @@ function M.fetch_conversation(pr, opts, on_done)
 				table.insert(failed, string.format("%s: %s", source, errors[source]))
 			end
 		end
-		local items = {}
-		for _, comment in ipairs(global_comments) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_at = comment.created_at or "",
-				entity = comment,
-			})
-		end
-		for _, task in ipairs(global_tasks) do
-			table.insert(items, {
-				id = "task:" .. tostring(task.id),
-				kind = "comment",
-				created_at = task.created_at or "",
-				entity = task,
-			})
-		end
-		for _, event in ipairs(timeline) do
-			table.insert(items, {
-				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
-				kind = "activity",
-				created_at = event.date or "",
-				entity = event,
-			})
-		end
-		on_done(items, #failed > 0 and table.concat(failed, "; ") or nil)
+		on_done({
+			comments = vim.list_extend(global_comments, global_tasks),
+			reviews = {},
+			activities = activities,
+		}, #failed > 0 and table.concat(failed, "; ") or nil)
 	end)
 	return requests
 end

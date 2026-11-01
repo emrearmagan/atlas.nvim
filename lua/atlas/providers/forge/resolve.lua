@@ -16,7 +16,7 @@ function M.new(service)
 	---@return string, string, string
 	local function repository(host, owner, repo)
 		local full_name = owner .. "/" .. repo
-		local web_url = url.base_url(provider_id, host, default_host) .. "/" .. full_name
+		local web_url = url.base_url(provider_id, host) .. "/" .. full_name
 		return full_name, web_url, web_url .. ".git"
 	end
 
@@ -43,7 +43,7 @@ function M.new(service)
 			return nil, nil
 		end
 		local host = git_transport and base.host or parsed.host
-		local path = url.path(parsed, base)
+		local path = url.relative_path(parsed, base)
 		if path == nil and parsed.remote then
 			path = parsed.path
 		end

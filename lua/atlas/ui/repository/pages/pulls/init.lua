@@ -1,12 +1,16 @@
 local opener = require("atlas.commands.open")
 local diff = require("atlas.pulls.diff")
-local resolver = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
-local layouts = require("atlas.pulls.ui.layouts")
+local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
+local github_search = require("atlas.providers.github.completion.search")
+local gitlab_query = require("atlas.providers.gitlab.query")
+local gitlab_search = require("atlas.providers.gitlab.completion.search")
 local spinner = require("atlas.ui.components.spinner")
-local picker = require("atlas.ui.picker")
 local help = require("atlas.ui.popups.help")
+local keymaps = require("atlas.ui.repository.pages.pulls.keymaps")
+local renderer = require("atlas.ui.repository.pages.pulls.renderer")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -16,9 +20,9 @@ local utils = require("atlas.ui.shared.utils")
 ---@field sidebar_buf integer
 ---@field provider PullsProvider|nil
 ---@field view AtlasPullsViewConfig|nil
+---@field query string|nil
 ---@field statusline AtlasStatusline
 ---@field pulls PullRequest[]|string
----@field filter PullsStateFilter
 ---@field page integer
 ---@field cursors table<integer, table<string, string>>
 ---@field next_cursor table<string, string>|nil
@@ -26,8 +30,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field line_map table<integer, PullRequest>
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
----@field group integer
----@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
+---@field keymaps table<string, AtlasHelpKeyItem[]>
 
 local M = { key = "pulls", label = "Pull Requests", icon = icons.get("pr") }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.pulls")
@@ -47,7 +50,7 @@ local function render(state)
 	if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 		return
 	end
-	local cursor = vim.api.nvim_win_get_cursor(state.win)
+
 	state.line_map = {}
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	local pulls = state.pulls
@@ -58,53 +61,26 @@ local function render(state)
 			end_row = vim.api.nvim_buf_line_count(state.buf),
 			line_hl_group = pulls == "loading" and "Normal" or "AtlasLogError",
 		})
+
 		return
 	end
-	local header, spans = " ", {}
-	for _, filter in ipairs(filters) do
-		local label = filter:gsub("^%l", string.upper)
-		spans[#spans + 1] = {
-			line = 0,
-			start_col = #header,
-			end_col = #header + #label,
-			hl_group = state.filter == filter and "Normal" or "AtlasTextMuted",
-		}
-		header = header .. label .. "  "
-	end
-	if state.page > 1 or state.next_cursor then
-		local page = "Page " .. state.page .. (state.total_pages and ("/" .. state.total_pages) or "")
-		spans[#spans + 1] = { line = 0, start_col = #header, end_col = #header + #page, hl_group = "AtlasTextMuted" }
-		header = header .. page
-	end
-	local lines = { header, "" }
+
+	local lines, spans, line_map = renderer.render(state, vim.api.nvim_win_get_width(state.win))
+	state.line_map = line_map
 	if #pulls == 0 then
-		utils.buffer.center_message(state.buf, state.win, "No " .. state.filter .. " pull requests found.", lines)
+		utils.buffer.center_message(state.buf, state.win, "No pull requests found.", lines)
 	else
-		local table_lines, line_map, table_spans = layouts.render({
-			width = vim.api.nvim_win_get_width(state.win),
-			provider_id = state.provider and state.provider.id,
-		}, pulls)
-		local offset = #lines
-		utils.append_block(lines, spans, { lines = table_lines, highlights = table_spans })
-		for row, item in pairs(line_map) do
-			if item.pr then
-				state.line_map[offset + row] = item.pr
-			end
-		end
 		vim.bo[state.buf].modifiable = true
 		vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 		vim.bo[state.buf].modifiable = false
 	end
+
 	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col or 0, {
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
 	end
-	if #pulls == 0 then
-		return
-	end
-	vim.api.nvim_win_set_cursor(state.win, { math.min(cursor[1], #lines), cursor[2] })
 end
 
 ---@param state RepositoryPulls
@@ -120,7 +96,7 @@ local function load(state, force_refresh)
 		render(state)
 		return
 	end
-	view._states = { state.filter }
+
 	state.pulls = "loading"
 	state.spinner:start()
 	state.statusline:notify("loading", "Loading pull requests...")
@@ -134,6 +110,7 @@ local function load(state, force_refresh)
 	end, function(page, errors)
 		state.spinner:stop()
 		state.statusline:clear_notice()
+		state.query = page.query
 		if errors and #errors > 0 then
 			state.pulls = table.concat(errors, "\n")
 			state.next_cursor = nil
@@ -142,6 +119,7 @@ local function load(state, force_refresh)
 			state.next_cursor = page.next_cursor
 			state.total_pages = page.total_pages
 		end
+
 		render(state)
 		for row = 1, vim.api.nvim_buf_line_count(state.buf) do
 			if state.line_map[row] then
@@ -153,54 +131,123 @@ local function load(state, force_refresh)
 end
 
 ---@param state RepositoryPulls
-local function search(state)
-	local pulls = state.pulls
-	if type(pulls) == "string" or #pulls == 0 then
-		return
+local function reload(state)
+	if states[state.buf] == state then
+		state.page, state.cursors, state.next_cursor = 1, {}, nil
+		load(state)
 	end
-	picker.select({
-		title = "Pull requests on this page",
-		items = pulls,
-		format_item = function(pr)
-			return string.format("%s  %s  %s", pr.id, pr.title:gsub("%c", " "), pr.author.name)
-		end,
-		on_select = function(pr)
-			if not pr or states[state.buf] ~= state or not utils.window.valid(state.win) then
-				return
-			end
-			for row = 1, vim.api.nvim_buf_line_count(state.buf) do
-				local entry = state.line_map[row]
-				if entry and entry.id == pr.id then
-					vim.api.nvim_set_current_win(state.win)
-					vim.api.nvim_win_set_cursor(state.win, { row, 0 })
-					return
-				end
-			end
-		end,
-	})
 end
 
 ---@param state RepositoryPulls
----@param buf integer
----@param actions table[]
-local function register(state, buf, actions)
-	local groups = { General = {}, Filters = {} }
-	for _, action in ipairs(actions) do
-		local keys = action.key
-		if keys and #keys > 0 then
-			local items = groups[action.group or "General"]
-			items[#items + 1] = {
-				key = keys,
-				desc = action.desc,
-				index = action.index,
-				callback = action.callback,
-				opts = { silent = true, nowait = true },
-			}
-		end
+local function edit_query(state)
+	local provider, view = state.provider, state.view
+	if not provider or not view or not state.query then
+		return
 	end
-	state.keymaps[buf] = groups
-	help.register("General", groups.General, { buffer = buf, index = 1 })
-	help.register("Filters", groups.Filters, { buffer = buf, index = 2 })
+
+	if provider.id == "github" then
+		---@cast view AtlasGitHubViewConfig
+		github_search.edit(state.query .. " ", function(query)
+			view.search = query
+			view._states = nil
+			reload(state)
+		end)
+	elseif provider.id == "gitlab" then
+		---@cast view AtlasGitLabPullsViewConfig
+		gitlab_search.edit("pulls", state.query, function(query)
+			local ok, err = gitlab_query.apply(view, query)
+			if not ok then
+				notify.warn(err)
+				return
+			end
+
+			reload(state)
+		end)
+	elseif provider.id == "bitbucket" then
+		---@cast view AtlasBitbucketViewConfig
+		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)
+			view.search = query
+			view._states = nil
+			reload(state)
+		end)
+	end
+end
+
+---@param state RepositoryPulls
+---@param status PullsStateFilter
+local function toggle_filter(state, status)
+	local provider, view = state.provider, state.view
+	if not provider or not view then
+		return
+	end
+
+	local _, active = provider.resolve_search(view)
+	local selected = {}
+	for _, value in ipairs(active) do
+		selected[value] = true
+	end
+
+	if selected[status] and #active == 1 then
+		notify.warn("At least one status filter must remain active")
+		return
+	end
+
+	selected[status] = not selected[status]
+	view._states = vim.tbl_filter(function(value)
+		return selected[value]
+	end, filters)
+	reload(state)
+end
+
+---@param state RepositoryPulls
+local function refresh(state)
+	state.page, state.cursors, state.next_cursor = 1, {}, nil
+	load(state, true)
+end
+
+---@param state RepositoryPulls
+local function next_page(state)
+	if state.pulls ~= "loading" and state.next_cursor then
+		state.page = state.page + 1
+		state.cursors[state.page] = state.next_cursor
+		load(state)
+	end
+end
+
+---@param state RepositoryPulls
+local function previous_page(state)
+	if state.pulls ~= "loading" and state.page > 1 then
+		state.page = state.page - 1
+		load(state)
+	end
+end
+
+---@param state RepositoryPulls
+local function open_diff(state)
+	local pr = current(state)
+	if pr then
+		diff.open_pr(pr, function(err)
+			if err then
+				state.statusline:notify("error", err)
+			end
+		end)
+	end
+end
+
+---@param state RepositoryPulls
+local function open_panel(state)
+	local pr = current(state)
+	if pr then
+		opener.open(pr.link.html)
+	end
+end
+
+---@param state RepositoryPulls
+local function open_in_browser(state)
+	local pr = current(state)
+	if pr then
+		vim.ui.open(pr.link.html)
+	end
 end
 
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
@@ -214,137 +261,45 @@ function M.open(opts)
 		win = opts.win,
 		sidebar_buf = opts.sidebar_buf,
 		provider = provider,
-		view = provider and target and provider.view_for_target(target),
+		view = provider and target and provider.repository_view(target),
 		statusline = opts.statusline,
 		pulls = "loading",
-		filter = "open",
 		page = 1,
 		cursors = {},
 		line_map = {},
 		requests = requests.new(),
 		spinner = spinner.create(),
-		group = vim.api.nvim_create_augroup("AtlasRepositoryPulls" .. opts.buf, { clear = true }),
 		keymaps = {},
 	}
+
 	states[state.buf] = state
 	state.spinner.on_tick = function()
 		if state.spinner:is_running() then
 			render(state)
 		end
 	end
+
 	vim.wo[state.win].cursorline = true
 	vim.wo[state.win].wrap = false
-	local actions = {
-		{
-			key = resolver.resolve("ui.refresh"),
-			desc = "Refresh pull requests",
-			callback = function()
-				state.page, state.cursors, state.next_cursor = 1, {}, nil
-				load(state, true)
-			end,
-			index = 80,
-		},
-		{
-			key = resolver.resolve("ui.search"),
-			desc = "Search this page",
-			group = "Filters",
-			callback = function()
-				search(state)
-			end,
-			index = 1,
-		},
-		{
-			key = resolver.resolve("ui.next_page"),
-			desc = "Next pull requests",
-			callback = function()
-				if state.pulls == "loading" or not state.next_cursor then
-					return
-				end
-				state.page = state.page + 1
-				state.cursors[state.page] = state.next_cursor
-				load(state)
-			end,
-			index = 16,
-		},
-		{
-			key = resolver.resolve("ui.previous_page"),
-			desc = "Previous pull requests",
-			callback = function()
-				if state.pulls ~= "loading" and state.page > 1 then
-					state.page = state.page - 1
-					load(state)
-				end
-			end,
-			index = 15,
-		},
-	}
-	for index, filter in ipairs(filters) do
-		actions[#actions + 1] = {
-			key = resolver.resolve("pulls.filters." .. filter),
-			desc = "Show " .. filter .. " pull requests",
-			group = "Filters",
-			callback = function()
-				state.filter = filter
-				state.page, state.cursors, state.next_cursor = 1, {}, nil
-				load(state)
-			end,
-			index = 10 + index,
-		}
-	end
-	register(state, state.sidebar_buf, actions)
-	local panel_keys = resolver.resolve("ui.select") or {}
-	if not vim.tbl_contains(panel_keys, "p") then
-		panel_keys[#panel_keys + 1] = "p"
-	end
-	vim.list_extend(actions, {
-		{
-			key = resolver.resolve("pulls.open_diff"),
-			desc = "Open pull request diff",
-			callback = function()
-				local pr = current(state)
-				if pr then
-					diff.open_pr(pr, function(err)
-						if err then
-							state.statusline:notify("error", err)
-						end
-					end)
-				end
-			end,
-			index = 2,
-		},
-		{
-			key = panel_keys,
-			desc = "Open pull request panel",
-			callback = function()
-				local pr = current(state)
-				if pr then
-					opener.open(pr.link.html)
-				end
-			end,
-			index = 1,
-		},
-		{
-			key = resolver.resolve("ui.open_in_browser"),
-			desc = "Open pull request in browser",
-			callback = function()
-				local pr = current(state)
-				if pr then
-					vim.ui.open(pr.link.html)
-				end
-			end,
-			index = 4,
-		},
-	})
-	register(state, state.buf, actions)
-	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
-		group = state.group,
-		callback = function(event)
-			if event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win) then
-				render(state)
-			end
-		end,
+	keymaps.setup(state, {
+		edit_query = edit_query,
+		next_page = next_page,
+		open_diff = open_diff,
+		open_in_browser = open_in_browser,
+		open_panel = open_panel,
+		previous_page = previous_page,
+		refresh = refresh,
+		toggle_filter = toggle_filter,
 	})
 	load(state)
+end
+
+---@param buf integer
+function M.render(buf)
+	local state = states[buf]
+	if state then
+		render(state)
+	end
 end
 
 ---@param buf integer
@@ -353,21 +308,13 @@ function M.close(buf)
 	if not state then
 		return
 	end
+
 	states[buf] = nil
 	state.requests.cancel()
 	state.spinner:stop()
 	state.statusline:clear_notice()
-	vim.api.nvim_del_augroup_by_id(state.group)
-	for buffer, groups in pairs(state.keymaps) do
-		for group, items in pairs(groups) do
-			help.remove(group, items, { buffer = buffer })
-		end
-	end
-	if utils.window.valid(state.win) then
-		vim.wo[state.win].cursorline = false
-	end
-	if utils.buffer.valid(state.buf) then
-		vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
+	for group, items in pairs(state.keymaps) do
+		help.remove(group, items, { buffer = state.sidebar_buf })
 	end
 end
 

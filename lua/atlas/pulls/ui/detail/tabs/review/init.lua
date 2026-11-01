@@ -8,7 +8,7 @@ local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
-local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state")
+local reactions = require("atlas.ui.shared.reactions")
 local utils = require("atlas.ui.shared.utils")
 
 ---@param pr PullRequest
@@ -160,12 +160,6 @@ local function action_context(pr)
 		provider = provider,
 		pr = pr,
 		data = data,
-		conversation = conversation.comments(),
-		notify = function(level, message, duration)
-			if is_current(pr) then
-				notify.show(level, message, { timeout = duration })
-			end
-		end,
 	}
 end
 
@@ -189,12 +183,9 @@ local function run_comment_action(action, pr, comment, refresh)
 		if not result or err then
 			return
 		end
+		---@cast result PullsActionResult
 		if result.changed_pr then
-			if on_update then
-				on_update(pr, result)
-			else
-				require("atlas.pulls.ui.detail").refresh()
-			end
+			require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 		elseif is_current(pr) then
 			refresh()
 		end
@@ -220,6 +211,23 @@ end
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
 	run_comment_action("delete_comment", pr, entry and entry.comment, refresh)
+end
+
+---@param pr PullRequest
+---@param entry table
+---@param refresh fun()
+function M.react(pr, entry, refresh)
+	local comment = entry and entry.comment
+	local capability = detail.provider
+		and detail.provider.capabilities.comments
+		and detail.provider.capabilities.comments.reactions
+	if not comment or comment.deleted or not capability then
+		return
+	end
+
+	reactions.pick(capability, pr, comment, function()
+		return is_current(pr)
+	end, refresh)
 end
 
 ---@param pr PullRequest

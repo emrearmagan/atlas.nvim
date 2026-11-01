@@ -15,23 +15,24 @@
 
 ---@class AtlasReactionsCapability
 ---@field options AtlasReactionOption[]
----@field add fun(target: Issue|PullRequest, comment: IssueComment|PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field remove (fun(target: Issue|PullRequest, comment: IssueComment|PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add fun(target: Issue|PullRequest|GitHubDiscussionDetails, comment: IssueComment|PullsComment|GitHubDiscussionComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field remove (fun(target: Issue|PullRequest|GitHubDiscussionDetails, comment: IssueComment|PullsComment|GitHubDiscussionComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class AtlasProviderCapabilities
 ---@field repository AtlasRepositoryCapability|nil
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field users AtlasUsersCapability|nil
 ---@field completion table<string, AtlasCompletionSource>|nil
----@field actions AtlasActionsCapability|nil
+---@field actions AtlasAction[]|nil
 
----@alias AtlasAction AtlasIssueAction|AtlasPullAction|PullsPipelineAction|AtlasDiffAction
----@alias AtlasActionContext AtlasIssueActionContext|AtlasPullActionContext|PullsPipelineActionContext|AtlasDiffActionContext
----@alias AtlasActionResult IssuesActionResult|PullsActionResult
-
----@class AtlasActionsCapability
----@field items AtlasAction[]
----@field find fun(action_id: string): AtlasAction|nil
+---@class AtlasAction
+---@field id string
+---@field label string
+---@field icon string|nil
+---@field hidden boolean|nil
+---@field confirm string|(fun(context: table): string)|nil
+---@field is_available (fun(context: table): boolean, string|nil)|nil
+---@field run fun(context: table, on_done: fun(result: any, err: string|nil)): boolean|{ cancel: fun() }|nil
 
 ---@class AtlasUsersCapability
 ---@field fetch_user fun(on_done: fun(user: AtlasUser|nil, err: string|nil)): { cancel: fun() }|nil
@@ -118,16 +119,10 @@
 ---@field author string|nil
 ---@field assets AtlasRepositoryReleaseAsset[]
 
----@class AtlasRepositoryIssueSummary
----@field open integer
----@field closed integer
----@field items { label: string, value: string|number }[]|nil
-
 ---@class AtlasRepositoryCapability
 ---@field fetch_details fun(repo: AtlasRepository, on_done: fun(repo: AtlasRepositoryDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_branches fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
 ---@field fetch_tags fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
 ---@field fetch_releases (fun(repo: AtlasRepository, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_release (fun(repo: AtlasRepository, opts: { id?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)): { cancel: fun() }|nil)|nil
----@field fetch_issue_summary (fun(repo: AtlasRepository, on_done: fun(summary: AtlasRepositoryIssueSummary|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_branch (fun(repo: AtlasRepository, branch: AtlasRepositoryBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

@@ -16,7 +16,7 @@ end
 
 ---@param release AtlasRepositoryReleaseDetails
 ---@param width integer
----@return string[], table<integer, RepositoryReleaseSelection>, AtlasUIHighlight[]
+---@return string[], AtlasUIHighlight[], table<integer, RepositoryReleaseSelection>
 function M.render(release, width)
 	local lines, line_map, spans = {}, {}, {}
 	local name = single_line(release.name)
@@ -26,9 +26,11 @@ function M.render(release, width)
 	if release.draft then
 		badges[#badges + 1] = { text = "Draft", hl = "AtlasTextWarning" }
 	end
+
 	if release.prerelease then
 		badges[#badges + 1] = { text = "Prerelease", hl = "AtlasTextNote" }
 	end
+
 	for _, badge in ipairs(badges) do
 		local start = #heading + 2
 		heading = heading .. "  [" .. badge.text .. "]"
@@ -39,6 +41,7 @@ function M.render(release, width)
 			hl_group = badge.hl,
 		}
 	end
+
 	lines[#lines + 1] = heading
 	spans[#spans + 1] = { line = 0, start_col = 0, end_col = title_end, hl_group = "AtlasColumnHeader" }
 	lines[#lines + 1] = ""
@@ -48,23 +51,28 @@ function M.render(release, width)
 	if date ~= "" then
 		parts[#parts + 1] = date
 	end
+
 	local tag = single_line(release.tag)
 	if tag ~= "" then
 		parts[#parts + 1] = icons.get("tag") .. " " .. tag
 	end
+
 	local author = single_line(release.author)
 	if author ~= "" then
 		parts[#parts + 1] = "by " .. author
 	end
+
 	if #parts > 0 then
 		utils.push(lines, spans, table.concat(parts, "  ·  "), "AtlasTextMuted")
 	end
+
 	lines[#lines + 1] = ""
 	if vim.trim(release.description) ~= "" then
 		utils.append_block(lines, spans, markdown.parse(release.description, { width = width }))
 	else
 		utils.push(lines, spans, "No release notes.", "AtlasTextMuted")
 	end
+
 	if #release.assets > 0 then
 		lines[#lines + 1] = ""
 		utils.push(lines, spans, "Assets (" .. #release.assets .. ")", "AtlasColumnHeader")
@@ -76,10 +84,12 @@ function M.render(release, width)
 			if asset.size ~= nil then
 				details[#details + 1] = utils.human_size(asset.size)
 			end
+
 			if asset.downloads ~= nil then
 				details[#details + 1] =
 					string.format("%d %s", asset.downloads, asset.downloads == 1 and "download" or "downloads")
 			end
+
 			local first_line = #lines + 1
 			local text = line .. (#details > 0 and "  ·  " .. table.concat(details, "  ·  ") or "")
 			utils.append_block(lines, spans, markdown.parse(text, { width = width }))
@@ -88,10 +98,12 @@ function M.render(release, width)
 			end
 		end
 	end
+
 	for line = 1, #lines do
 		line_map[line] = line_map[line] or { release = release }
 	end
-	return lines, line_map, spans
+
+	return lines, spans, line_map
 end
 
 return M

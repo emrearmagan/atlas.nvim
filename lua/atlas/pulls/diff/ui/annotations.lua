@@ -13,9 +13,12 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.annotations.popup")
 local popup
 
+---@alias AtlasDiffAnnotationKind "comment"|"note"|"unresolved"
+
 ---@class AtlasDiffAnnotation
 ---@field side "LEFT"|"RIGHT"
----@field line integer|nil
+---@field start_line integer|nil
+---@field end_line integer|nil
 ---@field thread AtlasCommentThreadNode|nil
 ---@field note AtlasNote|nil
 ---@field outdated boolean|nil
@@ -24,13 +27,57 @@ local popup
 ---@param buf integer
 ---@param lookup table<integer, AtlasDiffAnnotation[]>
 function M.draw_signs(ns, buf, lookup)
-	for line in pairs(lookup) do
+	local lines = {}
+	for line, items in pairs(lookup) do
+		lines[line] = true
+		for _, item in ipairs(items) do
+			if item.start_line and item.end_line == line then
+				for range_line = item.start_line, line - 1 do
+					lines[range_line] = true
+				end
+			end
+		end
+	end
+
+	for line in pairs(lines) do
 		vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
 			sign_text = "┃",
 			sign_hl_group = "AtlasLogInfo",
 			number_hl_group = "CursorLineNr",
 			priority = 1100,
 		})
+	end
+end
+
+-- Dim sign on lines that other commits change. Comments and notes on those lines are hidden here.
+---@param ns integer
+---@param buf integer
+---@param session AtlasDiffSession
+---@param file AtlasDiffFile
+---@param side "LEFT"|"RIGHT"
+function M.draw_changed_lines(ns, buf, session, file, side)
+	local path = side == "LEFT" and file.old_path or file.path
+	local count = vim.api.nvim_buf_line_count(buf)
+	for _, line in ipairs(session:changed_lines(path, side)) do
+		if line <= count then
+			vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
+				sign_text = "»",
+				sign_hl_group = "AtlasTextMuted",
+				priority = 1000,
+			})
+		end
+	end
+
+	if side == "RIGHT" then
+		for _, line in ipairs(session:outdated_lines(path)) do
+			if line <= count then
+				vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
+					sign_text = "~",
+					sign_hl_group = "AtlasLogWarn",
+					priority = 1000,
+				})
+			end
+		end
 	end
 end
 
@@ -46,33 +93,71 @@ function M.comment_options(expanded_threads)
 	return options
 end
 
----@param result AtlasDiffResult
+-- Updates the item's lines to match the diff on screen.
+-- Returns false when they can't be found there, so the item isn't drawn.
+-- File comments have no lines, so they're always kept.
+---@param session AtlasDiffSession
+---@param file AtlasDiffFile
+---@param item AtlasDiffAnnotation
+---@return boolean
+local function place(session, file, item)
+	local line = item.end_line
+	if not line then
+		return true
+	end
+
+	local path = item.side == "LEFT" and file.old_path or file.path
+	local start_line, end_line = session:map_range(path, item.side, item.start_line, line)
+	if not end_line then
+		return false
+	end
+
+	item.start_line, item.end_line = start_line, end_line
+	return true
+end
+
+---@param session AtlasDiffSession
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
-function M.for_file(result, file)
+function M.for_file(session, file)
 	local items = {}
-	local review = result.review and result.review.data
+	local review = session.review
 	if review then
 		for _, thread in ipairs(review_actions.group_comments(review.comments, review.tasks)) do
 			local comment = thread.comment
 			local target = comment.file or comment.inline
 			if target and (target.path == file.path or target.path == file.old_path) then
 				local side = file.status == "deleted" and "LEFT" or "RIGHT"
-				local line
-				if comment.inline then
-					side = comment.inline.to and "RIGHT" or "LEFT"
-					line = comment.inline.to or comment.inline.from
+				local start_line, end_line
+				local inline = comment.inline
+				if inline then
+					side = inline.to and "RIGHT" or "LEFT"
+					end_line = inline.to or inline.from
+					start_line = inline.to and inline.start_to or inline.start_from
 				end
 
-				items[#items + 1] = { side = side, line = line, thread = thread }
+				local item = { side = side, start_line = start_line, end_line = end_line, thread = thread }
+				if place(session, file, item) then
+					items[#items + 1] = item
+				end
 			end
 		end
 	end
 
-	if result.notes and not file.binary and file.status ~= "deleted" then
-		for _, note in ipairs(result.notes.items) do
+	if session.notes and not file.binary and file.status ~= "deleted" then
+		for _, note in ipairs(session.notes.items) do
 			if note.file_path == file.path or (file.status == "renamed" and note.file_path == file.old_path) then
-				items[#items + 1] = { side = "RIGHT", line = note.line, note = note }
+				local position = session.notes.positions[note.id]
+				local item = {
+					side = "RIGHT",
+					start_line = position.start_line,
+					end_line = position.end_line,
+					note = vim.tbl_extend("force", note, position),
+					outdated = position.outdated,
+				}
+				if place(session, file, item) then
+					items[#items + 1] = item
+				end
 			end
 		end
 	end
@@ -80,20 +165,36 @@ function M.for_file(result, file)
 	return items
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@return AtlasDiffAnnotation[]|nil
-function M.at_cursor(view)
-	local by_line = view.annotations[vim.api.nvim_get_current_buf()]
-	return by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+function M.at_cursor(renderer)
+	local by_line = renderer.annotations[vim.api.nvim_get_current_buf()]
+	if not by_line then
+		return nil
+	end
+
+	local cursor = vim.api.nvim_win_get_cursor(0)[1]
+	local lines = vim.tbl_keys(by_line)
+	table.sort(lines)
+	local items = {}
+	for _, line in ipairs(lines) do
+		for _, item in ipairs(by_line[line]) do
+			local covers = item.start_line and item.end_line == line and item.start_line <= cursor and cursor <= line
+			if line == cursor or covers then
+				items[#items + 1] = item
+			end
+		end
+	end
+	return #items > 0 and items or nil
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param file AtlasDiffFile
 ---@param side "LEFT"|"RIGHT"
 ---@param lines string[]
 ---@param position fun(line: integer): { from: integer|nil, to: integer|nil }
 ---@return AtlasDiffSelection|nil, string|nil
-function M.selection(view, file, side, lines, position)
+function M.selection(renderer, file, side, lines, position)
 	local first = vim.api.nvim_win_get_cursor(0)[1]
 	local last = first
 	local mode = vim.fn.mode()
@@ -107,35 +208,56 @@ function M.selection(view, file, side, lines, position)
 		return nil, "The selected lines are outside the file"
 	end
 
-	local inline = position(last)
-	if first ~= last then
-		local start = position(first)
-		if (start.to ~= nil) ~= (inline.to ~= nil) then
-			return nil, "The selected lines cannot be represented as one review range"
-		end
-		inline.start_from = start.from
-		inline.start_to = start.to
+	local stop = position(last)
+	local start = first ~= last and position(first) or nil
+	if start and (start.to ~= nil) ~= (stop.to ~= nil) then
+		return nil, "The selected lines cannot be represented as one review range"
 	end
-	inline.path = file.path
-	inline.old_path = file.old_path
-	inline.commit_hash = view.result.head_revision
 
-	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
+	local session = renderer.session
+	-- A file renamed in just one commit may not be renamed in the PR (e.g. added there instead),
+	-- so its old side from the commit can not be really trusted. Only the new side is sent then.
+	local renamed = file.old_path ~= nil and session:shown_commits() ~= nil
+	local start_to, to = session:pr_range(file.path, "RIGHT", start and start.to, stop.to)
+	local start_from, from
+	if not renamed then
+		start_from, from = session:pr_range(file.old_path or file.path, "LEFT", start and start.from, stop.from)
+	end
+	if (side == "RIGHT" and not to) or (side == "LEFT" and not from) then
+		return nil, "These lines can't be found in the pull request"
+	end
+
+	return {
+		file = file,
+		side = side,
+		first = first,
+		last = last,
+		source_lines = lines,
+		inline = {
+			path = file.path,
+			old_path = not renamed and file.old_path or nil,
+			from = from,
+			to = to,
+			start_from = start_from,
+			start_to = start_to,
+			commit_hash = session.full_range.head_revision,
+		},
+	}
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param all boolean|nil
 ---@return boolean toggled
-function M.toggle_threads(view, all)
-	if view.result.options.comment_display ~= "virtual_lines" then
+function M.toggle_threads(renderer, all)
+	if renderer.options.comment_display ~= "virtual_lines" then
 		return false
 	end
 
 	local items
-	if all and view.current_file then
-		items = M.for_file(view.result, view.current_file)
+	if all and renderer.current_file then
+		items = M.for_file(renderer.session, renderer.current_file)
 	else
-		items = M.at_cursor(view) or {}
+		items = M.at_cursor(renderer) or {}
 	end
 
 	local threads = vim.iter(items)
@@ -143,7 +265,7 @@ function M.toggle_threads(view, all)
 			return item.thread
 		end)
 		:totable()
-	return thread_ui.toggle_all_threads(threads, view.expanded_threads)
+	return (thread_ui.toggle_all_threads(threads, renderer.expanded_threads))
 end
 
 ---@param comment PullsComment
@@ -175,7 +297,7 @@ end
 ---@param note AtlasNote
 ---@return string
 local function note_location(note)
-	return "R" .. note.line
+	return "R" .. note_renderer.line_range(note)
 end
 
 ---@param items AtlasDiffAnnotation[]
@@ -255,20 +377,32 @@ function M.render_virtual_lines(items, width, options)
 	return result
 end
 
----@param view AtlasDiffView
+---@param item AtlasDiffAnnotation
+---@param kind AtlasDiffAnnotationKind
+---@return boolean
+function M.is_kind(item, kind)
+	if kind == "note" then
+		return item.note ~= nil
+	end
+	if kind == "unresolved" then
+		return item.thread ~= nil and item.thread.comment.state ~= "RESOLVED"
+	end
+	return item.thread ~= nil
+end
+
+---@param renderer AtlasDiffRenderer
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@param display_line fun(pane: integer, line: integer): integer
 ---@return boolean moved
-function M.navigate(view, direction, kind, from_edge, display_line)
+function M.navigate(renderer, direction, kind, from_edge, display_line)
 	local locations = {}
-	local field = kind == "comment" and "thread" or "note"
-	for index, pane in ipairs({ view.left, view.right }) do
+	for index, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			for line, items in pairs(view.annotations[pane.buf] or {}) do
+			for line, items in pairs(renderer.annotations[pane.buf] or {}) do
 				if vim.iter(items):any(function(item)
-					return item[field] ~= nil
+					return M.is_kind(item, kind)
 				end) then
 					locations[#locations + 1] = {
 						pane = index,
@@ -287,8 +421,8 @@ function M.navigate(view, direction, kind, from_edge, display_line)
 	table.sort(locations, function(a, b)
 		return a.row == b.row and a.pane < b.pane or a.row < b.row
 	end)
-	local pane = vim.api.nvim_get_current_win() == view.left.win and 1 or 2
-	local win = pane == 1 and view.left.win or view.right.win
+	local pane = vim.api.nvim_get_current_win() == renderer.left.win and 1 or 2
+	local win = pane == 1 and renderer.left.win or renderer.right.win
 	local cursor = display_line(pane, vim.api.nvim_win_get_cursor(win)[1])
 	local first = direction == 1 and 1 or #locations
 	local last = direction == 1 and #locations or 1
@@ -307,15 +441,16 @@ function M.navigate(view, direction, kind, from_edge, display_line)
 	return false
 end
 
----@param view AtlasDiffView
+---@param renderer AtlasDiffRenderer
 ---@param target { comment?: PullsComment, note?: AtlasNote }
 ---@param focus boolean
-function M.jump(view, target, focus)
-	for _, pane in ipairs({ view.left, view.right }) do
+---@return boolean found
+function M.jump(renderer, target, focus)
+	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			for line, items in pairs(view.annotations[pane.buf] or {}) do
+			for line, items in pairs(renderer.annotations[pane.buf] or {}) do
 				local found = vim.iter(items):any(function(item)
-					return target.note and item.note == target.note
+					return target.note and item.note and item.note.id == target.note.id
 						or target.comment and item.thread and item.thread.comment == target.comment
 				end)
 
@@ -328,11 +463,12 @@ function M.jump(view, target, focus)
 					if focus then
 						vim.api.nvim_set_current_win(pane.win)
 					end
-					return
+					return true
 				end
 			end
 		end
 	end
+	return false
 end
 
 ---@param owner integer|nil
@@ -353,19 +489,20 @@ function M.close(owner)
 end
 
 ---@param owner integer
----@param result AtlasDiffResult
+---@param pr PullRequest|nil
 ---@param path string
 ---@param items AtlasDiffAnnotation[]
 ---@param on_action fun(action: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, pending?: boolean}, on_submit: fun())
-function M.open(owner, result, path, items, on_action)
+function M.open(owner, pr, path, items, on_action)
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
 
-	local pr = result.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	---@cast provider PullsProvider|nil
 	local tasks = provider and provider.capabilities.tasks
 	local can_add_task = tasks and tasks.add_task ~= nil
+	local comments = provider and provider.capabilities.comments
+	local can_react = comments and comments.reactions ~= nil
 
 	local keys = {
 		close = keymaps.resolve("ui.close"),
@@ -373,6 +510,7 @@ function M.open(owner, result, path, items, on_action)
 		add_task = can_add_task and keymaps.resolve("pulls.review.add_task") or nil,
 		edit = keymaps.resolve("ui.comments.edit"),
 		delete = keymaps.resolve("ui.delete"),
+		react = can_react and keymaps.resolve("ui.comments.react") or nil,
 		toggle_resolved = keymaps.resolve("pulls.review.toggle_resolved"),
 	}
 	local labels = {}
@@ -428,15 +566,19 @@ function M.open(owner, result, path, items, on_action)
 	local first = items[1]
 	local same_line = true
 	for _, item in ipairs(items) do
-		if item.side ~= first.side or item.line ~= first.line then
+		if item.side ~= first.side or item.end_line ~= first.end_line then
 			same_line = false
 			break
 		end
 	end
 
 	local title = path
-	if same_line and first.line then
-		title = string.format("%s:%d (%s)", path, first.line, first.side)
+	if same_line and first.end_line then
+		local range = tostring(first.end_line)
+		if #items == 1 and first.start_line and first.start_line ~= first.end_line then
+			range = first.start_line .. "-" .. first.end_line
+		end
+		title = string.format("%s:%s (%s)", path, range, first.side)
 	end
 
 	local height = math.max(1, math.min(#lines, vim.o.lines - 6))
@@ -483,6 +625,8 @@ function M.open(owner, result, path, items, on_action)
 				elseif name == "edit_comment" or name == "delete_comment" then
 					local note_action = name == "edit_comment" and "edit_note" or "delete_note"
 					on_action(note_action, { note = entry.note }, close)
+				elseif name == "add_comment" then
+					on_action("note_to_comment", { note = entry.note, pending = true }, close)
 				end
 			elseif entry.comment then
 				local target = entry.comment
@@ -509,6 +653,7 @@ function M.open(owner, result, path, items, on_action)
 	map(keys.add_task, action("add_task"))
 	map(keys.edit, action("edit_comment"))
 	map(keys.delete, action("delete_comment"))
+	map(keys.react, action("react"))
 	map(keys.toggle_resolved, action("toggle_resolved"))
 end
 

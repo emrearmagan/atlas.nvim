@@ -26,7 +26,7 @@ function M.statusline_items(opts)
 	end
 
 	add(keymaps.resolve("ui.submit"), "submit")
-	add("gT", "templates")
+	add(keymaps.resolve("editor.templates"), "templates")
 	for _, keymap in ipairs(opts.keymaps or {}) do
 		add(keymap.key, keymap.desc)
 	end
@@ -61,7 +61,7 @@ function M.setup(form, on_close, buffers)
 		vim.cmd("stopinsert")
 		opts.submit(form)
 	end, { "n", "i" })
-	add("gT", "Templates", function()
+	add(keymaps.resolve("editor.templates"), "Templates", function()
 		local editor = require("atlas.ui.form")
 		require("atlas.templates").open({
 			get_description = function()

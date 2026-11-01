@@ -1,9 +1,9 @@
-local M = {}
+local overview = require("atlas.ui.repository.pages.overview")
+local pulls = require("atlas.ui.repository.pages.pulls")
+local builds = require("atlas.ui.repository.pages.builds")
+local branches = require("atlas.ui.repository.pages.branches")
+local tags = require("atlas.ui.repository.pages.tags")
 
----@param pages table<string, RepositoryPage>
----@return RepositoryPage[]
-function M.pages(pages)
-	return { pages.overview, pages.pulls, pages.builds, pages.branches, pages.tags }
-end
-
-return M
+return {
+	pages = { overview, pulls, builds, branches, tags },
+}

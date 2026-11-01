@@ -5,8 +5,6 @@
 ---| "labels"
 ---| "open_project"
 
-local M = {}
-
 local actions = require("atlas.issues.actions")
 local utils = require("atlas.issues.actions.utils")
 local icons = require("atlas.ui.shared.icons")
@@ -18,6 +16,7 @@ local users_api = require("atlas.providers.gitlab.users")
 local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
+local gitlab_search = require("atlas.providers.gitlab.completion.search")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -28,7 +27,6 @@ end
 
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
-M.items = ACTIONS
 
 ---@param action AtlasIssueAction
 local function register(action)
@@ -102,12 +100,6 @@ local function assign(ctx, done)
 	---@cast issue GitLabIssue
 	local key = issue.key
 	local path = issue.project_path
-	if path == "" then
-		local err = "Could not determine project path"
-		notify.error(err)
-		done(nil, err)
-		return
-	end
 
 	---@param current_assignees AtlasUser[]
 	---@param members AtlasUser[]
@@ -133,7 +125,7 @@ local function assign(ctx, done)
 
 		picker.multi_select({
 			items = members,
-			selected = vim.deepcopy(original),
+			selected = original,
 			key = function(item)
 				return item.id or item.username or ""
 			end,
@@ -152,19 +144,8 @@ local function assign(ctx, done)
 					end
 				end
 
-				local changed = false
-				if #final_ids ~= #original then
-					changed = true
-				else
-					for id, _ in pairs(original_set) do
-						if not final_set[id] then
-							changed = true
-							break
-						end
-					end
-				end
-
-				if not changed then
+				local adds, removes = utils.selection_diff(original_set, final_set)
+				if #adds == 0 and #removes == 0 then
 					done(nil, nil)
 					return
 				end
@@ -212,12 +193,6 @@ local function labels(ctx, done)
 	---@cast issue GitLabIssue
 	local key = issue.key
 	local path = issue.project_path
-	if path == "" then
-		local err = "Could not determine project path"
-		notify.error(err)
-		done(nil, err)
-		return
-	end
 
 	---@param current_labels IssueLabel[]
 	---@param all_labels IssueLabel[]
@@ -242,7 +217,7 @@ local function labels(ctx, done)
 
 		picker.multi_select({
 			items = all_labels,
-			selected = vim.deepcopy(original),
+			selected = original,
 			key = function(item)
 				return tostring(item.name or "")
 			end,
@@ -500,14 +475,14 @@ end
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
-local function toggle_subscription_available(ctx)
+local function project_available(ctx)
 	if not has_issue(ctx) then
 		return false, "No issue selected"
 	end
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
 	if issue.project_path == "" then
-		return false, "Invalid issue identifier"
+		return false, "Could not determine project path"
 	end
 	return true, nil
 end
@@ -541,7 +516,7 @@ register({ id = "create_issue", label = "Create Issue", icon = icons.get("create
 register({
 	id = "close",
 	label = "Close Issue",
-	confirmation = true,
+	confirm = "Close this issue?",
 	icon = icons.get("close", "actions"),
 	is_available = close_available,
 	run = close,
@@ -557,6 +532,7 @@ register({
 	id = "transition",
 	label = "Toggle Open/Closed",
 	icon = icons.get("transition", "actions"),
+	hidden = true,
 	is_available = has_issue,
 	run = transition,
 })
@@ -564,14 +540,14 @@ register({
 	id = "assign",
 	label = "Edit Assignees",
 	icon = icons.get("user", "actions"),
-	is_available = has_issue,
+	is_available = project_available,
 	run = assign,
 })
 register({
 	id = "labels",
 	label = "Edit Labels",
 	icon = icons.get("label", "actions"),
-	is_available = has_issue,
+	is_available = project_available,
 	run = labels,
 })
 register({ id = "search", label = "Search Issues", icon = icons.get("search", "actions"), run = search })
@@ -581,26 +557,20 @@ register({
 	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
-		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
-			if input == nil or vim.trim(input) == "" then
-				done(nil, nil)
-				return
-			end
+		gitlab_search.edit("issues", state.query, function(query)
 			local view = state.search_view()
 			if view == nil then
-				done(nil, nil)
 				return
 			end
 			---@cast view AtlasGitLabIssuesViewConfig
-			local ok, err = gitlab_query.apply_issue(view, input)
+			local ok, err = gitlab_query.apply_issue(view, query)
 			if not ok then
 				notify.warn(err)
-				done(nil, err)
 				return
 			end
 			require("atlas.issues.ui.dashboard.controller").refresh_view()
-			done(nil, nil)
 		end)
+		done(nil, nil)
 	end,
 })
 register({ id = "open_project", label = "Open Project", icon = icons.get("search", "actions"), run = open_project })
@@ -632,19 +602,8 @@ register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
 	icon = icons.get("notification", "actions"),
-	is_available = toggle_subscription_available,
+	is_available = project_available,
 	run = toggle_subscription,
 })
 
----@param id AtlasGitLabIssueActionId
----@return AtlasIssueAction|nil
-function M.find(id)
-	for _, action in ipairs(ACTIONS) do
-		if action.id == id then
-			return action
-		end
-	end
-	return nil
-end
-
-return M
+return ACTIONS

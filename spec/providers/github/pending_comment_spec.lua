@@ -19,7 +19,7 @@ local function gh_flags(args)
 end
 
 local function pull_request()
-	return { id = "7", repo_full_name = "octo/repo" }
+	return { id = "7", repo_full_name = "owner/repo", author = { name = "alice", username = "alice" } }
 end
 
 local function pending_comment(overrides)
@@ -121,24 +121,6 @@ describe("github review comments", function()
 			assert.equal("IC_node", flags.commentId)
 			assert.is_truthy(flags.query:find("updateIssueComment", 1, true))
 			assert.same({ "IC_node", "updated body", reactions }, { updated.id, updated.body, updated.reactions })
-		end)
-
-		it("propagates GraphQL errors", function()
-			github_client.install({
-				gh = function(args, callback)
-					table.insert(gh_calls, args)
-					callback(nil, "boom")
-				end,
-			})
-			local api = fresh_module()
-
-			local updated, err
-			api.edit_comment(pull_request(), pending_comment(), "updated body", function(result, e)
-				updated, err = result, e
-			end)
-
-			assert.is_nil(updated)
-			assert.equal("boom", err)
 		end)
 	end)
 

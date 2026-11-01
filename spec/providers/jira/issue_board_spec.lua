@@ -11,7 +11,7 @@ describe("Jira issue board provider", function()
 		original_statuses = projects_api.get_statuses
 		status_done, cancelled = nil, false
 		issues_api.search_issues = function(_, done)
-			done({ items = { { key = "KAN-1", project = { key = "KAN" } } } })
+			done({ items = { { key = "KAN-1", title = "Issue", project = { key = "KAN" } } } })
 		end
 		projects_api.get_statuses = function(project, done)
 			assert.equal("KAN", project)
@@ -31,10 +31,14 @@ describe("Jira issue board provider", function()
 
 	it("returns workflow statuses in category order with raw names", function()
 		local result
-		provider.capabilities.core.fetch_issues({ layout = "board", jql = "project = KAN" }, {}, function(page, err)
-			assert.is_nil(err)
-			result = page
-		end)
+		provider.capabilities.core.fetch_issues(
+			{ name = "Board", layout = "board", jql = "project = KAN" },
+			{},
+			function(page, err)
+				assert.is_nil(err)
+				result = page
+			end
+		)
 		assert.is_nil(result)
 		status_done({
 			{ id = "2", name = "Done", category = "done" },
@@ -50,13 +54,13 @@ describe("Jira issue board provider", function()
 	it("cancels the status request and ignores its late callback", function()
 		local completed = false
 		local handle = provider.capabilities.core.fetch_issues(
-			{ layout = "board", jql = "project = KAN" },
+			{ name = "Board", layout = "board", jql = "project = KAN" },
 			{},
 			function()
 				completed = true
 			end
 		)
-		handle.cancel()
+		assert(handle).cancel()
 		status_done({ { id = "1", name = "Open", category = "new" } })
 		assert.is_true(cancelled)
 		assert.is_false(completed)

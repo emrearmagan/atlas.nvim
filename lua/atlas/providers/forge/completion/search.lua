@@ -77,6 +77,7 @@ end
 function M.edit(service, domain, default, on_submit)
 	prompt.open({
 		name = "Atlas" .. service.name .. (domain == "pulls" and "PullSearch" or "IssueSearch"),
+		prompt = service.name .. " search: ",
 		default = default,
 		complete = function(_, cmdline, cursorpos)
 			return complete(domain, cmdline, cursorpos)

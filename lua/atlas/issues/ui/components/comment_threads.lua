@@ -1,7 +1,6 @@
 local M = {}
 
 local threads = require("atlas.ui.components.threads")
-local reactions = require("atlas.ui.shared.reactions")
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -15,39 +14,38 @@ local function comment_item(comment)
 		content = "(empty comment)"
 	end
 
-	local footer_items = {}
-	if not deleted then
-		local reaction_text, reaction_highlights = reactions.format(comment.reactions)
-		if reaction_text ~= "" then
-			table.insert(footer_items, { text = reaction_text, highlights = reaction_highlights })
-		end
-	end
-
 	local author = helper.person_name(comment.author)
 	local author_hl = helper.person_hl(author)
 	local user_icon = icons.get("user")
-	return {
+	local item = {
 		icon = user_icon,
 		icon_hl = author_hl,
 		author = author,
 		author_hl = author_hl,
-		additional = { { utils.relative_time(comment.created_at), "AtlasTextMuted" } },
+		additional = { { table.concat(comment.author_roles or {}, " "), "AtlasTextMuted" } },
+		right_text = { { utils.relative_time(comment.created_at), "AtlasTextMuted" } },
 		content = content,
 		markdown = not deleted,
-		footer_items = footer_items,
+		footer_items = {},
 		children = {},
 		line_map = { comment = comment, entity_kind = "comment" },
 		meta = { deleted = deleted },
 	}
+
+	if not deleted then
+		item.reactions = comment.reactions
+	end
+	return item
 end
 
 ---@param padding_x integer
----@param max_lines integer|fun(comment: IssueComment): integer|nil
+---@param max_lines integer|(fun(comment: IssueComment): integer|nil)|nil
 ---@param truncated_key string|nil
 ---@return AtlasThreadRenderOpts
 local function render_options(padding_x, max_lines, truncated_key)
 	if type(max_lines) == "function" then
 		local callback = max_lines
+		---@param item AtlasThreadItem
 		max_lines = function(item)
 			local comment = item.line_map and item.line_map.comment
 			return comment and callback(comment) or nil
@@ -147,7 +145,7 @@ end
 ---@class IssuesCommentThreadRenderOptions
 ---@field expanded fun(root: IssueComment): boolean
 ---@field padding_x integer|nil
----@field content_max_lines integer|fun(comment: IssueComment): integer|nil
+---@field content_max_lines integer|(fun(comment: IssueComment): integer|nil)|nil
 ---@field content_truncated_key string|nil
 
 ---@param nodes IssuesCommentThreadNode[]

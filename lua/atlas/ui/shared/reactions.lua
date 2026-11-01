@@ -51,7 +51,7 @@ local function reactors(reaction)
 end
 
 ---Reactions the comment already has come first, then the provider's other options.
----@param comment IssueComment|PullsComment
+---@param comment IssueComment|PullsComment|GitHubDiscussionComment
 ---@param options AtlasReactionOption[]
 ---@return AtlasReactionOption[]
 local function picker_items(comment, options)
@@ -85,7 +85,7 @@ local function picker_line(option, reaction, width)
 	return icon .. name .. details, { { icon, "AtlasLogInfo" }, { name, "Normal" }, { details, "AtlasTextMuted" } }
 end
 
----@param comment IssueComment|PullsComment
+---@param comment IssueComment|PullsComment|GitHubDiscussionComment
 ---@param name string
 local function increment(comment, name)
 	local reaction = find(comment.reactions, name)
@@ -98,7 +98,7 @@ local function increment(comment, name)
 	end
 end
 
----@param comment IssueComment|PullsComment
+---@param comment IssueComment|PullsComment|GitHubDiscussionComment
 ---@param name string
 local function decrement(comment, name)
 	for index, reaction in ipairs(comment.reactions or {}) do
@@ -115,8 +115,8 @@ end
 
 ---Picking one of your own reactions removes it; any other adds it.
 ---@param capability AtlasReactionsCapability
----@param target Issue|PullRequest
----@param comment IssueComment|PullsComment
+---@param target Issue|PullRequest|GitHubDiscussionDetails
+---@param comment IssueComment|PullsComment|GitHubDiscussionComment
 ---@param is_current fun(): boolean
 ---@param on_changed fun()
 function M.pick(capability, target, comment, is_current, on_changed)

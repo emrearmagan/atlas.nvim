@@ -6,7 +6,7 @@ local service = require("atlas.providers.bitbucket.client")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
-local repositories_api = require("atlas.providers.bitbucket.repositories")
+local workspaces_api = require("atlas.providers.bitbucket.workspaces")
 local url_encode = require("atlas.core.utils").url_encode
 
 local SUMMARY_FIELDS = {
@@ -168,7 +168,7 @@ function M.fetch_for_targets(targets, opts, on_done)
 
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return repositories_api.resolve_targets(targets, opts, done)
+		return workspaces_api.resolve_targets(targets, opts, done)
 	end, function(repos, errors)
 		requests.run(function(done)
 			return fetch_for_repositories(repos, opts, done)

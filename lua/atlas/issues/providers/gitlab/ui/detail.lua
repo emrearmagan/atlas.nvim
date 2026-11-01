@@ -18,24 +18,18 @@ end
 
 ---@param issue Issue
 ---@param details IssueDetails|nil
----@param loading boolean
+---@param _loading boolean
 ---@return IssuesDetailHeaderField[]
 function M.header_fields(issue, details, _loading)
 	local user_icon = icons.get("user")
 
 	local assignee = details and details.assignees[1] or issue.assignee
-	local assignee_name = assignee and assignee.name or ""
-	local reporter_name = issue.reporter and issue.reporter.name or ""
-	if assignee_name == "" then
-		assignee_name = "Unassigned"
-	end
-	if reporter_name == "" then
-		reporter_name = "Unknown"
-	end
+	local assignee_name = assignee and helper.person_name(assignee) or "Unassigned"
+	local reporter_name = helper.person_name(issue.reporter)
 
 	local milestone_text = details and details.milestone and details.milestone.title or ""
 	local assignee_text = string.format("%s %s", user_icon, assignee_name)
-	local assignee_hl = helper.person_hl(assignee and assignee.name or nil)
+	local assignee_hl = helper.person_hl(assignee and assignee_name or nil)
 
 	local fields = {
 		{

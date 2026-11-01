@@ -1,13 +1,12 @@
 local M = {}
 
-local api_utils = require("atlas.core.utils")
-local repositories_api = require("atlas.providers.bitbucket.repositories")
-local as_table = api_utils.as_table
+local json = require("atlas.core.json")
+local bitbucket_mapper = require("atlas.providers.bitbucket.mapper")
 
 ---@param update table   raw bitbucket update payload
 ---@return string
 local function describe_update(update)
-	local changes = as_table(update.changes) or {}
+	local changes = json.safe_table(update.changes)
 	local keys = {}
 	for k, _ in pairs(changes) do
 		keys[#keys + 1] = k
@@ -30,11 +29,11 @@ local function describe_update(update)
 			return "marked as draft"
 		end
 		if key == "reviewers" then
-			local rev = as_table(changes.reviewers) or {}
-			local reviewers = as_table(rev.added) or {}
+			local rev = json.safe_table(changes.reviewers)
+			local reviewers = json.safe_table(rev.added)
 			local verb = "added"
 			if #reviewers == 0 then
-				reviewers = as_table(rev.removed) or {}
+				reviewers = json.safe_table(rev.removed)
 				verb = "removed"
 			end
 			if #reviewers == 0 then
@@ -52,8 +51,8 @@ local function describe_update(update)
 		return "updated " .. table.concat(keys, ", ")
 	end
 
-	local source = as_table(update.source) or {}
-	local destination = as_table(update.destination) or {}
+	local source = json.safe_table(update.source)
+	local destination = json.safe_table(update.destination)
 	local src = tostring((source.branch or {}).name or "")
 	local dst = tostring((destination.branch or {}).name or "")
 	if src ~= "" and dst ~= "" then
@@ -82,7 +81,7 @@ end
 ---@param key string
 ---@return string
 local function link_href(links, key)
-	links = as_table(links) or {}
+	links = json.safe_table(links)
 	local link = links[key]
 	if link == nil and key == "request_changes" then
 		link = links["request-changes"]
@@ -90,18 +89,18 @@ local function link_href(links, key)
 	if type(link) == "string" then
 		return link
 	end
-	return tostring((as_table(link) or {}).href or "")
+	return tostring(json.safe_table(link).href or "")
 end
 
 ---@param repository table|nil
 ---@return string|nil https_url
 ---@return string|nil ssh_url
 local function clone_urls(repository)
-	repository = as_table(repository) or {}
-	local links = as_table(repository.links) or {}
+	repository = json.safe_table(repository)
+	local links = json.safe_table(repository.links)
 	local https_url, ssh_url
-	for _, raw in ipairs(as_table(links.clone) or {}) do
-		local clone = as_table(raw) or {}
+	for _, raw in ipairs(json.safe_table(links.clone)) do
+		local clone = json.safe_table(raw)
 		local href = tostring(clone.href or "")
 		if clone.name == "https" then
 			https_url = href
@@ -130,7 +129,7 @@ end
 ---@param role "reviewer"|"participant"
 ---@return PullsReviewer
 local function to_reviewer(participant, decision, role)
-	local user = as_table(participant.user) or {}
+	local user = json.safe_table(participant.user)
 	local provider_id = tostring(user.uuid or "")
 	local username = tostring(user.nickname or user.username or "")
 	return {
@@ -164,19 +163,19 @@ end
 ---@param repo string
 ---@return BitbucketPullRequest
 function M.to_pull_request(raw, workspace, repo)
-	local author = as_table(raw.author) or {}
-	local links = as_table(raw.links) or {}
-	local source = as_table(raw.source) or {}
-	local destination = as_table(raw.destination) or {}
-	local source_repository = as_table(source.repository) or {}
-	local destination_repository = as_table(destination.repository) or {}
-	local repository = repositories_api.to_repository(destination_repository, workspace, repo)
+	local author = json.safe_table(raw.author)
+	local links = json.safe_table(raw.links)
+	local source = json.safe_table(raw.source)
+	local destination = json.safe_table(raw.destination)
+	local source_repository = json.safe_table(source.repository)
+	local destination_repository = json.safe_table(destination.repository)
+	local repository = bitbucket_mapper.to_repository(destination_repository, workspace, repo)
 	local source_https_url, source_ssh_url = clone_urls(source_repository)
 	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
 	local repo_full_name = repository.full_name
 	local source_repo_full_name = tostring(source_repository.full_name or "")
 	local source_is_fork = source_repo_full_name ~= "" and source_repo_full_name ~= repo_full_name
-	local participants = as_table(raw.participants)
+	local participants = json.nilify(raw.participants)
 	local mapped_links = {
 		html = link_href(links, "html"),
 		self = link_href(links, "self"),
@@ -185,7 +184,6 @@ function M.to_pull_request(raw, workspace, repo)
 		commits = link_href(links, "commits"),
 		approve = link_href(links, "approve"),
 		request_changes = link_href(links, "request_changes"),
-		diff = link_href(links, "diff"),
 		diffstat = link_href(links, "diffstat"),
 		comments = link_href(links, "comments"),
 		activity = link_href(links, "activity"),
@@ -202,14 +200,14 @@ function M.to_pull_request(raw, workspace, repo)
 			username = tostring(author.nickname or ""),
 		},
 		source = {
-			branch = tostring((as_table(source.branch) or {}).name or ""),
-			commit_hash = tostring((as_table(source.commit) or {}).hash or ""),
+			branch = tostring(json.safe_table(source.branch).name or ""),
+			commit_hash = tostring(json.safe_table(source.commit).hash or ""),
 			https_url = source_is_fork and (source_https_url or "") or nil,
 			ssh_url = source_is_fork and (source_ssh_url or "") or nil,
 		},
 		destination = {
-			branch = tostring((as_table(destination.branch) or {}).name or ""),
-			commit_hash = tostring((as_table(destination.commit) or {}).hash or ""),
+			branch = tostring(json.safe_table(destination.branch).name or ""),
+			commit_hash = tostring(json.safe_table(destination.commit).hash or ""),
 			https_url = destination_https_url,
 			ssh_url = destination_ssh_url,
 		},
@@ -231,7 +229,7 @@ end
 ---@param repo string|nil
 ---@return BitbucketPullRequest[]
 function M.to_pull_requests_list(result, workspace, repo)
-	local payload = as_table(result) or {}
+	local payload = json.safe_table(result)
 	local out = {}
 	local ws = tostring(workspace or "")
 	local rp = tostring(repo or "")
@@ -246,7 +244,7 @@ end
 ---@param user table|nil
 ---@return AtlasUser
 local function actor(user)
-	local u = as_table(user) or {}
+	local u = json.safe_table(user)
 	local username = tostring(u.nickname or u.username or "")
 	return {
 		name = tostring(u.display_name or "Unknown"),
@@ -283,15 +281,15 @@ end
 ---@param result table|nil
 ---@return PullsActivityEntry[]
 function M.to_activities_list(result)
-	local payload = as_table(result) or {}
+	local payload = json.safe_table(result)
 	local entries = {}
 
 	for _, item in ipairs(payload.values or {}) do
-		local entry = as_table(item) or {}
-		local update = as_table(entry.update)
-		local approval = as_table(entry.approval)
-		local changes_request = as_table(entry.changes_request)
-		local comment = as_table(entry.comment)
+		local entry = json.safe_table(item)
+		local update = json.nilify(entry.update)
+		local approval = json.nilify(entry.approval)
+		local changes_request = json.nilify(entry.changes_request)
+		local comment = json.nilify(entry.comment)
 
 		if update ~= nil then
 			table.insert(entries, {
@@ -315,7 +313,7 @@ function M.to_activities_list(result)
 				label = "requested changes",
 			})
 		elseif comment ~= nil then
-			local content = as_table(comment.content) or {}
+			local content = json.safe_table(comment.content)
 			local body = content_display(content) or tostring(content.raw or "")
 			table.insert(entries, {
 				kind = "comment",
@@ -334,14 +332,14 @@ end
 ---@param result table|nil
 ---@return PullsCommit[]
 function M.to_commits_list(result)
-	local payload = as_table(result) or {}
+	local payload = json.safe_table(result)
 	local entries = {}
 
 	for _, item in ipairs(payload.values or {}) do
-		local entry = as_table(item) or {}
-		local author_raw = as_table(entry.author) or {}
-		local user = as_table(author_raw.user) or {}
-		local links = as_table(entry.links) or {}
+		local entry = json.safe_table(item)
+		local author_raw = json.safe_table(entry.author)
+		local user = json.safe_table(author_raw.user)
+		local links = json.safe_table(entry.links)
 		local hash = tostring(entry.hash or "")
 		local message = tostring(entry.message or ""):gsub("\r\n", "\n"):gsub("\n+$", "")
 
@@ -352,8 +350,8 @@ function M.to_commits_list(result)
 			author_name = tostring(user.display_name or "Unknown"),
 			author_nickname = tostring(user.nickname or ""),
 			date = tostring(entry.date or ""),
-			html_url = tostring((as_table(links.html) or {}).href or ""),
-			statuses_url = tostring((as_table(links.statuses) or {}).href or ""),
+			html_url = tostring(json.safe_table(links.html).href or ""),
+			statuses_url = tostring(json.safe_table(links.statuses).href or ""),
 		})
 	end
 
@@ -363,7 +361,7 @@ end
 ---@param raw_inline table|nil
 ---@return PullsInlineCommentPosition|nil, PullsFileCommentPosition|nil
 local function comment_position(raw_inline)
-	local inline = as_table(raw_inline)
+	local inline = json.nilify(raw_inline)
 	if inline == nil then
 		return nil, nil
 	end
@@ -382,18 +380,20 @@ local function comment_position(raw_inline)
 end
 
 ---@param result table|nil
+---@param author_id string|nil
 ---@return PullsComment|nil
-function M.to_comment(result)
-	local entry = as_table(result)
+function M.to_comment(result, author_id)
+	local entry = json.nilify(result)
 	if entry == nil then
 		return nil
 	end
-	local content = as_table(entry.content) or {}
-	local links = as_table(entry.links) or {}
-	local parent = as_table(entry.parent)
-	local resolution = as_table(entry.resolution)
-	local resolution_user = resolution and as_table(resolution.user) or nil
-	local raw_inline = as_table(entry.inline)
+	local author = actor(entry.user)
+	local content = json.safe_table(entry.content)
+	local links = json.safe_table(entry.links)
+	local parent = json.nilify(entry.parent)
+	local resolution = json.nilify(entry.resolution)
+	local resolution_user = resolution and json.nilify(resolution.user) or nil
+	local raw_inline = json.nilify(entry.inline)
 	local is_thread_root = parent == nil
 	local outdated = raw_inline ~= nil and raw_inline.outdated == true
 	local inline, file = comment_position(raw_inline)
@@ -402,7 +402,8 @@ function M.to_comment(result)
 	return {
 		id = tonumber(entry.id) or 0,
 		parent_id = parent ~= nil and tonumber(parent.id) or nil,
-		author = actor(entry.user),
+		author = author,
+		author_roles = author.id ~= "" and author.id == author_id and { "Author" } or nil,
 		body = tostring(content.raw or ""),
 		body_display = content_display(content),
 		created_at = tostring(entry.created_on or ""),
@@ -418,18 +419,19 @@ function M.to_comment(result)
 		state = state,
 		deleted = entry.deleted == true,
 		outdated = outdated,
-		url = tostring((as_table(links.html) or {}).href or ""),
+		url = tostring(json.safe_table(links.html).href or ""),
 	}
 end
 
 ---@param result table|nil
+---@param author_id string|nil
 ---@return PullsComment[]
-function M.to_comments_list(result)
-	local payload = as_table(result) or {}
+function M.to_comments_list(result, author_id)
+	local payload = json.safe_table(result)
 	local entries = {}
 
 	for _, item in ipairs(payload.values or {}) do
-		local entry = M.to_comment(item)
+		local entry = M.to_comment(item, author_id)
 		if entry ~= nil then
 			table.insert(entries, entry)
 		end
@@ -439,22 +441,25 @@ function M.to_comments_list(result)
 end
 
 ---@param result table|nil
+---@param author_id string|nil
 ---@return PullsComment[]
-function M.to_tasks_list(result)
-	local payload = as_table(result) or {}
+function M.to_tasks_list(result, author_id)
+	local payload = json.safe_table(result)
 	local entries = {}
 
 	for _, item in ipairs(payload.values or {}) do
-		local task = as_table(item) or {}
-		local content = as_table(task.content) or {}
-		local links = as_table(task.links) or {}
-		local comment = as_table(task.comment)
-		local resolved_by = as_table(task.resolved_by)
+		local task = json.safe_table(item)
+		local content = json.safe_table(task.content)
+		local links = json.safe_table(task.links)
+		local comment = json.nilify(task.comment)
+		local resolved_by = json.nilify(task.resolved_by)
+		local author = actor(task.creator)
 
 		table.insert(entries, {
 			id = tonumber(task.id) or 0,
 			parent_id = comment ~= nil and tonumber(comment.id) or nil,
-			author = actor(task.creator),
+			author = author,
+			author_roles = author.id ~= "" and author.id == author_id and { "Author" } or nil,
 			body = tostring(content.raw or ""),
 			body_display = content_display(content),
 			created_at = tostring(task.created_on or ""),
@@ -463,7 +468,7 @@ function M.to_tasks_list(result)
 			is_task = true,
 			pending = task.pending == true,
 			state = tostring(task.state or "") == "RESOLVED" and "RESOLVED" or nil,
-			url = tostring((as_table(links.html) or {}).href or ""),
+			url = tostring(json.safe_table(links.html).href or ""),
 		})
 	end
 

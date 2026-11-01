@@ -192,33 +192,33 @@ function M.render(_pr, _details, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
+	local commits = state.commits
 
-	if state.commits == nil then
+	if commits == nil then
 		return lines, spans, line_map
 	end
 
 	-- Loading
-	if state.commits == "loading" then
+	if commits == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading commits..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
 	-- Error
-	if type(state.commits) == "string" then
-		utils.push(lines, spans, state.commits, "AtlasLogError", PADDING_X)
+	if type(commits) == "string" then
+		utils.push(lines, spans, commits, "AtlasLogError", PADDING_X)
 		return lines, spans, line_map
 	end
 
 	-- Empty
-	local entries = state.commits
-	if #entries == 0 then
+	if #commits == 0 then
 		utils.push(lines, spans, "No commits yet.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
 	-- Thread items
 	local items = {}
-	for _, commit in ipairs(entries) do
+	for _, commit in ipairs(commits) do
 		table.insert(items, to_thread_item(commit, width))
 	end
 

@@ -1,9 +1,9 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local github_mapping = require("atlas.providers.github.mapping")
+local github_mapper = require("atlas.providers.github.mapper")
 
-M.to_user = require("atlas.providers.github.users").to_user
+M.to_user = github_mapper.to_user
 
 ---@param raw_users table[]|nil
 ---@return AtlasUser[]
@@ -75,7 +75,7 @@ local function issue_identity(raw, fallback_slug)
 		return nil, "", nil
 	end
 
-	local _, _, slug = github_mapping.repository(raw.repository, fallback_slug)
+	local _, _, slug = github_mapper.repository(raw.repository, fallback_slug)
 	local key = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	return { key = key, title = json.safe_str(raw.title) }, slug, number
 end
@@ -93,7 +93,7 @@ function M.to_issue(raw, fallback_slug)
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 
-	local issue_assignees = github_mapping.connection_nodes(raw.assignees)
+	local issue_assignees = github_mapper.connection_nodes(raw.assignees)
 	local parent = issue_identity(json.nilify(raw.parent), fallback_slug)
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
@@ -141,13 +141,13 @@ function M.to_issue_details(raw, fallback_slug)
 	local details = {
 		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.body) or "",
-		reactions = github_mapping.graphql_reactions(raw.reactionGroups),
-		assignees = M.to_users(github_mapping.connection_nodes(raw.assignees)),
-		labels = labels(github_mapping.connection_nodes(raw.labels)),
+		reactions = github_mapper.graphql_reactions(raw.reactionGroups),
+		assignees = M.to_users(github_mapper.connection_nodes(raw.assignees)),
+		labels = labels(github_mapper.connection_nodes(raw.labels)),
 		milestone = milestone(raw.milestone),
 		sub_issues = {},
 	}
-	for _, child in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
+	for _, child in ipairs(github_mapper.connection_nodes(raw.subIssues)) do
 		local sub_issue = M.to_issue(child, fallback_slug)
 		if sub_issue then
 			table.insert(details.sub_issues, sub_issue)
@@ -275,8 +275,9 @@ function M.to_timeline_entry(node)
 end
 
 ---@param node any GraphQL `IssueComment`
+---@param author_login string|nil
 ---@return IssueComment|nil
-function M.to_comment(node)
+function M.to_comment(node, author_login)
 	node = json.safe_table(node)
 	if json.nilify(node.id) == nil then
 		return nil
@@ -285,9 +286,10 @@ function M.to_comment(node)
 		id = tostring(node.id),
 		url = json.safe_str(node.url) or "",
 		author = M.to_user(node.author),
+		author_roles = github_mapper.author_roles(node, author_login),
 		body = json.safe_str(node.body) or "",
 		created_at = json.safe_str(node.createdAt) or "",
-		reactions = github_mapping.graphql_reactions(node.reactionGroups),
+		reactions = github_mapper.graphql_reactions(node.reactionGroups),
 	}
 end
 

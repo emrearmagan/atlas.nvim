@@ -107,7 +107,7 @@ local function fetch_thread_comments(pr, opts, on_done)
 		end
 		local items = {}
 		for _, raw in ipairs(result.values) do
-			local comment = mapper.to_comment(raw)
+			local comment = mapper.to_comment(raw, pr.author.id)
 			if comment then
 				local inline = json.safe_table(raw.inline)
 				comment.hunk = diff_parser.parse_hunk(json.safe_str(inline.context_lines) or "")

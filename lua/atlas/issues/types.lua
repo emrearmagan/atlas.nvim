@@ -89,6 +89,7 @@
 ---@field id string
 ---@field url string|nil
 ---@field author AtlasUser|nil
+---@field author_roles string[]|nil
 ---@field body string
 ---@field created_at string
 ---@field parent_id string|number|nil
@@ -132,10 +133,7 @@
 ---@field deleted boolean|nil
 ---@field always_render boolean|nil
 
----@alias IssueConversationItemKind "description"|"comment"|"activity"
-
----@class IssueConversationItem
----@field id string
----@field kind IssueConversationItemKind
----@field created_at string
----@field entity IssueComment|IssueActivityEntry
+---@class IssueConversation
+---@field description IssueComment|nil
+---@field comments IssueComment[]
+---@field activities IssueActivityEntry[]

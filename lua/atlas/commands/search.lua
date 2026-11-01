@@ -1,6 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
+local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
@@ -91,22 +92,29 @@ local function choose(entries, prompt)
 	})
 end
 
----@param provider_id AtlasProviderId|nil
-function M.run(provider_id)
-	local entries = configured_searches()
-	if provider_id then
-		local matches = {}
-		for _, entry in ipairs(entries) do
-			if entry.id == provider_id then
-				table.insert(matches, entry)
+---@param target string|nil A provider ID, "." for the current repository's provider, or nil to ask.
+function M.run(target)
+	if target == "." then
+		git.local_repository(nil, function(repository)
+			if not repository then
+				notify.warn("No supported Git repository found", { vim_notify = true })
 			end
-		end
-		if #matches == 0 then
-			notify.error("No configured search for provider: " .. provider_id, { vim_notify = true })
+			M.run(repository and repository.provider)
+		end)
+		return
+	end
+
+	local entries = configured_searches()
+	if target then
+		local matches = vim.tbl_filter(function(entry)
+			return entry.id == target
+		end, entries)
+		if #matches > 0 then
+			choose(matches, "Search " .. providers[target].name .. " in:")
 			return
 		end
-		choose(matches, "Search " .. providers[provider_id].name .. " in:")
-		return
+		local name = vim.tbl_get(providers, target, "name") or target
+		notify.warn("Search is not available for " .. name, { vim_notify = true })
 	end
 
 	if #entries == 0 then

@@ -29,6 +29,7 @@ local M = {}
 ---@field id string|number|nil
 ---@field repo_full_name string|nil
 ---@field repository_url string|nil
+---@field page string|nil Repository browser page the URL points to
 ---@field issue_key string|nil
 
 ---@class AtlasProviderDomain

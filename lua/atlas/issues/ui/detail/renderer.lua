@@ -7,10 +7,30 @@ local chips = require("atlas.ui.components.chips")
 local tabs = require("atlas.ui.components.tabs")
 local state = require("atlas.issues.ui.detail.state")
 local links = require("atlas.ui.links")
+local icons = require("atlas.ui.shared.icons")
 
 local ns = vim.api.nvim_create_namespace("atlas.issues.provider_detail")
 
 local PADDING_X = 1
+
+---@return IssuesDetailChip[]
+local function link_chips()
+	local counts = { issue = 0, pr = 0, external = 0 }
+	for _, link in ipairs(links.items(state.links and state.links.items or {})) do
+		counts[link.kind] = (counts[link.kind] or 0) + 1
+	end
+	local result = {}
+	for _, entry in ipairs({ { "issue", "issue" }, { "pr", "PR" }, { "external", "link" } }) do
+		local count = counts[entry[1]]
+		if count > 0 then
+			table.insert(result, {
+				label = icons.get("link") .. " " .. count .. " " .. entry[2] .. (count == 1 and "" or "s"),
+				hl = "AtlasRelatedChip",
+			})
+		end
+	end
+	return result
+end
 
 ---@param buf integer
 ---@param spans table[]
@@ -44,12 +64,24 @@ function M.render()
 	local issue = state.current_issue
 	local details = state.current_details
 	local width = vim.api.nvim_win_get_width(win)
+	local winbar = " "
+	if issue ~= nil and issue.is_subscribed ~= nil then
+		local bell, bell_hl = icons.get(issue.is_subscribed and "bell" or "bell_no")
+		if issue.is_subscribed then
+			bell_hl = "AtlasLogInfo"
+		end
+		winbar = string.format("%%=%%#%s#%s%%* ", bell_hl, bell)
+	end
+	vim.api.nvim_set_option_value("winbar", winbar, { win = win })
+
 	local lines = {}
 	local spans = {}
 
 	if issue == nil then
 		if state.issue_loading then
 			utils.push(lines, spans, spinner.with_text("Loading issue..."), "AtlasTextMuted", PADDING_X)
+		elseif state.issue_error then
+			utils.push(lines, spans, state.issue_error, "AtlasLogError", PADDING_X)
 		else
 			lines = { "", "  Nothing selected..." }
 		end
@@ -64,7 +96,7 @@ function M.render()
 				and provider_detail.chips
 				and provider_detail.chips(issue, details, state.details_loading)
 			or {}
-		vim.list_extend(extra_chips, links.chips(state))
+		vim.list_extend(extra_chips, link_chips())
 
 		local header_lines, header_spans = header.render(issue, width, extra_fields)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })

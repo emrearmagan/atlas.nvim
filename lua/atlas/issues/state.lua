@@ -11,6 +11,7 @@
 ---@field page_history IssuesPage[]
 ---@field issue_tree IssuesGroup[]
 ---@field collapsed_issue_keys table<string, boolean>
+---@field board_column integer
 ---@field provider IssuesProvider|nil
 ---@field views IssuesViewConfig[]
 ---@field starred_items AtlasStarredItem[]
@@ -29,6 +30,7 @@ local M = {
 	page_history = {},
 	issue_tree = {},
 	collapsed_issue_keys = {},
+	board_column = 1,
 	provider = nil,
 	views = {},
 	starred_items = {},

@@ -1,21 +1,13 @@
 local M = {}
+---@cast M AtlasNotificationsCapability
 
 local client = require("atlas.providers.gitlab.client")
 
 local TARGET_KIND = {
 	MergeRequest = "pr",
 	Issue = "issue",
+	["DesignManagement::Design"] = "issue",
 }
-
----@param action string|nil
----@return string
-local function pretty_action(action)
-	local s = tostring(action or "")
-	if s == "" then
-		return ""
-	end
-	return (s:gsub("_", " "))
-end
 
 ---@param raw table
 ---@return AtlasNotification
@@ -29,45 +21,37 @@ local function normalize(raw)
 	if repo ~= "" then
 		table.insert(subtitle_parts, repo)
 	end
-	local action = pretty_action(raw.action_name)
+	local action = tostring(raw.action_name or ""):gsub("_", " ")
 	if action ~= "" then
 		table.insert(subtitle_parts, action)
 	end
+
+	local updated_at = tostring(raw.updated_at or raw.created_at or "")
 
 	return {
 		id = tostring(raw.id or ""),
 		title = tostring(target.title or raw.body or ""),
 		subtitle = table.concat(subtitle_parts, "  "),
-		timestamp = tostring(raw.updated_at or raw.created_at or ""),
-		kind = TARGET_KIND[target_type],
+		timestamp = updated_at ~= "" and updated_at or nil,
+		kind = raw.action_name == "build_failed" and "checks" or TARGET_KIND[target_type],
 		unread = tostring(raw.state or "") == "pending",
 		url = type(raw.target_url) == "string" and raw.target_url or nil,
 	}
 end
 
----@param opts { state: "pending"|"done"|"all"|nil, per_page: number|nil, force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(opts, on_done)
-	opts = vim.tbl_extend("force", { state = "pending", per_page = 100 }, opts or {})
-	local per_page = math.max(1, math.min(100, tonumber(opts.per_page) or 100))
-	local state = opts.state or "pending"
-
-	local cache_key = string.format("gitlab:todos:state=%s:per_page=%d", state, per_page)
-	if not opts.force_refresh then
-		local cached, ok = client.get_memory_cache(cache_key)
+	if not (opts and opts.force_refresh) then
+		local cached, ok = client.get_memory_cache("gitlab:todos")
 		if ok then
 			on_done(cached, nil)
 			return nil
 		end
 	end
 
-	local endpoint = string.format("/todos?per_page=%d", per_page)
-	if state ~= "all" then
-		endpoint = endpoint .. "&state=" .. state
-	end
-
-	return client.request("GET", endpoint, nil, function(result, err)
+	return client.request("GET", "/todos?per_page=100&state=pending", nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -76,7 +60,7 @@ function M.fetch(opts, on_done)
 		for _, raw in ipairs(type(result) == "table" and result or {}) do
 			table.insert(notifications, normalize(raw))
 		end
-		client.set_memory_cache(cache_key, notifications, 60)
+		client.set_memory_cache("gitlab:todos", notifications, 60)
 		on_done(notifications, nil)
 	end, {
 		action = "Fetch notifications",
@@ -93,7 +77,7 @@ function M.mark_done(id, on_done)
 			on_done(false, err)
 			return
 		end
-		client.clear_memory_cache("gitlab:todos:")
+		client.delete_memory_cache("gitlab:todos")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification done",
@@ -101,6 +85,20 @@ function M.mark_done(id, on_done)
 	})
 end
 
-M.mark_read = M.mark_done
+---@param notification AtlasNotification
+---@return boolean
+function M.open(notification)
+	if notification.url == nil then
+		return false
+	end
+	if notification.kind == "checks" then
+		require("atlas.commands.pipelines").open(notification.url)
+	elseif notification.kind == "pr" or notification.kind == "issue" then
+		require("atlas.commands.open").open(notification.url)
+	else
+		return false
+	end
+	return true
+end
 
 return M

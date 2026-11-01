@@ -6,7 +6,7 @@ describe("Jira issue references", function()
 
 	before_each(function()
 		original_options = config.options
-		config.options = { providers = { jira = { base_url = "https://jira.example/jira/" } } }
+		config.options = { providers = { jira = { base_url = "https://jira.example/jira/", token = "token" } } }
 	end)
 
 	after_each(function()
@@ -36,10 +36,10 @@ describe("Jira links API", function()
 		original_links = package.loaded["atlas.issues.providers.jira.api.links"]
 		config.options = {
 			providers = {
-				jira = { base_url = "https://jira.example/jira" },
+				jira = { base_url = "https://jira.example/jira", token = "token" },
 				github = {},
-				gitlab = { base_url = "https://gitlab.example" },
-				bitbucket = {},
+				gitlab = { base_url = "https://gitlab.example", token = "token" },
+				bitbucket = { user = "user", token = "token" },
 			},
 		}
 		callbacks = {}

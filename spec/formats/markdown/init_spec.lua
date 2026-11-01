@@ -367,7 +367,7 @@ describe("Markdown parsing", function()
 	end)
 
 	it("renders a linked image label and keeps the outer destination", function()
-		local url = "https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml"
+		local url = "https://github.com/owner/repo/actions/workflows/ci.yml"
 		local text = "é [![CI](" .. url .. "/badge.svg)](" .. url .. ")!"
 		assert.are.same({
 			lines = { "é 󰋩 CI!" },
@@ -557,25 +557,25 @@ describe("Markdown parsing", function()
 			local source = "```" .. language .. "\nx\n```"
 			local result = markdown.parse(source, { width = 14 })
 			local padding = string.rep(" ", 10 - #language)
-			assert.equals(padding .. icon .. " " .. language .. "  ", result.lines[1])
-			assert.equals(14, vim.fn.strdisplaywidth(result.lines[1]))
+			assert.equal(padding .. icon .. " " .. language .. "  ", result.lines[1])
+			assert.equal(14, vim.fn.strdisplaywidth(result.lines[1]))
 			has_span(result, span(0, #padding, #padding + #icon, group))
 			has_span(result, span(0, #padding + #icon + 1, #padding + #icon + 1 + #language, "AtlasMarkdownCodeLabel"))
-			assert.equals(filetype, requested[#requested])
+			assert.equal(filetype, requested[#requested])
 
 			local natural = markdown.parse(source)
-			assert.equals("  " .. icon .. " " .. language .. "  ", natural.lines[1])
+			assert.equal("  " .. icon .. " " .. language .. "  ", natural.lines[1])
 			local narrow = markdown.parse(source, { width = #language + 5 })
-			assert.equals("   " .. language .. "  ", narrow.lines[1])
+			assert.equal("   " .. language .. "  ", narrow.lines[1])
 			for _, highlight in ipairs(narrow.highlights) do
-				assert.is_not.equals(group, highlight.hl_group)
+				assert.is_not.equal(group, highlight.hl_group)
 			end
 		end
 
 		assert.same(unknown, markdown.parse("```unknown\nx\n```", { width = 14 }))
 		local calls = #requested
 		assert.same(unlabeled, markdown.parse("```\nx\n```", { width = 14 }))
-		assert.equals(calls, #requested)
+		assert.equal(calls, #requested)
 	end)
 
 	it("renders an empty code block with a background", function()
@@ -626,7 +626,7 @@ describe("Markdown parsing", function()
 			has_span(result, span(0, 0, #case[3], case[2]))
 			has_span(result, span(1, 0, #"▎ ", case[2]))
 			has_span(result, span(1, #"▎ ", #"▎ body", "AtlasMarkdownStrong"))
-			assert.equals(3, #result.highlights)
+			assert.equal(3, #result.highlights)
 		end
 	end)
 
@@ -649,8 +649,8 @@ describe("Markdown parsing", function()
 			for index, text in ipairs({ "caféabcdefgh", "ijklmno", "abcdefghijkl", "mnop" }) do
 				local line = first_line + index - 1
 				local group = index <= 2 and "AtlasMarkdownStrong" or "AtlasMarkdownLink"
-				assert.equals("▎ " .. text, result.lines[line + 1])
-				assert.equals(" ▎ " .. text, rendered.lines[line + 1])
+				assert.equal("▎ " .. text, result.lines[line + 1])
+				assert.equal(" ▎ " .. text, rendered.lines[line + 1])
 				has_span(result, span(line, 0, #"▎ ", bar_group))
 				has_span(result, span(line, #"▎ ", #"▎ " + #text, group))
 				has_span(rendered, span(line, 1, #" ▎ ", bar_group))
@@ -734,7 +734,7 @@ describe("Markdown parsing", function()
 				shaded_text[#shaded_text + 1] = content
 			end
 		end
-		assert.equals(" Name  Value  ", table.concat(shaded_text))
+		assert.equal(" Name  Value  ", table.concat(shaded_text))
 	end)
 
 	it("supports tables without outer pipes and minimum-width columns", function()
@@ -750,12 +750,12 @@ describe("Markdown parsing", function()
 
 	it("honors left, center and right table alignment", function()
 		local result = markdown.parse("Left | Center | Right\n:--- | :---: | ---:\nx | y | z")
-		assert.equals("| x    |   y    |     z |", result.lines[4])
+		assert.equal("| x    |   y    |     z |", result.lines[4])
 	end)
 
 	it("preserves inline table highlights after padding and removed markers", function()
 		local result = markdown.parse("Name | Value\n--- | ---\na | b\n**é** | `code`")
-		assert.equals("| é    | code  |", result.lines[5])
+		assert.equal("| é    | code  |", result.lines[5])
 		has_span(result, span(4, #"| ", #"| é", "AtlasMarkdownStrong"))
 		has_span(result, span(4, #"| é    | ", #"| é    | code", "AtlasMarkdownInlineCode"))
 		for index, highlight in ipairs(result.highlights) do
@@ -774,7 +774,7 @@ describe("Markdown parsing", function()
 
 	it("keeps escaped pipes and pipes inside code within their table cells", function()
 		local result = markdown.parse("A | B\n--- | ---\na\\|b | `c|d`")
-		assert.equals("| a|b | c|d |", result.lines[4])
+		assert.equal("| a|b | c|d |", result.lines[4])
 		has_span(result, span(3, #"| a|b | ", #"| a|b | c|d", "AtlasMarkdownInlineCode"))
 	end)
 
@@ -796,7 +796,7 @@ describe("Markdown parsing", function()
 			"|-------|-------|",
 		}, result.lines)
 		for _, line in ipairs(result.lines) do
-			assert.equals(17, #line)
+			assert.equal(17, #line)
 		end
 		local shaded_rows = {}
 		for _, highlight in ipairs(result.highlights) do
@@ -824,7 +824,7 @@ describe("Markdown parsing", function()
 			"|----|----|",
 		}, result.lines)
 		for _, line in ipairs(result.lines) do
-			assert.equals(11, vim.fn.strdisplaywidth(line))
+			assert.equal(11, vim.fn.strdisplaywidth(line))
 		end
 		for row = 3, 6 do
 			has_span(result, span(row, #"| ", #"| éà", "AtlasMarkdownStrong"))
@@ -883,7 +883,7 @@ describe("Markdown parsing", function()
 				shaded_text[#shaded_text + 1] = content
 			end
 		end
-		assert.equals(" c           ", table.concat(shaded_text))
+		assert.equal(" c           ", table.concat(shaded_text))
 	end)
 
 	it("leaves malformed table delimiters as ordinary lines", function()

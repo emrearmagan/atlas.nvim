@@ -1,15 +1,27 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
-local detail_ui = require("atlas.ui.detail")
+local detail_window = require("atlas.pulls.ui.detail.window")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
 local actions = require("atlas.pulls.actions")
-local notify = require("atlas.core.notify")
+local action_runner = require("atlas.core.actions")
 local links = require("atlas.ui.links")
 
 local registrations = {}
+
+local function open_links()
+	local pr, provider = state.current_pr, state.provider
+	if pr == nil or provider == nil then
+		return
+	end
+	local loaded = state.links
+	if loaded and (loaded.loading or loaded.error) then
+		loaded = nil
+	end
+	links.select(provider, pr, "pr", loaded and loaded.items, require("atlas.pulls.ui.detail").way_back())
+end
 
 ---@param lnum integer
 ---@return boolean
@@ -40,36 +52,13 @@ local function action_context(pr, buf)
 		pr = pr,
 		details = state.current_details,
 		buf = buf,
-		notify = function(level, message, duration)
-			notify.show(level, message, { timeout = duration })
-		end,
 	}
-end
-
----@param pr PullRequest
----@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
----@param result PullsActionResult|nil
-local function complete_action(pr, on_update, result)
-	if not result or not result.changed_pr then
-		return
-	end
-	if on_update then
-		on_update(pr, result)
-	else
-		require("atlas.pulls.ui.detail").refresh()
-	end
 end
 
 ---@param action_id string
 ---@return boolean
 local function supports_action(action_id)
-	local capability = state.provider and state.provider.capabilities.actions
-	for _, action in ipairs(capability and capability.items or {}) do
-		if action.id == action_id then
-			return true
-		end
-	end
-	return false
+	return state.provider ~= nil and action_runner.find(state.provider.capabilities.actions, action_id) ~= nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -119,7 +108,7 @@ function M.register(buf)
 			if current then
 				local on_update = state.on_update
 				actions.run(action_id, current, function(result)
-					complete_action(pr, on_update, result)
+					require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 				end)
 			end
 		end
@@ -132,7 +121,7 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				detail_ui.move_cursor("down", is_selectable)
+				detail_window.move_cursor("down", is_selectable)
 			end,
 		})
 	)
@@ -143,7 +132,7 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				detail_ui.move_cursor("up", is_selectable)
+				detail_window.move_cursor("up", is_selectable)
 			end,
 		})
 	)
@@ -198,8 +187,14 @@ function M.register(buf)
 					if context then
 						local on_update = state.on_update
 						actions.open(context, function(result)
-							complete_action(pr, on_update, result)
-						end, { links.action(state) })
+							require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
+						end, {
+							{
+								label = "Open related items",
+								icon = require("atlas.ui.shared.icons").get("link"),
+								callback = open_links,
+							},
+						})
 					end
 				end,
 			})
@@ -244,6 +239,19 @@ function M.register(buf)
 		})
 	)
 
+	local provider_detail = state.provider and state.provider.capabilities.ui and state.provider.capabilities.ui.detail
+	if provider_detail and provider_detail.keymaps then
+		for _, keymap in ipairs(provider_detail.keymaps()) do
+			table.insert(items, {
+				key = keymap.key,
+				desc = keymap.desc,
+				index = 7,
+				opts = { nowait = true, silent = true },
+				callback = keymap.callback,
+			})
+		end
+	end
+
 	if supports_action("edit_pr") then
 		utils.insert_if(
 			items,
@@ -270,7 +278,15 @@ function M.register(buf)
 
 	M.remove(buf)
 	local general = items
-	vim.list_extend(general, links.keymaps(state))
+	utils.insert_if(
+		general,
+		item("ui.open_references", {
+			desc = "Open references",
+			index = 3,
+			opts = { nowait = true, silent = true },
+			callback = open_links,
+		})
+	)
 
 	utils.insert_if(
 		general,
@@ -333,7 +349,11 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				require("atlas.pulls.ui.detail").close()
+				if state.back then
+					state.back()
+				else
+					require("atlas.pulls.ui.detail").close()
+				end
 			end,
 		})
 	)
@@ -347,7 +367,7 @@ function M.register(buf)
 		local on_update = state.on_update
 		if context then
 			return callback(context, function(result)
-				complete_action(pr, on_update, result)
+				require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
 			end)
 		end
 	end)

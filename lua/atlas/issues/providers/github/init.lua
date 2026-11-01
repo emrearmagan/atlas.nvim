@@ -16,7 +16,7 @@
 
 local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
-local github_mapping = require("atlas.providers.github.mapping")
+local github_mapper = require("atlas.providers.github.mapper")
 local git = require("atlas.core.git")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local links_api = require("atlas.providers.github.links")
@@ -115,21 +115,6 @@ local function views()
 end
 
 ---@param target AtlasTarget
----@return AtlasIssuesViewConfig
-local function view_for_target(target)
-	return {
-		name = "Search",
-		layout = "compact",
-		search = string.format(
-			"repo:%s/%s %s is:issue",
-			target.owner,
-			target.repo,
-			target.number and tostring(target.number) or ""
-		),
-	}
-end
-
----@param target AtlasTarget
 ---@return IssueRef|nil
 local function issue_ref(target)
 	if target.owner and target.repo and target.number then
@@ -139,7 +124,6 @@ end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
 	issue_ref = issue_ref,
 	capabilities = {
 		actions = require("atlas.issues.providers.github.actions.registry"),
@@ -156,7 +140,7 @@ return {
 			edit_comment = comments_api.edit,
 			delete_comment = comments_api.delete,
 			reactions = {
-				options = github_mapping.reactions,
+				options = github_mapper.reactions,
 				add = comments_api.add_reaction,
 				remove = comments_api.remove_reaction,
 			},

@@ -1,29 +1,11 @@
 local service = require("atlas.providers.gitlab.client")
 local json = require("atlas.core.json")
+local mapper = require("atlas.providers.gitlab.mapper")
 
 local M = {
 	-- get_assignable_users = nil,
 }
-
----@param raw any
----@return AtlasUser|nil
-function M.to_user(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(raw.name) or ""
-	local id = json.safe_str(raw.id) or ""
-	return {
-		id = id:match("([^/]+)$") or id,
-		name = name ~= "" and name or username,
-		username = username,
-	}
-end
+---@cast M AtlasUsersCapability
 
 ---@param on_done fun(user: AtlasUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -31,7 +13,7 @@ function M.fetch_user(on_done)
 	local cache_key = "gitlab:current_user"
 	local cached, ok = service.get_cache(cache_key)
 	if ok then
-		on_done(M.to_user(cached), nil)
+		on_done(mapper.to_user(cached), nil)
 		return nil
 	end
 
@@ -43,7 +25,7 @@ function M.fetch_user(on_done)
 		if result then
 			service.set_cache(cache_key, result)
 		end
-		on_done(M.to_user(result), nil)
+		on_done(mapper.to_user(result), nil)
 	end, { action = "Fetch current user" })
 end
 
@@ -69,7 +51,7 @@ function M.list_members(project_path, query, on_done)
 		end
 		local users = {}
 		for _, raw in ipairs(json.safe_table(result)) do
-			local user = M.to_user(raw)
+			local user = mapper.to_user(raw)
 			if user then
 				table.insert(users, user)
 			end

@@ -22,13 +22,13 @@ function M.on_select(issue, refresh, opts)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
-		state.items = {}
+		state.conversation = { comments = {}, activities = {} }
 		refresh()
 		return
 	end
 
 	local key = issue.key
-	state.items = "loading"
+	state.conversation = "loading"
 	notify.loading(string.format("Loading conversation for %s...", key))
 	state.requests.run(function(done)
 		return comments.fetch_conversation(issue, opts, done)
@@ -36,13 +36,16 @@ function M.on_select(issue, refresh, opts)
 		if not state.is_current(issue) then
 			return
 		end
-		state.items = {}
+		state.conversation = nil
 		if result then
-			for _, item in ipairs(result) do
-				if item.kind ~= "comment" or item.entity.deleted ~= true then
-					table.insert(state.items, item)
+			local visible = {}
+			for _, comment in ipairs(result.comments) do
+				if comment.deleted ~= true then
+					table.insert(visible, comment)
 				end
 			end
+			state.conversation =
+				{ description = result.description, comments = visible, activities = result.activities }
 		end
 
 		state.error = nil
@@ -60,29 +63,21 @@ function M.on_select(issue, refresh, opts)
 	end)
 end
 
----@param issue Issue
----@param details IssueDetails|nil
----@param width integer
 M.render = renderer.render
 
 ---@param _lnum integer
 ---@param entry table
 ---@return boolean
 function M.is_selectable_line(_lnum, entry)
-	return entry.conversation_item ~= nil or entry.kind == "activity_gap"
+	return entry.comment ~= nil or entry.activity_entry ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _issue Issue
----@param entry table
+---@param entry IssuesConversationLine|nil
 ---@return boolean|nil
 function M.on_enter(_issue, entry)
-	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
-		return
-	end
-	---@type IssueComment
-	local comment = item.entity
-	local url = tostring(comment.url or "")
+	local comment = entry and entry.comment
+	local url = comment and tostring(comment.url or "") or ""
 	if url ~= "" then
 		vim.ui.open(url)
 		return true

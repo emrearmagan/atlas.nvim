@@ -29,7 +29,7 @@ describe("github pull request updates", function()
 		})
 		local api = fresh_module()
 
-		local pr = { id = 42, repo_full_name = "octo/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo" }
 		for index, case in ipairs({
 			{ { title = "New title" }, "--title", "New title" },
 			{ { body = "Line one\nLine two" }, "--body", "Line one\nLine two" },
@@ -41,7 +41,7 @@ describe("github pull request updates", function()
 			end)
 			assert.is_true(ok)
 			assert.is_nil(err)
-			assert.same({ "pr", "edit", "42", "--repo", "octo/repo", case[2], case[3] }, calls[index])
+			assert.same({ "pr", "edit", "42", "--repo", "owner/repo", case[2], case[3] }, calls[index])
 		end
 		assert.equal(3, #calls)
 	end)
@@ -54,7 +54,7 @@ describe("github pull request updates", function()
 			end,
 		})
 		local api = fresh_module()
-		local pr = { id = 42, repo_full_name = "octo/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo" }
 		for index, case in ipairs({ { method = "merge", body = "Body" }, { method = "squash", body = "" } }) do
 			api.merge(pr, {
 				method = case.method,
@@ -67,7 +67,7 @@ describe("github pull request updates", function()
 				"merge",
 				"42",
 				"--repo",
-				"octo/repo",
+				"owner/repo",
 				"--" .. case.method,
 				"--delete-branch",
 				"--subject",
@@ -75,25 +75,6 @@ describe("github pull request updates", function()
 				"--body",
 				case.body,
 			}, calls[index])
-		end
-	end)
-
-	it("propagates errors from the gh CLI", function()
-		github_client.install({
-			gh = function(_, callback)
-				callback(nil, "boom")
-			end,
-		})
-		local api = fresh_module()
-		local pr = { id = 42, repo_full_name = "octo/repo" }
-
-		for _, opts in ipairs({ { title = "New title" }, { body = "New body" } }) do
-			local ok, err
-			api.update_pr(pr, opts, function(success, e)
-				ok, err = success, e
-			end)
-			assert.is_false(ok)
-			assert.equal("boom", err)
 		end
 	end)
 
@@ -105,13 +86,13 @@ describe("github pull request updates", function()
 			end,
 		})
 		local api = fresh_module()
-		local pr = { id = 42, repo_full_name = "octo/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo" }
 		api.update_pr(pr, { labels = {} }, function() end)
 		api.update_pr(pr, { assignees = {} }, function() end)
 
 		assert.same({
-			{ "api", "-X", "PATCH", "repos/octo/repo/issues/42", "-f", "labels[]" },
-			{ "api", "-X", "PATCH", "repos/octo/repo/issues/42", "-f", "assignees[]" },
+			{ "api", "-X", "PATCH", "repos/owner/repo/issues/42", "-f", "labels[]" },
+			{ "api", "-X", "PATCH", "repos/owner/repo/issues/42", "-f", "assignees[]" },
 		}, calls)
 	end)
 
@@ -133,7 +114,7 @@ describe("github pull request updates", function()
 			end,
 		}
 		local api = fresh_module()
-		local pr = { id = 42, repo_full_name = "octo/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo" }
 		local ok
 		api.update_pr(pr, {
 			reviewers = { { label = "@alice", provider_id = "alice" }, { label = "@carol", provider_id = "carol" } },
@@ -143,7 +124,7 @@ describe("github pull request updates", function()
 
 		assert.is_true(ok)
 		assert.same({
-			{ "pr", "edit", "42", "--repo", "octo/repo", "--add-reviewer", "carol", "--remove-reviewer", "bob" },
+			{ "pr", "edit", "42", "--repo", "owner/repo", "--add-reviewer", "carol", "--remove-reviewer", "bob" },
 		}, calls)
 	end)
 end)

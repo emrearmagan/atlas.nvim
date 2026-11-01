@@ -10,10 +10,11 @@ end
 
 describe("core.git.checkout", function()
 	it("uses the pull request snapshot commits for diffs", function()
-		local base, head = checkout.pr_diff_revisions({
+		local pr = {
 			destination = { commit_hash = "base123" },
 			source = { commit_hash = "head456" },
-		})
+		}
+		local base, head = checkout.pr_diff_revisions(pr)
 
 		assert.equal("base123", base)
 
@@ -35,7 +36,7 @@ describe("core.git.checkout", function()
 				assert.is_false(ok)
 				local path, err = resolve({}, key)
 				assert.is_nil(path)
-				assert.is_truthy(err:find("invalid repository identifier", 1, true))
+				assert.matches("invalid repository identifier", assert(err), 1, true)
 			end
 		end)
 	end)
@@ -49,7 +50,7 @@ describe("core.git.checkout", function()
 				}, namespace .. "/repo")
 
 				assert.is_string(path)
-				assert.is_truthy(path:find("special"))
+				assert.matches("special", assert(path))
 			end
 		end)
 
@@ -59,14 +60,14 @@ describe("core.git.checkout", function()
 					[namespace .. "/*"] = "~/code/*",
 					[namespace .. "/proj-*"] = "~/work/proj-*",
 				}, namespace .. "/proj-foo")
-				assert.is_truthy(path:find("/work/proj%-foo$"))
+				assert.matches("/work/proj%-foo$", assert(path))
 			end
 		end)
 
 		it("substitutes multiple captures in order", function()
 			for _, namespace in ipairs({ "ws", "group/subgroup" }) do
 				local path = resolve({ [namespace .. "/proj-*-v*"] = "~/code/*/v*" }, namespace .. "/proj-foo-v2")
-				assert.is_truthy(path:find("/code/foo/v2$"))
+				assert.matches("/code/foo/v2$", assert(path))
 			end
 		end)
 
@@ -74,14 +75,14 @@ describe("core.git.checkout", function()
 			for _, repo in ipairs({ "other/repo", "ws/subgroup/repo" }) do
 				local path, err = resolve({ ["ws/*"] = "~/code/*" }, repo)
 				assert.is_nil(path)
-				assert.is_truthy(err:find("no repo_paths mapping", 1, true))
+				assert.matches("no repo_paths mapping", assert(err), 1, true)
 			end
 		end)
 	end)
 
 	describe("mapped pull request workflows", function()
 		local original_options, original_isdirectory, original_git
-		local pending, cancelled, checked_commits, checked_out, pr
+		local pending, pending_root, current_root, cancelled, checked_commits, checked_out, pr
 		local cases = {
 			{ provider = "github", host = "github.com", repo = "owner/repo", path = "pull/1" },
 			{ provider = "gitlab", host = "gitlab.com", repo = "group/subgroup/repo", path = "-/merge_requests/1" },
@@ -100,48 +101,61 @@ describe("core.git.checkout", function()
 
 		before_each(function()
 			original_options, original_isdirectory = config.options, vim.fn.isdirectory
-			original_git = {}
-			for _, name in ipairs({ "run", "repo_root", "check_commits", "rev_exists", "checkout_branch" }) do
-				original_git[name] = git[name]
-			end
-			pending, cancelled, checked_commits, checked_out = nil, false, false, false
+			pending, pending_root, current_root, cancelled, checked_commits, checked_out =
+				nil, nil, nil, false, false, false
 			config.options = {
 				providers = {
 					github = { hostname = "github.com" },
-					gitlab = { base_url = "https://gitlab.com" },
-					bitbucket = {},
+					gitlab = { base_url = "https://gitlab.com", token = "token" },
+					bitbucket = { user = "user", token = "token" },
 				},
 				pulls = { repo_config = {} },
 			}
+			---@diagnostic disable-next-line: duplicate-set-field
 			vim.fn.isdirectory = function()
 				return 1
 			end
+
 			-- Keep the real remote lookup and provider resolvers; finish Git asynchronously.
-			git.run = function(args, _, done)
-				assert.same({ "-C", "/mapped", "remote", "get-url", "origin" }, args)
-				pending = done
-				return {
-					cancel = function()
-						cancelled = true
-					end,
-				}
+			local stubs = {
+				run = function(args, _, done)
+					local root = args[2]
+					assert.is_true(root == "/mapped" or (current_root ~= nil and root == current_root))
+					assert.same({ "-C", root, "remote", "get-url", "origin" }, args)
+					pending, pending_root = done, root
+					return {
+						cancel = function()
+							cancelled = true
+						end,
+					}
+				end,
+				repo_root = function(root, done)
+					if root == nil then
+						done(current_root)
+					else
+						done(root == "/mapped" and root or nil)
+					end
+				end,
+				check_commits = function(root, revisions, done)
+					assert.equal("/mapped", root)
+					assert.same({ "base", "head" }, revisions)
+					checked_commits = true
+					done({ true, true }, nil)
+				end,
+				rev_exists = function(_, _, done)
+					done(true)
+				end,
+				checkout_branch = function(root, branch, done)
+					checked_out = { repo_path = root, local_branch = branch }
+					done(true, nil)
+				end,
+			}
+			original_git = {}
+			for name, stub in pairs(stubs) do
+				original_git[name] = git[name]
+				git[name] = stub
 			end
-			git.repo_root = function(root, done)
-				done(root == "/mapped" and root or nil)
-			end
-			git.check_commits = function(root, revisions, done)
-				assert.equal("/mapped", root)
-				assert.same({ "base", "head" }, revisions)
-				checked_commits = true
-				done({ true, true }, nil)
-			end
-			git.rev_exists = function(_, _, done)
-				done(true)
-			end
-			git.checkout_branch = function(root, branch, done)
-				checked_out = { repo_path = root, local_branch = branch }
-				done(true, nil)
-			end
+
 			use_repository(cases[1])
 		end)
 
@@ -182,11 +196,39 @@ describe("core.git.checkout", function()
 			assert.is_false(checked_out)
 		end)
 
+		it("checks out a PR in the current matching worktree before the configured mapping", function()
+			current_root = "/worktree"
+			local result, failure
+			checkout.checkout_pr(pr, function(value, err)
+				result, failure = value, err
+			end)
+			assert.equal("/worktree", pending_root)
+			complete_remote("https://github.com/owner/repo.git")
+			assert.is_nil(failure)
+			assert.same({ repo_path = "/worktree", local_branch = "feature" }, result)
+			assert.same({ repo_path = "/worktree", local_branch = "feature" }, checked_out)
+		end)
+
+		it("falls back to the configured mapping when the current checkout has another remote", function()
+			current_root = "/other"
+			local result, failure
+			checkout.checkout_pr(pr, function(value, err)
+				result, failure = value, err
+			end)
+			assert.equal("/other", pending_root)
+			complete_remote("https://gitlab.com/owner/repo.git")
+			assert.equal("/mapped", pending_root)
+			complete_remote("https://github.com/owner/repo.git")
+			assert.is_nil(failure)
+			assert.same({ repo_path = "/mapped", local_branch = "feature" }, result)
+			assert.same({ repo_path = "/mapped", local_branch = "feature" }, checked_out)
+		end)
+
 		it("stops a cancelled diff before fetching or opening the mapped repository", function()
 			local called = false
-			local request = checkout.prepare_diff(pr, "/outside", function() end, function()
+			local request = assert(checkout.prepare_diff(pr, "/outside", function() end, function()
 				called = true
-			end)
+			end))
 			request.cancel()
 			complete_remote("https://github.com/owner/repo.git")
 			assert.is_true(cancelled)
@@ -194,39 +236,15 @@ describe("core.git.checkout", function()
 			assert.is_false(checked_commits)
 		end)
 
-		it("checks out the PR branch in the mapped repository", function()
-			local result
-			checkout.checkout_pr(pr, function(value, err)
-				assert.is_nil(err)
-				result = value
-			end)
-			complete_remote("https://github.com/owner/repo.git")
-			assert.same({ repo_path = "/mapped", local_branch = "feature" }, checked_out)
-			assert.same(checked_out, result)
-		end)
-
-		it("passes mapped paths to custom actions, including configured SSH aliases", function()
-			local invoked, completed
-			config.options.pulls.custom_actions = {
-				{
-					id = "test",
-					label = "Test",
-					run = function(_, ctx, done)
-						invoked = ctx.repo_path
-						done(true)
-					end,
-				},
-			}
-			local action = require("atlas.pulls.actions.utils").find_custom_action("test")
+		it("resolves mapped paths for pull requests, including configured SSH aliases", function()
 			for _, remote in ipairs({ "https://github.com/owner/repo.git", "git@my-github-alias:owner/repo.git" }) do
-				invoked, completed = nil, false
-				action.run({ pr = pr, notify = function() end }, function(_, err)
-					assert.is_nil(err)
-					completed = true
+				local resolved, resolve_err
+				checkout.resolve_repo_path_for_pr(pr, { require_existing = false }, function(repo_path, err)
+					resolved, resolve_err = repo_path, err
 				end)
 				complete_remote(remote)
-				assert.equal("/mapped", invoked)
-				assert.is_true(completed)
+				assert.is_nil(resolve_err)
+				assert.equal("/mapped", resolved)
 			end
 		end)
 	end)

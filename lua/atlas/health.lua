@@ -57,10 +57,10 @@ local function check_provider_views(id)
 			local options = config.domain_options(id, domain) or {}
 			local views = options.views or {}
 			local label = string.format("%s %s", provider.name, domain)
-			if #views == 0 then
-				vim.health.ok(string.format("%s: using default views", label))
-			elseif type(views) ~= "table" then
+			if type(views) ~= "table" then
 				vim.health.warn(string.format("%s: no views configured", label))
+			elseif #views == 0 then
+				vim.health.ok(string.format("%s: using default views", label))
 			else
 				vim.health.ok(string.format("%s: %d view(s) configured", label, #views))
 			end

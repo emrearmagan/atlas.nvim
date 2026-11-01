@@ -326,6 +326,50 @@ function M.commits_for_range(root, range, on_done)
 	end)
 end
 
+---@class AtlasGitCommit
+---@field hash string
+---@field parent string|nil
+---@field message string
+---@field author string
+---@field date string
+
+---@param root string
+---@param rev string
+---@param on_done fun(commits: AtlasGitCommit[]|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.branch_commits(root, rev, on_done)
+	return M.run({
+		"log",
+		"--no-show-signature",
+		"--no-color",
+		"-z",
+		"--format=%H%x00%P%x00%an%x00%cI%x00%B",
+		"--end-of-options",
+		rev,
+		"--",
+	}, { cwd = root, text = false }, function(res)
+		local ok, err = command_result(res, "Failed to load branch commits")
+		if not ok then
+			on_done(nil, err)
+			return
+		end
+
+		local fields = vim.split(res.stdout or "", "\0", { plain = true })
+		local commits = {}
+		for index = 1, #fields - 4, 5 do
+			table.insert(commits, {
+				hash = fields[index],
+				parent = fields[index + 1]:match("^%S+"),
+				author = fields[index + 2],
+				date = fields[index + 3],
+				message = fields[index + 4],
+			})
+		end
+
+		on_done(commits, nil)
+	end)
+end
+
 ---@param root string
 ---@param base string
 ---@param head string
@@ -440,11 +484,15 @@ function M.is_inside_work_tree(root, on_done)
 	end)
 end
 
+---@class AtlasGitFetchOptions
+---@field console? boolean
+---@field on_progress? fun(label: string, percent: integer)
+
 ---@param root string
 ---@param remote string
 ---@param refs string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
----@param opts { console?: boolean, on_progress?: fun(label: string, percent: integer) }|nil
+---@param opts AtlasGitFetchOptions|nil
 ---@return { cancel: fun() }
 function M.fetch_refs(root, remote, refs, on_done, opts)
 	opts = opts or {}

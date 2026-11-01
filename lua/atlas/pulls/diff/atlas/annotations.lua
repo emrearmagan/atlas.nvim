@@ -1,33 +1,32 @@
-local diff = require("atlas.pulls.diff.diff")
+local diff = require("atlas.core.git.diff")
 local render = require("atlas.pulls.diff.atlas.render")
-local ui = require("atlas.pulls.diff.ui.annotations")
-local notes = require("atlas.pulls.notes")
+local annotation_ui = require("atlas.pulls.diff.ui.annotations")
 
 local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.diff.annotations")
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param document AtlasDiffDocument
 ---@param items AtlasDiffAnnotation[]
-local function place_annotations(view, document, items, expanded)
+local function place_annotations(renderer, document, items, expanded)
 	local lookup, placed, deleted = {}, {}, {}
 
 	for _, item in ipairs(items) do
-		local buf = view.right.buf
-		local line = item.line or 1
+		local buf = renderer.right.buf
+		local line = item.end_line or 1
 		local removed = false
 
 		if item.side == "LEFT" then
-			if view.left.win then
-				buf = view.left.buf
-			elseif document.file.status ~= "deleted" and item.line then
+			if renderer.left.win then
+				buf = renderer.left.buf
+			elseif document.file.status ~= "deleted" and item.end_line then
 				local hunk
-				line, hunk = diff.map_line(document.hunks, "LEFT", item.line)
+				line, hunk = diff.map_line(document.hunks, "LEFT", item.end_line)
 				if hunk then
 					removed = true
-					line = hunk[4] > 0 and hunk[3] or hunk[3] + 1
-					deleted[item.line] = deleted[item.line] or {}
-					table.insert(deleted[item.line], item)
+					line = hunk.new_count > 0 and hunk.new_start or hunk.new_start + 1
+					deleted[item.end_line] = deleted[item.end_line] or {}
+					table.insert(deleted[item.end_line], item)
 				end
 			end
 		end
@@ -40,7 +39,7 @@ local function place_annotations(view, document, items, expanded)
 
 		if not removed then
 			-- Row zero keeps file-level cards above the first buffer line.
-			local row = expanded and not item.line and 0 or line
+			local row = expanded and not item.end_line and 0 or line
 			placed[buf] = placed[buf] or {}
 			placed[buf][row] = placed[buf][row] or {}
 			table.insert(placed[buf][row], item)
@@ -50,10 +49,10 @@ local function place_annotations(view, document, items, expanded)
 	return lookup, placed, deleted
 end
 
----@param view AtlasDiffNativeView
-local function draw_annotations(view, lookup, placed, hunks, expanded, comment_options)
+---@param renderer AtlasDiffNativeRenderer
+local function draw_annotations(renderer, lookup, placed, hunks, expanded, comment_options)
 	for buf, by_line in pairs(lookup) do
-		ui.draw_signs(namespace, buf, by_line)
+		annotation_ui.draw_signs(namespace, buf, by_line)
 	end
 
 	local topfill = {}
@@ -72,19 +71,23 @@ local function draw_annotations(view, lookup, placed, hunks, expanded, comment_o
 	end
 
 	for buf, by_line in pairs(placed) do
-		local pane = buf == view.left.buf and view.left or view.right
+		local pane = buf == renderer.left.buf and renderer.left or renderer.right
 
 		for line, items in pairs(by_line) do
 			if expanded then
 				local rows = vim.api.nvim_win_call(pane.win, function()
-					return ui.render_virtual_lines(items, vim.api.nvim_win_get_width(pane.win), comment_options)
+					return annotation_ui.render_virtual_lines(
+						items,
+						vim.api.nvim_win_get_width(pane.win),
+						comment_options
+					)
 				end)
 				put_lines(pane, line, rows, false)
 
-				if view.left.win then
+				if renderer.left.win then
 					-- Keep the following diff lines aligned across both panes.
-					local side = buf == view.left.buf and "LEFT" or "RIGHT"
-					local other = side == "LEFT" and view.right or view.left
+					local side = buf == renderer.left.buf and "LEFT" or "RIGHT"
+					local other = side == "LEFT" and renderer.right or renderer.left
 					local target = line == 0 and 0 or diff.map_line(hunks, side, line)
 
 					local padding = {}
@@ -95,7 +98,7 @@ local function draw_annotations(view, lookup, placed, hunks, expanded, comment_o
 				end
 			else
 				vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
-					virt_text = ui.render_virtual_text(items),
+					virt_text = annotation_ui.render_virtual_text(items),
 					virt_text_pos = "eol",
 					priority = 1100,
 				})
@@ -106,54 +109,57 @@ local function draw_annotations(view, lookup, placed, hunks, expanded, comment_o
 	return topfill
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param document AtlasDiffDocument
 ---@return table<integer, table<integer, AtlasDiffAnnotation[]>>
-function M.render(view, document)
-	M.clear(view.left.buf)
-	M.clear(view.right.buf)
+function M.render(renderer, document)
+	M.clear(renderer.left.buf)
+	M.clear(renderer.right.buf)
+	annotation_ui.draw_changed_lines(namespace, renderer.right.buf, renderer.session, document.file, "RIGHT")
+	if renderer.left.win then
+		annotation_ui.draw_changed_lines(namespace, renderer.left.buf, renderer.session, document.file, "LEFT")
+	end
 
 	local contents = {
 		LEFT = document.contents.old.lines,
 		RIGHT = document.contents.new.lines,
 	}
 
-	local items = ui.for_file(view.result, document.file)
-	local comment_options = ui.comment_options(view.expanded_threads)
+	local items = annotation_ui.for_file(renderer.session, document.file)
+	local comment_options = annotation_ui.comment_options(renderer.expanded_threads)
 	for _, item in ipairs(items) do
 		local count = #contents[item.side]
-		if item.thread and (document.binary or (item.line and (item.line < 1 or item.line > count))) then
-			item.line = nil
-		elseif item.note then
-			item.outdated = notes.is_outdated(item.note, contents.RIGHT[item.note.line])
+		if item.thread and (document.binary or (item.end_line and (item.end_line < 1 or item.end_line > count))) then
+			item.end_line = nil
 		end
 	end
 
-	local expanded = view.result.options.comment_display == "virtual_lines"
-	local lookup, placed, deleted = place_annotations(view, document, items, expanded)
+	local expanded = renderer.options.comment_display == "virtual_lines"
+	local lookup, placed, deleted = place_annotations(renderer, document, items, expanded)
 
 	local deleted_topfill = 0
-	if not view.left.win then
-		deleted_topfill = vim.api.nvim_win_call(view.right.win, function()
+	if not renderer.left.win then
+		deleted_topfill = vim.api.nvim_win_call(renderer.right.win, function()
 			local cards, previews = {}, {}
-			local width = vim.api.nvim_win_get_width(view.right.win) - vim.fn.getwininfo(view.right.win)[1].textoff
+			local width = vim.api.nvim_win_get_width(renderer.right.win)
+				- vim.fn.getwininfo(renderer.right.win)[1].textoff
 
 			for line, entries in pairs(deleted) do
 				if expanded then
-					cards[line] = ui.render_virtual_lines(entries, width, comment_options)
+					cards[line] = annotation_ui.render_virtual_lines(entries, width, comment_options)
 				else
-					previews[line] = ui.render_virtual_text(entries)
+					previews[line] = annotation_ui.render_virtual_text(entries)
 				end
 			end
 
 			-- Deleted text and its cards share one virtual block.
-			return render.deleted_lines(view, contents.LEFT, document.hunks, cards, previews)
+			return render.deleted_lines(renderer, contents.LEFT, document.hunks, cards, previews)
 		end)
 	end
 
-	local topfill = draw_annotations(view, lookup, placed, document.split_hunks, expanded, comment_options)
+	local topfill = draw_annotations(renderer, lookup, placed, document.split_hunks, expanded, comment_options)
 	if deleted_topfill > 0 then
-		topfill[view.right.win] = (topfill[view.right.win] or 0) + deleted_topfill
+		topfill[renderer.right.win] = (topfill[renderer.right.win] or 0) + deleted_topfill
 	end
 
 	-- topfill keeps file comments and deleted rows above line 1 visible.
@@ -170,19 +176,19 @@ function M.render(view, document)
 	return lookup
 end
 
----@param view AtlasDiffNativeView
+---@param renderer AtlasDiffNativeRenderer
 ---@param direction 1|-1
----@param kind "comment"|"note"
+---@param kind AtlasDiffAnnotationKind
 ---@param from_edge boolean|nil
 ---@return boolean moved
-function M.navigate(view, direction, kind, from_edge)
-	local document = view.document
+function M.navigate(renderer, direction, kind, from_edge)
+	local document = renderer.document
 	if not document then
 		return false
 	end
 
-	return ui.navigate(view, direction, kind, from_edge, function(pane, line)
-		return view.left.win and diff.display_line(document.split_hunks, pane, line) or line
+	return annotation_ui.navigate(renderer, direction, kind, from_edge, function(pane, line)
+		return renderer.left.win and diff.display_line(document.split_hunks, pane, line) or line
 	end)
 end
 

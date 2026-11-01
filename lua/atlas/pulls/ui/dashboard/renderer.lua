@@ -1,13 +1,13 @@
 local header = require("atlas.ui.components.header")
 local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
-local notif_state = require("atlas.ui.notifications.state")
+local notifications = require("atlas.ui.notifications")
 local layouts = require("atlas.pulls.ui.layouts")
 local state = require("atlas.pulls.state")
-local statusline = require("atlas.ui.statusline")
 local bookmarks = require("atlas.ui.shared.bookmarks")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
+local window = require("atlas.pulls.ui.dashboard.window")
 
 local M = {}
 
@@ -136,7 +136,7 @@ local function render_header(lines, spans, width)
 		if #actions > 0 then
 			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		end
-		local count = notif_state.unread_count
+		local count = notifications.unread_count(state.provider)
 		local bell, bell_hl = icons.get(count > 0 and "bell_unread" or "bell")
 		table.insert(actions, {
 			label = count > 0 and string.format("%s %d", bell, count) or bell,
@@ -161,7 +161,7 @@ function M.render(opts)
 	local lines, spans, line_map = {}, {}, {}
 	local pulls = state.pulls
 	local loading = string.format("%s Loading...", state.reload_spinner_frame)
-	statusline.set_items(statusline_items(pulls))
+	window.statusline:set_items(statusline_items(pulls))
 
 	table.insert(lines, "")
 	render_header(lines, spans, opts.width)

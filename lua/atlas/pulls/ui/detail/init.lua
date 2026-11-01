@@ -1,6 +1,6 @@
 local M = {}
 
-local detail_ui = require("atlas.ui.detail")
+local detail_window = require("atlas.pulls.ui.detail.window")
 local providers = require("atlas.providers")
 local pipelines = require("atlas.pulls.pipelines")
 local state = require("atlas.pulls.ui.detail.state")
@@ -74,7 +74,7 @@ local function start_spinner()
 		SPINNER_INTERVAL_MS,
 		SPINNER_INTERVAL_MS,
 		vim.schedule_wrap(function()
-			if not detail_ui.is_showing("pulls") or not is_loading() then
+			if not detail_window.is_open() or not is_loading() then
 				stop_spinner()
 				return
 			end
@@ -92,7 +92,7 @@ local function update_spinner()
 end
 
 local function render_if_open()
-	if detail_ui.is_showing("pulls") then
+	if detail_window.is_open() then
 		render()
 	end
 end
@@ -148,6 +148,29 @@ local function refresh_callback(pr)
 		update_spinner()
 		render_if_open()
 	end
+end
+
+---@param pr PullRequest
+---@param force_refresh boolean
+local function load_links(pr, force_refresh)
+	local provider = state.provider
+	local current = { items = {}, loading = provider ~= nil }
+	state.links = current
+	if provider == nil then
+		return
+	end
+	local refresh = refresh_callback(pr)
+	state.requests.run(function(done)
+		return links.fetch(provider, pr, { force_refresh = force_refresh }, done)
+	end, function(items, err)
+		if state.links ~= current then
+			return
+		end
+		current.items = items or {}
+		current.error = err
+		current.loading = false
+		refresh()
+	end)
 end
 
 ---@param pr PullRequest
@@ -259,7 +282,7 @@ local function clear_pr()
 	state.pr_loading = false
 	state.details_loading = false
 	state.line_map = {}
-	links.reset(state)
+	state.links = { items = {}, loading = false }
 end
 
 ---@param pr PullRequest
@@ -268,7 +291,7 @@ local function show_pr(pr, force_refresh)
 	state.current_pr = pr
 	pending_ref = nil
 	state.pr_loading = false
-	links.load(state, pr, force_refresh, refresh_callback(pr))
+	load_links(pr, force_refresh)
 	load_pr(pr, force_refresh)
 	update_spinner()
 	render()
@@ -344,7 +367,7 @@ end
 
 ---@return boolean
 function M.is_open()
-	return detail_ui.is_showing("pulls")
+	return detail_window.is_open()
 end
 
 ---@param pr PullRequest
@@ -369,7 +392,7 @@ function M.select(pr, opts)
 end
 
 ---@param input PullRequest|PullRequestRef
----@param opts { provider: PullsProvider|nil, force_refresh: boolean|nil, on_update: fun(pr: PullRequest, result: PullsActionResult|nil)|nil }|nil
+---@param opts { provider: PullsProvider|nil, force_refresh: boolean|nil, on_update: fun(pr: PullRequest, result: PullsActionResult|nil)|nil, back: fun()|nil }|nil
 function M.open(input, opts)
 	opts = opts or {}
 
@@ -385,9 +408,10 @@ function M.open(input, opts)
 		notify.error("Pull request provider unavailable")
 		return
 	end
-	state.win, state.buf = detail_ui.open("pulls", cleanup, render)
+	state.win, state.buf = detail_window.open(cleanup, render)
 	set_provider(provider)
 	state.on_update = opts.on_update
+	state.back = opts.back
 
 	if pr then
 		M.select(pr, { force_refresh = opts.force_refresh })
@@ -505,9 +529,38 @@ function M.prev_tab()
 	change_tab(-1)
 end
 
+-- This just reopens the same pull request again. For example when opening something back and wanting to come back to this pull request, like when opening a reference
+---@return fun()|nil
+function M.way_back()
+	if state.back then
+		return state.back
+	end
+	local pr, provider, on_update = state.current_pr, state.provider, state.on_update
+	if pr == nil or provider == nil then
+		return nil
+	end
+	return function()
+		M.open(pr, { provider = provider, on_update = on_update })
+	end
+end
+
 function M.close()
 	if M.is_open() then
-		detail_ui.close()
+		detail_window.close()
+	end
+end
+
+---@param pr PullRequest
+---@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
+---@param result PullsActionResult|nil
+function M.apply_action_result(pr, on_update, result)
+	if not result or not result.changed_pr then
+		return
+	end
+	if on_update then
+		on_update(pr, result)
+	else
+		M.refresh()
 	end
 end
 

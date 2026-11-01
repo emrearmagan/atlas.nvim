@@ -5,7 +5,7 @@ describe("HTML parsing", function()
 		for _, tag in ipairs({ '<img src="image.png" alt="logo">', "<img alt='logo' src='image.png' />" }) do
 			local fragment, consumed = html.inline.image(tag .. " after")
 			assert.same({ text = "󰋩 logo", style = "image", url = "image.png" }, fragment)
-			assert.equals(#tag, consumed)
+			assert.equal(#tag, consumed)
 		end
 	end)
 
@@ -19,7 +19,7 @@ describe("HTML parsing", function()
 		local comment = "<!-- **café** -->"
 		local fragment, consumed = html.inline.comment(comment .. " text <!-- next -->")
 		assert.same({ text = comment, style = "comment" }, fragment)
-		assert.equals(#comment, consumed)
+		assert.equal(#comment, consumed)
 	end)
 
 	it("consumes block comments through the complete closing line", function()
@@ -29,7 +29,7 @@ describe("HTML parsing", function()
 			{ { text = "", style = "comment" } },
 			{ { text = "--> **raw**", style = "comment" } },
 		}, rows)
-		assert.equals(5, next_index)
+		assert.equal(5, next_index)
 	end)
 
 	it("preserves unclosed block comments through EOF", function()
@@ -38,14 +38,14 @@ describe("HTML parsing", function()
 			{ { text = "<!--", style = "comment" } },
 			{ { text = "**raw**", style = "comment" } },
 		}, rows)
-		assert.equals(3, next_index)
+		assert.equal(3, next_index)
 	end)
 
 	it("skips standalone empty anchors", function()
 		for _, tag in ipairs({ '<a id="github"></a>', "  <a id='github'> </a>  " }) do
 			local rows, next_index = html.block.anchor({ "before", tag, "after" }, 2)
 			assert.same({}, rows)
-			assert.equals(3, next_index)
+			assert.equal(3, next_index)
 		end
 	end)
 
@@ -53,7 +53,7 @@ describe("HTML parsing", function()
 		for _, tag in ipairs({ "<p>", '<p align="center">', "  </p>  " }) do
 			local rows, next_index = html.block.paragraph({ "before", tag, "after" }, 2)
 			assert.same({}, rows)
-			assert.equals(3, next_index)
+			assert.equal(3, next_index)
 		end
 	end)
 
@@ -61,7 +61,7 @@ describe("HTML parsing", function()
 		for _, tag in ipairs({ "<details>", "  </details>  " }) do
 			local rows, next_index = html.block.details({ "before", tag, "after" }, 2)
 			assert.same({}, rows)
-			assert.equals(3, next_index)
+			assert.equal(3, next_index)
 		end
 	end)
 
@@ -70,7 +70,7 @@ describe("HTML parsing", function()
 			'<summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>'
 		local rows, next_index = html.block.summary({ "before", summary, "after" }, 2)
 		assert.same({ { { text = "▾ Using lazy.nvim" } } }, rows)
-		assert.equals(3, next_index)
+		assert.equal(3, next_index)
 	end)
 
 	it("declines unsupported or incomplete input", function()

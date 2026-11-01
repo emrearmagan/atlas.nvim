@@ -1,26 +1,12 @@
 local service = require("atlas.providers.jira.client")
 local config = require("atlas.config")
-local json = require("atlas.core.json")
+local mapper = require("atlas.providers.jira.mapper")
 
 local M = {
 	-- list_members = nil,
 	-- get_assignable_users = nil,
 }
-
----@param raw_user any Decoded API value.
----@return AtlasUser|nil
-function M.to_user(raw_user)
-	raw_user = json.nilify(raw_user)
-	if type(raw_user) ~= "table" then
-		return nil
-	end
-
-	return {
-		id = json.safe_str(raw_user[service.is_server() and "name" or "accountId"]) or "",
-		name = json.safe_str(raw_user.displayName) or "",
-		username = json.safe_str(raw_user.name),
-	}
-end
+---@cast M AtlasUsersCapability
 
 ---@param callback fun(user: AtlasUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -39,7 +25,7 @@ function M.fetch_user(callback)
 			return
 		end
 
-		local user = M.to_user(result)
+		local user = mapper.to_user(result)
 
 		service.set_cache(cache_key, user)
 		callback(user, nil)

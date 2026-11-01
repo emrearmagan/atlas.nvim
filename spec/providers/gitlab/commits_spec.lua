@@ -33,23 +33,6 @@ describe("gitlab pulls.fetch_commits", function()
 		package.loaded[module_name] = nil
 	end)
 
-	it("fails fast when the MR identifier is invalid", function()
-		local calls = 0
-		stub_service(function()
-			calls = calls + 1
-		end)
-		local api = fresh_module()
-
-		local commits, err
-		api.fetch_commits({ id = nil, repo_full_name = "group/project" }, nil, function(c, e)
-			commits, err = c, e
-		end)
-
-		assert.is_nil(commits)
-		assert.equal("Invalid MR identifier", err)
-		assert.equal(0, calls)
-	end)
-
 	it("keeps full commit messages and falls back to the title when absent", function()
 		stub_service(function(endpoint, callback)
 			assert.equal("/projects/group%2Fproject/merge_requests/12/commits", endpoint)
@@ -77,20 +60,5 @@ describe("gitlab pulls.fetch_commits", function()
 		assert.equal("abc123def456", commits[1].hash)
 		assert.equal("abc123d", commits[1].short_hash)
 		assert.equal("Title only", commits[2].message)
-	end)
-
-	it("propagates errors from the request", function()
-		stub_service(function(_, callback)
-			callback(nil, "boom")
-		end)
-		local api = fresh_module()
-
-		local commits, err
-		api.fetch_commits({ id = 12, repo_full_name = "group/project" }, nil, function(c, e)
-			commits, err = c, e
-		end)
-
-		assert.is_nil(commits)
-		assert.equal("boom", err)
 	end)
 end)

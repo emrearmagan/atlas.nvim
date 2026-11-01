@@ -1,5 +1,5 @@
 local service = require("atlas.providers.jira.client")
-local users_api = require("atlas.providers.jira.users")
+local mapper = require("atlas.providers.jira.mapper")
 local url_encode = require("atlas.core.utils").url_encode
 
 ---@param user AtlasUser
@@ -48,7 +48,7 @@ return {
 			---@type AtlasCompletionItem[]
 			local items = {}
 			for _, raw_user in ipairs(result) do
-				local user = users_api.to_user(raw_user)
+				local user = mapper.to_user(raw_user)
 				local mention = user and format_mention(user)
 				if user and mention and raw_user.active ~= false then
 					table.insert(items, {

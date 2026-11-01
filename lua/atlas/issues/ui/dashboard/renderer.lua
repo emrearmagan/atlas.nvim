@@ -3,11 +3,12 @@ local state = require("atlas.issues.state")
 local header = require("atlas.ui.components.header")
 local navbar = require("atlas.ui.components.navbar")
 local utils = require("atlas.ui.shared.utils")
-local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local bookmarks = require("atlas.ui.shared.bookmarks")
 local layouts = require("atlas.issues.ui.layouts")
-local notif_state = require("atlas.ui.notifications.state")
+local presentation = require("atlas.issues.ui.presentation")
+local notifications = require("atlas.ui.notifications")
+local window = require("atlas.issues.ui.dashboard.window")
 
 local M = {}
 
@@ -67,7 +68,7 @@ function M.render(opts)
 			hl_group = "AtlasFooterActive",
 		}
 	end
-	local user_name = (state.current_user and state.current_user.name) or ""
+	local user_name = state.current_user and presentation.person_name(state.current_user) or ""
 	if user_name ~= "" then
 		statusline_items[#statusline_items + 1] = {
 			text = "| @" .. user_name,
@@ -76,7 +77,7 @@ function M.render(opts)
 			min_width = 8,
 		}
 	end
-	statusline.set_items(statusline_items)
+	window.statusline:set_items(statusline_items)
 
 	local views = bookmarks.views(state.views, state.bookmarks, state.starred_items)
 	local view = state.view
@@ -106,7 +107,7 @@ function M.render(opts)
 	local actions = {}
 
 	if provider and provider.capabilities.notifications then
-		local count = notif_state.unread_count
+		local count = notifications.unread_count(provider)
 		local bell_icon, bell_hl
 		if count > 0 then
 			bell_icon, bell_hl = icons.get("bell_unread")
@@ -200,6 +201,7 @@ function M.render(opts)
 				spinner = state.reload_spinner_frame,
 				collapsed = state.collapsed_issue_keys,
 				statuses = page and page.statuses,
+				first_column = state.board_column,
 			}, issues)
 
 			local table_base = #lines

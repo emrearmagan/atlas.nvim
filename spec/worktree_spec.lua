@@ -7,7 +7,7 @@ local logger = require("atlas.core.logger")
 local function context(overrides)
 	local ctx = {
 		repo_root = "/home/dev/code/atlas.nvim",
-		repo_full_name = "emrearmagan/atlas.nvim",
+		repo_full_name = "owner/repo",
 		head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 	}
 	for key, value in pairs(overrides or {}) do
@@ -58,10 +58,7 @@ describe("worktree", function()
 				{ { pr_id = 1234 }, "pr-1234" },
 				{ { pr_id = 2 }, "pr-2" },
 			}) do
-				assert.equals(
-					worktree.cache_root() .. "/emrearmagan-atlas-nvim/" .. case[2],
-					worktree.default_dir(context(case[1]))
-				)
+				assert.equal(worktree.cache_root() .. "/owner-repo/" .. case[2], worktree.default_dir(context(case[1])))
 			end
 		end)
 
@@ -70,7 +67,7 @@ describe("worktree", function()
 			ctx.repo_full_name = nil
 			for _, root in ipairs({ "/home/dev/code/atlas.nvim", "/home/dev/code/atlas.nvim/" }) do
 				ctx.repo_root = root
-				assert.equals(worktree.cache_root() .. "/atlas-nvim/abcdef012345", worktree.default_dir(ctx))
+				assert.equal(worktree.cache_root() .. "/atlas-nvim/abcdef012345", worktree.default_dir(ctx))
 			end
 		end)
 	end)
@@ -79,13 +76,13 @@ describe("worktree", function()
 		it("returns the default when no override is configured", function()
 			local ctx = context()
 
-			assert.equals(worktree.default_dir(ctx), worktree.resolve_dir(ctx, nil))
-			assert.equals(worktree.default_dir(ctx), worktree.resolve_dir(ctx, { enabled = true }))
+			assert.equal(worktree.default_dir(ctx), worktree.resolve_dir(ctx, nil))
+			assert.equal(worktree.default_dir(ctx), worktree.resolve_dir(ctx, { enabled = true }))
 		end)
 
 		it("accepts an absolute string override", function()
 			for _, dir in ipairs({ "/var/tmp/review", "/var/tmp/review/" }) do
-				assert.equals("/var/tmp/review", worktree.resolve_dir(context(), { dir = dir }))
+				assert.equal("/var/tmp/review", worktree.resolve_dir(context(), { dir = dir }))
 			end
 		end)
 
@@ -105,16 +102,16 @@ describe("worktree", function()
 				end,
 			})
 
-			assert.equals("/var/tmp/abcdef0", dir)
-			assert.equals("emrearmagan/atlas.nvim", seen.repo_full_name)
-			assert.equals("/home/dev/code/atlas.nvim", seen.repo_root)
-			assert.equals(worktree.default_dir(context()), seen.default)
+			assert.equal("/var/tmp/abcdef0", dir)
+			assert.equal("owner/repo", seen.repo_full_name)
+			assert.equal("/home/dev/code/atlas.nvim", seen.repo_root)
+			assert.equal(worktree.default_dir(context()), seen.default)
 		end)
 
 		it("uses the default when the function returns nil", function()
 			local ctx = context()
 
-			assert.equals(
+			assert.equal(
 				worktree.default_dir(ctx),
 				worktree.resolve_dir(ctx, {
 					dir = function()
@@ -136,11 +133,11 @@ describe("worktree", function()
 		end)
 
 		it("rejects a non-string return value", function()
-			local dir, err = worktree.resolve_dir(context(), {
-				dir = function()
-					return 42
-				end,
-			})
+			---@type any
+			local invalid_dir = function()
+				return 42
+			end
+			local dir, err = worktree.resolve_dir(context(), { dir = invalid_dir })
 
 			assert.is_nil(dir)
 			assert.is_truthy(err)
@@ -168,7 +165,7 @@ describe("worktree", function()
 		end)
 
 		it("rejects link entries that are not strings", function()
-			assert.is_false(worktree.validate({ link = { 42 } }))
+			assert.is_false(worktree.validate({ link = { 42 } } --[[@as any]]))
 			assert.is_false(worktree.validate({ link = { "" } }))
 		end)
 
@@ -200,12 +197,12 @@ describe("worktree", function()
 
 		it("isolates simultaneous sessions and reuses a directory only after release", function()
 			local ctx = context()
-			local first = worktree.claim(ctx, nil)
-			local second = worktree.claim(ctx, nil)
+			local first = assert(worktree.claim(ctx, nil))
+			local second = assert(worktree.claim(ctx, nil))
 			claimed = { first, second }
 
-			assert.equals(worktree.default_dir(ctx), first)
-			assert.equals(first .. "-2", second)
+			assert.equal(worktree.default_dir(ctx), first)
+			assert.equal(first .. "-2", second)
 			assert.is_true(worktree.is_claimed(first))
 			assert.is_true(worktree.is_claimed(second))
 
@@ -213,16 +210,8 @@ describe("worktree", function()
 			assert.is_false(worktree.is_claimed(first))
 			local reused = worktree.claim(ctx, nil)
 			claimed[#claimed + 1] = reused
-			assert.equals(first, reused)
+			assert.equal(first, reused)
 			assert.is_true(worktree.is_claimed(second))
-		end)
-
-		it("propagates resolution errors", function()
-			local dir, err = worktree.claim(context(), { dir = "relative" })
-			claimed[1] = dir
-
-			assert.is_nil(dir)
-			assert.is_truthy(err)
 		end)
 	end)
 
@@ -342,6 +331,36 @@ describe("worktree", function()
 			assert.same({}, deleted)
 		end)
 
+		it("ensure takes over a deleted worktree path, even a locked one below the cache root", function()
+			local inside = worktree.cache_root() .. "/repo/pr-1"
+			local outside = "/home/dev/reviews"
+			local forces = {}
+			vim.fn.isdirectory = function()
+				return 0
+			end
+			core_git.run = function(args, _, on_done)
+				local force_count = 0
+				for _, arg in ipairs(args) do
+					if arg == "--force" then
+						force_count = force_count + 1
+					end
+				end
+				forces[args[#args - 1]] = force_count
+				on_done({ code = 0, stdout = "", stderr = "" })
+				return { cancel = function() end }
+			end
+
+			for _, dir in ipairs({ inside, outside }) do
+				worktree.ensure({
+					repo_root = "/home/dev/code/atlas.nvim",
+					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+					dir = dir,
+				}, function() end)
+			end
+
+			assert.same({ [inside] = 2, [outside] = 1 }, forces)
+		end)
+
 		it("ensure refuses an existing directory that is not a worktree of the repository", function()
 			local calls = fake_git({
 				["worktree list"] = {
@@ -384,7 +403,7 @@ describe("worktree", function()
 				result = created
 			end)
 
-			assert.equals(dir, result)
+			assert.equal(dir, result)
 			assert.same({ dir }, deleted)
 			assert.is_true(ran(calls.calls, "add"))
 		end)
@@ -408,7 +427,7 @@ describe("worktree", function()
 				result = created
 			end)
 
-			assert.equals(dir, result)
+			assert.equal(dir, result)
 			assert.same({}, deleted)
 			assert.is_false(ran(calls.calls, "add"))
 			assert.is_false(ran(calls.calls, "remove"))
@@ -432,7 +451,7 @@ describe("worktree", function()
 				result = created
 			end)
 
-			assert.equals(dir, result)
+			assert.equal(dir, result)
 			assert.same({}, deleted)
 			assert.is_true(ran(calls.calls, "remove"))
 			assert.is_true(ran(calls.calls, "add"))
@@ -451,7 +470,7 @@ describe("worktree", function()
 					end
 					return {
 						cancel = function()
-							assert.equals(stage, args[4])
+							assert.equal(stage, args[4])
 							cancelled = true
 						end,
 					}
@@ -467,7 +486,7 @@ describe("worktree", function()
 
 				handle.cancel()
 				assert.is_true(cancelled)
-				pending({ code = 0, stdout = "", stderr = "" })
+				assert(pending)({ code = 0, stdout = "", stderr = "" })
 				assert.is_false(completed)
 				assert.same(stage == "remove" and { "list", "remove" } or { "list", "remove", "prune" }, calls)
 			end

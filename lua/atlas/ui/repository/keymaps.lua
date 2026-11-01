@@ -26,21 +26,23 @@ function M.setup(session, close, select_page)
 				opts = { nowait = true, silent = true },
 			},
 		}
+
 		for _, direction in ipairs({
-			{ "ui.next_panel_tab", "Next page", 1, 11 },
-			{ "ui.previous_panel_tab", "Previous page", -1, 10 },
+			{ action = "ui.next_panel_tab", desc = "Next page", step = 1, index = 11 },
+			{ action = "ui.previous_panel_tab", desc = "Previous page", step = -1, index = 10 },
 		}) do
 			table.insert(items, {
-				key = resolver.resolve(direction[1]) or {},
-				desc = direction[2],
-				index = direction[4],
+				key = resolver.resolve(direction.action) or {},
+				desc = direction.desc,
+				index = direction.index,
 				callback = function()
-					local index = (session.sidebar.selected - 1 + direction[3]) % #session.sidebar.pages + 1
+					local index = (session.sidebar.selected - 1 + direction.step) % #session.sidebar.pages + 1
 					select_page(index)
 				end,
 				opts = { nowait = true, silent = true },
 			})
 		end
+
 		if pane == session.sidebar then
 			table.insert(items, {
 				key = resolver.resolve("ui.select") or {},
@@ -53,6 +55,7 @@ function M.setup(session, close, select_page)
 				opts = { nowait = true, silent = true },
 			})
 		end
+
 		help.register("General", items, { buffer = pane.buf, index = 1 })
 	end
 end

@@ -14,7 +14,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.notes")
 ---@class AtlasNotesUIState
 ---@field buf integer|nil
 ---@field win integer|nil
----@field target_filter AtlasNoteTarget|nil
+---@field filter { host: string, repository: string, id: string|nil }|nil
 ---@field documents AtlasNotesUIManagerDocument[]
 ---@field line_map table<integer, AtlasNotesUIItem>
 ---@field expanded table<string, boolean>
@@ -23,7 +23,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.notes")
 local state = {
 	buf = nil,
 	win = nil,
-	target_filter = nil,
+	filter = nil,
 	documents = {},
 	line_map = {},
 	expanded = {},
@@ -52,6 +52,7 @@ local function render()
 	end
 
 	local win = valid_window() and state.win or nil
+	local filter = state.filter
 	local selected
 	if win then
 		local item = state.line_map[vim.api.nvim_win_get_cursor(win)[1]]
@@ -60,7 +61,7 @@ local function render()
 	local lines, spans, line_map = renderer.render_manager({
 		documents = state.documents,
 		width = win and vim.api.nvim_win_get_width(win) or vim.o.columns,
-		target_filter = state.target_filter,
+		filter_label = filter and filter.repository .. (filter.id and "#" .. filter.id or "") or nil,
 		expanded = state.expanded,
 		action_keys = {
 			edit = key_label("ui.comments.edit"),
@@ -123,20 +124,19 @@ local function refresh()
 	if not valid_buffer() then
 		return
 	end
-	local documents, err
-	if state.target_filter then
-		local target = state.target_filter
-		local items
-		items, err = notes.list(target)
-		if items then
-			documents = #items > 0 and { { target = target, notes = items } } or {}
-		end
-	else
-		documents, err = notes.documents()
-	end
+	local documents, err = notes.documents()
 	if not documents then
 		notify.error(err or "Unable to read notes", { vim_notify = true })
 		return
+	end
+	local filter = state.filter
+	if filter then
+		documents = vim.tbl_filter(function(document)
+			local target = document.target
+			return target.host == filter.host:lower()
+				and target.repository == filter.repository:lower()
+				and (filter.id == nil or target.id == filter.id)
+		end, documents)
 	end
 	state.documents = documents
 	render()
@@ -172,19 +172,9 @@ local function ensure_buffer()
 	return buf
 end
 
----@param opts { target: string|nil }|nil
-function M.open(opts)
-	opts = opts or {}
-	local target, err
-	if opts.target and opts.target ~= "" then
-		target, err = notes.resolve_target(opts.target)
-	end
-	if err then
-		notify.error(err, { vim_notify = true })
-		return
-	end
-
-	state.target_filter = target
+---@param filter { host: string, repository: string, id: string|nil }|nil Only notes of one pull request, or of a whole repository without `id`.
+function M.open(filter)
+	state.filter = filter
 
 	local buf = ensure_buffer()
 	if valid_window() then

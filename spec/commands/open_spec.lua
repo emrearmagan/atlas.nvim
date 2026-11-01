@@ -8,6 +8,7 @@ describe("commands.open", function()
 	local pull_error
 	local issue_result
 	local issue_error
+	local branch_pulls
 	local calls
 	local original_loaded
 
@@ -17,7 +18,6 @@ describe("commands.open", function()
 		"atlas.core.git",
 		"atlas.core.notify",
 		"atlas.providers",
-		"atlas",
 		"atlas.pulls.ui.detail",
 		"atlas.issues.ui.detail",
 	}
@@ -40,22 +40,27 @@ describe("commands.open", function()
 		pull_error = "Pull request not found"
 		issue_result = nil
 		issue_error = "Issue not found"
+		branch_pulls = {}
 		calls = {
 			resolve = {},
 			fetch = {},
-			dashboard = {},
 			pull_detail = {},
 			issue_detail = {},
 			errors = {},
+			infos = {},
 			local_repository = 0,
 		}
 
 		local pull_provider = {
-			view_for_target = function(target)
-				return { target = target }
+			repository_view = function(target, branch)
+				return { target = target, branch = branch }
 			end,
 			capabilities = {
 				core = {
+					fetch_pullrequests = function(view, opts, done)
+						table.insert(calls.fetch, { domain = "pulls", view = view, opts = opts })
+						done({ items = branch_pulls }, nil)
+					end,
 					fetch_by_refs = function(refs, opts, done)
 						local ref = refs[1]
 						table.insert(calls.fetch, { domain = "pulls", ref = ref, opts = opts })
@@ -80,14 +85,23 @@ describe("commands.open", function()
 		}
 
 		package.loaded["atlas.core.git"] = {
+			default_cwd = function()
+				return "/repo"
+			end,
 			local_repository = function(_, on_done)
 				calls.local_repository = calls.local_repository + 1
 				on_done(repository, nil)
+			end,
+			current_branch = function(_, on_done)
+				on_done("feature/x", nil)
 			end,
 		}
 		package.loaded["atlas.core.notify"] = {
 			error = function(message)
 				table.insert(calls.errors, message)
+			end,
+			info = function(message)
+				table.insert(calls.infos, message)
 			end,
 		}
 		package.loaded["atlas.config"] = {
@@ -109,11 +123,6 @@ describe("commands.open", function()
 			end,
 			load = function(_, domain)
 				return domain == "pulls" and pull_provider or issue_provider
-			end,
-		}
-		package.loaded["atlas"] = {
-			open = function(domain, provider, opts)
-				table.insert(calls.dashboard, { domain = domain, provider = provider, opts = opts })
 			end,
 		}
 		package.loaded["atlas.pulls.ui.detail"] = {
@@ -155,12 +164,24 @@ describe("commands.open", function()
 		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
 	end)
 
-	it("opens dot as the current repository dashboard", function()
+	it("opens the pull request of the current branch for dot", function()
+		local pr = { id = 7, title = "Feature", state = "open" }
+		branch_pulls = { pr, { id = 8, title = "Old", state = "merged" } }
+
 		command.open(".")
 
-		assert.are.equal("pulls", calls.dashboard[1].domain)
-		assert.are.equal("github", calls.dashboard[1].provider)
-		assert.are.equal(repository, calls.dashboard[1].opts.initial_view.target)
+		assert.are.equal("feature/x", calls.fetch[1].view.branch)
+		assert.are.equal(repository, calls.fetch[1].view.target)
+		assert.are.equal(pr, calls.pull_detail[1].entity)
+	end)
+
+	it("reports a branch without an open pull request", function()
+		branch_pulls = { { id = 8, title = "Old", state = "merged" } }
+
+		command.open(".")
+
+		assert.are.equal(0, #calls.pull_detail)
+		assert.same({ "No open pull request for branch feature/x" }, calls.infos)
 	end)
 
 	it("resolves a number against the current repository with PR priority", function()

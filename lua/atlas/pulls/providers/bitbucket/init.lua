@@ -6,7 +6,6 @@
 ---@field commits string|nil
 ---@field approve string|nil
 ---@field request_changes string|nil
----@field diff string|nil
 ---@field diffstat string|nil
 ---@field comments string|nil
 ---@field activity string|nil
@@ -35,13 +34,15 @@ local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local search_query = require("atlas.providers.bitbucket.query")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 
----@param target AtlasTarget
+---@param repository AtlasTarget
+---@param branch string|nil
 ---@return AtlasBitbucketViewConfig
-local function view_for_target(target)
+local function repository_view(repository, branch)
+	local filter = branch and string.format('source.branch.name = "%s"', branch)
 	return {
 		name = "Search",
 		layout = "compact",
-		search = search_query.for_repo(target.workspace, target.repo),
+		search = search_query.for_repo(repository.workspace, repository.repo, filter),
 	}
 end
 
@@ -107,7 +108,7 @@ end
 
 return {
 	views = views,
-	view_for_target = view_for_target,
+	repository_view = repository_view,
 	resolve_search = search_query.query,
 	capabilities = {
 		actions = require("atlas.pulls.providers.bitbucket.actions.registry"),
@@ -148,7 +149,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard_review,
-			-- set_file_reviewed = nil,
+			-- set_files_reviewed = nil,
 		},
 		pipelines = pipelines,
 		tasks = {

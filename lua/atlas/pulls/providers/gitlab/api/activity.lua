@@ -103,7 +103,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, opts, on_done)
 	local requests = request_scope.new()
@@ -120,32 +120,12 @@ function M.fetch_conversation(pr, opts, on_done)
 			return
 		end
 		local conversation = values.conversation or { comments = {} }
-		local items = {}
-		if conversation.description then
-			table.insert(items, {
-				id = "description",
-				kind = "description",
-				created_at = conversation.description.created_at,
-				entity = conversation.description,
-			})
-		end
-		for _, comment in ipairs(conversation.comments) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_at = comment.created_at or "",
-				entity = comment,
-			})
-		end
-		for _, event in ipairs(values.activity or {}) do
-			table.insert(items, {
-				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
-				kind = "activity",
-				created_at = event.date or "",
-				entity = event,
-			})
-		end
-		on_done(items, errors.activity or errors.conversation)
+		on_done({
+			description = conversation.description,
+			comments = conversation.comments,
+			reviews = {},
+			activities = values.activity or {},
+		}, errors.activity or errors.conversation)
 	end)
 	return requests
 end

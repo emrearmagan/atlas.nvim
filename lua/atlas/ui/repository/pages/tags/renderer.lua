@@ -10,9 +10,11 @@ function M.preview(tag)
 	if tag.author and tag.author ~= "" then
 		table.insert(lines, "Author: " .. tag.author)
 	end
+
 	if tag.tag_date and tag.tag_date ~= "" then
 		table.insert(lines, "Tag date: " .. tag.tag_date)
 	end
+
 	local annotation = tag.description and tag.description ~= "" and tag.description or nil
 	local message = annotation or tag.message
 	if message and message ~= "" then
@@ -20,12 +22,29 @@ function M.preview(tag)
 		table.insert(lines, annotation and "Tag annotation:" or "Commit message:")
 		vim.list_extend(lines, utils.sanitize_lines(message))
 	end
+
 	return { title = tag.name, lines = lines }
+end
+
+---@param tag AtlasRepositoryTag
+---@param width integer
+---@return string[]
+local function detail_lines(tag, width)
+	local details = {}
+	for index, line in ipairs(M.preview(tag).lines) do
+		if index > 1 then
+			for _, wrapped in ipairs(utils.wrap_line(line, math.max(1, width - 5))) do
+				table.insert(details, "  │ " .. wrapped)
+			end
+		end
+	end
+
+	return details
 end
 
 ---@param state RepositoryTags
 ---@param width integer
----@return string[], table<integer, RepositoryTagSelection>, table[]
+---@return string[], table[], table<integer, RepositoryTagSelection>
 function M.render(state, width)
 	local rows = {}
 	local tags = state.tags
@@ -41,6 +60,7 @@ function M.render(state, width)
 			_item = { tag = tag },
 		})
 	end
+
 	local lines, line_map, spans = table_tree.render({
 		columns = {
 			{ key = "name", name = "Tag", can_grow = false, hl = "Normal" },
@@ -53,38 +73,37 @@ function M.render(state, width)
 		margin = 0,
 		show_header = false,
 	})
-	for row, selection in ipairs(line_map) do
+
+	local row
+	for line, selection in pairs(line_map) do
 		if selection.tag.name == state.expanded then
-			local details = {}
-			for index, line in ipairs(M.preview(selection.tag).lines) do
-				if index > 1 then
-					for _, wrapped in ipairs(utils.wrap_line(line, math.max(1, width - 5))) do
-						table.insert(details, "  │ " .. wrapped)
-					end
-				end
-			end
-			for _, span in ipairs(spans) do
-				if span.line >= row then
-					span.line = span.line + #details
-				end
-			end
-			for index = #lines, row + 1, -1 do
-				line_map[index + #details] = line_map[index]
-			end
-			for index, line in ipairs(details) do
-				table.insert(lines, row + index, line)
-				line_map[row + index] = { tag = selection.tag, detail = index }
-				table.insert(spans, {
-					line = row + index - 1,
-					start_col = 0,
-					end_col = #line,
-					hl_group = "AtlasTextMuted",
-				})
-			end
-			break
+			row = line
 		end
 	end
-	return lines, line_map, spans
+
+	if not row then
+		return lines, spans, line_map
+	end
+
+	local tag = line_map[row].tag
+	local details = detail_lines(tag, width)
+	for _, span in ipairs(spans) do
+		if span.line >= row then
+			span.line = span.line + #details
+		end
+	end
+
+	for line = #lines, row + 1, -1 do
+		line_map[line + #details] = line_map[line]
+	end
+
+	for index, text in ipairs(details) do
+		table.insert(lines, row + index, text)
+		line_map[row + index] = { tag = tag, detail = index }
+		table.insert(spans, { line = row + index - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+	end
+
+	return lines, spans, line_map
 end
 
 return M

@@ -13,14 +13,12 @@ end
 ---@class TableTreeTreeOpts
 ---@field column_key string Column key that receives tree indent + branch/leaf glyphs.
 ---@field children_key? string Default "children".
----@field expanded_field? string Default "expanded".
 ---@field default_expanded? boolean When row has no expanded field.
 ---@field indent? string Per depth level (default "  ").
 ---@field leaf_prefix? string For non-branch rows at depth > 0 (default "└─ ").
 ---@field leaf_hl? string Highlight group for the leaf prefix.
 ---@field show_indicator? boolean Branch expand/collapse glyphs (default true).
----@field separator? string If set, inserts a full-width separator line between root siblings.
----@field is_expanded? fun(row:table):boolean Overrides expanded_field when set.
+---@field is_expanded? fun(row:table):boolean Overrides row.expanded when set.
 
 ---@param tree TableTreeTreeOpts|nil
 ---@return TableTreeTreeOpts|nil
@@ -32,13 +30,11 @@ local function resolve_tree(tree)
 	return {
 		column_key = tree.column_key,
 		children_key = tree.children_key or "children",
-		expanded_field = tree.expanded_field or "expanded",
 		default_expanded = tree.default_expanded == true,
 		indent = tree.indent or "  ",
 		leaf_prefix = tree.leaf_prefix or "└─ ",
 		leaf_hl = tree.leaf_hl,
 		show_indicator = tree.show_indicator ~= false,
-		separator = tree.separator,
 		is_expanded = tree.is_expanded,
 	}
 end
@@ -54,22 +50,10 @@ local function row_is_expanded(row, has_children, tree)
 	if tree.is_expanded then
 		return tree.is_expanded(row) == true
 	end
-	if row[tree.expanded_field] ~= nil then
-		return row[tree.expanded_field] == true
+	if row.expanded ~= nil then
+		return row.expanded == true
 	end
 	return tree.default_expanded
-end
-
----@param row table
----@return boolean
-local function is_pass_through_row(row)
-	if row.kind == "separator" then
-		return true
-	end
-	if row._tv2_pass_through == true then
-		return true
-	end
-	return false
 end
 
 ---@param rows table[]
@@ -77,17 +61,16 @@ end
 ---@return table[]
 local function flatten(rows, tree)
 	local out = {}
-	local root_count = #rows
 
 	local function walk(list, depth)
-		for index, row in ipairs(list) do
+		for _, row in ipairs(list) do
 			local item = vim.tbl_extend("force", row, {
 				_tv2_depth = 0,
 				_tv2_has_children = false,
 				_tv2_expanded = false,
 			})
 			table.insert(out, item)
-			if tree and not is_pass_through_row(row) then
+			if tree and row.kind ~= "separator" then
 				local children = row[tree.children_key]
 				local has_children = type(children) == "table" and #children > 0
 				local expanded = row_is_expanded(row, has_children, tree)
@@ -97,13 +80,6 @@ local function flatten(rows, tree)
 
 				if has_children and expanded then
 					walk(children, depth + 1)
-				end
-
-				if depth == 0 and tree.separator ~= nil and tree.separator ~= "" and index < root_count then
-					table.insert(out, {
-						_tv2_separator = true,
-						_tv2_separator_char = tree.separator,
-					})
 				end
 			end
 		end
@@ -160,9 +136,7 @@ local function natural_width(column, rows, tree)
 
 	local w = display_width(column.name or column.key or "")
 	for _, row in ipairs(rows) do
-		if not row._tv2_separator then
-			w = math.max(w, display_width(cell_text(row, column, tree)))
-		end
+		w = math.max(w, display_width(cell_text(row, column, tree)))
 	end
 
 	if column.min_width ~= nil then
@@ -305,7 +279,6 @@ end
 ---@field hide_columns? string[] Columns to shrink to min_width, then hide, in order.
 ---@field tree? TableTreeTreeOpts
 ---@field cell_hl? fun(row:table, col:table, ctx:{text:string, padded:string, width:integer}):string|table[]|nil
----@field align_title? boolean If true and header_align is nil, header uses column align.
 
 ---@param opts TableTreeRenderOpts
 ---@return string[] lines
@@ -347,11 +320,7 @@ function M.render(opts)
 			end
 			local col_start = #line
 			local label = truncate(c.name or "", c._computed)
-			local header_align = c.header_align
-			if header_align == nil and c.align_title == true then
-				header_align = c.align
-			end
-			local padded = pad_aligned(label, c._computed, header_align)
+			local padded = pad_aligned(label, c._computed, c.header_align)
 			line = line .. padded
 
 			table.insert(spans, {
@@ -366,11 +335,83 @@ function M.render(opts)
 	end
 
 	for _, row in ipairs(rows) do
-		if row._tv2_separator then
-			local sep = tostring(row._tv2_separator_char or "─")
-			local content_width = math.max(width - (margin * 2), 1)
-			local sep_line = string.rep(" ", margin) .. string.rep(sep, content_width)
-			table.insert(lines, "")
+		local line = string.rep(" ", margin)
+		for i, c in ipairs(columns) do
+			if i > 1 then
+				line = line .. string.rep(" ", gap_after(i - 1))
+			end
+			local col_start = #line
+			local cell = truncate(cell_text(row, c, tree), c._computed, c.truncate_from == "start")
+			local padded = pad_aligned(cell, c._computed, c.align)
+			line = line .. padded
+
+			local cell_spans = nil
+			if type(cell_hl) == "function" then
+				cell_spans = cell_hl(row, c, {
+					text = cell,
+					padded = padded,
+					width = c._computed,
+				})
+			end
+
+			if type(cell_spans) == "string" then
+				table.insert(spans, {
+					line = #lines,
+					start_col = col_start,
+					end_col = col_start + #padded,
+					hl_group = cell_spans,
+				})
+			elseif type(cell_spans) == "table" then
+				for _, span in ipairs(cell_spans) do
+					if type(span) == "table" and type(span.hl_group) == "string" then
+						local rel_start = math.max(0, tonumber(span.start_col) or 0)
+						local rel_end = math.min(#padded, tonumber(span.end_col) or #padded)
+						if rel_end > rel_start then
+							table.insert(spans, {
+								line = #lines,
+								start_col = col_start + rel_start,
+								end_col = col_start + rel_end,
+								hl_group = span.hl_group,
+							})
+						end
+					end
+				end
+			elseif c.hl then
+				table.insert(spans, {
+					line = #lines,
+					start_col = col_start,
+					end_col = col_start + #padded,
+					hl_group = c.hl,
+				})
+			end
+
+			if
+				tree
+				and tree.leaf_hl
+				and c.key == tree.column_key
+				and row._tv2_depth > 0
+				and (not tree.show_indicator or not row._tv2_has_children)
+			then
+				local prefix = tree_glyphs_for_row(row, tree)
+				if cell:sub(1, #prefix) == prefix then
+					local padding = #padded - #cell
+					local offset = c.align == "right" and padding
+						or c.align == "center" and math.floor(padding / 2)
+						or 0
+					table.insert(spans, {
+						line = #lines,
+						start_col = col_start + offset,
+						end_col = col_start + offset + #prefix,
+						hl_group = tree.leaf_hl,
+					})
+				end
+			end
+		end
+		table.insert(lines, line)
+		line_map[#lines] = row._item or row
+
+		if row.separator == true then
+			local sep_line = string.rep(" ", margin) .. string.rep("─", math.max(width - (margin * 2), 1))
 			table.insert(lines, sep_line)
 			table.insert(spans, {
 				line = #lines - 1,
@@ -378,96 +419,6 @@ function M.render(opts)
 				end_col = #sep_line,
 				hl_group = "AtlasTextMuted",
 			})
-			line_map[#lines] = row
-			table.insert(lines, "")
-		else
-			local line = string.rep(" ", margin)
-			for i, c in ipairs(columns) do
-				if i > 1 then
-					line = line .. string.rep(" ", gap_after(i - 1))
-				end
-				local col_start = #line
-				local cell = truncate(cell_text(row, c, tree), c._computed, c.truncate_from == "start")
-				local padded = pad_aligned(cell, c._computed, c.align)
-				line = line .. padded
-
-				local cell_spans = nil
-				if type(cell_hl) == "function" then
-					cell_spans = cell_hl(row, c, {
-						text = cell,
-						padded = padded,
-						width = c._computed,
-					})
-				end
-
-				if type(cell_spans) == "string" then
-					table.insert(spans, {
-						line = #lines,
-						start_col = col_start,
-						end_col = col_start + #padded,
-						hl_group = cell_spans,
-					})
-				elseif type(cell_spans) == "table" then
-					for _, span in ipairs(cell_spans) do
-						if type(span) == "table" and type(span.hl_group) == "string" then
-							local rel_start = math.max(0, tonumber(span.start_col) or 0)
-							local rel_end = math.min(#padded, tonumber(span.end_col) or #padded)
-							if rel_end > rel_start then
-								table.insert(spans, {
-									line = #lines,
-									start_col = col_start + rel_start,
-									end_col = col_start + rel_end,
-									hl_group = span.hl_group,
-								})
-							end
-						end
-					end
-				elseif c.hl then
-					table.insert(spans, {
-						line = #lines,
-						start_col = col_start,
-						end_col = col_start + #padded,
-						hl_group = c.hl,
-					})
-				end
-
-				if
-					tree
-					and tree.leaf_hl
-					and c.key == tree.column_key
-					and row._tv2_depth > 0
-					and (not tree.show_indicator or not row._tv2_has_children)
-				then
-					local prefix = tree_glyphs_for_row(row, tree)
-					if cell:sub(1, #prefix) == prefix then
-						local padding = #padded - #cell
-						local offset = c.align == "right" and padding
-							or c.align == "center" and math.floor(padding / 2)
-							or 0
-						table.insert(spans, {
-							line = #lines,
-							start_col = col_start + offset,
-							end_col = col_start + offset + #prefix,
-							hl_group = tree.leaf_hl,
-						})
-					end
-				end
-			end
-			table.insert(lines, line)
-			line_map[#lines] = row._item or row
-
-			if row.separator == true then
-				local sep_char = row.separator_char or "─"
-				local sep_hl = row.separator_hl or "AtlasTextMuted"
-				local sep_line = string.rep(" ", margin) .. string.rep(sep_char, math.max(width - (margin * 2), 1))
-				table.insert(lines, sep_line)
-				table.insert(spans, {
-					line = #lines - 1,
-					start_col = margin,
-					end_col = margin + #sep_line - margin,
-					hl_group = sep_hl,
-				})
-			end
 		end
 	end
 

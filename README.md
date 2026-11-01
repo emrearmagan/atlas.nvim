@@ -3,7 +3,7 @@
 [![CI](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/emrearmagan/atlas.nvim?style=flat-square&color=blue)](LICENSE)
 
-# Atlas.nvim
+# atlas.nvim
 
 Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Gitea, Forgejo, and Jira without leaving your editor.
 
@@ -25,10 +25,14 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Gitea, 
 
 - [Configuration](#configuration)
 - [Commands](#commands)
-- GitHub: [Pull requests](#github) · [Issues](#github-issues)
-- GitLab: [Pull requests](#gitlab) · [Issues](#gitlab-issues)
-- [Bitbucket](#bitbucket)
-- [Jira](#jira)
+- [Pull requests](#pulls)
+  - [GitHub](#github)
+  - [GitLab](#gitlab)
+  - [Bitbucket](#bitbucket)
+- [Issues](#issues)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
+  - [Jira](#jira)
 
 ## Installation
 
@@ -85,9 +89,10 @@ require("atlas").setup({})
 
 <img alt="AtlasDiff" src="https://github.com/user-attachments/assets/4f9f9628-fdad-492f-abe4-2b59a0f0f2e3">
 
-Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
+Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. It opens in your configured diff viewer.
 
 - Browse files, commits, hunks, and review history.
+- Review commit by commit or a range of commits.
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
@@ -112,8 +117,8 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeD
 ```sh
 ./bin/atlas-notes add \
   --target https://github.com/owner/repository/pull/123 \
-  --file lua/review_queue.lua --line 19 \
-  --context "local item = queue[index]" \
+  --commit 3f2a9c1e \
+  --file lua/review_queue.lua --start-line 19 \
   --type suggestion --body "Should this be a bool?"
 ```
 
@@ -125,7 +130,7 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff or CodeDiff.
 
-Atlas uses a temporary worktree and removes it when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
+The diff uses a temporary worktree, removed when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
 
 <img alt="lsp-support" src="https://github.com/user-attachments/assets/a5a51c9d-0fd7-4141-828f-fd433435dbaf" />
 
@@ -133,7 +138,7 @@ Atlas uses a temporary worktree and removes it when the diff closes. Set `link` 
 
 <img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
 
-Browse a repository's README, pull requests, issues, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
+Browse a repository's README, pull requests, issues, discussions, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
 
 ### Pipelines
 
@@ -146,7 +151,7 @@ Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#1
 <details>
 <summary><strong>Configuration</strong></summary>
 
-Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
+Pipelines use your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
 
 ```lua
 providers = {
@@ -208,7 +213,7 @@ pulls = {
       id = "show_repo_status",
       label = "Show repository status",
       icon = "",
-      confirmation = true,
+      confirm = "Show repository status?",
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -242,7 +247,6 @@ issues = {
       id = "copy_branch_name",
       label = "Copy branch name",
       icon = "",
-      confirmation = false,
       ---@param issue Issue
       ---@param ctx AtlasIssuesCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
@@ -272,7 +276,7 @@ done(true, "Checks passed")
   <img width="49%" alt="Create issue" src="https://github.com/user-attachments/assets/8fdc418c-2a29-4a8a-a748-a7daec021984">
 </p>
 
-Use `:Atlas create [pr|issue]` to create a pull request from the current branch or a new issue on GitHub, GitLab, Gitea, Forgejo, or Jira. For pull requests, Atlas can fill the description from your template or commits.
+Use `:Atlas create pr` to create a pull request from the current branch, or `:Atlas create issue` for a new issue. For pull requests, the description can be filled from your template or commits.
 
 ### Bookmarks
 
@@ -287,8 +291,9 @@ Save provider searches or Jira JQL as bookmarks, or press `*` to star a pull req
 - Use Conventional Comments templates or define your own.
 - Save issue descriptions as templates and reuse them when creating issues.
 - Close or reopen GitHub/GitLab issues and change Jira workflow states.
-- Jump between linked issues and pull requests, or browse related issues and sub-issues.
-- Read GitHub and GitLab notifications, open the related item, and mark them as read or done.
+- Jump between linked issues and pull requests and back, or browse related issues and sub-issues.
+- See a GitHub PR's position in its stack (e.g. `2/5`) and step through the stack with `]s` / `[s`.
+- Read GitHub and GitLab notifications, open them in Atlas, and mark them as read or done.
 - Remap shortcuts or assign multiple keys to the same action.
 - Set local repository paths and PR templates per project.
 
@@ -299,10 +304,14 @@ Save provider searches or Jira JQL as bookmarks, or press `*` to star a pull req
 ```lua
 {
   ui = {
-    -- Set either to false to keep your existing statusline.
     statusline = {
-      atlas = true, -- Dashboards, details, and other non-diff Atlas views.
-      diff = true, -- Diff and review views.
+      -- false keeps your existing statusline. A function(buf, win, context) decides per window;
+      -- `context` is "atlas" for dashboards/details and "diff" for diff views.
+      enable = true,
+      -- For example, keep your statusline in Atlas detail views:
+      -- enable = function(buf, win, context)
+      --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
+      -- end,
     },
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
@@ -370,30 +379,31 @@ Save provider searches or Jira JQL as bookmarks, or press `*` to star a pull req
 ## Commands
 
 - `:Atlas` - Pick a command
-- `:Atlas pulls [provider]` - Open a pull-request provider dashboard
-- `:Atlas issues [provider]` - Open an issue provider dashboard
-- `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
-- `:Atlas diff <target>` - Open a Git range or pull request with the configured diff viewer; a target is required
+- `:Atlas pulls [provider|.]` - Open a pull-request provider dashboard; `.` uses the current repository's provider
+- `:Atlas issues [provider|.]` - Open an issue provider dashboard; `.` uses the current repository's provider
+- `:Atlas review [pull-request-url|number|.]` - Review a pull request with the configured diff viewer; without an argument, pick one from the current repository; `.` reviews the current branch's pull request
+- `:Atlas diff <base...head>` - Open a Git range with the configured diff viewer
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
-- `:Atlas create [pr|issue]` - Create a pull request or issue
-- `:Atlas search [provider]` - Search configured pull-request and issue providers
-- `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
-- `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
-- `:Atlas notes [target]` - Inspect notes
-- `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, or starred items
+- `:Atlas create pr` - Create a pull request from the current branch
+- `:Atlas create issue [provider|.]` - Create an issue; `.` uses the current repository's provider
+- `:Atlas search [provider|.]` - Search configured pull-request and issue providers; `.` uses the current repository's provider
+- `:Atlas open [target|.]` - Open a pull request or issue by URL, Jira key, or number; `.` opens the current branch's pull request
+- `:Atlas browse [repository URL|.|page] [page]` - Open the repository browser; `.` uses the current repository, a page name alone picks a repository first, and a URL to a repository page or item opens that page, e.g. `:Atlas browse . branches`, `:Atlas browse issues` or `:Atlas browse https://github.com/owner/repo/discussions`
+- `:Atlas notes [target|.]` - Inspect notes; `.` shows the current repository's notes
+- `:Atlas clear [cache|notes|reviewed|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, reviewed file marks, or starred items
 - `:Atlas logs` - Toggle Atlas logs
 - `:Atlas console` - Open the latest command output
 
 ## Pulls
 
-Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo.
+Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Pulls Configuration
 
 ```lua
 pulls = {
-  delete_notes = false, -- Delete notes after approval or merge.
+  delete_notes = false, -- Delete notes after approval, merge, or decline.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
@@ -452,6 +462,8 @@ pulls = {
   },
   repo_config = {
     -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    -- PR checkout prefers the matching checkout or worktree Atlas is run from, then falls back here.
+    -- Diffs of other repositories use a clone in the cache, removed after 30 days without a review.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
@@ -692,7 +704,7 @@ pulls = {
 
 ## Issues
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues.
+Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Issue Configuration
@@ -750,7 +762,7 @@ issues = {
     project_config = {
       -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
       story_points_field = "customfield_10016",
-      -- Override issue type styles by name (case-insensitive).
+      -- Override issue type styles by name (lowercase).
       issue_types = {
         bug = { icon = "" },
         maintenance = { icon = "", hl_group = "AtlasTextWarning" },
@@ -765,26 +777,60 @@ issues = {
         ["Blocked"] = "",
       },
 
-      -- Custom fields to display per project; replace KAN with your project key.
-      KAN = {
-        customfield_10003 = {
-          name = "Approvers",
-          format = function(value)
-            if type(value) ~= "table" or #value == 0 then
-              return nil -- nil hides the field
-            end
-            return table.concat(value, ", ")
-          end,
-          hl_group = "AtlasChipActive",
-          display = "chip", -- "chip" or "table"
-        },
-      },
+      -- Fields and defaults per project; see "Project fields" below.
+      KAN = { ... },
     },
   },
 },
 ```
 
 <img alt="jira" src="https://github.com/user-attachments/assets/5268d7d7-b16d-4f1d-9650-87db31bf5a2d" />
+
+**Project fields**
+
+Custom fields to display go under `fields` in the project's entry, keyed by Jira field ID. Replace `KAN` with your project key.
+
+```lua
+KAN = {
+  fields = {
+    customfield_10003 = {
+      name = "Approvers", -- the field's label
+      format = function(value) -- what the detail panel shows
+        if type(value) ~= "table" or #value == 0 then
+          return nil -- nil hides the field
+        end
+        return table.concat(value, ", ")
+      end,
+      hl_group = "AtlasChipActive",
+      display = "chip", -- "chip" or "table"
+    },
+  },
+  -- Pre-fills new issues, with values as Jira shows them.
+  defaults = {
+    issue_type = "Story",
+    fields = {
+      priority = "High",
+      labels = { "backend" },
+      components = { "Backend", "Frontend" },
+      customfield_10050 = "Platform",
+    },
+  },
+},
+```
+
+To find out which custom fields your project has, expand the field names of any issue: `https://your-site.atlassian.net/rest/api/3/issue/KAN-1?expand=names`. `names` maps each field ID to its name, and `fields` holds the value `format` receives.
+
+If you came here to replace the browser with this plugin, here's a curl for you:
+
+```sh
+curl -s -u "you@example.com:your_jira_api_token" \
+  "https://your-site.atlassian.net/rest/api/3/issue/KAN-1?expand=names" \
+  | jq .names
+```
+
+Once you have the ID, use `jq .fields.customfield_10003` to see the value `format` receives.
+
+On Jira Server/Data Center, use `/rest/api/2/`, and with bearer auth `-H "Authorization: Bearer your_jira_api_token"`.
 
 </details>
 
@@ -833,6 +879,7 @@ issues = {
   },
 },
 ```
+
 <img alt="github-issue" src="https://github.com/user-attachments/assets/109b9a2a-86f2-4867-86e2-ff6a0645ca29" />
 
 </details>
@@ -956,9 +1003,9 @@ issues = {
 
 ## Events
 
-Atlas emits these `User` events after the corresponding cleanup or setup has completed:
+These `User` events fire after the corresponding cleanup or setup has completed:
 
-- `AtlasUIClosed` for the main pulls/issues dashboard.
+- `AtlasUIClosed` for the pull request or issue dashboard.
 - `AtlasDiffOpened` and `AtlasDiffClosed` for diff sessions in AtlasDiff, CodeDiff, and Diffview.
 - `AtlasDiffFileChanged` when the current diff file changes in any of these viewers.
 
@@ -1027,11 +1074,27 @@ keymaps = {
     edit_issue = "ge",
     create_issue = "c",
   },
+  editor = {
+    assignees = "ga",
+    labels = "gl", -- GitHub and GitLab only.
+    milestone = "gm", -- GitHub and GitLab only.
+    reporter = "gr", -- Jira only.
+    reviewers = "gr", -- Pull requests only.
+    base = "gb", -- Pull requests only.
+    draft = "gD", -- Pull requests only.
+    issue_type = "gt", -- Jira only.
+    fields = "gf", -- Jira only.
+    templates = "gT",
+  },
   pulls = {
     open_diff = "gd",
     checkout = "gc",
     open_repository = "o",
     edit_pr = "ge",
+    stack = {
+      next = "]s",
+      prev = "[s",
+    },
     review = {
       show_details = "K", -- File/commit details.
       toggle_file_reviewed = "-",
@@ -1043,8 +1106,12 @@ keymaps = {
       toggle_resolved = "x",
       next_comment = "]c",
       prev_comment = "[c",
+      next_unresolved = "]x",
+      prev_unresolved = "[x",
       next_note = "]n",
       prev_note = "[n",
+      next_commit = "]r",
+      prev_commit = "[r",
       add_comment = "c",
       submit_comment = "C",
       add_suggestion = "s",
@@ -1061,6 +1128,9 @@ keymaps = {
         next_unreviewed_file = "]u",
         prev_unreviewed_file = "[u",
         find_file = "<leader>f",
+      },
+      panel = {
+        cycle_filter = "f",
       },
       -- Built-in navigation; external viewers use their own keys.
       atlas = {

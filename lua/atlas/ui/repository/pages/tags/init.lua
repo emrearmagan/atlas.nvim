@@ -1,10 +1,11 @@
+local checkout = require("atlas.core.git.checkout")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local diff = require("atlas.pulls.diff")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
+local help = require("atlas.ui.popups.help")
 local info = require("atlas.ui.popups.info")
-local history = require("atlas.ui.repository.pages.branches.git")
 local keymaps = require("atlas.ui.repository.pages.tags.keymaps")
 local renderer = require("atlas.ui.repository.pages.tags.renderer")
 local icons = require("atlas.ui.shared.icons")
@@ -16,37 +17,36 @@ local utils = require("atlas.ui.shared.utils")
 ---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
+---@field repository AtlasRepositoryCapability
 ---@field tags AtlasRepositoryTag[]|"loading"|string
 ---@field page integer
 ---@field cursors table<integer, string>
 ---@field next_cursor string|nil
 ---@field root string|nil
 ---@field root_loading boolean
+---@field root_error string|nil
 ---@field root_request AtlasRequestScope
 ---@field expanded string|nil
 ---@field line_map table<integer, RepositoryTagSelection>
+---@field closed boolean
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field statusline AtlasStatusline
----@field group integer
+---@field keymaps table<string, AtlasHelpKeyItem[]>
 
 ---@class RepositoryTagSelection
 ---@field tag AtlasRepositoryTag
 ---@field detail integer|nil
 
+local M = { key = "tags", label = "Tags", icon = icons.get("tag") }
 ---@type table<integer, RepositoryTags>
 local states = {}
 
-local M = {
-	key = "tags",
-	label = "Tags",
-	icon = icons.get("tag"),
-}
 local namespace = vim.api.nvim_create_namespace("atlas.repository.tags")
 
 ---@param state RepositoryTags
 ---@return AtlasRepositoryTag|nil
-local function tag_at_cursor(state)
+local function current(state)
 	local selection = state.line_map[vim.api.nvim_win_get_cursor(state.win)[1]]
 	return selection and selection.tag
 end
@@ -56,8 +56,7 @@ local function render(state)
 	if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 		return
 	end
-	local cursor = vim.api.nvim_win_get_cursor(state.win)
-	local selection = state.line_map[cursor[1]]
+
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	state.line_map = {}
 	local tags = state.tags
@@ -72,16 +71,18 @@ local function render(state)
 	elseif #tags == 0 then
 		message = "No tags found"
 	end
+
 	if message then
 		utils.buffer.center_message(state.buf, state.win, message)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
 			end_row = vim.api.nvim_buf_line_count(state.buf),
 			line_hl_group = hl_group,
 		})
+
 		return
 	end
 
-	local lines, line_map, spans = renderer.render(state, vim.api.nvim_win_get_width(state.win))
+	local lines, spans, line_map = renderer.render(state, vim.api.nvim_win_get_width(state.win))
 	state.line_map = line_map
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
@@ -91,34 +92,21 @@ local function render(state)
 			hl_group = span.hl_group,
 		})
 	end
+
 	vim.bo[state.buf].modifiable = false
-	local selected_row
-	for row, entry in pairs(line_map) do
-		if selection and entry.tag.name == selection.tag.name then
-			if not entry.detail then
-				selected_row = selected_row or row
-			end
-			if selection.detail == entry.detail then
-				selected_row = row
-				break
-			end
-		end
-	end
-	if selected_row then
-		vim.api.nvim_win_set_cursor(state.win, { selected_row, cursor[2] })
-	end
 end
 
 ---@param state RepositoryTags
 ---@param page integer|nil
 local function load(state, page)
-	local repository = state.provider.capabilities.repository
+	local repository = state.repository
 	state.requests.cancel()
 	state.requests = requests.new()
 	state.page = page or 1
 	if state.page == 1 then
 		state.cursors = {}
 	end
+
 	state.next_cursor = nil
 	state.tags = "loading"
 	state.spinner:start()
@@ -143,7 +131,7 @@ end
 
 ---@param state RepositoryTags
 local function search(state)
-	local repository = state.provider.capabilities.repository
+	local repository = state.repository
 	local tags = state.tags
 	picker.search({
 		title = "Tags",
@@ -163,9 +151,10 @@ local function search(state)
 			end, done)
 		end,
 		on_select = function(tag)
-			if not tag or states[state.buf] ~= state or not utils.window.valid(state.win) then
+			if not tag or state.closed or not utils.window.valid(state.win) then
 				return
 			end
+
 			state.requests.cancel()
 			state.requests = requests.new()
 			for row, entry in pairs(state.line_map) do
@@ -175,6 +164,7 @@ local function search(state)
 					return
 				end
 			end
+
 			state.page = 1
 			state.cursors = {}
 			state.next_cursor = nil
@@ -191,26 +181,105 @@ end
 
 ---@param state RepositoryTags
 local function open_diff(state)
-	local tag = tag_at_cursor(state)
+	local tag = current(state)
 	if not tag then
 		return
 	end
+
 	if not state.root then
+		local reason = state.root_error and (" (" .. state.root_error .. ")") or ""
 		notify.warn(
 			state.root_loading and "Resolving local repository..."
-				or "Configure this repository under pulls.repo_config.paths to open diffs"
+				or ("Configure this repository under pulls.repo_config.paths to open diffs" .. reason)
 		)
+
 		return
 	end
+
 	if tag.hash == "" then
 		notify.warn("This tag has no target commit")
 		return
 	end
+
 	diff.open_commit({ root = state.root, commit = tag.hash }, function(err)
 		if err then
 			notify.error(err)
 		end
 	end)
+end
+
+---@param state RepositoryTags
+local function next_page(state)
+	if state.tags ~= "loading" and state.next_cursor then
+		load(state, state.page + 1)
+	end
+end
+
+---@param state RepositoryTags
+local function previous_page(state)
+	if state.tags ~= "loading" and state.page > 1 then
+		load(state, state.page - 1)
+	end
+end
+
+---@param state RepositoryTags
+local function toggle_details(state)
+	local tag = current(state)
+	if not tag then
+		return
+	end
+
+	state.expanded = state.expanded ~= tag.name and tag.name or nil
+	render(state)
+	for row, entry in pairs(state.line_map) do
+		if entry.tag.name == tag.name and not entry.detail then
+			vim.api.nvim_win_set_cursor(state.win, { row, 0 })
+			break
+		end
+	end
+end
+
+---@param state RepositoryTags
+local function show_details(state)
+	info.toggle({
+		source_win = state.win,
+		content = function(line)
+			local selection = state.line_map[line]
+			if selection then
+				return renderer.preview(selection.tag)
+			end
+		end,
+	})
+end
+
+---@param state RepositoryTags
+local function open_in_browser(state)
+	local tag = current(state)
+	if tag and tag.url and tag.url ~= "" then
+		vim.ui.open(tag.url)
+	elseif tag then
+		notify.warn("No URL available for this tag")
+	end
+end
+
+---@param state RepositoryTags
+local function copy_sha(state)
+	local tag = current(state)
+	if tag then
+		vim.fn.setreg("+", tag.hash)
+		notify.success("Copied commit SHA")
+	end
+end
+
+---@param state RepositoryTags
+local function copy_url(state)
+	local tag = current(state)
+	if tag and tag.url and tag.url ~= "" then
+		vim.fn.setreg("+", tag.url)
+		notify.success("Copied tag URL")
+	elseif tag then
+		notify.warn("No URL available for this tag")
+	end
 end
 
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
@@ -222,110 +291,61 @@ function M.open(opts)
 		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		provider = opts.provider,
+		repository = assert(opts.provider.capabilities.repository),
 		tags = "loading",
 		page = 1,
 		cursors = {},
 		root_request = requests.new(),
 		root_loading = true,
+		closed = false,
 		line_map = {},
 		requests = requests.new(),
 		spinner = spinner.create(),
 		statusline = opts.statusline,
-		group = vim.api.nvim_create_augroup("AtlasRepositoryTags" .. opts.buf, { clear = true }),
+		keymaps = {},
 	}
+
 	states[state.buf] = state
 	state.spinner.on_tick = function()
 		if state.spinner:is_running() then
 			render(state)
 		end
 	end
+
 	vim.wo[state.win].cursorline = true
-	keymaps.setup(state.buf, state.sidebar_buf, {
-		search = function()
-			search(state)
-		end,
-		refresh = function()
-			load(state)
-		end,
-		next_page = function()
-			if state.tags ~= "loading" and state.next_cursor then
-				load(state, state.page + 1)
-			end
-		end,
-		previous_page = function()
-			if state.tags ~= "loading" and state.page > 1 then
-				load(state, state.page - 1)
-			end
-		end,
-		select = function()
-			local tag = tag_at_cursor(state)
-			if tag then
-				state.expanded = state.expanded ~= tag.name and tag.name or nil
-				render(state)
-			end
-		end,
-		details = function()
-			info.toggle({
-				source_win = state.win,
-				content = function(line)
-					local selection = state.line_map[line]
-					if selection then
-						return renderer.preview(selection.tag)
-					end
-				end,
-			})
-		end,
-		diff = function()
-			open_diff(state)
-		end,
-		browser = function()
-			local tag = tag_at_cursor(state)
-			if tag then
-				if tag.url and tag.url ~= "" then
-					vim.ui.open(tag.url)
-				else
-					notify.warn("No URL available for this tag")
-				end
-			end
-		end,
-		copy = function()
-			local tag = tag_at_cursor(state)
-			if not tag then
-				return
-			end
-			vim.fn.setreg("+", tag.hash)
-			notify.success("Copied commit SHA")
-		end,
-		copy_url = function()
-			local tag = tag_at_cursor(state)
-			if tag then
-				if tag.url and tag.url ~= "" then
-					vim.fn.setreg("+", tag.url)
-					notify.success("Copied tag URL")
-				else
-					notify.warn("No URL available for this tag")
-				end
-			end
-		end,
+	keymaps.setup(state, {
+		copy_sha = copy_sha,
+		copy_url = copy_url,
+		load = load,
+		next_page = next_page,
+		open_diff = open_diff,
+		open_in_browser = open_in_browser,
+		previous_page = previous_page,
+		search = search,
+		show_details = show_details,
+		toggle_details = toggle_details,
 	})
-	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
-		group = state.group,
-		callback = function(event)
-			if event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win) then
-				render(state)
-			end
-		end,
-	})
+
 	load(state)
 	state.root_request.run(function(done)
-		return history.resolve(opts.repo, done)
-	end, function(root)
-		if states[state.buf] ~= state or not utils.window.has_buffer(state.win, state.buf) then
+		return checkout.resolve_repo_root(opts.repo.full_name, opts.repo.html_url, done)
+	end, function(root, err)
+		if state.closed or not utils.window.has_buffer(state.win, state.buf) then
 			return
 		end
+
 		state.root = root
+		state.root_error = err
 		state.root_loading = false
 	end)
+end
+
+---@param buf integer
+function M.render(buf)
+	local state = states[buf]
+	if state then
+		render(state)
+	end
 end
 
 ---@param buf integer
@@ -334,20 +354,16 @@ function M.close(buf)
 	if not state then
 		return
 	end
-	info.close(state.win)
+
 	states[buf] = nil
+	state.closed = true
+	info.close(state.win)
 	state.root_request.cancel()
 	state.requests.cancel()
 	state.spinner:stop()
 	state.statusline:clear_notice()
-	vim.api.nvim_del_augroup_by_id(state.group)
-	keymaps.clear(state.buf)
-	keymaps.clear(state.sidebar_buf)
-	if utils.window.valid(state.win) then
-		vim.wo[state.win].cursorline = false
-	end
-	if utils.buffer.valid(state.buf) then
-		vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
+	for group, items in pairs(state.keymaps) do
+		help.remove(group, items, { buffer = state.sidebar_buf })
 	end
 end
 

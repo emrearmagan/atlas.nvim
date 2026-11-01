@@ -373,45 +373,58 @@ function M.shutdown()
 	claims = {}
 end
 
--- Best effort cleanup of directories left behind by a crash. Never touches claimed worktrees.
----@param repo_root string
----@return { cancel: fun() }
-function M.prune(repo_root)
-	local handle = core_git.run({ "-C", repo_root, "worktree", "prune" }, { text = true }, function() end)
+---@param dir string
+---@return string|nil
+local function git_dir(dir)
+	local file = join(dir, ".git")
+	if vim.fn.filereadable(file) == 0 then
+		return nil
+	end
+	local path = (vim.fn.readfile(file, "", 1)[1] or ""):match("^gitdir:%s*(.-)%s*$")
+	if not path then
+		return nil
+	end
+	if not is_absolute(path) then
+		path = join(dir, path)
+	end
+	return path:match("^(.*)/worktrees/[^/]+$")
+end
 
+---@param dir string
+---@param now integer
+---@return boolean
+local function is_stale(dir, now)
+	local stat = vim.uv.fs_stat(dir)
+	return not M.is_claimed(dir) and stat ~= nil and now - stat.mtime.sec > STALE_SECONDS
+end
+
+function M.prune()
 	local root = M.cache_root()
 	if not directory_exists(root) then
-		return handle
+		return
 	end
 	local now = os.time()
 
-	---@param dir string
-	local function remove_if_stale(dir)
-		if M.is_claimed(dir) then
-			return
-		end
-		local stat = vim.uv.fs_stat(dir)
-		local mtime = stat and stat.mtime and stat.mtime.sec or now
-		if now - mtime <= STALE_SECONDS then
-			return
-		end
-		logger.loginfo("worktree.prune removing stale worktree", { dir = dir })
-		vim.fn.delete(dir, "rf")
-	end
-
-	-- Worktrees live one level below the repository directory, as <repo>/<pr or sha>.
 	for repo, kind in vim.fs.dir(root) do
 		if kind == "directory" then
 			local repo_dir = join(root, repo)
 			for name, child_kind in vim.fs.dir(repo_dir) do
-				if child_kind == "directory" then
-					remove_if_stale(join(repo_dir, name))
+				local dir = join(repo_dir, name)
+				if child_kind == "directory" and is_stale(dir, now) then
+					logger.loginfo("worktree.prune removing stale worktree", { dir = dir })
+					local repository = git_dir(dir)
+					if repository and directory_exists(repository) then
+						M.remove(repository, dir, function()
+							vim.fn.delete(repo_dir, "d")
+						end)
+					else
+						delete_owned(dir, "stale worktree without a repository")
+					end
 				end
 			end
 			vim.fn.delete(repo_dir, "d")
 		end
 	end
-	return handle
 end
 
 ---@class AtlasWorktreeEnsureOptions
@@ -442,12 +455,12 @@ function M.ensure(opts, on_done)
 
 	local function create()
 		vim.fn.mkdir(vim.fs.dirname(dir), "p")
+		local args = { "-C", repo_root, "worktree", "add", "--force", "--detach", dir, head_sha }
+		if M.is_cache_path(dir) then
+			table.insert(args, 5, "--force")
+		end
 		scope.run(function(done)
-			return core_git.run(
-				{ "-C", repo_root, "worktree", "add", "--detach", dir, head_sha },
-				{ text = true, console = true },
-				done
-			)
+			return core_git.run(args, { text = true, console = true }, done)
 		end, function(res)
 			if res.code ~= 0 then
 				on_done(nil, command_error(res, "Failed to create worktree"))
