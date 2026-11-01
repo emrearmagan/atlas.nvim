@@ -121,6 +121,7 @@ local config = require("atlas.config")
 ---@field show_history? AtlasKeymapValue
 ---@field toggle_raw_logs? AtlasKeymapValue
 ---@field toggle_auto_refresh? AtlasKeymapValue
+---@field toggle_config? AtlasKeymapValue
 
 ---@class AtlasPullsStackKeymaps
 ---@field next? AtlasKeymapValue
@@ -234,6 +235,7 @@ local config = require("atlas.config")
 ---| "pulls.pipelines.show_history"
 ---| "pulls.pipelines.toggle_raw_logs"
 ---| "pulls.pipelines.toggle_auto_refresh"
+---| "pulls.pipelines.toggle_config"
 ---| "pulls.review.view.external_help"
 ---| "pulls.review.view.toggle_review_panel"
 ---| "pulls.review.view.toggle_detail_panel"

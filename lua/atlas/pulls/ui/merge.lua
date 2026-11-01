@@ -222,6 +222,7 @@ local function setup_buffer(state)
 	for key, value in pairs({
 		number = false,
 		relativenumber = false,
+		list = false,
 		signcolumn = "no",
 		diff = false,
 		scrollbind = false,

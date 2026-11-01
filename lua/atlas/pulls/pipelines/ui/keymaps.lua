@@ -5,9 +5,10 @@ local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local explorer_keymaps = require("atlas.pulls.pipelines.ui.explorer.keymaps")
 local logs = require("atlas.pulls.pipelines.ui.logs")
 local logs_keymaps = require("atlas.pulls.pipelines.ui.logs.keymaps")
+local overview_keymaps = require("atlas.pulls.pipelines.ui.overview.keymaps")
 local help = require("atlas.ui.popups.help")
 
----@param pane PullsPipelinesExplorer|PullsPipelinesLogs|PullsPipelinesConfig
+---@param pane PullsPipelinesExplorer|PullsPipelinesLogs|PullsPipelinesOverview|PullsPipelinesConfig
 ---@param explorer_pane PullsPipelinesExplorer
 ---@return PullsPipelinesSelection|nil
 local function current_selection(pane, explorer_pane)
@@ -17,13 +18,14 @@ local function current_selection(pane, explorer_pane)
 	return pane.selection
 end
 
----@param pane PullsPipelinesExplorer|PullsPipelinesLogs|PullsPipelinesConfig
+---@param pane PullsPipelinesExplorer|PullsPipelinesLogs|PullsPipelinesOverview|PullsPipelinesConfig
 ---@param explorer_pane PullsPipelinesExplorer
 ---@param logs_pane PullsPipelinesLogs
 ---@param close fun()
 ---@param open_actions fun(selection: PullsPipelinesSelection|nil)
+---@param toggle_config fun(selection: PullsPipelinesSelection|nil)
 ---@return AtlasHelpKeyItem[]
-local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
+local function shared_items(pane, explorer_pane, logs_pane, close, open_actions, toggle_config)
 	local close_keys = keymaps.resolve("ui.close") or {}
 	local items = {
 		{
@@ -74,6 +76,15 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 				end
 			end,
 			index = 21,
+			opts = { nowait = true, silent = true },
+		},
+		{
+			key = keymaps.resolve("pulls.pipelines.toggle_config") or {},
+			desc = "Toggle configuration",
+			callback = function()
+				toggle_config(current_selection(pane, explorer_pane))
+			end,
+			index = 22,
 			opts = { nowait = true, silent = true },
 		},
 		{
@@ -138,14 +149,16 @@ end
 ---@param session PullsPipelinesSession
 ---@param close fun()
 ---@param open_actions fun(selection: PullsPipelinesSelection|nil)
-function M.setup(session, close, open_actions)
+---@param toggle_config fun(selection: PullsPipelinesSelection|nil)
+function M.setup(session, close, open_actions, toggle_config)
 	local explorer_items = explorer_keymaps.items(session.explorer, session.logs.win)
 	local logs_items = logs_keymaps.items(session.logs)
+	local overview_items = overview_keymaps.items(session.overview, session.explorer)
 
-	for _, pane in ipairs({ session.explorer, session.logs, session.config }) do
+	for _, pane in ipairs({ session.explorer, session.logs, session.overview, session.config }) do
 		help.register(
 			"General",
-			shared_items(pane, session.explorer, session.logs, close, open_actions),
+			shared_items(pane, session.explorer, session.logs, close, open_actions, toggle_config),
 			{ buffer = pane.buf, index = 0 }
 		)
 		help.register(
@@ -157,6 +170,11 @@ function M.setup(session, close, open_actions)
 			"Logs",
 			pane == session.logs and logs_items or references(logs_items),
 			{ buffer = pane.buf, index = 200 }
+		)
+		help.register(
+			"Overview",
+			pane == session.overview and overview_items or references(overview_items),
+			{ buffer = pane.buf, index = 300 }
 		)
 	end
 end

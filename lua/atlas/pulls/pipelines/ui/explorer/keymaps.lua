@@ -11,7 +11,7 @@ function M.items(pane, content_win)
 	for index, item in ipairs({
 		{
 			key = keymaps.resolve("ui.select") or {},
-			desc = "Open logs",
+			desc = "Open logs or overview",
 			callback = function()
 				if explorer.select(pane) then
 					vim.api.nvim_set_current_win(content_win)
@@ -20,7 +20,7 @@ function M.items(pane, content_win)
 		},
 		{
 			key = keymaps.resolve("ui.show_details") or {},
-			desc = "Preview logs",
+			desc = "Preview logs or overview",
 			callback = function()
 				explorer.select(pane)
 			end,

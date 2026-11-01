@@ -252,9 +252,12 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
 		local icon, status_hl = icons.get(state_value, "status")
-		local label = pipeline.name
-		local job_count = tonumber(pipeline.job_count)
-		if job_count ~= nil then
+		local label = pipeline_utils.display_name(pipeline)
+		local job_count = 0
+		for _, pipeline_stage in ipairs(pipeline.stages) do
+			job_count = job_count + #pipeline_stage.jobs
+		end
+		if job_count > 0 then
 			label = string.format("%s  %d %s", label, job_count, job_count == 1 and "job" or "jobs")
 		end
 		local row = {
@@ -268,14 +271,11 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		}
 		---@type { state: PullsPipelineState, stage: PullsPipelineStage, job: PullsPipelineJob }[]
 		local unnamed_jobs = {}
-		local has_named_stage = false
 		for _, pipeline_stage in ipairs(pipeline.stages) do
 			if pipeline_stage.name == nil then
 				for _, job in ipairs(pipeline_stage.jobs) do
 					table.insert(unnamed_jobs, { state = job.state, stage = pipeline_stage, job = job })
 				end
-			else
-				has_named_stage = true
 			end
 		end
 		for _, pipeline_stage in ipairs(pipeline_utils.sort_by_state(pipeline.stages)) do
@@ -312,13 +312,9 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 				url = tostring(job.url or pipeline.url or ""),
 			})
 		end
-		local total_unnamed_jobs = #unnamed_jobs
-		if not has_named_stage then
-			total_unnamed_jobs = math.max(tonumber(pipeline.job_count) or 0, total_unnamed_jobs)
-		end
-		if total_unnamed_jobs > visible_jobs then
+		if #unnamed_jobs > visible_jobs then
 			table.insert(row.children, {
-				label = string.format("+%d more", total_unnamed_jobs - visible_jobs),
+				label = string.format("+%d more", #unnamed_jobs - visible_jobs),
 				status = "",
 				muted = true,
 			})

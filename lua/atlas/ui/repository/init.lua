@@ -33,6 +33,7 @@ local function setup_window(win)
 	for option, value in pairs({
 		number = false,
 		relativenumber = false,
+		list = false,
 		signcolumn = "no",
 		statuscolumn = "",
 		foldcolumn = "0",

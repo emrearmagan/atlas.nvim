@@ -6,12 +6,12 @@ local parser = require("atlas.pulls.pipelines.github.parser")
 ---@field workflow_file { path: string, repositoryFileUrl: string }|nil
 ---@field node_id string|nil
 ---@field workflow_id string|nil
----@field event string|nil
 ---@field source_repository string|nil
 
 ---@type PullsPipelineBackend
 return {
 	fetch = api.fetch,
+	fetch_pipeline = api.fetch_pipeline,
 	fetch_history = api.fetch_history,
 	fetch_config = api.fetch_config,
 	fetch_job = api.fetch_job,
