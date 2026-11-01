@@ -192,6 +192,7 @@ local function setup_windows(session)
 		for option, value in pairs({
 			number = false,
 			relativenumber = false,
+			list = false,
 			signcolumn = "no",
 			foldcolumn = "0",
 			statuscolumn = "",

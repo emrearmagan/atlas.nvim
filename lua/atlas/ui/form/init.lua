@@ -68,6 +68,7 @@ local function configure_window(win)
 	local options = vim.wo[win]
 	options.number = false
 	options.relativenumber = false
+	options.list = false
 	options.signcolumn = "no"
 	options.foldcolumn = "0"
 	options.statuscolumn = ""

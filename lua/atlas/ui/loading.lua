@@ -72,6 +72,7 @@ function M.open(message, on_cancel, context)
 		foldcolumn = "0",
 		number = false,
 		relativenumber = false,
+		list = false,
 		signcolumn = "no",
 		statuscolumn = "",
 		winbar = " ",
