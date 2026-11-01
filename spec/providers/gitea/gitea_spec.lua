@@ -40,6 +40,71 @@ describe("Gitea", function()
 		assert.same(previous, view)
 	end)
 
+	it("keeps the view scope in the editable query", function()
+		local query = require("atlas.pulls.providers.forge.query")
+		local view = { scope = "created" }
+		assert.equal("type:pulls is:open scope:created", (query.resolve(view)))
+		assert.is_true(query.apply(view, "type:pulls is:open scope:review_requested"))
+		assert.equal("review_requested", query.for_api(view).scope)
+		assert.is_false(query.apply(view, "scope:unknown"))
+	end)
+
+	it("searches a scoped repository view by owner and keeps only that repository", function()
+		local endpoint, params
+		local service = {
+			id = "gitea",
+			name = "Gitea",
+			url_encode = tostring,
+			base_url = function()
+				return "https://forge.example"
+			end,
+			query = function(values)
+				params = values
+				return ""
+			end,
+			get_cache = function()
+				return nil, false
+			end,
+			set_cache = function() end,
+			request = function(_, path, _, done)
+				endpoint = path
+				local user = { id = 1, login = "alice" }
+				done({
+					{
+						number = 1,
+						state = "open",
+						user = user,
+						pull_request = {},
+						repository = { full_name = "Owner/Repo" },
+					},
+					{
+						number = 2,
+						state = "open",
+						user = user,
+						pull_request = {},
+						repository = { full_name = "owner/other" },
+					},
+				}, nil)
+			end,
+		}
+		local result
+		pull_requests
+			.new(service, mapper)
+			.list({ repo = "owner/repo", scope = "review_requested" }, { "OPEN" }, {}, function(page, err)
+				assert.is_nil(err)
+				result = page.items
+			end)
+		assert.equal("/repos/issues/search", endpoint)
+		assert.is_true(params.review_requested)
+		assert.equal("owner", params.owner)
+		assert.same(
+			{ "1" },
+			vim.tbl_map(function(pr)
+				return tostring(pr.id)
+			end, result)
+		)
+	end)
+
 	it("groups comments by review position and keeps pending state separate from resolution", function()
 		local service = {
 			id = "gitea",

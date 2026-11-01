@@ -31,8 +31,9 @@ require("atlas.providers.forge.gitea.config")
 
 ---@class AtlasGiteaPullsSearchConfig
 ---@field repo string|nil
----@field search string|nil Pull request search text, with optional `repo:` and `is:` filters.
+---@field search string|nil Pull request search text, with optional `repo:`, `is:` and `scope:` filters.
 ---@field current_repo boolean|nil
+---@field scope "assigned"|"created"|"mentioned"|"review_requested"|"reviewed"|nil
 ---@field head string|nil Source branch name.
 ---@field extra_params table<string, string|number|boolean>|nil Additional API query parameters.
 

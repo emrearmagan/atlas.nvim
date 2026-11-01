@@ -2,6 +2,8 @@ local config = require("atlas.config")
 local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 
+local SCOPES = { assigned = true, created = true, mentioned = true, review_requested = true, reviewed = true }
+
 ---@param service ForgeService
 ---@param mapper ForgePullMapper
 ---@return ForgePullRequestsApi
@@ -175,6 +177,7 @@ local function new(service, mapper)
 				global = global,
 				repo = view.repo,
 				search = view.search,
+				scope = view.scope,
 				extra_params = view.extra_params,
 				statuses = statuses,
 				pagelen = pagelen,
@@ -192,7 +195,7 @@ local function new(service, mapper)
 			on_done({ items = {} }, provider_name .. " pull view requires repo = 'owner/repo'")
 			return nil
 		end
-		if vim.trim(tostring(view.search or "")) ~= "" then
+		if vim.trim(tostring(view.search or "")) ~= "" or view.scope then
 			return M.search_global(view, statuses, opts, on_done)
 		end
 		local selected = {}
@@ -812,6 +815,11 @@ local function new(service, mapper)
 			on_done({ items = {} }, invalid_repository)
 			return nil
 		end
+		local scope = view.scope
+		if scope and not SCOPES[scope] then
+			on_done({ items = {} }, "Invalid " .. provider_name .. " pull request scope: " .. scope)
+			return nil
+		end
 		local selected = {}
 		for _, status in ipairs(statuses) do
 			selected[status:upper()] = true
@@ -836,6 +844,12 @@ local function new(service, mapper)
 		params.page = page_number
 		params.limit = limit
 		local endpoint = base and (base .. "/issues") or "/repos/issues/search"
+		if scope then
+			params[scope] = true
+			params.owner = base and repo:match("^[^/]+") or params.owner
+			endpoint = "/repos/issues/search"
+		end
+
 		return service.request("GET", endpoint .. service.query(params), nil, function(raw, err)
 			if err then
 				on_done({ items = {} }, err)
@@ -844,7 +858,10 @@ local function new(service, mapper)
 			raw = raw == vim.NIL and {} or raw
 			local prs = {}
 			for _, value in ipairs(raw) do
-				if json.nilify(value.pull_request) then
+				local repository = json.nilify(value.repository)
+				local in_repo = not (scope and base)
+					or (repository ~= nil and tostring(repository.full_name):lower() == repo:lower())
+				if json.nilify(value.pull_request) and in_repo then
 					if base and not json.nilify(value.repository) then
 						value = vim.tbl_extend("force", {}, value, { repository = { full_name = repo } })
 					end

@@ -11,6 +11,7 @@ local QUERY_STATES = {
 	closed = { "merged", "declined" },
 	all = STATE_ORDER,
 }
+local SCOPES = { assigned = true, created = true, mentioned = true, review_requested = true, reviewed = true }
 
 ---@param values PullsStateFilter[]|nil
 ---@return PullsStateFilter[]
@@ -31,7 +32,7 @@ end
 ---@param input string
 ---@return table|nil, string|nil
 local function parse(input)
-	local parsed, err = syntax.parse(input, { repo = "repo", type = "type" })
+	local parsed, err = syntax.parse(input, { repo = "repo", type = "type", scope = "scope" })
 	if not parsed then
 		return nil, err
 	end
@@ -40,6 +41,12 @@ local function parse(input)
 	end
 	if parsed.type and parsed.type:lower() ~= "pulls" then
 		return nil, "Search type must be pulls"
+	end
+	if parsed.scope then
+		parsed.scope = parsed.scope:lower()
+		if not SCOPES[parsed.scope] then
+			return nil, "Unknown pull request scope: " .. parsed.scope
+		end
 	end
 	local selected = {}
 	for _, value in ipairs(parsed.states) do
@@ -58,25 +65,27 @@ local function parse(input)
 end
 
 ---@param view AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig
----@return string, string, PullsStateFilter[], table
+---@return string, string, PullsStateFilter[], table, string|nil
 local function parts(view)
 	-- Configured views and string bookmarks have always accepted query qualifiers.
 	local parsed = parse(view.search or "") or { search = view.search or "", extra_params = {} }
 	return vim.trim(parsed.repo or view.repo or ""),
 		parsed.search,
 		ordered_states(view._states or parsed.states),
-		vim.tbl_extend("force", {}, view.extra_params or {}, parsed.extra_params)
+		vim.tbl_extend("force", {}, view.extra_params or {}, parsed.extra_params),
+		parsed.scope or view.scope
 end
 
 ---@param view AtlasPullsViewConfig
 ---@return string, PullsStateFilter[]
 function M.resolve(view)
 	---@cast view AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig
-	local repo, search, states, extra_params = parts(view)
+	local repo, search, states, extra_params, scope = parts(view)
 	local query = { repo ~= "" and ("repo:" .. repo) or "type:pulls" }
 	for _, state in ipairs(states) do
 		table.insert(query, "is:" .. state)
 	end
+	syntax.append(query, "scope", scope)
 	local extra_keys = vim.tbl_keys(extra_params)
 	table.sort(extra_keys)
 	for _, key in ipairs(extra_keys) do
@@ -90,11 +99,12 @@ end
 ---@param view AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig
 ---@return AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig, string[]
 function M.for_api(view)
-	local repo, search, states, extra_params = parts(view)
+	local repo, search, states, extra_params, scope = parts(view)
 	local api_view = vim.tbl_extend("force", {}, view, {
 		repo = repo,
 		search = search,
 		extra_params = extra_params,
+		scope = scope,
 	})
 	local statuses = {}
 	for _, state in ipairs(states) do
@@ -115,6 +125,7 @@ function M.apply(view, input, default_states)
 	view.repo = nil
 	view.search = vim.trim(input)
 	view.extra_params = nil
+	view.scope = nil
 	view._states = ordered_states(parsed.states or default_states)
 	view.current_repo = nil
 	return true, nil

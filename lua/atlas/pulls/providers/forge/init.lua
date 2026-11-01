@@ -10,7 +10,10 @@ local M = {}
 function M.views(provider_id)
 	local configured = (config.domain_options(provider_id, "pulls") or {}).views
 	if not configured or #configured == 0 then
-		configured = { { name = "Pull Requests", key = "1", layout = "compact" } }
+		configured = {
+			{ name = "Created", key = "1", layout = "compact", scope = "created" },
+			{ name = "Review requested", key = "2", layout = "compact", scope = "review_requested" },
+		}
 	end
 	return vim.tbl_map(function(view)
 		return vim.tbl_extend("force", {}, view)

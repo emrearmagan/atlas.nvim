@@ -649,13 +649,14 @@ pulls = {
   gitea = {
     draft_prefix = "WIP:",
     views = {
+      { name = "Review requested", key = "1", scope = "review_requested" },
       {
         name = "Repository",
-        key = "1",
+        key = "2",
         repo = "owner/repository",
         extra_params = { sort = "recentupdate" },
       },
-      { name = "Current", key = "2", current_repo = true },
+      { name = "Current", key = "3", current_repo = true },
     },
     bookmarks = {
       key = "S",
@@ -681,13 +682,14 @@ pulls = {
   forgejo = {
     draft_prefix = "WIP:",
     views = {
+      { name = "Review requested", key = "1", scope = "review_requested" },
       {
         name = "Repository",
-        key = "1",
+        key = "2",
         repo = "owner/repository",
         extra_params = { sort = "recentupdate" },
       },
-      { name = "Current", key = "2", current_repo = true },
+      { name = "Current", key = "3", current_repo = true },
     },
     bookmarks = {
       key = "S",
