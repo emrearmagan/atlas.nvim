@@ -8,9 +8,10 @@ local API_PATH = "/api/v1"
 local M = {}
 
 ---@param provider_id ForgeProviderId
+---@param provider_name ForgeProviderName
+---@param default_host string|nil
 ---@return ForgeClient
-function M.new(provider_id)
-	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
+function M.new(provider_id, provider_name, default_host)
 	local client = {}
 
 	---@return AtlasGiteaConfig|AtlasForgejoConfig
@@ -35,7 +36,7 @@ function M.new(provider_id)
 	end
 
 	function client.hostname()
-		return client.base_url():match("^https?://([^/]+)") or (provider_id == "gitea" and "gitea.com" or nil)
+		return client.base_url():match("^https?://([^/]+)") or default_host
 	end
 
 	function client.cache_ttl()

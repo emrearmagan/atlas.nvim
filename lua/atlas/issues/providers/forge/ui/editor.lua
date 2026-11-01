@@ -401,9 +401,9 @@ local function submit(state)
 end
 
 ---@param opts ForgeIssueEditorOpts
----@param provider_id ForgeProviderId
+---@param service ForgeService
 ---@param api ForgeIssuesApi
-local function open(opts, provider_id, api)
+local function open(opts, service, api)
 	highlights.setup()
 
 	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
@@ -424,9 +424,9 @@ local function open(opts, provider_id, api)
 			due_date = due_date,
 		},
 		issue = opts.issue,
-		provider_name = provider_id == "gitea" and "Gitea" or "Forgejo",
+		provider_name = service.name,
 		api = api,
-		users = require("atlas.providers.forge." .. provider_id .. ".api").users,
+		users = service.users,
 		layout = {},
 		is_submitting = false,
 		closed = false,
@@ -447,7 +447,7 @@ local function open(opts, provider_id, api)
 		end,
 		completion = {
 			context = {
-				provider = provider_id,
+				provider = service.id,
 				repository = opts.repo_slug,
 				issue = opts.issue and { key = opts.issue.key },
 			},
@@ -509,13 +509,13 @@ local function open(opts, provider_id, api)
 	return state.layout
 end
 
----@param provider_id ForgeProviderId
+---@param service ForgeService
 ---@param api ForgeIssuesApi
 ---@return ForgeIssueEditor
-function M.new(provider_id, api)
+function M.new(service, api)
 	return {
 		open = function(repo_slug, on_done)
-			return open({ repo_slug = repo_slug, on_done = on_done }, provider_id, api)
+			return open({ repo_slug = repo_slug, on_done = on_done }, service, api)
 		end,
 		edit = function(issue, on_done)
 			notify.loading("Loading " .. issue.key .. "...")
@@ -530,12 +530,12 @@ function M.new(provider_id, api)
 				end
 				notify.clear()
 				local current = vim.tbl_extend("force", {}, issue)
-				if provider_id == "gitea" then
+				if service.id == "gitea" then
 					current.content_version = details.content_version
 				end
 				open(
 					{ repo_slug = issue.repo_full_name, issue = current, details = details, on_done = on_done },
-					provider_id,
+					service,
 					api
 				)
 			end)

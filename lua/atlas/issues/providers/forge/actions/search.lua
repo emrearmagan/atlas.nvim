@@ -4,10 +4,11 @@ local picker = require("atlas.ui.picker")
 local query = require("atlas.issues.providers.forge.query")
 local search_prompt = require("atlas.providers.forge.completion.search")
 
----@param provider_id ForgeProviderId
+---@param service ForgeService
 ---@param api ForgeIssuesApi
-function M.new(provider_id, api)
-	local name = provider_id == "gitea" and "Gitea" or "Forgejo"
+function M.new(service, api)
+	local provider_id = service.id
+	local name = service.name
 	local actions = {}
 
 	local function select_repository(title, include_all, on_select, on_cancel)
@@ -157,7 +158,7 @@ function M.new(provider_id, api)
 		local view = state.search_view()
 		if actions.can_edit() then
 			search_prompt.edit(
-				provider_id,
+				service,
 				"issues",
 				(state.query ~= "" and state.query or query.resolve(view)) .. " ",
 				function(value)

@@ -4,10 +4,11 @@ local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local query = require("atlas.issues.providers.forge.query")
 
----@param provider_id ForgeProviderId
+---@param service ForgeService
+---@param api table
 ---@return table
-function M.new(provider_id)
-	local api = require("atlas.issues.providers.forge." .. provider_id .. ".api")
+function M.new(service, api)
+	local provider_id = service.id
 	local issues = api.issues
 	local comments = api.comments
 
@@ -115,7 +116,7 @@ function M.new(provider_id)
 			end
 		end,
 		capabilities = {
-			actions = require("atlas.issues.providers.forge.actions.registry").new(provider_id, issues),
+			actions = require("atlas.issues.providers.forge.actions.registry").new(service, issues),
 			core = {
 				fetch_issues = fetch_issues,
 				fetch_by_refs = issues.fetch_by_refs,

@@ -2,11 +2,12 @@ local url = require("atlas.providers.url")
 
 local M = {}
 
----@param provider_id "gitea"|"forgejo"
----@param default_host string|nil
+---@param service ForgeService
 ---@return { resolve: fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil }
-function M.new(provider_id, default_host)
-	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
+function M.new(service)
+	local provider_id = service.id
+	local provider_name = service.name
+	local default_host = service.default_host
 	local resolver = {}
 
 	---@param host string

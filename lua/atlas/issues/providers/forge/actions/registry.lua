@@ -38,14 +38,15 @@ local function same_values(left, right)
 	return table.concat(first, "\0") == table.concat(second, "\0")
 end
 
----@param provider_id ForgeProviderId
+---@param service ForgeService
 ---@param api ForgeIssuesApi
 ---@return ForgeIssueActionsRegistry
-function M.new(provider_id, api)
-	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
-	local editor = require("atlas.issues.providers.forge.ui.editor").new(provider_id, api)
-	local users_api = require("atlas.providers.forge." .. provider_id .. ".api").users
-	local search = require("atlas.issues.providers.forge.actions.search").new(provider_id, api)
+function M.new(service, api)
+	local provider_id = service.id
+	local provider_name = service.name
+	local editor = require("atlas.issues.providers.forge.ui.editor").new(service, api)
+	local users_api = service.users
+	local search = require("atlas.issues.providers.forge.actions.search").new(service, api)
 	local set_locked_api = api.set_locked
 	---@type ForgeIssueActionsRegistry
 	local registry = {}

@@ -19,6 +19,10 @@
 ---@field labels ForgejoIssueLabel[]
 ---@field milestone ForgejoIssueMilestone|nil
 
+local api = require("atlas.issues.providers.forge.forgejo.api")
+local forge = require("atlas.issues.providers.forge")
+local service = require("atlas.providers.forge.forgejo.api")
+
 require("atlas.issues.providers.forge.forgejo.config")
 
-return require("atlas.issues.providers.forge").new("forgejo")
+return forge.new(service, api)

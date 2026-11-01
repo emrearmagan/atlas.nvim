@@ -52,18 +52,22 @@ local pagination_factory = require("atlas.providers.forge.api.pagination")
 ---@class ForgeService : ForgeClient
 ---@field id ForgeProviderId
 ---@field name ForgeProviderName
+---@field default_host string|nil
 ---@field fetch_all fun(endpoint: string, params: table<string, any>|nil, opts: ForgePaginationOpts|nil, on_done: fun(values: table[]|nil, err: string|nil), ctx: ForgeRequestContext|nil): AtlasRequestScope
 ---@field notifications AtlasNotificationsCapability
 ---@field users AtlasUsersCapability
 ---@field repository ForgeRepositoriesApi
 
 ---@param provider_id ForgeProviderId
+---@param provider_name ForgeProviderName
+---@param default_host string|nil Host used when `base_url` is not configured.
 ---@return ForgeService
-function M.new(provider_id)
+function M.new(provider_id, provider_name, default_host)
 	---@type ForgeService
-	local service = client_factory.new(provider_id)
+	local service = client_factory.new(provider_id, provider_name, default_host)
 	service.id = provider_id
-	service.name = provider_id == "gitea" and "Gitea" or "Forgejo"
+	service.name = provider_name
+	service.default_host = default_host
 	service.fetch_all = pagination_factory.new(service).fetch_all
 	service.notifications = notifications_factory.new(service)
 	service.users = require("atlas.providers.forge.users").new(service)

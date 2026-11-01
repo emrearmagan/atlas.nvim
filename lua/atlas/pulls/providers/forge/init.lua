@@ -5,14 +5,15 @@ local request_scope = require("atlas.core.requests")
 
 local M = {}
 
----@param provider_id "gitea"|"forgejo"
+---@param service ForgeService
+---@param api table
+---@param comments_api table
+---@param reviews_api table
+---@param pipelines PullsPipelineBackend
 ---@return PullsProvider
-function M.new(provider_id)
-	local api = require("atlas.pulls.providers.forge." .. provider_id .. ".api")
-	local service = require("atlas.providers.forge." .. provider_id .. ".api")
+function M.new(service, api, comments_api, reviews_api, pipelines)
+	local provider_id = service.id
 	local pullrequests_api = api.pullrequests
-	local comments_api = require("atlas.pulls.providers.forge." .. provider_id .. ".api.comments")
-	local reviews_api = require("atlas.pulls.providers.forge." .. provider_id .. ".api.reviews")
 
 	local function views()
 		local configured = (config.domain_options(provider_id, "pulls") or {}).views
@@ -114,11 +115,7 @@ function M.new(provider_id)
 			return { name = "Search", layout = "compact", repo = target.repo_full_name }
 		end,
 		capabilities = {
-			actions = require("atlas.pulls.providers.forge.actions.registry").new(
-				provider_id,
-				pullrequests_api,
-				service.repository
-			),
+			actions = require("atlas.pulls.providers.forge.actions.registry").new(service, pullrequests_api),
 			core = {
 				fetch_pullrequests = fetch_pullrequests,
 				fetch_by_refs = pullrequests_api.fetch_by_refs,
@@ -160,7 +157,7 @@ function M.new(provider_id)
 				request_changes = reviews_api.request_changes,
 				discard_review = reviews_api.discard_review,
 			},
-			pipelines = require("atlas.pulls.pipelines.forge." .. provider_id),
+			pipelines = pipelines,
 			ui = {
 				detail = require("atlas.pulls.providers.forge.ui.detail"),
 				repository = require("atlas.providers.forge.ui.repository"),

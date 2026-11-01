@@ -70,14 +70,13 @@ local function complete(domain, cmdline, cursorpos)
 	return matches
 end
 
----@param provider_id "gitea"|"forgejo"
+---@param service ForgeService
 ---@param domain "pulls"|"issues"
 ---@param default string|nil
 ---@param on_submit fun(query: string)
-function M.edit(provider_id, domain, default, on_submit)
-	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
+function M.edit(service, domain, default, on_submit)
 	prompt.open({
-		name = "Atlas" .. provider_name .. (domain == "pulls" and "PullSearch" or "IssueSearch"),
+		name = "Atlas" .. service.name .. (domain == "pulls" and "PullSearch" or "IssueSearch"),
 		default = default,
 		complete = function(_, cmdline, cursorpos)
 			return complete(domain, cmdline, cursorpos)

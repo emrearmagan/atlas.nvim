@@ -11,11 +11,12 @@ local M = {}
 ---@field items AtlasPullAction[]
 ---@field find fun(id: string): AtlasPullAction|nil
 
----@param provider_id "gitea"|"forgejo"
----@param repositories ForgeRepositoriesApi
+---@param service ForgeService
+---@param pullrequests table
 ---@return ForgePullActionsRegistry
-function M.new(provider_id, pullrequests, repositories)
-	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
+function M.new(service, pullrequests)
+	local provider_id = service.id
+	local provider_name = service.name
 
 	---@param ctx AtlasPullActionContext
 	---@return boolean, string|nil
@@ -85,7 +86,7 @@ function M.new(provider_id, pullrequests, repositories)
 					fetch_done(initial_items, nil)
 					return
 				end
-				return repositories.search(input, function(matches, err)
+				return service.repository.search(input, function(matches, err)
 					if err then
 						fetch_done(nil, err)
 						return
@@ -343,7 +344,7 @@ function M.new(provider_id, pullrequests, repositories)
 			local state = require("atlas.pulls.state")
 			local current = state.provider and state.provider.id == provider_id and state.search_view() or nil
 			search_prompt.edit(
-				provider_id,
+				service,
 				"pulls",
 				current and (state.query .. " ") or "type:pulls is:open ",
 				function(input)
@@ -379,7 +380,7 @@ function M.new(provider_id, pullrequests, repositories)
 				done(nil, nil)
 				return
 			end
-			search_prompt.edit(provider_id, "pulls", state.query .. " ", function(input)
+			search_prompt.edit(service, "pulls", state.query .. " ", function(input)
 				if state.provider and state.provider.id == provider_id and state.search_view() == view then
 					local ok, err = query.apply(view, input)
 					if not ok then

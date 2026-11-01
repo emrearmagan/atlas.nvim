@@ -21,6 +21,10 @@
 ---@field labels GiteaIssueLabel[]
 ---@field milestone GiteaIssueMilestone|nil
 
+local api = require("atlas.issues.providers.forge.gitea.api")
+local forge = require("atlas.issues.providers.forge")
+local service = require("atlas.providers.forge.gitea.api")
+
 require("atlas.issues.providers.forge.gitea.config")
 
-return require("atlas.issues.providers.forge").new("gitea")
+return forge.new(service, api)
