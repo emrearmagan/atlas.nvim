@@ -40,10 +40,11 @@ end
 ---@param url string
 ---@param headers table<string, string>
 ---@param data? string
----@param callback fun(body?: string, status?: integer|nil, err?: string)
+---@param callback fun(body?: string, status?: integer|nil, err?: string, headers?: table<string, string>)
 ---@param follow_redirects? boolean
+---@param with_headers? boolean
 ---@return { job_id: integer, cancel: fun() }
-local function curl_fetch(method, url, headers, data, callback, follow_redirects)
+local function curl_fetch(method, url, headers, data, callback, follow_redirects, with_headers)
 	local config = {
 		"silent",
 		"show-error",
@@ -64,7 +65,11 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 		table.insert(config, "data-raw = " .. curl_config_value(data))
 	end
 
-	table.insert(config, "write-out = " .. curl_config_value("__ATLAS_HTTP_CODE:%{http_code}"))
+	local write_out = "__ATLAS_HTTP_CODE:%{http_code}"
+	if with_headers then
+		write_out = write_out .. "\n__ATLAS_HTTP_HEADERS:%{header_json}"
+	end
+	table.insert(config, "write-out = " .. curl_config_value(write_out))
 	table.insert(config, "url = " .. curl_config_value(url))
 	local config_input = table.concat(config, "\n") .. "\n"
 	local args = { "curl", "--config", "-" }
@@ -112,6 +117,19 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 					return
 				end
 
+				local response_headers = nil
+				local headers_start, _, header_json = raw:find("\n__ATLAS_HTTP_HEADERS:(.*)$")
+				if headers_start ~= nil then
+					raw = raw:sub(1, headers_start - 1)
+					local ok, parsed = pcall(vim.json.decode, header_json)
+					if ok and type(parsed) == "table" then
+						response_headers = {}
+						for key, values in pairs(parsed) do
+							response_headers[key] = values[1]
+						end
+					end
+				end
+
 				local body = raw
 				local http_status = nil
 				local marker_start, _, status_str = raw:find("__ATLAS_HTTP_CODE:(%d+)%s*$")
@@ -120,7 +138,7 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 					http_status = tonumber(status_str)
 				end
 
-				callback(body, http_status, nil)
+				callback(body, http_status, nil, response_headers)
 			end)
 		end,
 	}
@@ -174,10 +192,11 @@ end
 ---@param url string Full URL
 ---@param headers table<string, string> HTTP headers
 ---@param data? string JSON data for POST/PUT
----@param callback fun(result?: table, err?: string, status?: integer)
+---@param callback fun(result?: table, err?: string, status?: integer, headers?: table<string, string>)
+---@param opts? { response_headers?: boolean }
 ---@return { job_id: integer, cancel: fun() }
-function M.curl_request(method, url, headers, data, callback)
-	return curl_fetch(method, url, headers, data, function(body, http_status, err)
+function M.curl_request(method, url, headers, data, callback, opts)
+	return curl_fetch(method, url, headers, data, function(body, http_status, err, response_headers)
 		if err ~= nil then
 			callback(nil, err, http_status)
 			return
@@ -185,7 +204,7 @@ function M.curl_request(method, url, headers, data, callback)
 
 		if body == nil or body == "" then
 			if http_status ~= nil and http_status >= 200 and http_status < 300 then
-				callback({}, nil, http_status)
+				callback({}, nil, http_status, response_headers)
 				return
 			end
 			callback(nil, string.format("HTTP %s", tostring(http_status or "?")), http_status)
@@ -216,8 +235,8 @@ function M.curl_request(method, url, headers, data, callback)
 			return
 		end
 
-		callback(result, nil, http_status)
-	end, method == "GET")
+		callback(result, nil, http_status, response_headers)
+	end, method == "GET", opts and opts.response_headers)
 end
 
 ---@param method string

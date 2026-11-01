@@ -143,6 +143,40 @@ M.jira = {
 	end,
 }
 
+M.azure = {
+	columns = {
+		{ key = "name", name = "Issue", min_width = 42 },
+		{ key = "assignee", name = icons.get("user") .. " Assignee", min_width = 10, max_width = 22, can_grow = false },
+		{ key = "reporter", name = icons.get("user") .. " Reporter", min_width = 10, max_width = 22, can_grow = false },
+		{ key = "status", name = " Status", can_grow = false },
+	},
+	values = function(issue, opts)
+		return {
+			icon = utils.type_icon(issue),
+			name = issue.key .. " " .. issue.title,
+			assignee = utils.person_value(issue.assignee, "Unassigned"),
+			reporter = utils.person_value(issue.reporter, "Unknown"),
+			status = utils.status_value(issue, opts),
+		}
+	end,
+	highlights = function(row, column, context, opts)
+		local issue = row._issue
+		if issue == nil then
+			return nil
+		end
+
+		if column.key == "name" then
+			local icon, icon_hl = utils.type_icon(issue)
+			local spans = utils.key_title_highlights(context.text, issue.key, "AtlasTextMuted")
+			return utils.highlight_match(spans, context.text, icon, icon_hl)
+		elseif column.key == "status" then
+			return utils.status_hl(issue, opts, presentation.status_hl(issue.status_id))
+		end
+
+		return utils.person_hl(issue, column.key)
+	end,
+}
+
 M.default = {
 	columns = {
 		{ key = "name", name = "Issue", min_width = 42 },

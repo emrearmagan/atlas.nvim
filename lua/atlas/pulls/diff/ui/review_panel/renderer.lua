@@ -49,6 +49,19 @@ local function thread_comments(node)
 	return comments
 end
 
+---@param user AtlasUser|nil
+---@return string[]
+local function user_keys(user)
+	local keys = {}
+	if user and (user.id or "") ~= "" then
+		table.insert(keys, "id:" .. user.id)
+	end
+	if user and (user.username or "") ~= "" then
+		table.insert(keys, "username:" .. user.username)
+	end
+	return keys
+end
+
 ---@param item AtlasDiffReviewPanelItem
 ---@param filter AtlasDiffReviewPanelFilter
 ---@param user AtlasUser|nil
@@ -61,7 +74,12 @@ local function matches(item, filter, user)
 		if filter == "unresolved" then
 			return item.thread.comment.state ~= "RESOLVED"
 		end
-		return user ~= nil and user.username ~= nil and item.authors[user.username] == true
+		for _, key in ipairs(user_keys(user)) do
+			if item.authors[key] then
+				return true
+			end
+		end
+		return false
 	end
 	if item.note then
 		return filter == "mine" or not item.note.resolved
@@ -99,8 +117,8 @@ local function sections(session, filter)
 			local authors, has_pending = {}, false
 			for _, thread_comment in ipairs(thread_comments(thread)) do
 				has_pending = has_pending or thread_comment.pending == true
-				if thread_comment.author and thread_comment.author.username then
-					authors[thread_comment.author.username] = true
+				for _, key in ipairs(user_keys(thread_comment.author)) do
+					authors[key] = true
 				end
 			end
 			local items = comment.is_task and tasks or (has_pending and pending or comments)

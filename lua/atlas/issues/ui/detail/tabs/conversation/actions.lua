@@ -153,6 +153,7 @@ function M.edit(issue, entry, refresh)
 					state.upsert_comment(updated)
 				else
 					comment.body = text
+					comment.body_display = nil
 				end
 				notify.success("Comment updated", { timeout = 1200 })
 				refresh()

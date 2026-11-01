@@ -240,6 +240,7 @@ function M.selection(renderer, file, side, lines, position)
 			to = to,
 			start_from = start_from,
 			start_to = start_to,
+			end_column = vim.fn.strutf16len(lines[last], true) + 1,
 			commit_hash = session.full_range.head_revision,
 		},
 	}
@@ -501,6 +502,8 @@ function M.open(owner, pr, path, items, on_action)
 	---@cast provider PullsProvider|nil
 	local tasks = provider and provider.capabilities.tasks
 	local can_add_task = tasks and tasks.add_task ~= nil
+	local reviews = provider and provider.capabilities.reviews
+	local pending_reviews = reviews and reviews.submit_review ~= nil
 	local comments = provider and provider.capabilities.comments
 	local can_react = comments and comments.reactions ~= nil
 
@@ -626,7 +629,7 @@ function M.open(owner, pr, path, items, on_action)
 					local note_action = name == "edit_comment" and "edit_note" or "delete_note"
 					on_action(note_action, { note = entry.note }, close)
 				elseif name == "add_comment" then
-					on_action("note_to_comment", { note = entry.note, pending = true }, close)
+					on_action("note_to_comment", { note = entry.note, pending = pending_reviews }, close)
 				end
 			elseif entry.comment then
 				local target = entry.comment
@@ -635,7 +638,11 @@ function M.open(owner, pr, path, items, on_action)
 					selected_action = target.is_task and "toggle_task" or "toggle_resolved"
 					target = target.is_task and target or entry.thread_root
 				end
-				on_action(selected_action, { comment = target, pending = name == "add_comment" or nil }, close)
+				on_action(
+					selected_action,
+					{ comment = target, pending = name == "add_comment" and pending_reviews or nil },
+					close
+				)
 			end
 		end
 	end

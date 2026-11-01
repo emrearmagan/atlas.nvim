@@ -96,6 +96,7 @@
 -- Configs
 
 ---@class AtlasProvidersConfig
+---@field azure AtlasAzureConfig|nil
 ---@field bitbucket AtlasBitbucketConfig|nil
 ---@field github AtlasGitHubConfig|nil
 ---@field gitlab AtlasGitLabConfig|nil
@@ -111,6 +112,7 @@
 ---@field default_delete_source_branch boolean|nil
 ---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
+---@field azure AtlasAzurePullsConfig|nil
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
 ---@field github AtlasGitHubPullsConfig|nil
 ---@field gitlab AtlasGitLabPullsConfig|nil
@@ -128,6 +130,7 @@
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
+---@field azure AtlasAzureIssuesConfig|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil

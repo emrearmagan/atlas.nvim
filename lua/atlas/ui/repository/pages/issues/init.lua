@@ -2,6 +2,7 @@ local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local detail = require("atlas.issues.ui.detail")
 local providers = require("atlas.providers")
+local azure_search = require("atlas.providers.azure.completion.search")
 local github_search = require("atlas.providers.github.completion.search")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local gitlab_search = require("atlas.providers.gitlab.completion.search")
@@ -99,6 +100,14 @@ local function repository_view(state)
 			order_by = "created_at",
 			sort = "desc",
 		}
+	elseif state.provider.id == "azure" then
+		return {
+			name = "Issues",
+			layout = "compact",
+			project = state.repo.full_name:match("^([^/]+)/"),
+			search = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project"
+				.. " ORDER BY [System.CreatedDate] DESC",
+		}
 	end
 end
 
@@ -183,6 +192,12 @@ local function edit_query(state)
 
 			apply()
 		end)
+	elseif state.provider.id == "azure" then
+		---@cast view AtlasAzureIssuesViewConfig
+		azure_search.edit("wiql", state.query, function(input)
+			view.search = input
+			apply()
+		end)
 	end
 end
 
@@ -208,6 +223,9 @@ local function toggle_state(state)
 	elseif state.provider.id == "gitlab" then
 		---@cast view AtlasGitLabIssuesViewConfig
 		view.state = view.state == "closed" and "opened" or "closed"
+	else
+		notify.info("Filter work item states in the WIQL query")
+		return
 	end
 
 	state.page, state.cursors = 1, {}

@@ -91,6 +91,7 @@
 ---@field author AtlasUser|nil
 ---@field author_roles string[]|nil
 ---@field body string
+---@field body_display string|nil
 ---@field created_at string
 ---@field parent_id string|number|nil
 ---@field thread_id string|nil

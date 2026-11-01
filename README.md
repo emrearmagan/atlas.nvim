@@ -5,12 +5,13 @@
 
 # atlas.nvim
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Azure DevOps and Jira without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
   <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
   <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
+  <img alt="Azure DevOps" src="https://img.shields.io/badge/Azure_DevOps-0078D7?style=flat-square">
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
@@ -71,11 +72,12 @@ require("atlas").setup({})
 <summary><strong>Requirements</strong></summary>
 
 - Neovim: `0.10+`
-- `git` and `curl` on `$PATH`
+- `git` and `curl` 7.83+ on `$PATH`
 - Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab 17.7+ (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
+- Azure DevOps: Personal Access Token (`dev.azure.com`)
 
 </details>
 
@@ -343,6 +345,14 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
+    ---@type AtlasAzureConfig
+    azure = {
+      base_url = "https://dev.azure.com/your-organization",
+      -- https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate
+      token = vim.env.AZURE_DEVOPS_TOKEN,
+      cache_ttl = 300, -- Set to 0 to disable caching.
+    },
+
     ---@type AtlasJiraConfig
     jira = {
       base_url = "https://your-site.atlassian.net",
@@ -391,7 +401,7 @@ vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
 
 ## Pulls
 
-Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, and Azure DevOps.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Pulls Configuration
@@ -634,9 +644,45 @@ pulls = {
 
 </details>
 
+<a id="azure"></a>
+
+<details>
+<summary><strong>Azure DevOps</strong></summary>
+
+```lua
+pulls = {
+  ---@type AtlasAzurePullsConfig
+  azure = {
+    ---@type AtlasAzurePullsViewConfig[]
+    views = {
+      {
+        name = "Reviewing",
+        key = "1",
+        layout = "grouped", -- "compact", "grouped", or "plain"
+        project = "YourProject",
+        repository = "YourRepository", -- Omit to include all repositories in the project.
+        -- current_repo = true, -- Limit this view to the local repository.
+        scope = "assigned_to_me",
+      },
+      {
+        name = "Created",
+        key = "2",
+        project = "YourProject",
+        scope = "created_by_me", -- Or "all".
+        extra_params = {
+          ["searchCriteria.targetRefName"] = "refs/heads/main",
+        },
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Issues
 
-Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, GitLab, and Azure DevOps issues.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Issue Configuration
@@ -865,6 +911,39 @@ issues = {
 
 </details>
 
+<a id="azure-issues"></a>
+
+<details>
+<summary><strong>Azure DevOps Work Items</strong></summary>
+
+Uses the shared `providers.azure` authentication. Views use flat [WIQL queries](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops).
+
+Azure supports both HTML and Markdown for work-item [descriptions](https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/) and [comments](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat). [Pandoc](https://pandoc.org) is needed to view and edit HTML as Markdown. Saving converted content switches it to Markdown permanently.
+
+```lua
+issues = {
+  ---@type AtlasAzureIssuesConfig
+  azure = {
+    ---@type AtlasAzureIssuesViewConfig[]
+    views = {
+      {
+        name = "Assigned",
+        key = "1",
+        project = "YourProject",
+        -- current_repo = true, -- Use the project of the local repository instead of project.
+        search = [[
+          SELECT [System.Id] FROM WorkItems
+          WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me
+          ORDER BY [System.ChangedDate] DESC
+        ]],
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Events
 
 These `User` events fire after the corresponding cleanup or setup has completed:
@@ -946,7 +1025,7 @@ keymaps = {
     reviewers = "gr", -- Pull requests only.
     base = "gb", -- Pull requests only.
     draft = "gD", -- Pull requests only.
-    issue_type = "gt", -- Jira only.
+    issue_type = "gt", -- Jira and Azure DevOps only.
     fields = "gf", -- Jira only.
     templates = "gT",
   },

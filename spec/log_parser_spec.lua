@@ -4,6 +4,7 @@ local github = require("atlas.pulls.pipelines.github.parser")
 local gitlab = require("atlas.pulls.pipelines.gitlab.parser")
 local bamboo = require("atlas.pulls.pipelines.bamboo.parser")
 local bitbucket = require("atlas.pulls.pipelines.bitbucket.parser")
+local azure = require("atlas.pulls.pipelines.azure.parser")
 
 describe("pipeline logs", function()
 	local original_strptime, original_hlexists
@@ -154,6 +155,33 @@ describe("pipeline logs", function()
 				},
 			}, entries)
 		end
+	end)
+
+	it("groups Azure steps and closes runner groups a step left open", function()
+		local entries = parser.parse({
+			raw = table.concat({
+				"2026-09-20T14:30:12Z ##[section]Starting: Initialize job",
+				"##[group]Operating System",
+				"Ubuntu",
+				"##[endgroup]",
+				"2026-09-20T14:30:15Z ##[section]Finishing: Initialize job",
+				"##[section]Starting: Run lint",
+				"##[group]Unclosed",
+				"Linting",
+				"##[section]Finishing: Run lint",
+				"Done",
+			}, "\n"),
+		}, azure.parse)
+		assert.same({
+			{
+				name = "Initialize job",
+				timestamp = "2026-09-20T14:30:12Z",
+				duration = 3,
+				entries = { { name = "Operating System", entries = { { text = "Ubuntu" } } } },
+			},
+			{ name = "Run lint", entries = { { name = "Unclosed", entries = { { text = "Linting" } } } } },
+			{ text = "Done" },
+		}, entries)
 	end)
 
 	it("keeps Bitbucket output flat after shared cleanup", function()

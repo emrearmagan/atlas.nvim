@@ -87,13 +87,20 @@ describe("core.git.checkout", function()
 			{ provider = "github", host = "github.com", repo = "owner/repo", path = "pull/1" },
 			{ provider = "gitlab", host = "gitlab.com", repo = "group/subgroup/repo", path = "-/merge_requests/1" },
 			{ provider = "bitbucket", host = "bitbucket.org", repo = "owner/repo", path = "pull-requests/1" },
+			{
+				provider = "azure",
+				host = "dev.azure.com",
+				repo = "Platform/api",
+				url = "https://dev.azure.com/acme/Platform/_git/api/pullrequest/1",
+				remote = "git@ssh.dev.azure.com:v3/acme/Platform/api",
+			},
 		}
 		local function use_repository(case)
 			config.options.pulls.repo_config.paths = { [case.repo] = "/mapped" }
 			pr = {
 				provider = case.provider,
 				repo_full_name = case.repo,
-				link = { html = "https://" .. case.host .. "/" .. case.repo .. "/" .. case.path },
+				link = { html = case.url or ("https://" .. case.host .. "/" .. case.repo .. "/" .. case.path) },
 				source = { branch = "feature", commit_hash = "head" },
 				destination = { commit_hash = "base" },
 			}
@@ -108,6 +115,7 @@ describe("core.git.checkout", function()
 					github = { hostname = "github.com" },
 					gitlab = { base_url = "https://gitlab.com", token = "token" },
 					bitbucket = { user = "user", token = "token" },
+					azure = { base_url = "https://dev.azure.com/acme", token = "token" },
 				},
 				pulls = { repo_config = {} },
 			}
@@ -178,7 +186,8 @@ describe("core.git.checkout", function()
 					assert.is_nil(err)
 					result = source
 				end)
-				local remote = case.provider == "gitlab" and ("https://" .. case.host .. "/" .. case.repo .. ".git")
+				local remote = case.remote
+					or case.provider == "gitlab" and ("https://" .. case.host .. "/" .. case.repo .. ".git")
 					or ("git@" .. case.host .. ":" .. case.repo .. ".git")
 				complete_remote(remote)
 				assert.same({ root = "/mapped", base_revision = "base", head_revision = "head" }, result)

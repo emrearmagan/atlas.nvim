@@ -125,7 +125,7 @@ local function is_comment_long(comment)
 	if comment.deleted then
 		return false
 	end
-	local lines = utils.sanitize_lines(utils.strip_markup(comment.body or ""))
+	local lines = utils.sanitize_lines(utils.strip_markup(comment.body_display or comment.body or ""))
 	while #lines > 0 and vim.trim(lines[#lines]) == "" do
 		table.remove(lines)
 	end
