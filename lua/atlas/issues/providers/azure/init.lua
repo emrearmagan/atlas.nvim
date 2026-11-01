@@ -20,9 +20,20 @@ local links_api = require("atlas.providers.azure.links")
 ---@return AtlasAzureIssuesViewConfig[]
 local function views()
 	local options = config.domain_options("azure", "issues") or {}
+	local configured = options.views or {}
+	if #configured == 0 then
+		configured = {
+			{
+				name = "Assigned",
+				key = "1",
+				search = "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me"
+					.. " ORDER BY [System.ChangedDate] DESC",
+			},
+		}
+	end
 	return vim.tbl_map(function(view)
 		return vim.tbl_extend("force", {}, view)
-	end, options.views or {})
+	end, configured)
 end
 
 ---@param view AtlasAzureIssuesViewConfig
