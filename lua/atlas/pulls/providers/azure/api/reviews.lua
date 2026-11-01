@@ -103,7 +103,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 			for _, comment in ipairs(comments) do
 				local inline = comment.inline
 				local file = inline and files[inline.path]
-				if file and not comment.parent_id then
+				if inline and file and not comment.parent_id then
 					local side = inline.to and "new" or "old"
 					local line = inline.to or inline.from
 					for _, hunk in ipairs(file.hunks) do

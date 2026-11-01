@@ -9,7 +9,9 @@ return {
 		icon = icons.get("close", "actions"),
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
-			return ctx.pipeline.state == "INPROGRESS" and ctx.pipeline.provider_state ~= "cancelling"
+			local pipeline = ctx.pipeline
+			---@cast pipeline AzurePipeline
+			return pipeline.state == "INPROGRESS" and pipeline.provider_state ~= "cancelling"
 		end,
 		run = function(ctx, done)
 			return pipelines.cancel(ctx.context, ctx.pipeline, function(_, err)
@@ -30,7 +32,9 @@ return {
 				and vim.tbl_contains({ "SUCCESSFUL", "FAILED", "STOPPED" }, ctx.pipeline.state)
 		end,
 		run = function(ctx, done)
-			return pipelines.update_stage(ctx.context, ctx.pipeline, ctx.stage, "retry", function(_, err)
+			local stage = ctx.stage
+			---@cast stage AzurePipelineStage
+			return pipelines.update_stage(ctx.context, ctx.pipeline, stage, "retry", function(_, err)
 				done(err == nil, err)
 			end)
 		end,
@@ -46,7 +50,9 @@ return {
 			return stage ~= nil and stage.ref_name ~= nil and stage.state == "INPROGRESS"
 		end,
 		run = function(ctx, done)
-			return pipelines.update_stage(ctx.context, ctx.pipeline, ctx.stage, "cancel", function(_, err)
+			local stage = ctx.stage
+			---@cast stage AzurePipelineStage
+			return pipelines.update_stage(ctx.context, ctx.pipeline, stage, "cancel", function(_, err)
 				done(err == nil, err)
 			end)
 		end,

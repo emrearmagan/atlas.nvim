@@ -115,7 +115,7 @@ describe("core.git.checkout", function()
 					github = { hostname = "github.com" },
 					gitlab = { base_url = "https://gitlab.com", token = "token" },
 					bitbucket = { user = "user", token = "token" },
-					azure = { base_url = "https://dev.azure.com/acme" },
+					azure = { base_url = "https://dev.azure.com/acme", token = "token" },
 				},
 				pulls = { repo_config = {} },
 			}

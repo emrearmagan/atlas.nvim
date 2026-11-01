@@ -72,7 +72,7 @@ describe("Azure work items", function()
 		end
 		local result
 		require("atlas.issues.providers.azure.api.issues").list_issues(
-			{ project = "Platform", search = query },
+			{ name = "Platform", project = "Platform", search = query },
 			{ cursor = "1", pagelen = 2 },
 			function(page, err)
 				assert.is_nil(err)
@@ -110,7 +110,7 @@ describe("Azure work items", function()
 		end
 		local result
 		require("atlas.issues.providers.azure.api.comments").fetch_conversation(
-			{ id = 42, key = "42", project = "Platform" },
+			{ id = 42, key = "42", title = "Title", project = "Platform" },
 			{},
 			function(conversation, err)
 				assert.is_nil(err)
@@ -126,11 +126,12 @@ describe("Azure work items", function()
 
 	it("only switches the description format when a Markdown description is written", function()
 		local api = require("atlas.issues.providers.azure.api.issues")
-		api.update({ key = "42" }, { ["System.Title"] = "New title" }, function(ok)
+		local issue = { key = "42", title = "Title" }
+		api.update(issue, { ["System.Title"] = "New title" }, function(ok)
 			assert.is_true(ok)
 		end, { format = "markdown" })
 		assert.same({ { op = "add", path = "/fields/System.Title", value = "New title" } }, calls[1].payload)
-		api.update({ key = "42" }, { ["System.Description"] = "Body" }, function(ok)
+		api.update(issue, { ["System.Description"] = "Body" }, function(ok)
 			assert.is_true(ok)
 		end, { format = "markdown" })
 		assert.same({

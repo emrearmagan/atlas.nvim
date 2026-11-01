@@ -25,8 +25,7 @@ describe("core.http", function()
 			},
 			json = {
 				decode = function(value)
-					assert.is_not_nil(decoded[value], "Unexpected JSON: " .. value)
-					return decoded[value]
+					return assert(decoded[value], "Unexpected JSON: " .. value)
 				end,
 			},
 		})

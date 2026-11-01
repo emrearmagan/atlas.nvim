@@ -1,3 +1,6 @@
+---@class AzurePipeline : PullsPipeline
+---@field provider_state string
+
 ---@class AzurePipelineStage : PullsPipelineStage
 ---@field ref_name string|nil
 
@@ -42,7 +45,7 @@ local function builds_endpoint(pr)
 end
 
 ---@param raw table
----@return PullsPipeline
+---@return AzurePipeline
 local function to_pipeline(raw)
 	return {
 		id = tostring(raw.id),
@@ -234,6 +237,7 @@ function M.fetch(context, opts, on_done)
 		on_done(nil, "Azure pipelines require a pull request")
 		return nil
 	end
+	---@cast pr PullRequest
 	local scope = request_scope.new()
 	local selected = opts and opts.pipeline
 	if selected then
@@ -287,8 +291,10 @@ end
 ---@param on_done fun(job: PullsPipelineJob|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job(context, pipeline, job, on_done)
-	return fetch_timeline(context.target, pipeline, { force_refresh = true }, function(updated, err)
-		if err then
+	local pr = context.target
+	---@cast pr PullRequest
+	return fetch_timeline(pr, pipeline, { force_refresh = true }, function(updated, err)
+		if not updated then
 			on_done(nil, err)
 			return
 		end
@@ -311,6 +317,7 @@ end
 ---@return AtlasRequestScope
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local pr = context.target
+	---@cast pr PullRequest
 	---@cast job AzurePipelineJob
 	local starts = {}
 	for _, log_id in ipairs(job.log_ids) do
@@ -344,6 +351,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.cancel(context, pipeline, on_done)
 	local pr = context.target
+	---@cast pr PullRequest
 	return service.request(
 		"PATCH",
 		builds_endpoint(pr) .. "/" .. pipeline.id,
@@ -368,6 +376,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.update_stage(context, pipeline, stage, action, on_done)
 	local pr = context.target
+	---@cast pr PullRequest
 	local endpoint = builds_endpoint(pr) .. "/" .. pipeline.id .. "/stages/" .. service.url_encode(stage.ref_name)
 	return service.request("PATCH", endpoint, {
 		state = action,

@@ -40,12 +40,15 @@ return {
 	complete = function(context, query, done)
 		local pr = context.pr
 		local issue = context.issue
-		if not pr and not issue then
+		local key
+		if issue then
+			key = "completion:users:issue:" .. issue.key
+		elseif pr then
+			key = "completion:users:pr:" .. pr.repo_full_name .. ":" .. pr.id
+		else
 			done({}, nil)
 			return nil
 		end
-		local key = "completion:users:"
-			.. (issue and ("issue:" .. issue.key) or ("pr:" .. pr.repo_full_name .. ":" .. pr.id))
 		local cached, found = client.get_cache(key)
 		if found then
 			done(completion_items(cached, query), nil)
@@ -81,7 +84,7 @@ return {
 					finish(authors)
 				end)
 			end)
-		else
+		elseif pr then
 			local project, repository = pr.repo_full_name:match("^([^/]+)/(.+)$")
 			if not project then
 				done(nil, "Azure pull request completion requires a project and repository")

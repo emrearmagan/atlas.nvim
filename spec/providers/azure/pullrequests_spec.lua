@@ -100,7 +100,7 @@ describe("Azure pull request API logic", function()
 			body = "Description",
 			base = "release",
 			draft = false,
-			reviewers = { { provider_id = "keep" }, { provider_id = "add" } },
+			reviewers = { { label = "Keep", provider_id = "keep" }, { label = "Add", provider_id = "add" } },
 		}, function(ok, err)
 			assert.is_nil(err)
 			updated = ok

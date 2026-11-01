@@ -152,11 +152,10 @@ function M.configured(domain)
 	return result
 end
 
-add(azure)
-
 add(jira)
 add(github)
 add(bitbucket)
 add(gitlab)
+add(azure)
 
 return M

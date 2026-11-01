@@ -247,7 +247,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_description(pr, opts, on_done)
 	return fetch_pullrequest(pr, opts, function(result, err)
-		if err then
+		if err or not result then
 			on_done(nil, err)
 			return
 		end

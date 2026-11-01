@@ -114,7 +114,7 @@ describe("Azure review mapping", function()
 		local result
 		require("atlas.pulls.providers.azure.api.reviews").fetch_threads(pr, {}, function(data, err)
 			assert.is_nil(err)
-			result = data.comments
+			result = assert(data).comments
 		end)
 		assert.equal(6, #result)
 		assert.equal(hunk, result[1].hunk)

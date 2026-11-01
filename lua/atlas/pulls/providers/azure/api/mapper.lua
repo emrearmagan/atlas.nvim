@@ -53,11 +53,12 @@ end
 ---@param raw_list table[]|nil
 ---@return PullsReviewer[]|nil
 function M.to_reviewers(raw_list)
-	if json.nilify(raw_list) == nil then
+	local list = json.nilify(raw_list)
+	if list == nil then
 		return nil
 	end
 	local reviewers = {}
-	for _, raw in ipairs(raw_list) do
+	for _, raw in ipairs(list) do
 		local author = to_author(raw)
 		table.insert(reviewers, {
 			name = author.name,

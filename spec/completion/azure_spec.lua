@@ -135,7 +135,7 @@ describe("Azure mention completion", function()
 			items
 		)
 
-		issues.complete({ issue = { key = "42" } }, "", function() end)
+		issues.complete({ provider = "azure", issue = { key = "42" } }, "", function() end)
 		assert.equal("/_apis/wit/wiql?$top=50", requests[2].endpoint)
 		assert.is_nil(requests[2].payload.query:find("TeamProject", 1, true))
 	end)
@@ -151,10 +151,10 @@ describe("Azure mention completion", function()
 		assert.same({ "draft_pr !7", "merged_pr !8" }, { items[1].label, items[2].label })
 		assert.equal("!7", items[1].insert_text)
 
-		pulls.complete({ project = "Team" }, "", function() end)
+		pulls.complete({ provider = "azure", project = "Team" }, "", function() end)
 		assert.truthy(requests[2].endpoint:find("^/Team/_apis/git/pullrequests%?"))
 
-		pulls.complete({ issue = { key = "42" } }, "", function(result, err)
+		pulls.complete({ provider = "azure", issue = { key = "42" } }, "", function(result, err)
 			assert.is_nil(result)
 			assert.equal("Azure pull request completion requires a project", err)
 		end)

@@ -7,7 +7,7 @@ describe("Azure provider logic", function()
 
 	before_each(function()
 		original_options = config.options
-		config.options = { providers = { azure = {} } }
+		config.options = { providers = { azure = { base_url = "https://dev.azure.com/acme", token = "token" } } }
 	end)
 
 	after_each(function()
