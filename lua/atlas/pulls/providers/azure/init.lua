@@ -22,6 +22,7 @@ local checks_api = require("atlas.pulls.providers.azure.api.checks")
 local changes_api = require("atlas.pulls.providers.azure.api.changes")
 local activity_api = require("atlas.pulls.providers.azure.api.activity")
 local comments_api = require("atlas.pulls.providers.azure.api.comments")
+local links_api = require("atlas.providers.azure.links")
 
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
@@ -100,7 +101,7 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			-- fetch_links = nil,
+			fetch_links = links_api.fetch_pullrequest,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,

@@ -13,6 +13,7 @@ local config = require("atlas.config")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local comments_api = require("atlas.issues.providers.azure.api.comments")
 local history_api = require("atlas.issues.providers.azure.api.history")
+local links_api = require("atlas.providers.azure.links")
 
 ---@return AtlasAzureIssuesViewConfig[]
 local function views()
@@ -38,7 +39,7 @@ return {
 			fetch_issues = issues_api.list_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
-			-- fetch_links = nil,
+			fetch_links = links_api.fetch_issue,
 		},
 		comments = {
 			fetch_activity = history_api.fetch,
