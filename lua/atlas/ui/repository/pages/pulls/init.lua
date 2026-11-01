@@ -3,6 +3,7 @@ local diff = require("atlas.pulls.diff")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
+local azure_query = require("atlas.providers.azure.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local github_search = require("atlas.providers.github.completion.search")
 local gitlab_query = require("atlas.providers.gitlab.query")
@@ -168,6 +169,21 @@ local function edit_query(state)
 		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)
 			view.search = query
 			view._states = nil
+			reload(state)
+		end)
+	elseif provider.id == "azure" then
+		---@cast view AtlasAzurePullsViewConfig
+		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
+			if input == nil or vim.trim(input) == "" then
+				return
+			end
+
+			local ok, err = azure_query.apply(view, input)
+			if not ok then
+				notify.warn(err)
+				return
+			end
+
 			reload(state)
 		end)
 	end

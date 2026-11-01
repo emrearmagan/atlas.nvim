@@ -84,6 +84,7 @@ function M.resolve(value, parsed)
 	end
 
 	target.page = ({
+		pullrequests = "pulls",
 		branches = "branches",
 		tags = "tags",
 	})[(tail or ""):match("^/([^/]+)") or ""]

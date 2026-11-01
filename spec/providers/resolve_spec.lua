@@ -355,6 +355,7 @@ describe("providers.resolve", function()
 
 		it("resolves repository pages", function()
 			local base = "https://dev.azure.com/acme/platform/_git/api"
+			assert.are.equal("pulls", assert(providers.resolve(base .. "/pullrequests")).page)
 			assert.are.equal("branches", assert(providers.resolve(base .. "/branches")).page)
 			assert.are.equal("tags", assert(providers.resolve(base .. "/tags")).page)
 			assert.is_nil(providers.resolve(base .. "/commits"))

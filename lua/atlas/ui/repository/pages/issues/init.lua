@@ -99,6 +99,14 @@ local function repository_view(state)
 			order_by = "created_at",
 			sort = "desc",
 		}
+	elseif state.provider.id == "azure" then
+		return {
+			name = "Issues",
+			layout = "compact",
+			project = state.repo.full_name:match("^([^/]+)/"),
+			search = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project"
+				.. " ORDER BY [System.CreatedDate] DESC",
+		}
 	end
 end
 
@@ -183,6 +191,16 @@ local function edit_query(state)
 
 			apply()
 		end)
+	elseif state.provider.id == "azure" then
+		---@cast view AtlasAzureIssuesViewConfig
+		vim.ui.input({ prompt = "WIQL: ", default = state.query }, function(input)
+			if input == nil or vim.trim(input) == "" then
+				return
+			end
+
+			view.search = input
+			apply()
+		end)
 	end
 end
 
@@ -208,6 +226,9 @@ local function toggle_state(state)
 	elseif state.provider.id == "gitlab" then
 		---@cast view AtlasGitLabIssuesViewConfig
 		view.state = view.state == "closed" and "opened" or "closed"
+	else
+		notify.info("Filter work item states in the WIQL query")
+		return
 	end
 
 	state.page, state.cursors = 1, {}
