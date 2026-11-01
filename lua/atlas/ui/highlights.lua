@@ -1,8 +1,8 @@
 local M = {}
 
--- Atlas follows the active colorscheme. Most groups link to standard Neovim
--- groups; the rest read the colors of those groups so light and dark
--- backgrounds stay readable. Provider brand hues are the only fixed colors.
+-- Atlas follows the active colorscheme. Groups read the colors of standard
+-- Neovim groups so light and dark backgrounds stay readable, without taking
+-- over attributes like italic. Provider brand hues are the only fixed colors.
 local BRAND = {
 	gitlab = "#fc6d26",
 	bitbucket = "#2684ff",
@@ -194,28 +194,16 @@ local function footer_background()
 	return background("StatusLine") or line_background()
 end
 
----Groups that map one to one onto a standard Neovim highlight.
+---Groups that map one to one onto a standard Neovim highlight. Only UI
+---surfaces link; text colors copy the foreground alone so theme attributes
+---like italic do not leak into Atlas.
 ---@return table<string, string>
 local function links()
 	return {
 		-- Shared UI
 		AtlasTabInactive = "CursorLine",
 
-		-- Text
-		AtlasTextPositive = "DiagnosticOk",
-
-		-- Issues and pull requests
-		AtlasIssueOpen = "DiagnosticOk",
-		AtlasPROpen = "DiagnosticOk",
-		AtlasPRMerged = "DiagnosticInfo",
-		AtlasPRDeclined = "DiagnosticError",
-		AtlasPRDraft = "DiagnosticWarn",
-
 		-- Logs
-		AtlasLogInfo = "DiagnosticInfo",
-		AtlasLogWarn = "DiagnosticWarn",
-		AtlasLogError = "DiagnosticError",
-		AtlasLogCommand = "Function",
 		AtlasLogDebug = "AtlasTextMuted",
 
 		-- Jira
@@ -268,6 +256,7 @@ local function styles()
 		AtlasRelatedChip = { bg = line, fg = muted, bold = true },
 
 		-- Issues and Jira fields
+		AtlasIssueOpen = { fg = ok },
 		AtlasIssueClosed = { fg = warn_icon, bold = true },
 		AtlasIssueOpenChip = chip_style(ok),
 		AtlasIssueClosedChip = chip_style(warn_icon),
@@ -276,12 +265,23 @@ local function styles()
 		AtlasJiraChipDueDate = { bg = line, fg = muted, bold = true },
 
 		-- Pull requests
+		AtlasPROpen = { fg = ok },
+		AtlasPRMerged = { fg = info },
+		AtlasPRDeclined = { fg = err },
+		AtlasPRDraft = { fg = warn },
 		AtlasPROpenChip = chip_style(ok),
 		AtlasPRMergedChip = chip_style(info),
 		AtlasPRDeclinedChip = chip_style(err),
 		AtlasPRDraftChip = chip_style(warn),
 
+		-- Text
+		AtlasTextPositive = { fg = ok },
+
 		-- Logs
+		AtlasLogInfo = { fg = info },
+		AtlasLogWarn = { fg = warn },
+		AtlasLogError = { fg = err },
+		AtlasLogCommand = { fg = accent },
 		AtlasLogErrorLine = error_line,
 		AtlasLogGroup = { fg = text, bg = line, bold = true },
 
@@ -411,7 +411,7 @@ function M.setup()
 		set_default(name, opts)
 	end
 	for index, group in ipairs(dynamic_groups) do
-		set_default(string.format("AtlasDynColor%02d", index), { link = group })
+		set_default(string.format("AtlasDynColor%02d", index), { fg = foreground(group) })
 		set_default(string.format("AtlasDynBgColor%02d", index), chip_style(foreground(group)))
 	end
 	require("atlas.formats.markdown.highlights").setup()

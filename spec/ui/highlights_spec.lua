@@ -48,10 +48,18 @@ describe("ui.highlights", function()
 	it("links semantic groups to standard highlights", function()
 		highlights.setup()
 
-		assert.are.same({ link = "DiagnosticOk", default = true }, set.AtlasTextPositive)
-		assert.are.same({ link = "DiagnosticInfo", default = true }, set.AtlasPRMerged)
+		assert.are.same({ link = "CursorLine", default = true }, set.AtlasTabInactive)
 		assert.are.same({ link = "AtlasTextMuted", default = true }, set.AtlasLogDebug)
 		assert.are.same({ link = "AtlasCodeBackground", default = true }, set.AtlasMarkdownInlineCode)
+	end)
+
+	it("takes only the foreground for status colors", function()
+		theme.DiagnosticInfo = { fg = 0x0ea5e9, italic = true }
+		highlights.setup()
+
+		assert.are.same({ fg = "#40a02b", default = true }, set.AtlasTextPositive)
+		assert.are.same({ fg = "#0ea5e9", default = true }, set.AtlasPRMerged)
+		assert.are.same({ fg = "#0ea5e9", default = true }, set.AtlasLogInfo)
 	end)
 
 	it("derives the remaining groups from the colorscheme", function()
@@ -69,7 +77,7 @@ describe("ui.highlights", function()
 	it("builds the dynamic palette from standard highlights", function()
 		highlights.setup()
 
-		assert.are.same({ link = "Function", default = true }, set.AtlasDynColor01)
+		assert.are.same({ fg = "#1e66f5", default = true }, set.AtlasDynColor01)
 		assert.are.same({ bg = "#1e66f5", fg = "#ffffff", bold = true, default = true }, set.AtlasDynBgColor01)
 	end)
 
