@@ -23,7 +23,6 @@ vim.api.nvim_create_autocmd("User", {
 function M.setup(opts)
 	config.setup(opts)
 	highlights.setup()
-	require("atlas.ui.window_options").setup()
 
 	vim.api.nvim_create_autocmd("ColorScheme", {
 		group = vim.api.nvim_create_augroup("AtlasHighlights", { clear = true }),
