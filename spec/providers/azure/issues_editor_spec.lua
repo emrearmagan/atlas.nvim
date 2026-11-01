@@ -44,7 +44,13 @@ describe("Azure work item updates", function()
 				done({ { name = "Task" } })
 			end,
 			fetch_issue = function(_, _, done)
-				done({ title = "Title", description = "<p>Existing body</p>", description_format = "html" })
+				done({
+					title = "Title",
+					description = "<p>Existing body</p>",
+					description_format = "html",
+					assignees = {},
+					labels = {},
+				})
 			end,
 			update = function(_, fields, done, opts)
 				saved = { fields = fields, format = opts.format }

@@ -4,6 +4,7 @@ local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local state = require("atlas.pulls.state")
 local query = require("atlas.providers.azure.query")
+local azure_search = require("atlas.providers.azure.completion.search")
 local repositories = require("atlas.providers.azure.repositories")
 local pullrequests = require("atlas.pulls.providers.azure.api.pullrequests")
 
@@ -124,20 +125,15 @@ function M.open_view(context, done)
 			repository = context.pr and context.pr.repo.repo_name,
 			scope = "all",
 		}
-	vim.ui.input({ prompt = "Search: ", default = query.query(view) }, function(input)
-		if input == nil or vim.trim(input) == "" then
-			done(nil, nil)
-			return
-		end
+	azure_search.edit("pulls", query.query(view), function(input)
 		local filters, err = query.parse(input)
 		if not filters then
 			notify.warn(err)
-			done(nil, err)
 			return
 		end
 		require("atlas").open("pulls", "azure", { initial_view = filters })
-		done(nil, nil)
 	end)
+	done(nil, nil)
 end
 
 ---@param _ AtlasPullActionContext
@@ -149,20 +145,15 @@ function M.edit(_, done)
 		return
 	end
 	---@cast view AtlasAzurePullsViewConfig
-	vim.ui.input({ prompt = "Search: ", default = query.query(view) }, function(input)
-		if input == nil or vim.trim(input) == "" then
-			done(nil, nil)
-			return
-		end
+	azure_search.edit("pulls", query.query(view), function(input)
 		local ok, err = query.apply(view, input)
 		if not ok then
 			notify.warn(err)
-			done(nil, err)
 			return
 		end
 		require("atlas.pulls.ui.dashboard.controller").refresh_view()
-		done(nil, nil)
 	end)
+	done(nil, nil)
 end
 
 ---@param context AtlasPullActionContext

@@ -4,6 +4,7 @@ local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
 local azure_query = require("atlas.providers.azure.query")
+local azure_search = require("atlas.providers.azure.completion.search")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local github_search = require("atlas.providers.github.completion.search")
 local gitlab_query = require("atlas.providers.gitlab.query")
@@ -173,11 +174,7 @@ local function edit_query(state)
 		end)
 	elseif provider.id == "azure" then
 		---@cast view AtlasAzurePullsViewConfig
-		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
-			if input == nil or vim.trim(input) == "" then
-				return
-			end
-
+		azure_search.edit("pulls", state.query, function(input)
 			local ok, err = azure_query.apply(view, input)
 			if not ok then
 				notify.warn(err)

@@ -2,6 +2,7 @@ local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local detail = require("atlas.issues.ui.detail")
 local providers = require("atlas.providers")
+local azure_search = require("atlas.providers.azure.completion.search")
 local github_search = require("atlas.providers.github.completion.search")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local gitlab_search = require("atlas.providers.gitlab.completion.search")
@@ -193,11 +194,7 @@ local function edit_query(state)
 		end)
 	elseif state.provider.id == "azure" then
 		---@cast view AtlasAzureIssuesViewConfig
-		vim.ui.input({ prompt = "WIQL: ", default = state.query }, function(input)
-			if input == nil or vim.trim(input) == "" then
-				return
-			end
-
+		azure_search.edit("wiql", state.query, function(input)
 			view.search = input
 			apply()
 		end)

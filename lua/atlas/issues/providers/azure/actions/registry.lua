@@ -1,4 +1,5 @@
 local actions = require("atlas.issues.actions")
+local azure_search = require("atlas.providers.azure.completion.search")
 local icons = require("atlas.ui.shared.icons")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local notify = require("atlas.core.notify")
@@ -236,17 +237,13 @@ register({
 	icon = icons.get("search", "actions"),
 	run = function(context, done)
 		with_project(context, function(project)
-			vim.ui.input({
-				prompt = "WIQL: ",
-				default = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project",
-			}, function(input)
-				if input and vim.trim(input) ~= "" then
-					require("atlas").open("issues", "azure", {
-						initial_view = { name = "Search", layout = "plain", project = project, search = input },
-					})
-				end
-				done(nil, nil)
+			local default = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project"
+			azure_search.edit("wiql", default, function(input)
+				require("atlas").open("issues", "azure", {
+					initial_view = { name = "Search", layout = "plain", project = project, search = input },
+				})
 			end)
+			done(nil, nil)
 		end, done)
 	end,
 })
@@ -257,15 +254,14 @@ register({
 	icon = icons.get("search", "actions"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
-		local query = vim.trim(state.query:gsub("[\r\n\t]+[ \t]*", " "))
-		vim.ui.input({ prompt = "WIQL: ", default = query }, function(input)
+		azure_search.edit("wiql", state.query, function(input)
 			local view = state.search_view()
-			if view and input and vim.trim(input) ~= "" then
+			if view then
 				view.search = input
 				require("atlas.issues.ui.dashboard.controller").refresh_view()
 			end
-			done(nil, nil)
 		end)
+		done(nil, nil)
 	end,
 })
 

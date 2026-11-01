@@ -27,7 +27,7 @@ local function views()
 				name = "Assigned",
 				key = "1",
 				search = "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me"
-					.. " ORDER BY [System.ChangedDate] DESC",
+					.. " AND [Microsoft.VSTS.Common.ClosedDate] = '' ORDER BY [System.ChangedDate] DESC",
 			},
 		}
 	end

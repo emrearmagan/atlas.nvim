@@ -7,6 +7,7 @@ local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local requests = require("atlas.core.requests")
+local users = require("atlas.providers.azure.users")
 
 ---@param item_types table[]
 ---@return table|nil
@@ -30,6 +31,16 @@ local function open_editor(project, item_types, issue, details, on_done)
 	local initial_body = details and details.description or ""
 	local item_type = issue and issue.type or default_type(item_types)
 	local initial_type_name = item_type and item_type.name
+	local assignee = details and details.assignees[1]
+	local initial_assignee = assignee and assignee.username
+	local tags = table.concat(
+		vim.tbl_map(function(label)
+			return label.name
+		end, details and details.labels or {}),
+		"; "
+	)
+	local initial_tags = tags
+	local loading_members = false
 	local submitting = false
 
 	local function is_modified(editor)
@@ -37,6 +48,8 @@ local function open_editor(project, item_types, issue, details, on_done)
 		return content.title ~= initial_title
 			or content.body ~= initial_body
 			or (item_type and item_type.name) ~= initial_type_name
+			or (assignee and assignee.username) ~= initial_assignee
+			or tags ~= initial_tags
 	end
 
 	return form.open({
@@ -54,6 +67,19 @@ local function open_editor(project, item_types, issue, details, on_done)
 				{
 					{ key = "Project:", value = project },
 					{ key = "Type:", value = icon .. " " .. name, hl = hl },
+				},
+				{
+					{
+						key = "Assignee:",
+						value = icons.get("user") .. " " .. (assignee and assignee.name or "Unassigned"),
+						hl = assignee and "Normal" or "AtlasTextMuted",
+						loading = loading_members,
+					},
+					{
+						key = "Tags:",
+						value = tags ~= "" and tags or "None",
+						hl = tags ~= "" and "Normal" or "AtlasTextMuted",
+					},
 				},
 			}
 		end,
@@ -79,6 +105,73 @@ local function open_editor(project, item_types, issue, details, on_done)
 							end
 						end,
 					})
+				end,
+			},
+			{
+				key = keymaps.resolve("editor.assignees"),
+				desc = "assignee",
+				action = function(editor)
+					if submitting or loading_members then
+						return
+					end
+					loading_members = true
+					editor.statusline:notify("loading", "Loading members...")
+					form.render_meta(editor)
+
+					users.fetch_project_members(project, function(members, err)
+						loading_members = false
+						if editor.closed or submitting then
+							return
+						end
+						form.render_meta(editor)
+						if err then
+							editor.statusline:notify("error", err)
+							return
+						end
+						editor.statusline:clear_notice()
+
+						local items = { { name = "Unassigned", username = "" } }
+						local seen = {}
+						for _, member in ipairs(members or {}) do
+							local user = users.to_user(member)
+							if user and user.username and not seen[user.username] then
+								seen[user.username] = true
+								table.insert(items, user)
+							end
+						end
+
+						picker.select({
+							title = "Assignee",
+							items = items,
+							format_item = function(user)
+								if user.username == "" then
+									return user.name
+								end
+								return string.format("%s %s (%s)", icons.get("user"), user.name, user.username)
+							end,
+							on_select = function(user)
+								if user and not editor.closed and not submitting then
+									assignee = user.username ~= "" and user or nil
+									form.render_meta(editor)
+								end
+							end,
+						})
+					end)
+				end,
+			},
+			{
+				key = keymaps.resolve("editor.labels"),
+				desc = "tags",
+				action = function(editor)
+					if submitting then
+						return
+					end
+					vim.ui.input({ prompt = "Tags (separated by ;): ", default = tags }, function(input)
+						if input and not editor.closed and not submitting then
+							tags = vim.trim(input)
+							form.render_meta(editor)
+						end
+					end)
 				end,
 			},
 		},
@@ -127,6 +220,12 @@ local function open_editor(project, item_types, issue, details, on_done)
 			end
 			if issue and item_type.name ~= initial_type_name then
 				fields["System.WorkItemType"] = item_type.name
+			end
+			if (assignee and assignee.username) ~= initial_assignee then
+				fields["System.AssignedTo"] = assignee and assignee.username or ""
+			end
+			if tags ~= initial_tags then
+				fields["System.Tags"] = tags
 			end
 			local function done(saved_issue, err)
 				if not saved_issue then
