@@ -164,11 +164,19 @@ local function from_hsl(h, s, l)
 	)
 end
 
+---A subtle background used for code blocks and secondary rows.
+---@return string|nil
+local function line_background()
+	return background("Pmenu") or background("CursorLine") or background("NormalFloat")
+end
+
 ---A label chip that stays readable on the current background.
 ---@param color string
 ---@return table
 local function label_style(color)
-	local page = background("Normal")
+	-- Transparent themes have no Normal background, so tint against the line
+	-- background instead of falling back to solid chips.
+	local page = background("Normal") or line_background()
 	if vim.o.background == "light" or page == nil then
 		return chip_style(color)
 	end
@@ -181,12 +189,6 @@ local function label_style(color)
 		bg = blend(page, color, 0.18),
 		bold = true,
 	}
-end
-
----A subtle background used for code blocks and secondary rows.
----@return string|nil
-local function line_background()
-	return background("Pmenu") or background("CursorLine") or background("NormalFloat")
 end
 
 ---@return string|nil

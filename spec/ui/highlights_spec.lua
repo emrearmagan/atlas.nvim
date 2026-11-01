@@ -100,6 +100,19 @@ describe("ui.highlights", function()
 		assert.are.equal("AtlasTextMuted", highlights.label("not-a-color"))
 	end)
 
+	it("tints labels against the line background with a transparent theme", function()
+		local original = vim.o.background
+		vim.o.background = "dark"
+		theme.Normal = { fg = 0xcdd6f4 }
+		theme.Pmenu = { bg = 0x313244 }
+		highlights.setup()
+		highlights.label("#40a02b")
+
+		assert.is_not_nil(set.AtlasLabel_40a02b.fg)
+		assert.are_not.equal("#40a02b", set.AtlasLabel_40a02b.bg)
+		vim.o.background = original
+	end)
+
 	it("maps identifiers to a stable palette", function()
 		assert.are.equal(highlights.dynamic_for("alice"), highlights.dynamic_for("alice"))
 		assert.is_truthy(highlights.dynamic_for("alice"):match("^AtlasDynColor%d%d$"))
