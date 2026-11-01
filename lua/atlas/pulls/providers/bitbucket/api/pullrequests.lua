@@ -497,10 +497,15 @@ function M.create_pr(opts, on_done)
 		return nil
 	end
 
+	local source = { branch = { name = opts.head } }
+	if opts.head_repo_slug and opts.head_repo_slug ~= "" and opts.head_repo_slug ~= slug then
+		source.repository = { full_name = opts.head_repo_slug }
+	end
+
 	local payload = {
 		title = opts.title,
 		description = opts.body or "",
-		source = { branch = { name = opts.head } },
+		source = source,
 		destination = { branch = { name = opts.base } },
 		close_source_branch = config.options.pulls.default_delete_source_branch == true,
 		draft = opts.draft == true,
