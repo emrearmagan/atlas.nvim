@@ -194,7 +194,8 @@ local function render_reviewers(width, lines, spans)
 		content = decision_content(decisions, DECISION_GROUPS, width)
 	end
 
-	if #others > 0 then
+	local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
+	if #other_content.lines > 0 then
 		table.insert(content.lines, "")
 		local label = "Other decisions"
 		table.insert(content.lines, label)
@@ -205,7 +206,6 @@ local function render_reviewers(width, lines, spans)
 			hl_group = "AtlasColumnHeader",
 		})
 
-		local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
 		utils.append_block(
 			content.lines,
 			content.spans,

@@ -99,6 +99,14 @@ local function repository_view(state)
 			order_by = "created_at",
 			sort = "desc",
 		}
+	elseif state.provider.id == "gitea" or state.provider.id == "forgejo" then
+		return {
+			name = "Issues",
+			layout = "compact",
+			repo = state.repo.full_name,
+			scope = "all",
+			state = "open",
+		}
 	end
 end
 
@@ -183,6 +191,19 @@ local function edit_query(state)
 
 			apply()
 		end)
+	elseif state.provider.id == "gitea" or state.provider.id == "forgejo" then
+		---@cast view AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig
+		local service = state.provider.id == "gitea" and require("atlas.providers.forge.gitea.api")
+			or require("atlas.providers.forge.forgejo.api")
+		require("atlas.providers.forge.completion.search").edit(service, "issues", state.query .. " ", function(query)
+			local ok, err = require("atlas.issues.providers.forge.query").apply(view, query)
+			if not ok then
+				notify.warn(err)
+				return
+			end
+
+			apply()
+		end)
 	end
 end
 
@@ -208,6 +229,9 @@ local function toggle_state(state)
 	elseif state.provider.id == "gitlab" then
 		---@cast view AtlasGitLabIssuesViewConfig
 		view.state = view.state == "closed" and "opened" or "closed"
+	elseif state.provider.id == "gitea" or state.provider.id == "forgejo" then
+		---@cast view AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig
+		view.state = view.state == "closed" and "open" or "closed"
 	end
 
 	state.page, state.cursors = 1, {}

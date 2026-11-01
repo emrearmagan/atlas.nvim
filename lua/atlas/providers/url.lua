@@ -49,7 +49,7 @@ function M.configured_base(provider)
 	if type(base_url) ~= "string" then
 		return nil
 	end
-	return M.parse(base_url)
+	return M.parse(vim.trim(base_url))
 end
 
 ---@param parsed AtlasParsedUrl

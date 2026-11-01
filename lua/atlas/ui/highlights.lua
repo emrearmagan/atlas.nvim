@@ -6,6 +6,8 @@ local M = {}
 local BRAND = {
 	gitlab = "#fc6d26",
 	bitbucket = "#2684ff",
+	gitea = "#609926",
+	forgejo = "#fb923c",
 	jira = "#2684ff",
 }
 
@@ -251,6 +253,8 @@ local function styles()
 		AtlasGitHubTheme = { bg = line, fg = text, bold = true },
 		AtlasGitLabTheme = chip_style(BRAND.gitlab),
 		AtlasBitbucketTheme = chip_style(BRAND.bitbucket),
+		AtlasGiteaTheme = chip_style(BRAND.gitea),
+		AtlasForgejoTheme = chip_style(BRAND.forgejo),
 		AtlasJiraTheme = chip_style(BRAND.jira),
 
 		-- Chips

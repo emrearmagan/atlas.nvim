@@ -568,7 +568,8 @@ M.open_actions = {
 		end
 
 		if review.pr.state == "open" or review.pr.state == "draft" then
-			add(review.data.review.pending and "submit_review" or "start_review")
+			local can_start = not review.data.review.pending and review.provider.capabilities.reviews.start_review
+			add(can_start and "start_review" or "submit_review")
 		end
 		add("discard_review")
 		add("approve")

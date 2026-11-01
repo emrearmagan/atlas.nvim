@@ -5,12 +5,14 @@
 
 # atlas.nvim
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Gitea, Forgejo, and Jira without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
   <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
   <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
+  <img alt="Gitea" src="https://img.shields.io/badge/Gitea-609926?style=flat-square&logo=gitea&logoColor=white">
+  <img alt="Forgejo" src="https://img.shields.io/badge/Forgejo-FB923C?style=flat-square&logo=forgejo&logoColor=white">
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
@@ -76,6 +78,7 @@ require("atlas").setup({})
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab 17.7+ (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
+- Gitea / Forgejo: REST API v1 and an API token
 
 </details>
 
@@ -283,7 +286,7 @@ Use `:Atlas create pr` to create a pull request from the current branch, or `:At
 
 <img alt="bookmarks" src="https://github.com/user-attachments/assets/c51d1fbd-29b3-41de-a398-122caf867447" />
 
-Save searches as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
+Save provider searches or Jira JQL as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
 
 ### Other features
 
@@ -334,6 +337,20 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
       -- https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
       token = vim.env.GITLAB_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
+    },
+
+    ---@type AtlasGiteaConfig
+    gitea = {
+      base_url = "https://gitea.example.com",
+      token = vim.env.GITEA_TOKEN,
+      cache_ttl = 300,
+    },
+
+    ---@type AtlasForgejoConfig
+    forgejo = {
+      base_url = "https://forgejo.example.com",
+      token = vim.env.FORGEJO_TOKEN,
+      cache_ttl = 300,
     },
 
     ---@type AtlasBitbucketConfig
@@ -391,7 +408,7 @@ vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
 
 ## Pulls
 
-Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Pulls Configuration
@@ -634,9 +651,75 @@ pulls = {
 
 </details>
 
+<a id="gitea"></a>
+
+<details>
+<summary><strong>Gitea</strong></summary>
+
+```lua
+pulls = {
+  ---@type AtlasGiteaPullsConfig
+  gitea = {
+    draft_prefix = "WIP:",
+    views = {
+      { name = "Review requested", key = "1", scope = "review_requested" },
+      {
+        name = "Repository",
+        key = "2",
+        repo = "owner/repository",
+        extra_params = { sort = "recentupdate" },
+      },
+      { name = "Current", key = "3", current_repo = true },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Authentication"] = { search = "authentication" },
+      },
+    },
+  },
+},
+```
+
+</details>
+
+<a id="forgejo"></a>
+
+<details>
+<summary><strong>Forgejo</strong></summary>
+
+```lua
+pulls = {
+  ---@type AtlasForgejoPullsConfig
+  forgejo = {
+    draft_prefix = "WIP:",
+    views = {
+      { name = "Review requested", key = "1", scope = "review_requested" },
+      {
+        name = "Repository",
+        key = "2",
+        repo = "owner/repository",
+        extra_params = { sort = "recentupdate" },
+      },
+      { name = "Current", key = "3", current_repo = true },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Authentication"] = { search = "authentication" },
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Issues
 
-Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Issue Configuration
@@ -862,6 +945,74 @@ issues = {
 ```
 
 <img alt="gitlab-issue" src="https://github.com/user-attachments/assets/65fedb30-dee0-442d-afa5-46a42aeae425" />
+
+</details>
+
+<a id="gitea-issues"></a>
+
+<details>
+<summary><strong>Gitea Issues</strong></summary>
+
+```lua
+issues = {
+  ---@type AtlasGiteaIssuesConfig
+  gitea = {
+    views = {
+      {
+        name = "Assigned",
+        key = "1",
+        scope = "assigned",
+        state = "open",
+        extra_params = { milestones = "v1" },
+      },
+      { name = "Current", key = "2", current_repo = true, state = "open" },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+      },
+    },
+  },
+},
+```
+
+`extra_params` passes additional query parameters to Gitea's issue endpoint.
+
+</details>
+
+<a id="forgejo-issues"></a>
+
+<details>
+<summary><strong>Forgejo Issues</strong></summary>
+
+```lua
+issues = {
+  ---@type AtlasForgejoIssuesConfig
+  forgejo = {
+    views = {
+      {
+        name = "Assigned",
+        key = "1",
+        scope = "assigned",
+        state = "open",
+        extra_params = { milestones = "v1" },
+      },
+      { name = "Current", key = "2", current_repo = true, state = "open" },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+      },
+    },
+  },
+},
+```
+
+`extra_params` passes additional query parameters to Forgejo's issue endpoint.
 
 </details>
 

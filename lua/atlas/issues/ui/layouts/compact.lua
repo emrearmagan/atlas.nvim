@@ -78,6 +78,9 @@ M.github = {
 	end,
 }
 
+M.gitea = M.github
+M.forgejo = M.github
+
 M.gitlab = {
 	columns = {
 		{ key = "name", name = "Issue", min_width = 42 },
