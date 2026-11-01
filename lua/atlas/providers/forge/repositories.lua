@@ -1,3 +1,5 @@
+local json = require("atlas.core.json")
+
 local factory = {}
 
 ---@class ForgeRepositoriesApi : AtlasRepositoryCapability
@@ -163,6 +165,94 @@ function factory.new(service)
 
 	function M.fetch_tags(repo, opts, on_done)
 		return refs(repo, "tags", opts, on_done)
+	end
+
+	---@param repo AtlasRepository
+	---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
+	---@return { cancel: fun() }|nil
+	function M.fetch_releases(repo, on_done)
+		local base = endpoint(repo.full_name)
+		if not base then
+			on_done(nil, "Invalid " .. provider_name .. " repository")
+			return nil
+		end
+		return service.fetch_all(base .. "/releases", nil, nil, function(values, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+
+			---@type AtlasRepositoryRelease[]
+			local entries = {}
+			for _, release in ipairs(values) do
+				local tag = json.safe_str(release.tag_name) or ""
+				local name = json.safe_str(release.name)
+				table.insert(entries, {
+					id = tostring(release.id),
+					name = name and name ~= "" and name or tag,
+					tag = tag,
+					url = json.safe_str(release.html_url) or "",
+					published_at = json.safe_str(release.published_at),
+					draft = release.draft == true,
+					prerelease = release.prerelease == true,
+				})
+			end
+			on_done(entries, nil)
+		end, { action = "Fetch repository releases", repo = repo.full_name })
+	end
+
+	---@param repo AtlasRepository
+	---@param opts { id?: string }
+	---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
+	---@return { cancel: fun() }|nil
+	function M.fetch_release(repo, opts, on_done)
+		local base = endpoint(repo.full_name)
+		if not base then
+			on_done(nil, "Invalid " .. provider_name .. " repository")
+			return nil
+		end
+		local target = base .. "/releases/" .. (opts.id and service.url_encode(opts.id) or "latest")
+		return service.request("GET", target, nil, function(result, err, status)
+			if err then
+				on_done(nil, err, status)
+				return
+			end
+
+			local author = json.safe_table(result.author)
+			local tag = json.safe_str(result.tag_name) or ""
+			local name = json.safe_str(result.name)
+			---@type AtlasRepositoryReleaseAsset[]
+			local assets = {}
+			for _, asset in ipairs(json.safe_table(result.assets)) do
+				table.insert(assets, {
+					name = json.safe_str(asset.name) or "",
+					url = json.safe_str(asset.browser_download_url) or "",
+					size = tonumber(asset.size),
+					downloads = tonumber(asset.download_count),
+				})
+			end
+			for _, source in ipairs({
+				{ name = "Source code (zip)", url = json.safe_str(result.zipball_url) },
+				{ name = "Source code (tar.gz)", url = json.safe_str(result.tarball_url) },
+			}) do
+				if source.url and source.url ~= "" then
+					table.insert(assets, source)
+				end
+			end
+
+			on_done({
+				id = tostring(result.id),
+				name = name and name ~= "" and name or tag,
+				tag = tag,
+				description = json.safe_str(result.body) or "",
+				url = json.safe_str(result.html_url) or "",
+				author = json.safe_str(author.login),
+				published_at = json.safe_str(result.published_at),
+				draft = result.draft == true,
+				prerelease = result.prerelease == true,
+				assets = assets,
+			}, nil, status)
+		end, { action = "Fetch repository release", repo = repo.full_name })
 	end
 
 	---@param repo AtlasRepositoryDetails

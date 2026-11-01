@@ -37,7 +37,7 @@ function M.new(service)
 					on_done(nil, err)
 					return
 				end
-				on_done(mapper.to_comment(raw), nil)
+				on_done(mapper.to_comment(raw, issue), nil)
 			end
 		)
 	end
@@ -61,7 +61,7 @@ function M.new(service)
 					on_done(nil, err)
 					return
 				end
-				on_done(mapper.to_comment(raw), nil)
+				on_done(mapper.to_comment(raw, issue), nil)
 			end
 		)
 	end
@@ -87,25 +87,51 @@ function M.new(service)
 
 	---@param issue GiteaIssue|ForgejoIssue
 	---@param comment_id string|integer
+	---@return string|nil
+	local function reactions_endpoint(issue, comment_id)
+		local base, number = endpoint(issue)
+		if not base then
+			return nil
+		end
+		if comment_id == "description" then
+			return string.format("%s/issues/%d/reactions", base, number)
+		end
+		local id = tonumber(comment_id)
+		return id and string.format("%s/issues/comments/%d/reactions", base, id) or nil
+	end
+
+	---@param method "POST"|"DELETE"
+	---@param issue GiteaIssue|ForgejoIssue
+	---@param comment_id string|integer
+	---@param content string
+	---@param on_done fun(ok: boolean, err: string|nil)
+	local function send_reaction(method, issue, comment_id, content, on_done)
+		local target = reactions_endpoint(issue, comment_id)
+		content = vim.trim(content)
+		if not target or content == "" then
+			local invalid = "Invalid " .. provider_name .. " issue or comment"
+			on_done(false, not target and invalid or "Reaction is required")
+			return nil
+		end
+		return service.request(method, target, { content = content }, function(_, err)
+			on_done(err == nil, err)
+		end)
+	end
+
+	---@param issue GiteaIssue|ForgejoIssue
+	---@param comment_id string|integer
 	---@param content string
 	---@param on_done fun(ok: boolean, err: string|nil)
 	function api.add_reaction(issue, comment_id, content, on_done)
-		local base = endpoint(issue)
-		local id = tonumber(comment_id)
-		content = vim.trim(content)
-		if not base or not id or content == "" then
-			local invalid = "Invalid " .. provider_name .. " issue or comment"
-			on_done(false, (not base or not id) and invalid or "Reaction is required")
-			return nil
-		end
-		return service.request(
-			"POST",
-			string.format("%s/issues/comments/%d/reactions", base, id),
-			{ content = content },
-			function(_, err)
-				on_done(err == nil, err)
-			end
-		)
+		return send_reaction("POST", issue, comment_id, content, on_done)
+	end
+
+	---@param issue GiteaIssue|ForgejoIssue
+	---@param comment_id string|integer
+	---@param content string
+	---@param on_done fun(ok: boolean, err: string|nil)
+	function api.remove_reaction(issue, comment_id, content, on_done)
+		return send_reaction("DELETE", issue, comment_id, content, on_done)
 	end
 
 	return api

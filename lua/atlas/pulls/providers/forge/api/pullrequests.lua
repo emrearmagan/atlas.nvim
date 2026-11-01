@@ -1,5 +1,6 @@
 local config = require("atlas.config")
 local json = require("atlas.core.json")
+local mapping = require("atlas.providers.forge.mapping")
 local request_scope = require("atlas.core.requests")
 
 local SCOPES = { assigned = true, created = true, mentioned = true, review_requested = true, reviewed = true }
@@ -278,6 +279,15 @@ local function new(service, mapper)
 					end
 				)
 			end,
+			reactions = function(done)
+				return service.fetch_all(
+					string.format("%s/issues/%s/reactions", assert(repo), tostring(ref.id)),
+					nil,
+					nil,
+					done
+				)
+			end,
+			user = service.users.fetch_user,
 		}, function(values, errors)
 			if errors.details then
 				on_done(nil, errors.details)
@@ -286,6 +296,9 @@ local function new(service, mapper)
 			local pr = mapper.to_pull_request_details(values.details)
 			if errors.subscription == nil then
 				pr.is_subscribed = values.subscription
+			end
+			if errors.reactions == nil then
+				pr.reactions = mapping.to_reactions(values.reactions, values.user and values.user.username)
 			end
 			service.set_memory_cache(cache_key, pr)
 			on_done(pr, nil)

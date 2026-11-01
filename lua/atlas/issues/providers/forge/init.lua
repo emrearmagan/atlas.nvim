@@ -12,7 +12,7 @@ local timeline_api = require("atlas.issues.providers.forge.api.timeline")
 function M.new(service, issues)
 	local provider_id = service.id
 	local comments = comments_api.new(service)
-	local timeline = timeline_api.new(service)
+	local timeline = timeline_api.new(service, issues)
 
 	local function resolve_view(view, on_done)
 		if not view.current_repo then
@@ -104,6 +104,9 @@ function M.new(service, issues)
 					options = require("atlas.providers.forge.mapping").reactions,
 					add = function(issue, comment, key, on_done)
 						return comments.add_reaction(issue, comment.id, key, on_done)
+					end,
+					remove = function(issue, comment, key, on_done)
+						return comments.remove_reaction(issue, comment.id, key, on_done)
 					end,
 				},
 			},

@@ -99,8 +99,16 @@ function M.new(service)
 			}
 		end
 
-		owner, repo = path:match("^/([^/]+)/([^/]+)$")
-		if owner then
+		local section
+		owner, repo, section = path:match("^/([^/]+)/([^/]+)/?([^/]*)")
+		local page = ({
+			issues = "issues",
+			pulls = "pulls",
+			releases = "releases",
+			tags = "tags",
+			branches = "branches",
+		})[section]
+		if owner and (section == "" or page) then
 			local full_name, web_url, repository_url = repository(host, owner, repo)
 			return {
 				provider = provider_id,
@@ -112,6 +120,7 @@ function M.new(service)
 				owner = owner,
 				repo = repo,
 				repo_full_name = full_name,
+				page = page,
 			}
 		end
 

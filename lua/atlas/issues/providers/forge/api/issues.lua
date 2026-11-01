@@ -1,5 +1,6 @@
 local json = require("atlas.core.json")
 local mapper = require("atlas.issues.providers.forge.api.mapper")
+local mapping = require("atlas.providers.forge.mapping")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -32,7 +33,7 @@ local M = {}
 ---@class ForgeIssuesApi
 ---@field search_repositories fun(term: string, on_done: fun(repositories: string[]|nil, err: string|nil)): ForgeRequestHandle|nil
 ---@field list fun(view: AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): ForgeRequestHandle|AtlasRequestScope|nil
----@field get fun(ref: GiteaIssue|ForgejoIssue|IssueRef|string, opts: IssuesFetchOpts|nil, on_done: fun(details: GiteaIssueDetails|ForgejoIssueDetails|nil, err: string|nil)): ForgeRequestHandle|nil
+---@field get fun(ref: GiteaIssue|ForgejoIssue|IssueRef|string, opts: IssuesFetchOpts|nil, on_done: fun(details: GiteaIssueDetails|ForgejoIssueDetails|nil, err: string|nil)): AtlasRequestScope|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts|nil, on_done: fun(issues: Issue[], err: string|nil)): AtlasRequestScope|nil
 ---@field create fun(opts: ForgeIssueCreateParams, on_done: fun(result: ForgeIssueCreateResult|nil, err: string|nil)): ForgeRequestHandle|nil
 ---@field update_issue fun(issue: GiteaIssue|ForgejoIssue, changes: ForgeIssuePatch, on_done: fun(issue: GiteaIssue|ForgejoIssue|nil, err: string|nil)): ForgeRequestHandle|nil
@@ -243,19 +244,32 @@ function M.new(service)
 				return nil
 			end
 		end
-		return service.request("GET", endpoint, nil, function(raw, err)
-			if err then
-				on_done(nil, err)
+		local requests = request_scope.new()
+		requests.all({
+			details = function(done)
+				return service.request("GET", endpoint, nil, done)
+			end,
+			reactions = function(done)
+				return service.fetch_all(endpoint .. "/reactions", nil, nil, done)
+			end,
+			user = service.users.fetch_user,
+		}, function(values, errors)
+			if errors.details then
+				on_done(nil, errors.details)
 				return
 			end
-			local details = mapper.to_issue_details(raw, repo_full_name)
+			local details = mapper.to_issue_details(values.details, repo_full_name)
 			if not details then
 				on_done(nil, "The requested number is not an issue")
 				return
 			end
+			if errors.reactions == nil then
+				details.reactions = mapping.to_reactions(values.reactions, values.user and values.user.username)
+			end
 			service.set_memory_cache(cache_key, details)
 			on_done(details, nil)
 		end)
+		return requests
 	end
 
 	---@param refs IssueRef[]

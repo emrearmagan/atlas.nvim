@@ -1,5 +1,6 @@
 local json = require("atlas.core.json")
 local diff_parser = require("atlas.core.git.diff_parser")
+local mapping = require("atlas.providers.forge.mapping")
 local users = require("atlas.providers.forge.users")
 
 ---@class ForgeReviewLines
@@ -17,7 +18,7 @@ local users = require("atlas.providers.forge.users")
 ---@field to_pull_request_details fun(raw: any): GiteaPullRequestDetails|ForgejoPullRequestDetails
 ---@field to_pull_requests fun(values: table[]): (GiteaPullRequest|ForgejoPullRequest)[]
 ---@field to_search_pull_request fun(raw: table): GiteaPullRequest|ForgejoPullRequest
----@field to_comment fun(raw: table, review: table|nil, lines: ForgeReviewLines|nil): PullsComment
+---@field to_comment fun(raw: table, pr: PullRequest, review: table|nil, lines: ForgeReviewLines|nil): PullsComment
 ---@field to_activity fun(raw: table, review: table|nil): PullsActivityEntry|nil
 
 ---@param provider ForgeProviderId
@@ -443,20 +444,24 @@ local function new(provider)
 	end
 
 	---@param raw table
+	---@param pr PullRequest
 	---@param review table|nil
 	---@param lines ForgeReviewLines|nil
 	---@return PullsComment
-	function M.to_comment(raw, review, lines)
+	function M.to_comment(raw, pr, review, lines)
 		review = json.nilify(review)
 		local inline, hunk = inline_position(raw, lines or M.review_lines(raw))
 		local review_state = review and tostring(review.state or ""):upper() or ""
 		local resolver = json.nilify(raw.resolver)
 		local comment_state = resolver and "RESOLVED" or (review and review.stale == true and "OUTDATED") or nil
 		local outdated = review ~= nil and review.stale == true
+		local comment_author = raw.user and author(raw.user) or nil
 		local comment = {
 			id = raw.id,
 			parent_id = nil,
-			author = raw.user and author(raw.user) or nil,
+			author = comment_author,
+			author_roles = comment_author
+				and mapping.author_roles(comment_author.username, pr.author.username, pr.repo_full_name),
 			body = raw.body or "",
 			created_at = raw.created_at or "",
 			inline = inline,

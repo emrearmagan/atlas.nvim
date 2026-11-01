@@ -5,6 +5,7 @@ local M = {}
 function M.new(service)
 	return {
 		users = require("atlas.providers.forge.completion.users").new(service),
+		references = require("atlas.providers.forge.completion.references").new(service),
 	}
 end
 

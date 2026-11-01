@@ -3,7 +3,8 @@ local issues = require("atlas.ui.repository.pages.issues")
 local pulls = require("atlas.ui.repository.pages.pulls")
 local branches = require("atlas.ui.repository.pages.branches")
 local tags = require("atlas.ui.repository.pages.tags")
+local releases = require("atlas.ui.repository.pages.releases")
 
 return {
-	pages = { overview, issues, pulls, branches, tags },
+	pages = { overview, issues, pulls, branches, tags, releases },
 }

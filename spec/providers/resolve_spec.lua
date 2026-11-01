@@ -299,6 +299,17 @@ describe("providers.resolve", function()
 			assert.are.equal("team/repo#10", issue.issue_key)
 		end)
 
+		it("resolves repository pages", function()
+			assert.are.equal("issues", assert(providers.resolve(gitea .. "/issues")).page)
+			assert.are.equal("pulls", assert(providers.resolve(forgejo .. "/pulls")).page)
+			assert.are.equal("tags", assert(providers.resolve(gitea .. "/tags")).page)
+			assert.are.equal("branches", assert(providers.resolve(forgejo .. "/branches")).page)
+			assert.are.equal("releases", assert(providers.resolve(gitea .. "/releases")).page)
+			assert.are.equal("releases", assert(providers.resolve(forgejo .. "/releases/tag/v1.0.0")).page)
+			assert.is_nil(assert(providers.resolve(gitea)).page)
+			assert.is_nil(providers.resolve(gitea .. "/wiki"))
+		end)
+
 		it("resolves Git remotes as the repository", function()
 			local cases = {
 				{ gitea .. ".git", "gitea", gitea },

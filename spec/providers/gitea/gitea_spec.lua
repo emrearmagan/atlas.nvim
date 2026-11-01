@@ -49,6 +49,31 @@ describe("Gitea", function()
 		assert.is_false(query.apply(view, "scope:unknown"))
 	end)
 
+	it("groups reactions by emoji and marks the current user's", function()
+		local reactions = require("atlas.providers.forge.mapping").to_reactions({
+			{ content = "+1", user = { id = 1, login = "alice" } },
+			{ content = "+1", user = { id = 2, login = "bob" } },
+			{ content = "heart", user = { id = 2, login = "bob" } },
+		}, "alice")
+		assert.same(
+			{ "thumbsup", "heart" },
+			vim.tbl_map(function(reaction)
+				return reaction.name
+			end, reactions)
+		)
+		assert.equal(2, reactions[1].count)
+		assert.is_true(reactions[1].reacted)
+		assert.is_false(reactions[2].reacted)
+	end)
+
+	it("marks the author and the repository owner", function()
+		local author_roles = require("atlas.providers.forge.mapping").author_roles
+		assert.same({ "Author", "Owner" }, author_roles("alice", "alice", "alice/repo"))
+		assert.same({ "Owner" }, author_roles("Alice", "bob", "alice/repo"))
+		assert.same({ "Author" }, author_roles("bob", "bob", "team/repo"))
+		assert.is_nil(author_roles("carol", "bob", "team/repo"))
+	end)
+
 	it("searches a scoped repository view by owner and keeps only that repository", function()
 		local endpoint, params
 		local service = {

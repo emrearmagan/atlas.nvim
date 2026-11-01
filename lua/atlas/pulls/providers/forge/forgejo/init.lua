@@ -70,6 +70,7 @@ return {
 			reactions = {
 				options = mapping.reactions,
 				add = comments_api.add_reaction,
+				remove = comments_api.remove_reaction,
 			},
 		},
 		reviews = {

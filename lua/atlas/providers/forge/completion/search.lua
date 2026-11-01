@@ -2,13 +2,17 @@ local M = {}
 local prompt = require("atlas.ui.prompt")
 
 local QUALIFIERS = {
-	pulls = { "repo:", "is:", "type:", "search:", "param." },
+	pulls = { "repo:", "is:", "type:", "search:", "param.", "scope:" },
 	issues = { "repo:", "is:", "type:", "search:", "param.", "state:", "scope:", "labels:", "label:" },
 }
 local PULL_STATES = { "open", "merged", "declined", "closed", "all" }
 local ISSUE_STATES = { "open", "closed", "all" }
 local VALUES = {
-	pulls = { is = PULL_STATES, type = { "pulls" } },
+	pulls = {
+		is = PULL_STATES,
+		scope = { "assigned", "created", "mentioned", "review_requested", "reviewed" },
+		type = { "pulls" },
+	},
 	issues = {
 		is = ISSUE_STATES,
 		state = ISSUE_STATES,

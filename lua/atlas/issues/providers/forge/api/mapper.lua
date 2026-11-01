@@ -1,4 +1,5 @@
 local json = require("atlas.core.json")
+local mapping = require("atlas.providers.forge.mapping")
 local user = require("atlas.providers.forge.users").to_user
 
 local M = {}
@@ -160,12 +161,16 @@ function M.to_issue_details(raw, _scoped_slug)
 end
 
 ---@param raw table
+---@param issue GiteaIssue|ForgejoIssue
 ---@return IssueComment
-function M.to_comment(raw)
+function M.to_comment(raw, issue)
+	local author = user(raw.user)
 	return {
 		id = tostring(raw.id),
 		url = raw.html_url,
-		author = user(raw.user),
+		author = author,
+		author_roles = author
+			and mapping.author_roles(author.username, issue.reporter and issue.reporter.username, issue.repo_full_name),
 		body = json.nilify(raw.body) or "",
 		created_at = json.nilify(raw.created_at) or "",
 	}

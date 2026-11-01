@@ -1,6 +1,7 @@
 local api = require("atlas.pulls.providers.forge.gitea.api")
 local service = require("atlas.providers.forge.gitea.api")
 local mapper = api.mapper
+local mapping = require("atlas.providers.forge.mapping")
 local reviews = require("atlas.pulls.providers.forge.gitea.api.reviews")
 local request_scope = require("atlas.core.requests")
 
@@ -120,25 +121,30 @@ local function enrich_review_events(base, pr, timeline, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch(pr, _opts, on_done)
+function M.fetch(pr, opts, on_done)
 	local base = endpoint(pr)
 	if not base then
 		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
 	local requests = request_scope.new()
-	requests.run(function(done)
-		return service.fetch_all(string.format("%s/issues/%s/timeline", base, pr.id), nil, nil, done)
-	end, function(raw, err)
-		if err then
-			on_done(nil, err)
+	requests.all({
+		timeline = function(done)
+			return service.fetch_all(string.format("%s/issues/%s/timeline", base, pr.id), nil, nil, done)
+		end,
+		details = function(done)
+			return api.pullrequests.get(pr, opts or {}, done)
+		end,
+	}, function(values, errors)
+		if errors.timeline then
+			on_done(nil, errors.timeline)
 			return
 		end
 		requests.run(function(done)
-			return enrich_review_events(base, pr, raw, done)
+			return enrich_review_events(base, pr, values.timeline, done)
 		end, function(enriched, review_err)
 			if review_err then
 				on_done(nil, review_err)
@@ -148,7 +154,7 @@ function M.fetch(pr, _opts, on_done)
 			for _, value in ipairs(enriched.timeline) do
 				local event = tostring(value.type or ""):lower()
 				if event == "comment" then
-					table.insert(comments, mapper.to_comment(value))
+					table.insert(comments, mapper.to_comment(value, pr))
 				else
 					local id = review_id(value)
 					local activity = mapper.to_activity(value, id and enriched.reviews[id] or nil)
@@ -158,8 +164,23 @@ function M.fetch(pr, _opts, on_done)
 				end
 			end
 			events = squash_pushes(events)
+
+			local details = values.details
+			local description = details
+				and {
+					id = "description",
+					author = pr.author,
+					author_roles = mapping.author_roles(pr.author.username, pr.author.username, pr.repo_full_name),
+					body = details.description,
+					created_at = pr.created_on,
+					reactions = details.reactions,
+					url = pr.link.html,
+				}
 			-- TODO: Figure out how the fuck to load reactions without N+1 requests.
-			on_done({ comments = comments, reviews = {}, activities = events }, nil)
+			on_done(
+				{ description = description, comments = comments, reviews = {}, activities = events },
+				errors.details
+			)
 		end)
 	end)
 	return requests
@@ -191,7 +212,7 @@ function M.add(pr, content, opts, on_done)
 					on_done(nil, err)
 					return
 				end
-				local created = mapper.to_comment(raw)
+				local created = mapper.to_comment(raw, pr)
 				created.parent_id = parent.parent_id or parent.id
 				created.inline = created.inline or parent.inline
 				created.hunk = created.hunk or parent.hunk
@@ -216,7 +237,7 @@ function M.add(pr, content, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			on_done(mapper.to_comment(raw), nil)
+			on_done(mapper.to_comment(raw, pr), nil)
 		end
 	)
 end
@@ -279,22 +300,49 @@ end
 
 ---@param pr PullRequest
 ---@param comment PullsComment
----@param key string
----@param on_done fun(ok: boolean, err: string|nil)
-function M.add_reaction(pr, comment, key, on_done)
+---@return string|nil, string|nil
+local function reactions_endpoint(pr, comment)
 	local base = endpoint(pr)
 	if not base then
-		on_done(false, "Invalid Gitea repository")
-		return nil
+		return nil, "Invalid Gitea repository"
+	end
+	if comment.id == "description" then
+		return string.format("%s/issues/%s/reactions", base, pr.id), nil
 	end
 	local id = tostring(comment.id)
 	if not id:match("^%d+$") then
-		on_done(false, "Invalid Gitea comment")
+		return nil, "Invalid Gitea comment"
+	end
+	return string.format("%s/issues/comments/%s/reactions", base, id), nil
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.add_reaction(pr, comment, key, on_done)
+	local target, err = reactions_endpoint(pr, comment)
+	if not target then
+		on_done(false, err)
 		return nil
 	end
-	local target = string.format("%s/issues/comments/%s/reactions", base, id)
-	return service.request("POST", target, { content = key }, function(_, err)
-		on_done(err == nil, err)
+	return service.request("POST", target, { content = key }, function(_, request_err)
+		on_done(request_err == nil, request_err)
+	end)
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.remove_reaction(pr, comment, key, on_done)
+	local target, err = reactions_endpoint(pr, comment)
+	if not target then
+		on_done(false, err)
+		return nil
+	end
+	return service.request("DELETE", target, { content = key }, function(_, request_err)
+		on_done(request_err == nil, request_err)
 	end)
 end
 

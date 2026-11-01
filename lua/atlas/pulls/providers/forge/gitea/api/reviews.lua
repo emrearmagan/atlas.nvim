@@ -232,7 +232,7 @@ local function fetch_comments(pr, on_done)
 						-- Gitea drops the reply parent ID, so stitch comments on the same review position back into a thread.
 						local roots = {}
 						for _, value in ipairs(raw) do
-							local comment = mapper.to_comment(value, review)
+							local comment = mapper.to_comment(value, pr, review)
 							local inline = comment.inline
 							local side = inline and (inline.to and "RIGHT" or inline.from and "LEFT") or nil
 							local line = inline and (inline.to or inline.from) or nil

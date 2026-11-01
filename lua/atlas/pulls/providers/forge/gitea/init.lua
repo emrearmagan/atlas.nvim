@@ -59,6 +59,7 @@ return {
 			reactions = {
 				options = mapping.reactions,
 				add = comments_api.add_reaction,
+				remove = comments_api.remove_reaction,
 			},
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},

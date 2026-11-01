@@ -191,6 +191,19 @@ local function edit_query(state)
 
 			apply()
 		end)
+	elseif state.provider.id == "gitea" or state.provider.id == "forgejo" then
+		---@cast view AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig
+		local service = state.provider.id == "gitea" and require("atlas.providers.forge.gitea.api")
+			or require("atlas.providers.forge.forgejo.api")
+		require("atlas.providers.forge.completion.search").edit(service, "issues", state.query .. " ", function(query)
+			local ok, err = require("atlas.issues.providers.forge.query").apply(view, query)
+			if not ok then
+				notify.warn(err)
+				return
+			end
+
+			apply()
+		end)
 	end
 end
 
