@@ -14,7 +14,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.cancel(ctx.context, ctx.pipeline, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},

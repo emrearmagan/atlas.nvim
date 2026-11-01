@@ -6,10 +6,6 @@ local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local config = require("atlas.config")
 
----@class ForgeIssueActionsRegistry : AtlasActionsCapability
----@field items AtlasIssueAction[]
----@field find fun(id: string): AtlasIssueAction|nil
-
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function has_issue(ctx)
@@ -40,7 +36,7 @@ end
 
 ---@param service ForgeService
 ---@param api ForgeIssuesApi
----@return ForgeIssueActionsRegistry
+---@return AtlasIssueAction[]
 function M.new(service, api)
 	local provider_id = service.id
 	local provider_name = service.name
@@ -48,8 +44,6 @@ function M.new(service, api)
 	local users_api = service.users
 	local search = require("atlas.issues.providers.forge.actions.search").new(service, api)
 	local set_locked_api = api.set_locked
-	---@type ForgeIssueActionsRegistry
-	local registry = {}
 
 	---@param issue Issue
 	---@return string
@@ -357,7 +351,6 @@ function M.new(service, api)
 
 	---@type AtlasIssueAction[]
 	local ACTIONS = {}
-	registry.items = ACTIONS
 
 	---@param action AtlasIssueAction
 	local function register(action)
@@ -701,18 +694,7 @@ function M.new(service, api)
 	register(actions.copy_issue_key)
 	register(actions.copy_issue_url)
 
-	---@param id string
-	---@return AtlasIssueAction|nil
-	function registry.find(id)
-		for _, action in ipairs(ACTIONS) do
-			if action.id == id then
-				return action
-			end
-		end
-		return nil
-	end
-
-	return registry
+	return ACTIONS
 end
 
 return M

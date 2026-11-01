@@ -7,13 +7,9 @@ local search_prompt = require("atlas.providers.forge.completion.search")
 
 local M = {}
 
----@class ForgePullActionsRegistry : PullsActionsCapability
----@field items AtlasPullAction[]
----@field find fun(id: string): AtlasPullAction|nil
-
 ---@param service ForgeService
 ---@param pullrequests ForgePullRequestsApi
----@return ForgePullActionsRegistry
+---@return AtlasPullAction[]
 function M.new(service, pullrequests)
 	local provider_id = service.id
 	local provider_name = service.name
@@ -56,18 +52,6 @@ function M.new(service, pullrequests)
 			return false, "Cannot review your own pull request"
 		end
 		return true, nil
-	end
-
-	---@param ctx AtlasPullActionContext
-	---@param level "loading"|"success"|"warn"|"error"|"info"
-	---@param message string
-	---@param duration integer|nil
-	local function notify(ctx, level, message, duration)
-		if ctx.notify then
-			ctx.notify(level, message, duration)
-			return
-		end
-		core_notify.show(level, message, { timeout = duration })
 	end
 
 	---@param opts { title: string, include_all: boolean, on_select: fun(repo: string), on_cancel: fun() }
@@ -194,8 +178,6 @@ function M.new(service, pullrequests)
 
 	---@type AtlasPullAction[]
 	local ACTIONS = {}
-	---@type ForgePullActionsRegistry
-	local registry = { items = ACTIONS }
 
 	---@param action AtlasPullAction
 	local function register(action)
@@ -227,15 +209,15 @@ function M.new(service, pullrequests)
 		is_available = can_review,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
-			notify(ctx, "loading", "Updating branch...")
+			core_notify.loading("Updating branch...")
 			pullrequests.update_branch(pr, "merge", function(ok, err)
 				if not ok then
-					notify(ctx, "error", err)
+					core_notify.error(err)
 					done(nil, err)
 					return
 				end
-				notify(ctx, "success", "Branch updated", 1200)
-				done({ changed_pr = true, message = "Branch updated" }, nil)
+				core_notify.success("Branch updated", { timeout = 1200 })
+				done({ changed_pr = true }, nil)
 			end)
 		end,
 	})
@@ -262,15 +244,15 @@ function M.new(service, pullrequests)
 		end,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
-			notify(ctx, "loading", "Reopening PR...")
+			core_notify.loading("Reopening PR...")
 			pullrequests.set_state(pr, "open", function(_, err)
 				if err then
-					notify(ctx, "error", "Reopen failed: " .. err)
+					core_notify.error("Reopen failed: " .. err)
 					done(nil, err)
 					return
 				end
-				notify(ctx, "success", "PR reopened", 1200)
-				done({ changed_pr = true, message = "Reopened" }, nil)
+				core_notify.success("PR reopened", { timeout = 1200 })
+				done({ changed_pr = true }, nil)
 			end)
 		end,
 	})
@@ -405,18 +387,18 @@ function M.new(service, pullrequests)
 			local user = ctx.current_user and ctx.current_user.username or ""
 			local function update(current, username)
 				local subscribed = current ~= true
-				notify(ctx, "loading", subscribed and "Subscribing..." or "Unsubscribing...")
+				core_notify.loading(subscribed and "Subscribing..." or "Unsubscribing...")
 				pullrequests.set_subscription(pr, username, subscribed, function(ok, err)
 					if not ok then
-						notify(ctx, "error", err)
+						core_notify.error(err)
 						done(nil, err)
 						return
 					end
 					if details then
 						details.is_subscribed = subscribed
 					end
-					notify(ctx, "success", subscribed and "Subscribed" or "Unsubscribed", 1200)
-					done({ changed_pr = true, message = subscribed and "Subscribed" or "Unsubscribed" }, nil)
+					core_notify.success(subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+					done({ changed_pr = true }, nil)
 				end)
 			end
 			local function resolve_user(current)
@@ -428,7 +410,7 @@ function M.new(service, pullrequests)
 					local username = current_user and current_user.username or ""
 					if err or username == "" then
 						local message = tostring(err or ("Missing current " .. provider_name .. " user"))
-						notify(ctx, "error", message)
+						core_notify.error(message)
 						done(nil, message)
 						return
 					end
@@ -439,10 +421,10 @@ function M.new(service, pullrequests)
 				resolve_user(details.is_subscribed)
 				return
 			end
-			notify(ctx, "loading", "Checking subscription...")
+			core_notify.loading("Checking subscription...")
 			pullrequests.subscription(pr, function(current, err)
 				if err then
-					notify(ctx, "error", err)
+					core_notify.error(err)
 					done(nil, err)
 					return
 				end
@@ -458,18 +440,7 @@ function M.new(service, pullrequests)
 	register(actions.copy_url)
 	register(actions.open_in_browser)
 
-	---@param id string
-	---@return AtlasPullAction|nil
-	function registry.find(id)
-		for _, action in ipairs(ACTIONS) do
-			if action.id == id then
-				return action
-			end
-		end
-		return nil
-	end
-
-	return registry
+	return ACTIONS
 end
 
 return M

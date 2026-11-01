@@ -119,6 +119,10 @@ local function enrich_review_events(base, pr, timeline, on_done)
 	end)
 end
 
+---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(conversation: PullsConversation|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch(pr, _opts, on_done)
 	local base = endpoint(pr)
 	if not base then
@@ -155,7 +159,7 @@ function M.fetch(pr, _opts, on_done)
 			end
 			events = squash_pushes(events)
 			-- TODO: Figure out how the fuck to load reactions without N+1 requests.
-			on_done({ comments = comments, events = events }, nil)
+			on_done({ comments = comments, reviews = {}, activities = events }, nil)
 		end)
 	end)
 	return requests

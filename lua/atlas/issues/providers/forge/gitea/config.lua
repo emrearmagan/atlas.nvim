@@ -9,7 +9,7 @@ require("atlas.providers.forge.gitea.config")
 ---@field current_repo boolean|nil
 ---@field extra_params table<string, string|number|boolean>|nil
 
----@class AtlasGiteaIssuesViewConfig : AtlasIssuesViewConfig, AtlasGiteaIssuesSearchConfig
+---@class AtlasGiteaIssuesViewConfig : IssuesViewConfig, AtlasGiteaIssuesSearchConfig
 
 ---@class AtlasGiteaIssuesBookmarkConfig : AtlasIssuesBookmarkConfig, AtlasGiteaIssuesSearchConfig
 

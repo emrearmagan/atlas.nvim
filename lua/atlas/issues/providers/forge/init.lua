@@ -54,34 +54,6 @@ function M.new(service, issues)
 		return requests
 	end
 
-	local function fetch_conversation(issue, opts, on_done)
-		return timeline.list(issue, opts, function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local items = {}
-			for _, comment in ipairs(result.comments) do
-				table.insert(items, {
-					id = "comment:" .. comment.id,
-					kind = "comment",
-					created_at = comment.created_at,
-					entity = comment,
-				})
-			end
-			for index, entry in ipairs(result.events) do
-				table.insert(items, {
-					id = table.concat({ "activity", entry.date or "", index }, ":"),
-					kind = "activity",
-					created_at = entry.date or "",
-					entity = entry,
-				})
-			end
-			-- Timeline responses omit reaction counts; loading them requires one request per comment.
-			on_done(items, nil)
-		end)
-	end
-
 	local function edit_comment(issue, comment, content, on_done)
 		return comments.edit(issue, comment.id, content, function(updated, err)
 			if err then
@@ -109,9 +81,6 @@ function M.new(service, issues)
 
 	return {
 		views = views,
-		view_for_target = function(target)
-			return { name = "Search", layout = "compact", repo = target.repo_full_name, state = "all" }
-		end,
 		issue_ref = function(target)
 			if target.repo_full_name and target.number then
 				return { key = string.format("%s#%d", target.repo_full_name, target.number) }
@@ -125,7 +94,7 @@ function M.new(service, issues)
 				fetch_issue = issues.get,
 			},
 			comments = {
-				fetch_conversation = fetch_conversation,
+				fetch_conversation = timeline.list,
 				add_comment = comments.add,
 				edit_comment = edit_comment,
 				delete_comment = function(issue, comment, on_done)

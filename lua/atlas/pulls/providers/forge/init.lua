@@ -17,10 +17,11 @@ function M.views(provider_id)
 	end, configured)
 end
 
----@param target AtlasTarget
+---@param repository AtlasTarget
+---@param branch string|nil
 ---@return AtlasPullsViewConfig
-function M.view_for_target(target)
-	return { name = "Search", layout = "compact", repo = target.repo_full_name }
+function M.repository_view(repository, branch)
+	return { name = "Search", layout = "compact", repo = repository.repo_full_name, head = branch }
 end
 
 local function resolve_view(provider_id, view, on_done)
@@ -54,62 +55,16 @@ function M.fetch_pullrequests(provider_id, pullrequests, view, opts, on_done)
 			return fetch(api_view, statuses, opts, done)
 		end, function(page, err)
 			page = page or { items = {} }
+			if resolved.head then
+				page.items = vim.tbl_filter(function(pr)
+					return pr.source.branch == resolved.head
+				end, page.items)
+			end
 			page.query = query.resolve(resolved)
 			on_done(page, err and { err } or nil)
 		end)
 	end)
 	return requests
-end
-
----@param fetch_comments fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)): { cancel: fun() }|nil
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_conversation(fetch_comments, pr, opts, on_done)
-	return fetch_comments(pr, opts, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local ordered = {}
-		local sequence = 0
-		local function add(kind, created_at, entity, id)
-			sequence = sequence + 1
-			table.insert(ordered, {
-				sequence = sequence,
-				item = {
-					id = id,
-					kind = kind,
-					created_at = created_at,
-					entity = entity,
-				},
-			})
-		end
-
-		for _, comment in ipairs(result.comments) do
-			add("comment", comment.created_at, comment, "comment:" .. tostring(comment.id))
-		end
-		for index, event in ipairs(result.events) do
-			local created_at = event.date
-			local id = table.concat({ "activity", created_at, event.kind, tostring(index) }, ":")
-			add("activity", created_at, event, id)
-		end
-
-		table.sort(ordered, function(left, right)
-			if left.item.created_at == right.item.created_at then
-				return left.sequence < right.sequence
-			end
-			return left.item.created_at < right.item.created_at
-		end)
-
-		local items = {}
-		for _, value in ipairs(ordered) do
-			table.insert(items, value.item)
-		end
-		on_done(items, nil)
-	end)
 end
 
 return M

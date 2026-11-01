@@ -9,7 +9,7 @@ function M.new(service)
 
 	---@param issue GiteaIssue|ForgejoIssue
 	---@param _ IssuesFetchOpts|nil
-	---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+	---@param on_done fun(conversation: IssueConversation|nil, err: string|nil)
 	---@return { cancel: fun() }|nil
 	function api.list(issue, _, on_done)
 		local owner, repo = issue.repo_full_name:match("^([^/]+)/([^/]+)$")
@@ -31,15 +31,16 @@ function M.new(service)
 				return
 			end
 
-			local result = { comments = {}, events = {} }
+			local result = { comments = {}, activities = {} }
 			for _, raw in ipairs(values) do
 				local raw_type = raw.type
 				if raw_type == "comment" then
 					table.insert(result.comments, mapper.to_comment(raw))
 				else
-					table.insert(result.events, mapper.to_timeline_entry(raw))
+					table.insert(result.activities, mapper.to_timeline_entry(raw))
 				end
 			end
+			-- Timeline responses omit reaction counts; loading them requires one request per comment.
 			on_done(result, nil)
 		end)
 	end

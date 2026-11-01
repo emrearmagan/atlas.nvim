@@ -9,7 +9,7 @@ require("atlas.providers.forge.forgejo.config")
 ---@field current_repo boolean|nil
 ---@field extra_params table<string, string|number|boolean>|nil
 
----@class AtlasForgejoIssuesViewConfig : AtlasIssuesViewConfig, AtlasForgejoIssuesSearchConfig
+---@class AtlasForgejoIssuesViewConfig : IssuesViewConfig, AtlasForgejoIssuesSearchConfig
 
 ---@class AtlasForgejoIssuesBookmarkConfig : AtlasIssuesBookmarkConfig, AtlasForgejoIssuesSearchConfig
 

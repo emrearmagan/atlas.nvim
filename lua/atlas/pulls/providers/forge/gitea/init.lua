@@ -24,7 +24,7 @@ return {
 	views = function()
 		return forge.views("gitea")
 	end,
-	view_for_target = forge.view_for_target,
+	repository_view = forge.repository_view,
 	resolve_search = query.resolve,
 	capabilities = {
 		actions = require("atlas.pulls.providers.forge.actions.registry").new(service, pullrequests_api),
@@ -52,9 +52,7 @@ return {
 			end,
 		},
 		comments = {
-			fetch_conversation = function(pr, opts, on_done)
-				return forge.fetch_conversation(comments_api.fetch, pr, opts, on_done)
-			end,
+			fetch_conversation = comments_api.fetch,
 			add_comment = comments_api.add,
 			edit_comment = comments_api.edit,
 			delete_comment = comments_api.delete,

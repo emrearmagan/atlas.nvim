@@ -58,7 +58,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.rerun(ctx.context, ctx.pipeline, true, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -71,7 +71,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.rerun(ctx.context, ctx.pipeline, false, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -88,7 +88,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.rerun_job(ctx.context, ctx.pipeline, ctx.job, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
