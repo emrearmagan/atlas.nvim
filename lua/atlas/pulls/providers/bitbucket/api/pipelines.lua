@@ -77,23 +77,23 @@ local function parse_job(job)
 end
 
 ---@param result table
----@param name string|nil
 ---@return PullsPipeline
-local function parse_pipeline(result, name)
+local function parse_pipeline(result)
 	local target = json.safe_table(result.target)
-	local commit = json.safe_table(target.commit)
 	local number = tonumber(result.build_number)
 	local links = json.safe_table(result.links)
+	local trigger = json.safe_str(json.safe_table(result.trigger).name)
 	return {
 		id = tostring(number),
-		name = name or ("Pipeline #" .. tostring(number)),
+		name = "Pipeline",
 		state = pipeline_state(result.state),
 		url = json.safe_str(json.safe_table(links.html).href),
 		number = number,
-		commit = json.safe_str(commit.hash),
+		commit = json.safe_str(json.safe_table(target.commit).hash),
 		branch = json.safe_str(target.ref_name) or json.safe_str(target.source),
+		trigger = trigger and trigger:lower(),
 		started_at = json.safe_str(result.created_on),
-		title = json.safe_str(commit.message),
+		duration = tonumber(json.nilify(result.duration_in_seconds)),
 		stages = {},
 	}
 end
@@ -127,10 +127,6 @@ end
 local function fetch_jobs(context, pipeline, on_done)
 	local repo = tostring(context.repo_full_name or "")
 	local id = tostring(pipeline.id)
-	if not id:match("^%d+$") then
-		on_done(pipeline, nil)
-		return nil
-	end
 	if repo == "" then
 		on_done(nil, "Missing repo")
 		return nil
@@ -148,7 +144,6 @@ local function fetch_jobs(context, pipeline, on_done)
 		for _, job in ipairs((result or {}).values or {}) do
 			table.insert(jobs, parse_job(job))
 		end
-		pipeline.job_count = #jobs
 		pipeline.stages = {
 			{
 				name = nil,
@@ -164,11 +159,15 @@ end
 ---@param pipeline PullsPipeline
 ---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_pipeline(context, pipeline, on_done)
+function M.fetch_pipeline(context, pipeline, on_done)
 	local repo = tostring(context.repo_full_name or "")
 	local id = tostring(pipeline.id)
-	if repo == "" or not id:match("^%d+$") then
-		on_done(nil, "Missing Bitbucket pipeline identifier")
+	if not id:match("^%d+$") then
+		on_done(pipeline, nil)
+		return nil
+	end
+	if repo == "" then
+		on_done(nil, "Missing repo")
 		return nil
 	end
 
@@ -185,7 +184,7 @@ local function fetch_pipeline(context, pipeline, on_done)
 			on_done(nil, err)
 			return
 		end
-		local selected = parse_pipeline(result, pipeline.name)
+		local selected = parse_pipeline(result)
 		selected.id = id
 		selected.number = selected.number or tonumber(id)
 		selected.url = selected.url or string.format("https://bitbucket.org/%s/pipelines/results/%s", repo, selected.id)
@@ -210,7 +209,8 @@ function M.fetch_history(context, on_done)
 	local function fetch_runs(pipeline_target)
 		local selector = json.safe_table(pipeline_target.selector)
 		local pullrequest = json.safe_str(json.safe_table(pipeline_target.pullrequest).id)
-		local fields = "values.build_number,values.state,values.target,values.created_on,values.links.html"
+		local fields =
+			"values.build_number,values.state,values.target,values.trigger,values.created_on,values.duration_in_seconds,values.links.html"
 		local endpoint =
 			string.format("/repositories/%s/pipelines/?pagelen=30&sort=-created_on&fields=%s", repo, fields)
 		local filters = {
@@ -267,19 +267,11 @@ function M.fetch_history(context, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
+---@param opts { force_refresh?: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	local target = context.target
-	local selected = (opts or {}).pipeline or (type(target) == "table" and target.stages and target or nil)
-	if selected then
-		---@cast selected PullsPipeline
-		return fetch_pipeline(context, selected, function(pipeline, err)
-			on_done(pipeline and { pipeline } or nil, err)
-		end)
-	end
-
 	local pr = type(target) == "table" and target.source and target or nil
 	if not pr then
 		local repo = context.repo_full_name
@@ -374,14 +366,17 @@ function M.fetch(context, opts, on_done)
 		local starts = {}
 		for index, pipeline in ipairs(pipelines) do
 			starts[tostring(index)] = function(done)
-				return fetch_jobs(context, pipeline, done)
+				return M.fetch_pipeline(context, pipeline, done)
 			end
 		end
-		scope.all(starts, function(_, errors)
+		scope.all(starts, function(loaded, errors)
 			local _, first_err = next(errors)
 			if first_err ~= nil then
 				on_done(nil, first_err)
 				return
+			end
+			for index, pipeline in pairs(loaded) do
+				pipelines[tonumber(index)] = pipeline
 			end
 			service.set_cache(key, pipelines)
 			on_done(pipelines, nil)
@@ -469,7 +464,7 @@ end
 ---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
 ---@param job PullsPipelineJob
----@param on_done fun(log: PullsLog|nil, err: string|nil, status?: integer)
+---@param on_done fun(log: PullsLog|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local repo = tostring(context.repo_full_name or "")
@@ -482,7 +477,11 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps/%s/log", repo, id, encode_path_segment(job_id))
 	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err, status)
-		on_done(raw and { raw = raw } or nil, err, status)
+		if status == 404 then
+			on_done({ raw = "" }, nil)
+			return
+		end
+		on_done(raw and { raw = raw } or nil, err)
 	end, {
 		action = "Fetch pipeline job log",
 		repo = repo,

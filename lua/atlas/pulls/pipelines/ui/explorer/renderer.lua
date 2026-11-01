@@ -8,6 +8,12 @@ local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas.pipelines.explorer")
 
+---@param stage PullsPipelineStage
+---@return boolean
+local function collapsed(stage)
+	return #stage.jobs == 1 and stage.jobs[1].name == stage.name
+end
+
 ---@param pipeline PullsPipeline
 ---@param stage PullsPipelineStage
 ---@param job PullsPipelineJob
@@ -43,27 +49,35 @@ local function job_row(pipeline, stage, job, loading_frame, selection)
 end
 
 ---@param pipeline PullsPipeline
+---@param label string
 ---@param loading_job_id string|nil
 ---@param loading_frame string|nil
 ---@param selection PullsPipelinesSelection|nil
----@return table[], boolean
-local function pipeline_children(pipeline, loading_job_id, loading_frame, selection)
-	local rows = {}
+---@return table, boolean
+local function pipeline_row(pipeline, label, loading_job_id, loading_frame, selection)
+	local children = {}
 	local has_steps = false
 	for _, stage in ipairs(pipeline.stages) do
 		local jobs = {}
 		for _, job in ipairs(stage.jobs) do
-			local row = job_row(pipeline, stage, job, job.id == loading_job_id and loading_frame or nil, selection)
-			jobs[#jobs + 1] = row
-			if row.children and #row.children > 0 then
-				has_steps = true
+			if job.downstream then
+				local row, downstream_steps =
+					pipeline_row(job.downstream, job.name, loading_job_id, loading_frame, selection)
+				jobs[#jobs + 1] = row
+				has_steps = has_steps or downstream_steps
+			else
+				local row = job_row(pipeline, stage, job, job.id == loading_job_id and loading_frame or nil, selection)
+				jobs[#jobs + 1] = row
+				if row.children and #row.children > 0 then
+					has_steps = true
+				end
 			end
 		end
-		if stage.name == nil then
-			vim.list_extend(rows, jobs)
+		if stage.name == nil or collapsed(stage) then
+			vim.list_extend(children, jobs)
 		else
 			local icon, icon_hl = icons.get(tostring(stage.state or "UNKNOWN"), "status")
-			rows[#rows + 1] = {
+			children[#children + 1] = {
 				icon = icon,
 				label = string.format("%s %s", icon, stage.name),
 				icon_hl = icon_hl,
@@ -72,7 +86,16 @@ local function pipeline_children(pipeline, loading_job_id, loading_frame, select
 			}
 		end
 	end
-	return rows, has_steps
+
+	local icon, icon_hl = icons.get(tostring(pipeline.state or "UNKNOWN"), "status")
+	local row = {
+		icon = icon,
+		label = string.format("%s %s", icon, label),
+		icon_hl = icon_hl,
+		_item = { pipeline = pipeline },
+		children = children,
+	}
+	return row, has_steps
 end
 
 ---@param row table
@@ -129,18 +152,12 @@ local function build_content(pane)
 		if #rows > 0 then
 			table.insert(rows, { kind = "separator" })
 		end
-		local icon, icon_hl = icons.get(tostring(pipeline.state or "UNKNOWN"), "status")
-		local children, has_steps = pipeline_children(pipeline, pane.loading_job_id, loading_frame, pane.selection)
+		local label = pipeline_utils.display_name(pipeline)
+		local row, has_steps = pipeline_row(pipeline, label, pane.loading_job_id, loading_frame, pane.selection)
 		if has_steps then
 			columns[2] = { key = "duration", name = "", align = "right", hl = "AtlasTextMuted", can_grow = false }
 		end
-		table.insert(rows, {
-			icon = icon,
-			label = string.format("%s %s", icon, pipeline_utils.display_name(pipeline)),
-			icon_hl = icon_hl,
-			_item = { pipeline = pipeline },
-			children = children,
-		})
+		table.insert(rows, row)
 	end
 
 	if #rows == 0 then
@@ -195,7 +212,10 @@ local function matches_selection(entry, selection)
 	end
 
 	if selection.stage then
-		return entry.stage ~= nil and entry.job == nil and entry.stage.name == selection.stage.name
+		return entry.stage ~= nil
+			and entry.stage.name == selection.stage.name
+			and entry.step == nil
+			and (entry.job == nil or collapsed(entry.stage))
 	end
 
 	return entry.stage == nil and entry.job == nil

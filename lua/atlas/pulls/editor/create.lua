@@ -1,5 +1,6 @@
 local M = {}
 
+local create_remotes = require("atlas.pulls.create.remotes")
 local description = require("atlas.pulls.create.description")
 local form = require("atlas.ui.form")
 local git = require("atlas.core.git")
@@ -16,11 +17,16 @@ local utils = require("atlas.ui.shared.utils")
 ---@field repo_root string
 ---@field repo_slug string
 ---@field repository AtlasTarget
+---@field head_repository AtlasTarget|nil
+---@field head_remote string
 ---@field head string
+---@field base_remote string
 ---@field base string
+---@field completion_context AtlasCompletionContext|nil
 ---@field draft boolean
----@field branches string[]
+---@field branches AtlasCreateBranchOption[]
 ---@field reviewer_candidates PullsReviewerCandidate[]
+---@field reviewer_candidates_error string|nil
 ---@field reviewers PullsReviewerCandidate[]
 ---@field commits_buf integer
 ---@field requests AtlasRequestScope
@@ -69,6 +75,7 @@ local function open_commits(state, editor, content)
 	local options = vim.wo[win]
 	options.number = false
 	options.relativenumber = false
+	options.list = false
 	options.signcolumn = "no"
 	options.foldcolumn = "0"
 	options.statuscolumn = ""
@@ -83,6 +90,12 @@ local function open_commits(state, editor, content)
 end
 
 ---@param state PullsCreatePRState
+---@return string
+local function base_ref(state)
+	return state.base_remote .. "/" .. state.base
+end
+
+---@param state PullsCreatePRState
 ---@param editor AtlasForm
 local function refresh_description(state, editor)
 	state.requests.cancel()
@@ -93,7 +106,7 @@ local function refresh_description(state, editor)
 	state.requests = description.build(
 		state.repo_root,
 		state.repo_slug,
-		state.base,
+		base_ref(state),
 		state.head,
 		state.repository,
 		function(content, err)
@@ -114,14 +127,46 @@ end
 
 ---@param state PullsCreatePRState
 ---@param editor AtlasForm
+local function refresh_reviewers(state, editor)
+	if not state.write.fetch_reviewer_candidates then
+		return
+	end
+
+	state.reviewer_candidates = {}
+	state.reviewers = {}
+	form.render_meta(editor)
+	state.requests.run(function(done)
+		return state.write.fetch_reviewer_candidates({ repo_slug = state.repo_slug }, done)
+	end, function(candidates, err)
+		if editor.closed or state.submitting then
+			return
+		end
+		if err then
+			state.reviewer_candidates_error = err
+			editor.statusline:notify("warn", err)
+			form.render_meta(editor)
+			return
+		end
+
+		state.reviewer_candidates_error = nil
+		state.reviewer_candidates = candidates or {}
+		state.reviewers = vim.tbl_filter(function(reviewer)
+			return reviewer.selected
+		end, state.reviewer_candidates)
+		form.render_meta(editor)
+	end)
+end
+
+---@param state PullsCreatePRState
+---@param editor AtlasForm
 local function select_base(state, editor)
 	if state.submitting then
 		return
 	end
 
 	local initial_index
-	for i, branch in ipairs(state.branches) do
-		if branch == state.base then
+	for i, option in ipairs(state.branches) do
+		if option.remote == state.base_remote and option.branch == state.base then
 			initial_index = i
 			break
 		end
@@ -131,10 +176,28 @@ local function select_base(state, editor)
 		title = "Target branch",
 		items = state.branches,
 		initial_index = initial_index,
-		on_select = function(branch)
-			if branch and branch ~= state.base and not editor.closed and not state.submitting then
-				state.base = branch
+		format_item = function(option)
+			return option.label
+		end,
+		on_select = function(option)
+			if
+				option
+				and (option.remote ~= state.base_remote or option.branch ~= state.base)
+				and not editor.closed
+				and not state.submitting
+			then
+				local repo_changed = option.target.repo_full_name ~= state.repo_slug
+				state.base_remote = option.remote
+				state.base = option.branch
+				state.repository = option.target
+				state.repo_slug = option.target.repo_full_name
+				if state.completion_context then
+					state.completion_context.repository = state.repo_slug
+				end
 				refresh_description(state, editor)
+				if repo_changed then
+					refresh_reviewers(state, editor)
+				end
 			end
 		end,
 	})
@@ -144,6 +207,11 @@ end
 ---@param editor AtlasForm
 local function select_reviewers(state, editor)
 	if state.submitting then
+		return
+	end
+	if #state.reviewer_candidates == 0 then
+		local message = state.reviewer_candidates_error or "No reviewer candidates available"
+		editor.statusline:notify(state.reviewer_candidates_error and "warn" or "info", message)
 		return
 	end
 
@@ -174,7 +242,7 @@ local function preview_diff(state, editor)
 	end
 
 	state.requests.run(function(done)
-		return git.diff_revisions(state.repo_root, state.base, state.head, done)
+		return git.diff_revisions(state.repo_root, base_ref(state), state.head, done)
 	end, function(base, head, err)
 		if err then
 			editor.statusline:notify("error", err)
@@ -203,7 +271,7 @@ local function submit(state, editor)
 		editor.statusline:notify("warn", "Title is required")
 		return
 	end
-	if state.head == state.base then
+	if state.head == state.base and create_remotes.same_repository(state.head_repository, state.repo_slug) then
 		editor.statusline:notify("warn", "Head and base branches must differ")
 		return
 	end
@@ -213,6 +281,7 @@ local function submit(state, editor)
 		title = title,
 		body = content.body,
 		head = state.head,
+		head_repo_slug = state.head_repository and state.head_repository.repo_full_name or nil,
 		base = state.base,
 		draft = state.draft,
 		reviewers = state.reviewers,
@@ -250,9 +319,9 @@ local function submit(state, editor)
 		end
 	end
 
-	editor.statusline:notify("loading", "Pushing " .. state.head .. " to origin...")
+	editor.statusline:notify("loading", "Pushing " .. state.head .. " to " .. state.head_remote .. "...")
 	state.requests.run(function(callback)
-		return git.push_branch(state.repo_root, state.head, "origin", callback)
+		return git.push_branch(state.repo_root, state.head, state.head_remote, callback)
 	end, function(ok, err)
 		if not ok then
 			done(nil, err)
@@ -274,8 +343,8 @@ local function render_meta(state)
 	local rows = {
 		{ { key = "Repo:", value = state.repo_slug, hl = presentation.repo_hl(state.repo_slug) } },
 		{
-			{ key = "Head:", value = state.head },
-			{ key = "Base:", value = state.base, loading = state.loading },
+			{ key = "Head:", value = state.head_remote .. "/" .. state.head },
+			{ key = "Base:", value = base_ref(state), loading = state.loading },
 		},
 		{
 			{
@@ -286,7 +355,8 @@ local function render_meta(state)
 		},
 	}
 	if state.write.fetch_reviewer_candidates then
-		rows[#rows + 1] = { meta.people("Reviewers:", reviewers, "None") }
+		local empty = state.reviewer_candidates_error and "Unavailable" or "None"
+		rows[#rows + 1] = { meta.people("Reviewers:", reviewers, empty) }
 	end
 	return rows
 end
@@ -335,12 +405,13 @@ local function open_editor(state, content)
 		}
 	end
 
+	state.completion_context = { provider = state.repository.provider, repository = state.repo_slug }
 	local editor = form.open({
 		header = "Create Pull Request",
 		initial_title = content.title,
 		initial_body = content.body,
 		completion = {
-			context = { provider = state.repository.provider, repository = state.repo_slug },
+			context = state.completion_context,
 		},
 		meta = function()
 			return render_meta(state)
@@ -377,91 +448,169 @@ function M.open()
 		end
 
 		scope.all({
-			repository = function(done)
-				return git.local_repository(root, done)
+			remotes = function(done)
+				return git.list_repository_remotes(root, done)
 			end,
 			head = function(done)
 				return git.current_branch(root, done)
 			end,
-			base = function(done)
-				return git.default_branch(root, "origin", done)
-			end,
-			branches = function(done)
-				return git.list_remote_branches(root, "origin", done)
-			end,
 		}, function(values, errors)
-			local load_err = errors.repository or errors.head or errors.base or errors.branches
+			local load_err = errors.remotes or errors.head
 			if load_err then
 				notify.error(load_err)
 				return
 			end
 
-			local repository = values.repository
-			local provider = providers.load(repository.provider, "pulls")
-			local write = provider and provider.capabilities.write
-			if not write or not write.create then
-				notify.error("Provider does not support creating pull requests: " .. repository.provider)
-				return
-			end
-
-			local loads = {
-				content = function(done)
-					return description.build(
-						root,
-						repository.repo_full_name,
-						values.base,
-						values.head,
-						repository,
-						done
-					)
-				end,
-			}
-			if write.fetch_reviewer_candidates then
-				loads.reviewers = function(done)
-					return write.fetch_reviewer_candidates({
-						repo_slug = repository.repo_full_name,
-					}, done)
+			scope.run(function(done)
+				return git.branch_remotes(root, values.head, done)
+			end, function(branch_remotes, branch_remotes_err)
+				if branch_remotes_err then
+					notify.error(branch_remotes_err)
+					return
 				end
-			end
+				branch_remotes = branch_remotes or {}
 
-			scope.all(loads, function(loaded, load_errors)
-				local content_err = load_errors.content or load_errors.reviewers
-				if content_err then
-					notify.error(content_err)
+				local base_remote, base_err = create_remotes.base_remote(values.remotes, branch_remotes.merge)
+				local head_remote, head_err = create_remotes.head_remote(values.remotes, branch_remotes.push)
+				local remote_err = base_err or head_err or create_remotes.validate(head_remote, base_remote)
+				if remote_err then
+					notify.error(remote_err)
 					return
 				end
 
-				local candidates = loaded.reviewers or {}
-				local reviewers = vim.tbl_filter(function(reviewer)
-					return reviewer.selected
-				end, candidates)
-				local branches = vim.tbl_filter(function(branch)
-					return branch ~= values.head
-				end, values.branches)
-				if values.base ~= values.head and not vim.tbl_contains(branches, values.base) then
-					table.insert(branches, 1, values.base)
+				---@type AtlasCreateRemote
+				local base_remote_info = assert(base_remote)
+				---@type AtlasCreateRemote
+				local head_remote_info = assert(head_remote)
+				local repository = base_remote_info.target --[[@as AtlasTarget]]
+				local provider = providers.load(repository.provider, "pulls")
+				local write = provider and provider.capabilities.write
+				if not write or not write.create then
+					notify.error("Provider does not support creating pull requests: " .. repository.provider)
+					return
 				end
 
-				---@type PullsCreatePRState
-				local state = {
-					repo_root = root,
-					repo_slug = repository.repo_full_name,
-					repository = repository,
-					head = values.head,
-					base = values.base,
-					draft = false,
-					branches = branches,
-					reviewer_candidates = candidates,
-					reviewers = reviewers,
-					commits_buf = vim.api.nvim_create_buf(false, true),
-					requests = requests.new(),
-					loading = false,
-					submitting = false,
-					write = write,
-				}
+				local compatible = create_remotes.compatible_remotes(values.remotes, base_remote_info)
+				local remote_names = {}
+				for _, remote in ipairs(compatible) do
+					remote_names[#remote_names + 1] = remote.name
+				end
 
-				notify.clear()
-				open_editor(state, loaded.content)
+				scope.all({
+					base = function(done)
+						return git.default_branch(root, base_remote_info.name, done)
+					end,
+					branches = function(done)
+						return git.list_all_remote_branches(root, remote_names, done)
+					end,
+				}, function(remote_values, remote_errors)
+					if remote_errors.branches then
+						notify.error(remote_errors.branches)
+						return
+					end
+
+					local same_repository =
+						create_remotes.same_repository(head_remote_info.target, repository.repo_full_name)
+					local available = (remote_values.branches or {})[base_remote_info.name] or {}
+					local reported_base = remote_values.base
+					local default_base =
+						create_remotes.base_branch(available, reported_base, values.head, same_repository)
+					if not default_base then
+						notify.error(remote_errors.base or ("No base branches found for " .. base_remote_info.name))
+						return
+					end
+
+					local base_notice
+					if reported_base and default_base ~= reported_base then
+						base_notice = string.format(
+							"Base branch %s/%s is not fetched; using %s/%s",
+							base_remote_info.name,
+							reported_base,
+							base_remote_info.name,
+							default_base
+						)
+					end
+
+					local branches = create_remotes.branch_options(
+						remote_values.branches or {},
+						compatible,
+						head_remote_info.name,
+						values.head,
+						head_remote_info.target
+					)
+					if not (same_repository and default_base == values.head) then
+						branches = create_remotes.ensure_branch_option(branches, base_remote_info, default_base)
+					end
+
+					local loads = {
+						content = function(done)
+							return description.build(
+								root,
+								repository.repo_full_name,
+								base_remote_info.name .. "/" .. default_base,
+								values.head,
+								repository,
+								done
+							)
+						end,
+					}
+					if write.fetch_reviewer_candidates then
+						loads.reviewers = function(done)
+							return write.fetch_reviewer_candidates({
+								repo_slug = repository.repo_full_name,
+							}, done)
+						end
+					end
+
+					scope.all(loads, function(loaded, load_errors)
+						local content_err = load_errors.content
+						local reviewer_err = load_errors.reviewers
+						local content = loaded.content or { title = "", body = "", commits = {}, diffstat = {} }
+						local candidates = loaded.reviewers or {}
+						local reviewers = vim.tbl_filter(function(reviewer)
+							return reviewer.selected
+						end, candidates)
+
+						---@type PullsCreatePRState
+						local state = {
+							repo_root = root,
+							repo_slug = repository.repo_full_name,
+							repository = repository,
+							head_repository = head_remote_info.target,
+							head_remote = head_remote_info.name,
+							head = values.head,
+							base_remote = base_remote_info.name,
+							base = default_base,
+							draft = false,
+							branches = branches,
+							reviewer_candidates = candidates,
+							reviewer_candidates_error = reviewer_err,
+							reviewers = reviewers,
+							commits_buf = vim.api.nvim_create_buf(false, true),
+							requests = requests.new(),
+							loading = false,
+							submitting = false,
+							write = write,
+						}
+
+						notify.clear()
+						local editor = open_editor(state, content)
+						if content_err then
+							editor.statusline:notify("error", content_err)
+						else
+							local notices = {}
+							if base_notice then
+								table.insert(notices, base_notice)
+							end
+							if reviewer_err then
+								table.insert(notices, reviewer_err)
+							end
+							if #notices > 0 then
+								editor.statusline:notify("warn", table.concat(notices, " | "))
+							end
+						end
+					end)
+				end)
 			end)
 		end)
 	end)
