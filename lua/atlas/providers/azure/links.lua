@@ -49,11 +49,13 @@ function M.fetch_issue(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
+
 		local refs, relationship_by_key, pulls, hyperlinks = {}, {}, {}, {}
 		for _, relation in ipairs(json.safe_table(result.relations)) do
 			local attributes = json.safe_table(relation.attributes)
 			local id = relation.url:match("/_apis/wit/[Ww]ork[Ii]tems/(%d+)$")
 			local artifact = relation.url:match("^vstfs:///Git/PullRequestId/(.+)$")
+
 			if id and not relation.rel:find(".Remote.", 1, true) then
 				table.insert(refs, { key = id })
 				relationship_by_key[id] = relationships[relation.rel]
@@ -82,21 +84,20 @@ function M.fetch_issue(issue, opts, on_done)
 		for index, pull in ipairs(pulls) do
 			starts[index] = function(done)
 				local endpoint = string.format("/%s/_apis/git/pullrequests/%s", pull.project_id, pull.id)
-				return service.request(
-					"GET",
-					endpoint,
-					nil,
-					done,
-					{ action = "Fetch linked pull request", id = pull.id }
-				)
+				return service.request("GET", endpoint, nil, done, {
+					action = "Fetch linked pull request",
+					id = pull.id,
+				})
 			end
 		end
+
 		scope.all(starts, function(values, errors)
 			local _, fetch_err = next(errors)
 			if fetch_err then
 				on_done(nil, fetch_err)
 				return
 			end
+
 			local links = {}
 			for _, item in ipairs(values.items) do
 				table.insert(links, issue_link(item, relationship_by_key[item.key]))
@@ -112,6 +113,7 @@ function M.fetch_issue(issue, opts, on_done)
 				})
 			end
 			vim.list_extend(links, hyperlinks)
+
 			service.set_cache(cache_key, links)
 			on_done(links, nil)
 		end)
@@ -153,10 +155,12 @@ function M.fetch_pullrequest(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
+
 		local refs = {}
 		for _, ref in ipairs(result.value) do
 			table.insert(refs, { key = tostring(ref.id) })
 		end
+
 		scope.run(function(done)
 			return issues_api.fetch_by_refs(refs, opts, done)
 		end, function(items, items_err)
@@ -164,10 +168,12 @@ function M.fetch_pullrequest(pr, opts, on_done)
 				on_done(nil, items_err)
 				return
 			end
+
 			local links = {}
 			for _, item in ipairs(items) do
 				table.insert(links, issue_link(item, "linked"))
 			end
+
 			service.set_cache(cache_key, links)
 			on_done(links, nil)
 		end)
