@@ -782,7 +782,7 @@ function M.create_pr(opts, on_done)
 	if head_slug and head_slug ~= "" and head_slug ~= path then
 		return service.request(
 			"GET",
-			string.format("/projects/%s", service.url_encode(head_slug)),
+			string.format("/projects/%s", service.url_encode(path)),
 			nil,
 			function(result, err)
 				if err then
@@ -791,13 +791,14 @@ function M.create_pr(opts, on_done)
 				end
 				local project_id = type(result) == "table" and tonumber(result.id) or nil
 				if not project_id then
-					on_done(nil, "Could not resolve source project: " .. head_slug)
+					on_done(nil, "Could not resolve target project: " .. path)
 					return
 				end
-				payload.source_project_id = project_id
+				endpoint = string.format("/projects/%s/merge_requests", service.url_encode(head_slug))
+				payload.target_project_id = project_id
 				submit()
 			end,
-			{ action = "Resolve source project", path = head_slug }
+			{ action = "Resolve target project", path = path }
 		)
 	end
 
