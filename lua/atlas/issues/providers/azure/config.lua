@@ -1,7 +1,8 @@
 -- WIQL syntax: https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax
 
 ---@class AtlasAzureIssuesViewConfig : IssuesViewConfig
----@field project string Azure DevOps project name.
+---@field project string|nil Azure DevOps project name.
+---@field current_repo boolean|nil Use the project of the current Git repository; alternative to project.
 ---@field search string Native flat WIQL query.
 
 ---@class AtlasAzureIssuesBookmarkConfig : AtlasIssuesBookmarkConfig

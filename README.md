@@ -917,6 +917,7 @@ issues = {
         name = "Assigned",
         key = "1",
         project = "YourProject",
+        -- current_repo = true, -- Use the project of the local repository instead of project.
         search = [[
           SELECT [System.Id] FROM WorkItems
           WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me

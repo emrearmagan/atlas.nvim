@@ -66,7 +66,7 @@ end
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function query(view, opts, on_done)
-	local endpoint = "/" .. service.url_encode(view.project) .. "/_apis/wit/wiql"
+	local endpoint = (view.project and "/" .. service.url_encode(view.project) or "") .. "/_apis/wit/wiql"
 	local cache_key = "issues:query:" .. endpoint .. ":" .. view.search
 	if not opts.force_refresh then
 		local cached, found = service.get_cache(cache_key)

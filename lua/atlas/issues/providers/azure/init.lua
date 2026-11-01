@@ -10,6 +10,8 @@
 ---@field body_format string
 
 local config = require("atlas.config")
+local git = require("atlas.core.git")
+local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local comments_api = require("atlas.issues.providers.azure.api.comments")
 local history_api = require("atlas.issues.providers.azure.api.history")
@@ -21,6 +23,39 @@ local function views()
 	return vim.tbl_map(function(view)
 		return vim.tbl_extend("force", {}, view)
 	end, options.views or {})
+end
+
+---@param view AtlasAzureIssuesViewConfig
+---@param on_done fun(view: AtlasAzureIssuesViewConfig)
+---@return { cancel: fun() }|nil
+local function resolve_view(view, on_done)
+	if not view.current_repo then
+		on_done(view)
+		return nil
+	end
+	return git.local_repository(vim.fn.getcwd(), function(target)
+		local resolved = vim.tbl_extend("force", {}, view)
+		if target and target.provider == "azure" and target.owner then
+			resolved.project = target.owner
+		end
+		on_done(resolved)
+	end)
+end
+
+---@param view AtlasAzureIssuesViewConfig
+---@param opts IssuesFetchOpts
+---@param on_done fun(page: IssuesPage, err: string|nil)
+---@return AtlasRequestScope
+local function fetch_issues(view, opts, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_view(view, done)
+	end, function(resolved)
+		requests.run(function(done)
+			return issues_api.list_issues(resolved, opts, done)
+		end, on_done)
+	end)
+	return requests
 end
 
 ---@param target AtlasTarget
@@ -36,7 +71,7 @@ return {
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
-			fetch_issues = issues_api.list_issues,
+			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			fetch_links = links_api.fetch_issue,
