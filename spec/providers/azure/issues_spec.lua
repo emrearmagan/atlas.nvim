@@ -139,4 +139,12 @@ describe("Azure work items", function()
 			{ op = "add", path = "/multilineFieldsFormat/System.Description", value = "Markdown" },
 		}, calls[2].payload)
 	end)
+
+	it("clears fields with replace because Azure ignores an empty add", function()
+		local api = require("atlas.issues.providers.azure.api.issues")
+		api.update({ key = "42", title = "Title" }, { ["System.Tags"] = "" }, function(ok)
+			assert.is_true(ok)
+		end)
+		assert.same({ { op = "replace", path = "/fields/System.Tags", value = "" } }, calls[1].payload)
+	end)
 end)

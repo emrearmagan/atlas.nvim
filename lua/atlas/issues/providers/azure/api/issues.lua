@@ -169,7 +169,8 @@ end
 local function field_patch(fields)
 	local patch = {}
 	for field, value in pairs(fields) do
-		table.insert(patch, { op = "add", path = "/fields/" .. field, value = value })
+		local op = value == "" and "replace" or "add"
+		table.insert(patch, { op = op, path = "/fields/" .. field, value = value })
 	end
 	return patch
 end
