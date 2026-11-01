@@ -1,7 +1,6 @@
 ---@class AzureIssue : Issue
 ---@field id integer
 ---@field project string
----@field description_format string|nil
 
 ---@class AzureIssueDetails : IssueDetails
 --- Azure work-item formats: https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/
@@ -18,7 +17,9 @@ local history_api = require("atlas.issues.providers.azure.api.history")
 ---@return AtlasAzureIssuesViewConfig[]
 local function views()
 	local options = config.domain_options("azure", "issues") or {}
-	return options.views or {}
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, options.views or {})
 end
 
 ---@param target AtlasTarget

@@ -104,48 +104,32 @@ function M.fetch_commits(pr, opts, on_done)
 		end
 	end
 
-	local commits = {}
-	local scope = request_scope.new()
 	local context = { action = "Fetch pull request commits", repo = pr.repo_full_name, id = pr.id }
-
-	---@param continuation_token string|nil
-	local function fetch_page(continuation_token)
-		local query = service.build_query({ ["$top"] = 100, continuationToken = continuation_token })
-		scope.run(function(done)
-			return service.request("GET", endpoint .. query, nil, done, context)
-		end, function(result, err, headers)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			for _, raw in ipairs(result.value) do
-				table.insert(commits, {
-					hash = raw.commitId,
-					short_hash = raw.commitId:sub(1, 8),
-					message = raw.comment,
-					author_name = raw.author.name,
-					date = raw.author.date,
-					html_url = raw.remoteUrl,
-					statuses_url = string.format(
-						"/%s/_apis/git/repositories/%s/commits/%s/statuses",
-						service.url_encode(pr.repo.owner),
-						service.url_encode(pr.repo.repo_name),
-						raw.commitId
-					),
-				})
-			end
-			local next_token = headers["x-ms-continuationtoken"]
-			if next_token then
-				fetch_page(next_token)
-				return
-			end
-			service.set_cache(cache_key, commits)
-			on_done(commits, nil)
-		end)
-	end
-
-	fetch_page(nil)
-	return scope
+	return service.fetch_all(endpoint, {}, context, function(values, err)
+		if not values then
+			on_done(nil, err)
+			return
+		end
+		local commits = {}
+		for _, raw in ipairs(values) do
+			table.insert(commits, {
+				hash = raw.commitId,
+				short_hash = raw.commitId:sub(1, 8),
+				message = raw.comment,
+				author_name = raw.author.name,
+				date = raw.author.date,
+				html_url = raw.remoteUrl,
+				statuses_url = string.format(
+					"/%s/_apis/git/repositories/%s/commits/%s/statuses",
+					service.url_encode(pr.repo.owner),
+					service.url_encode(pr.repo.repo_name),
+					raw.commitId
+				),
+			})
+		end
+		service.set_cache(cache_key, commits)
+		on_done(commits, nil)
+	end)
 end
 
 return M

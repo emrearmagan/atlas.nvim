@@ -10,6 +10,7 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local search = require("atlas.pulls.providers.azure.actions.search")
+local state = require("atlas.pulls.state")
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}
@@ -25,30 +26,8 @@ register({
 	id = "merge",
 	label = "Merge PR",
 	icon = icons.get("merge", "actions"),
-	is_available = function(ctx)
-		return ctx.pr ~= nil and ctx.pr.state == "open"
-	end,
-	run = function(ctx, done)
-		local pr = assert(ctx.pr)
-		require("atlas.pulls.ui.merge").open(pr, {
-			on_cancel = function()
-				done({ changed_pr = false }, nil)
-			end,
-			on_submit = function(options, completed)
-				notify.loading("Completing PR...")
-				pullrequests_api.merge(pr, options, function(ok, err)
-					if not ok then
-						notify.error(err or "Completion failed")
-						completed(false)
-						return
-					end
-					completed(true)
-					notify.success("Completion requested", { timeout = 1500 })
-					done({ changed_pr = true }, nil)
-				end)
-			end,
-		})
-	end,
+	is_available = actions.merge.is_available,
+	run = actions.merge.run,
 })
 register(actions.decline)
 register({
@@ -123,6 +102,13 @@ register(actions.edit_reviewers)
 
 register({ id = "search", label = "Search Pull Requests", icon = icons.get("search", "actions"), run = search.search })
 register({ id = "open_repo", label = "Open Repo", icon = icons.get("search", "actions"), run = search.open_repo })
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.get("overview"),
+	run = search.browse_repositories,
+})
 register({
 	id = "search_pull_requests",
 	label = "Open Search View",
@@ -134,7 +120,6 @@ register({
 	label = "Edit search",
 	icon = icons.get("search", "actions"),
 	is_available = function(context)
-		local state = require("atlas.pulls.state")
 		return state.provider == context.provider and state.search_view() ~= nil
 	end,
 	run = search.edit,

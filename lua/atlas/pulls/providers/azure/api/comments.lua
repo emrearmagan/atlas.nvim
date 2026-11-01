@@ -136,13 +136,16 @@ function M.add_comment(pr, content, opts, on_done)
 		return create_thread(pr, body, on_done)
 	end
 	local inline = opts.inline
-	body.threadContext = {
-		filePath = "/" .. position.path,
-		leftFileStart = inline and inline.from and { line = inline.start_from or inline.from, offset = 1 } or nil,
-		leftFileEnd = inline and inline.from and { line = inline.from, offset = inline.end_column or 1 } or nil,
-		rightFileStart = inline and inline.to and { line = inline.start_to or inline.to, offset = 1 } or nil,
-		rightFileEnd = inline and inline.to and { line = inline.to, offset = inline.end_column or 1 } or nil,
-	}
+	local thread_context = { filePath = "/" .. position.path }
+	if inline and inline.from then
+		thread_context.leftFileStart = { line = inline.start_from or inline.from, offset = 1 }
+		thread_context.leftFileEnd = { line = inline.from, offset = inline.end_column or 1 }
+	end
+	if inline and inline.to then
+		thread_context.rightFileStart = { line = inline.start_to or inline.to, offset = 1 }
+		thread_context.rightFileEnd = { line = inline.to, offset = inline.end_column or 1 }
+	end
+	body.threadContext = thread_context
 	local scope = request_scope.new()
 	scope.run(function(done)
 		return fetch_thread_context(pr, position.path, position.commit_hash or pr.source.commit_hash, done)
@@ -202,6 +205,20 @@ function M.add_reaction(pr, comment, _key, on_done)
 		end
 		on_done(err == nil, err)
 	end, { action = "Like pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param _key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.remove_reaction(pr, comment, _key, on_done)
+	return service.request("DELETE", comment_endpoint(pr, comment) .. "/likes", nil, function(_, err)
+		if not err then
+			service.clear_cache()
+		end
+		on_done(err == nil, err)
+	end, { action = "Unlike pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
 
 ---@param pr PullRequest

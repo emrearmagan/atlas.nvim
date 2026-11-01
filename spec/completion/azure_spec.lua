@@ -37,6 +37,16 @@ describe("Azure mention completion", function()
 				end
 			end,
 		}
+		package.loaded[modules[4]] = {
+			fetch_by_refs = function(_, _, done)
+				done({ { key = "42", project = "Team", reporter = { id = "author", name = "Avery" } } })
+			end,
+		}
+		package.loaded[modules[5]] = {
+			fetch_conversation = function(_, _, done)
+				done({ comments = { { author = { id = "commenter", name = "Chris" } } }, activities = {} })
+			end,
+		}
 		source = require("atlas.providers.azure.completion").users
 	end)
 
@@ -74,16 +84,6 @@ describe("Azure mention completion", function()
 	end)
 
 	it("includes work-item comment authors in filtered mention candidates", function()
-		package.loaded[modules[4]] = {
-			fetch_by_refs = function(_, _, done)
-				done({ { key = "42", project = "Team", reporter = { id = "author", name = "Avery" } } })
-			end,
-		}
-		package.loaded[modules[5]] = {
-			fetch_conversation = function(_, _, done)
-				done({ { entity = { author = { id = "commenter", name = "Chris" } } } })
-			end,
-		}
 		local items
 		source.complete({ issue = { key = "42" } }, "ch", function(result, err)
 			assert.is_nil(err)

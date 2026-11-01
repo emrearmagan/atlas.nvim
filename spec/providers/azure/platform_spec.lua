@@ -33,6 +33,9 @@ describe("Azure repositories and builds", function()
 				local request = { method = method, endpoint = endpoint, payload = payload, done = done }
 				requests[#requests + 1] = request
 			end,
+			fetch_all = function(endpoint, params, _, done)
+				requests[#requests + 1] = { endpoint = endpoint .. client.build_query(params), done = done }
+			end,
 		}
 		repositories = require("atlas.providers.azure.repositories")
 		pipelines = require("atlas.pulls.providers.azure.api.pipelines")
@@ -44,23 +47,17 @@ describe("Azure repositories and builds", function()
 		end
 	end)
 
-	it("follows tag continuation tokens before filtering and peels annotated tags", function()
+	it("filters tags and peels annotated tags", function()
 		local tags
 		repositories.fetch_tags(repo, { search = "v2" }, function(value, err, cursor)
 			assert.is_nil(err)
 			assert.is_nil(cursor)
 			tags = value
 		end)
-		requests[1].done({ value = { { name = "refs/tags/v1", objectId = "one" } } }, nil, {
-			["x-ms-continuationtoken"] = "next",
+		requests[1].done({
+			{ name = "refs/tags/v1", objectId = "one" },
+			{ name = "refs/tags/v2", objectId = "tag", peeledObjectId = "commit" },
 		})
-		assert.is_nil(tags)
-		assert.matches("continuationToken=next", requests[2].endpoint, 1, true)
-		requests[2].done(
-			{ value = { { name = "refs/tags/v2", objectId = "tag", peeledObjectId = "commit" } } },
-			nil,
-			{}
-		)
 		assert.same({ { name = "v2", hash = "commit" } }, tags)
 	end)
 
@@ -81,7 +78,7 @@ describe("Azure repositories and builds", function()
 		for index = 1, 2 do
 			local request = requests[index]
 			local is_pr = request.endpoint:find("reasonFilter=pullRequest", 1, true)
-			request.done({ value = is_pr and { build(5, "merge-sha"), build(9, "old-sha") } or {} }, nil, {})
+			request.done(is_pr and { build(5, "merge-sha"), build(9, "old-sha") } or {})
 		end
 	end
 

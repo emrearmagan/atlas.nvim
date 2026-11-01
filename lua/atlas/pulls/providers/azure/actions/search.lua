@@ -165,6 +165,16 @@ function M.edit(_, done)
 	end)
 end
 
+---@param context AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+function M.browse_repositories(context, done)
+	select_repository("Browse Repository", function(repo)
+		local full_name = repo.project.name .. "/" .. repo.name
+		require("atlas.ui.repository").open(full_name, context.provider, { page = context.page })
+		done(nil, nil)
+	end, done)
+end
+
 ---@param _ AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 function M.open_repo(_, done)

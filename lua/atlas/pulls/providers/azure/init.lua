@@ -26,9 +26,15 @@ local comments_api = require("atlas.pulls.providers.azure.api.comments")
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
 	local options = config.domain_options("azure", "pulls") or {}
+	local configured = options.views or {}
+	if #configured == 0 then
+		configured = {
+			{ name = "Pull Requests", key = "1", layout = "compact", current_repo = true },
+		}
+	end
 	return vim.tbl_map(function(view)
 		return vim.tbl_extend("force", {}, view)
-	end, options.views or {})
+	end, configured)
 end
 
 ---@param view AtlasAzurePullsViewConfig
@@ -118,6 +124,7 @@ return {
 			reactions = {
 				options = { { name = "thumbsup", key = "like" } },
 				add = comments_api.add_reaction,
+				remove = comments_api.remove_reaction,
 			},
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
@@ -131,7 +138,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			-- discard_review = nil,
-			-- set_file_reviewed = nil,
+			-- set_files_reviewed = nil,
 		},
 		-- tasks = {
 		-- 	add_task = nil,

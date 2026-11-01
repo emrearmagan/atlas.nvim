@@ -516,15 +516,17 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
+	local message = opts.subject
+	if message and opts.body and opts.body ~= "" then
+		message = message .. "\n\n" .. opts.body
+	end
 	return update_pullrequest(pr, {
 		status = "completed",
 		lastMergeSourceCommit = { commitId = pr.source.commit_hash },
 		completionOptions = {
 			mergeStrategy = opts.method == "squash" and "squash" or "noFastForward",
 			deleteSourceBranch = opts.delete_source_branch,
-			mergeCommitMessage = opts.subject
-					and (opts.subject .. (opts.body and opts.body ~= "" and "\n\n" .. opts.body or ""))
-				or nil,
+			mergeCommitMessage = message,
 		},
 	}, on_done)
 end

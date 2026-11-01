@@ -648,6 +648,7 @@ pulls = {
         layout = "grouped", -- "compact", "grouped", or "plain"
         project = "YourProject",
         repository = "YourRepository", -- Omit to include all repositories in the project.
+        -- current_repo = true, -- Limit this view to the local repository.
         scope = "assigned_to_me",
       },
       {

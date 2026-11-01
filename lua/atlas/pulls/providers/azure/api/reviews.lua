@@ -40,12 +40,12 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean, commit_hash?: string }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review(pr, opts, include_hunks, on_done)
-	local commit_hash = (opts or {}).commit_hash or pr.source.commit_hash
+	local commit_hash = pr.source.commit_hash
 	local endpoint = string.format(
 		"/%s/_apis/git/repositories/%s/pullrequests/%s",
 		service.url_encode(pr.repo.owner),
@@ -78,6 +78,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 			comments = function(done)
 				return service.request("GET", endpoint .. "/threads" .. query, nil, done, context)
 			end,
+			viewer = users.fetch_user,
 		}
 		if include_hunks then
 			starts.files = function(done)
@@ -90,7 +91,8 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 				on_done(nil, error)
 				return
 			end
-			local comments = mapper.to_review_comments(values.comments.value, pr)
+			local viewer = values.viewer and values.viewer.id
+			local comments = mapper.to_review_comments(values.comments.value, pr, viewer)
 			local files = {}
 			for _, file in ipairs(values.files or {}) do
 				files[file.path] = file
@@ -128,7 +130,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean, commit_hash?: string }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
@@ -136,7 +138,7 @@ function M.fetch(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean, commit_hash?: string }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_threads(pr, opts, on_done)

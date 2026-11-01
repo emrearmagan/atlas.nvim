@@ -2,8 +2,7 @@ local M = {}
 
 local json = require("atlas.core.json")
 local service = require("atlas.providers.azure.client")
-
-M.to_user = require("atlas.providers.azure.users").to_user
+local users = require("atlas.providers.azure.users")
 
 ---@param raw table
 ---@return AzureIssue
@@ -20,8 +19,8 @@ function M.to_issue(raw)
 		status = fields["System.State"],
 		status_id = fields["System.State"],
 		type = { id = item_type, name = item_type, subtask = parent ~= nil },
-		assignee = M.to_user(fields["System.AssignedTo"]),
-		reporter = M.to_user(fields["System.CreatedBy"]),
+		assignee = users.to_user(fields["System.AssignedTo"]),
+		reporter = users.to_user(fields["System.CreatedBy"]),
 		story_points = fields["Microsoft.VSTS.Scheduling.StoryPoints"],
 		duedate = fields["Microsoft.VSTS.Scheduling.DueDate"],
 		parent = parent and { key = tostring(parent) } or nil,
@@ -30,7 +29,6 @@ function M.to_issue(raw)
 		updated_at = fields["System.ChangedDate"],
 		closed_at = fields["Microsoft.VSTS.Common.ClosedDate"],
 		comment_count = fields["System.CommentCount"],
-		description_format = json.safe_table(raw.multilineFieldsFormat)["System.Description"] or "html",
 	}
 end
 
@@ -38,7 +36,7 @@ end
 ---@return AzureIssueDetails
 function M.to_issue_details(raw)
 	local fields = raw.fields
-	local assigned = M.to_user(fields["System.AssignedTo"])
+	local assigned = users.to_user(fields["System.AssignedTo"])
 	local labels = {}
 	for name in tostring(fields["System.Tags"] or ""):gmatch("[^;]+") do
 		table.insert(labels, { name = vim.trim(name) })
@@ -91,7 +89,7 @@ function M.to_history(updates)
 	local entries = {}
 	for _, raw in ipairs(updates) do
 		local fields = raw.fields or {}
-		local actor = M.to_user(raw.revisedBy)
+		local actor = users.to_user(raw.revisedBy)
 		local date = fields["System.ChangedDate"] and fields["System.ChangedDate"].newValue
 		if raw.id == 1 then
 			table.insert(entries, { kind = "other", actor = actor, date = date, label = "created the work item" })

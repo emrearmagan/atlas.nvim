@@ -32,6 +32,9 @@ describe("Azure review mapping", function()
 			build_query = client.build_query,
 			get_cache = function() end,
 			set_cache = function() end,
+			get_persistent_cache = function()
+				return { id = "me" }, true
+			end,
 			request = function(_, endpoint, _, done)
 				if endpoint:match("/reviewers$") then
 					done({ value = reviewers }, nil)
@@ -119,5 +122,16 @@ describe("Azure review mapping", function()
 		for _, index in ipairs({ 2, 4, 5, 6 }) do
 			assert.is_nil(result[index].hunk)
 		end
+	end)
+
+	it("marks likes from the current user as reacted", function()
+		local mapper = require("atlas.pulls.providers.azure.api.mapper")
+		local raw = comment(1)
+		raw.usersLiked = { { id = "me", displayName = "Me" }, { id = "bob", displayName = "Bob" } }
+
+		local liked = mapper.to_comment(raw, { id = 7 }, pr, "me").reactions[1]
+		assert.equal(2, liked.count)
+		assert.is_true(liked.reacted)
+		assert.is_false(mapper.to_comment(raw, { id = 7 }, pr, "alice").reactions[1].reacted)
 	end)
 end)

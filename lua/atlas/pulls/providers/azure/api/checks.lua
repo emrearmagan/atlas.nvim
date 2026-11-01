@@ -57,13 +57,23 @@ function M.fetch(pr, opts, on_done)
 			local completed = json.safe_str(evaluation.completedDate)
 			local timestamp = completed or json.safe_str(evaluation.startedDate)
 			local timestamp_label = completed and "Completed " or "Evaluation started "
+			local check_state = state
+			if state == "failed" and not configuration.isBlocking then
+				check_state = "warning"
+			end
+			local label = configuration.type.displayName
+			if name and name ~= "" then
+				label = label .. ": " .. name
+			end
+			local details = nil
+			if show_details and timestamp then
+				details = { timestamp_label .. utils.relative_time_text(timestamp) }
+			end
 			table.insert(checks, {
 				key = evaluation.evaluationId,
-				state = state == "failed" and not configuration.isBlocking and "warning" or state,
-				label = name and name ~= "" and (configuration.type.displayName .. ": " .. name)
-					or configuration.type.displayName,
-				details = show_details and timestamp and { timestamp_label .. utils.relative_time_text(timestamp) }
-					or nil,
+				state = check_state,
+				label = label,
+				details = details,
 			})
 		end
 		service.set_cache(cache_key, checks)

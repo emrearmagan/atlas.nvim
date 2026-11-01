@@ -4,6 +4,7 @@ local issues_api = require("atlas.issues.providers.azure.api.issues")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local search = require("atlas.issues.providers.azure.actions.search")
+local users = require("atlas.providers.azure.users")
 
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
@@ -49,13 +50,7 @@ local function with_project(context, on_select, done)
 		on_select(project)
 		return
 	end
-	vim.ui.input({ prompt = "Azure project: " }, function(input)
-		if input == nil or vim.trim(input) == "" then
-			done(nil, nil)
-			return
-		end
-		on_select(vim.trim(input))
-	end)
+	search.select_project("Project", on_select, done)
 end
 
 register({
@@ -116,18 +111,42 @@ register({
 	is_available = has_issue,
 	run = function(context, done)
 		local issue = assert(context.issue)
-		local assignee = issue.assignee
-		---@cast assignee AtlasUser|nil
-		vim.ui.input(
-			{ prompt = "Assignee email (empty to unassign): ", default = assignee and assignee.username or "" },
-			function(input)
-				if input == nil then
-					done(nil, nil)
-					return
-				end
-				update(issue, { ["System.AssignedTo"] = vim.trim(input) }, done)
+		---@cast issue AzureIssue
+		notify.loading("Loading members...")
+		users.fetch_project_members(issue.project, function(members, err)
+			if err then
+				notify.error(err)
+				done(nil, err)
+				return
 			end
-		)
+			notify.clear()
+			local items = { { name = "Unassigned", username = "" } }
+			local seen = {}
+			for _, member in ipairs(members or {}) do
+				local user = users.to_user(member)
+				if user and user.username and not seen[user.username] then
+					seen[user.username] = true
+					table.insert(items, user)
+				end
+			end
+			picker.select({
+				title = "Assign work item #" .. issue.key,
+				items = items,
+				format_item = function(user)
+					if user.username == "" then
+						return user.name
+					end
+					return string.format("%s %s (%s)", icons.get("user"), user.name, user.username)
+				end,
+				on_select = function(user)
+					if user then
+						update(issue, { ["System.AssignedTo"] = user.username }, done)
+					else
+						done(nil, nil)
+					end
+				end,
+			})
+		end)
 	end,
 })
 
@@ -179,23 +198,20 @@ register({
 	id = "delete_issue",
 	label = "Delete work item",
 	icon = icons.get("delete", "actions"),
+	confirm = function(context)
+		return string.format("Move work item #%s to the recycle bin?", assert(context.issue).key)
+	end,
 	is_available = has_issue,
 	run = function(context, done)
 		local issue = assert(context.issue)
-		vim.ui.input({ prompt = "Move work item #" .. issue.key .. " to the recycle bin? [y/N]: " }, function(input)
-			if vim.trim(input or ""):lower() ~= "y" then
-				done(nil, nil)
+		issues_api.delete(issue, function(ok, err)
+			if not ok then
+				notify.error(err)
+				done(nil, err)
 				return
 			end
-			issues_api.delete(issue, function(ok, err)
-				if not ok then
-					notify.error(err)
-					done(nil, err)
-					return
-				end
-				notify.success("Work item moved to recycle bin", { timeout = 1200 })
-				done({ issue_key = issue.key, removed = true }, nil)
-			end)
+			notify.success("Work item moved to recycle bin", { timeout = 1200 })
+			done({ issue_key = issue.key, removed = true }, nil)
 		end)
 	end,
 })

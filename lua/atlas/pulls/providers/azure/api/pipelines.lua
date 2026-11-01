@@ -60,41 +60,18 @@ end
 ---@param on_done fun(builds: table[]|nil, err: string|nil)
 ---@return AtlasRequestScope
 local function fetch_builds(pr, branch, reason, on_done)
-	local scope = request_scope.new()
-	local builds = {}
-	local function fetch_page(continuation_token)
-		local query = service.build_query({
-			branchName = branch,
-			reasonFilter = reason,
-			repositoryId = pr.repository_id,
-			repositoryType = "TfsGit",
-			queryOrder = "queueTimeDescending",
-			maxBuildsPerDefinition = 1,
-			["$top"] = 100,
-			continuationToken = continuation_token,
-		})
-		scope.run(function(done)
-			return service.request("GET", builds_endpoint(pr) .. query, nil, done, {
-				action = "Fetch pull request builds",
-				repo = pr.repo_full_name,
-				id = pr.id,
-			})
-		end, function(result, err, headers)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			vim.list_extend(builds, result.value)
-			local next_token = headers["x-ms-continuationtoken"]
-			if next_token then
-				fetch_page(next_token)
-				return
-			end
-			on_done(builds, nil)
-		end)
-	end
-	fetch_page(nil)
-	return scope
+	return service.fetch_all(builds_endpoint(pr), {
+		branchName = branch,
+		reasonFilter = reason,
+		repositoryId = pr.repository_id,
+		repositoryType = "TfsGit",
+		queryOrder = "queueTimeDescending",
+		maxBuildsPerDefinition = 1,
+	}, {
+		action = "Fetch pull request builds",
+		repo = pr.repo_full_name,
+		id = pr.id,
+	}, on_done)
 end
 
 ---@param pr PullRequest
@@ -201,7 +178,6 @@ local function with_timeline(pipeline, records)
 			id = raw.id,
 			name = raw.name,
 			state = pipeline_state(raw.state, raw.result),
-			provider_state = json.safe_str(raw.result) or raw.state,
 			url = pipeline.url,
 			started_at = json.safe_str(raw.startTime),
 			duration = pipeline_utils.duration(json.safe_str(raw.startTime), json.safe_str(raw.finishTime)),

@@ -24,8 +24,8 @@ describe("Azure client HTTP contract", function()
 		})
 		response, response_error, status, headers = { value = {} }, nil, 200, { ["x-ms-continuationtoken"] = "next" }
 		package.loaded["atlas.core.http"] = {
-			curl_request = function(method, url, request_headers, body, callback)
-				captured = { method = method, url = url, headers = request_headers, body = body }
+			curl_request = function(method, url, request_headers, body, callback, opts)
+				captured = { method = method, url = url, headers = request_headers, body = body, opts = opts }
 				callback(response, response_error, status, headers)
 			end,
 		}
@@ -40,21 +40,37 @@ describe("Azure client HTTP contract", function()
 		package.loaded["atlas.core.logger"] = original_logger
 	end)
 
-	it("passes continuation headers after the shared status argument", function()
-		local received
-		require("atlas.providers.azure.client").request(
-			"GET",
-			"/_apis/git/repositories?top=1",
-			nil,
-			function(result, err, metadata)
-				received = metadata
-				assert.equal(response, result)
-				assert.is_nil(err)
-			end
-		)
-		assert.equal(headers, received)
+	it("sends authenticated requests without asking for response headers", function()
+		local client = require("atlas.providers.azure.client")
+		client.request("GET", "/_apis/git/repositories?top=1", nil, function(result, err)
+			assert.equal(response, result)
+			assert.is_nil(err)
+		end)
 		assert.equal("https://dev.azure.com/acme/_apis/git/repositories?top=1&api-version=7.1", captured.url)
 		assert.equal("Basic test-encoded", captured.headers.Authorization)
+		assert.falsy(captured.opts.response_headers)
+	end)
+
+	it("follows encoded continuation tokens and combines pages", function()
+		local urls = {}
+		package.loaded["atlas.core.http"].curl_request = function(_, url, _, _, callback, opts)
+			assert.is_true(opts.response_headers)
+			table.insert(urls, url)
+			local first = #urls == 1
+			callback({ value = { #urls } }, nil, 200, first and { ["x-ms-continuationtoken"] = "next/page" } or {})
+		end
+		local values
+		local client = require("atlas.providers.azure.client")
+		client.fetch_all("/_apis/projects", { stateFilter = "all" }, {}, function(result, err)
+			assert.is_nil(err)
+			values = result
+		end)
+		assert.same({ 1, 2 }, values)
+		assert.equal("https://dev.azure.com/acme/_apis/projects?$top=100&stateFilter=all&api-version=7.1", urls[1])
+		assert.equal(
+			"https://dev.azure.com/acme/_apis/projects?$top=100&continuationToken=next%2Fpage&stateFilter=all&api-version=7.1",
+			urls[2]
+		)
 	end)
 
 	it("retains version overrides, patch content type and transport errors", function()

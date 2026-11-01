@@ -4,7 +4,6 @@ local M = {}
 
 local json = require("atlas.core.json")
 local requests = require("atlas.core.requests")
-local mapper = require("atlas.issues.providers.azure.api.mapper")
 local users = require("atlas.providers.azure.users")
 local markdown = require("atlas.issues.providers.azure.markdown")
 local service = require("atlas.providers.azure.client")
@@ -41,7 +40,7 @@ local function to_comment(raw)
 			table.insert(reactions, { name = name, count = count, reacted = reaction.isCurrentUserEngaged == true })
 		end
 	end
-	local author = mapper.to_user(raw.createdBy)
+	local author = users.to_user(raw.createdBy)
 	local authors = {}
 	users.add_mention_name(authors, author)
 	return {
@@ -57,7 +56,7 @@ end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
+---@param on_done fun(conversation: IssueConversation|nil, err: string|nil)
 ---@return AtlasRequestScope|nil
 function M.fetch_conversation(issue, opts, on_done)
 	---@cast issue AzureIssue
@@ -72,7 +71,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 
 	local scope = requests.new()
-	local items = {}
+	local comments = {}
 	local function fetch_page(token)
 		local query = service.build_query({
 			["$top"] = 100,
@@ -100,14 +99,15 @@ function M.fetch_conversation(issue, opts, on_done)
 					local authors = {}
 					users.add_mention_name(authors, issue.reporter)
 					users.add_mention_name(authors, issue.assignee)
-					for _, item in ipairs(items) do
-						users.add_mention_name(authors, item.entity.author)
+					for _, comment in ipairs(comments) do
+						users.add_mention_name(authors, comment.author)
 					end
-					for _, item in ipairs(items) do
-						item.entity.body_display = users.resolve_mentions(item.entity.body, authors)
+					for _, comment in ipairs(comments) do
+						comment.body_display = users.resolve_mentions(comment.body, authors)
 					end
-					service.set_cache(cache_key, items)
-					on_done(items, nil)
+					local conversation = { comments = comments, activities = {} }
+					service.set_cache(cache_key, conversation)
+					on_done(conversation, nil)
 					return
 				end
 
@@ -118,12 +118,7 @@ function M.fetch_conversation(issue, opts, on_done)
 					local comment = to_comment(raw)
 					comment.body = body
 					comment.body_format = format
-					table.insert(items, {
-						id = "comment:" .. comment.id,
-						kind = "comment",
-						created_at = comment.created_at,
-						entity = comment,
-					})
+					table.insert(comments, comment)
 					convert_comment(index + 1)
 				end)
 			end

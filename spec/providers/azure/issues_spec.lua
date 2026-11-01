@@ -112,15 +112,16 @@ describe("Azure work items", function()
 		require("atlas.issues.providers.azure.api.comments").fetch_conversation(
 			{ id = 42, key = "42", project = "Platform" },
 			{},
-			function(items, err)
+			function(conversation, err)
 				assert.is_nil(err)
-				result = items
+				result = conversation
 			end
 		)
 		assert.equal(2, pages)
-		assert.equal(2, #result)
-		assert.equal("Hi @<alice> and @<unknown>", result[1].entity.body)
-		assert.equal("Hi @Alice and @<unknown>", result[1].entity.body_display)
+		assert.equal(2, #result.comments)
+		assert.same({}, result.activities)
+		assert.equal("Hi @<alice> and @<unknown>", result.comments[1].body)
+		assert.equal("Hi @Alice and @<unknown>", result.comments[1].body_display)
 	end)
 
 	it("only switches the description format when a Markdown description is written", function()

@@ -1,7 +1,9 @@
 local M = {}
 
+local request_scope = require("atlas.core.requests")
 local service = require("atlas.providers.azure.client")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
+local users = require("atlas.providers.azure.users")
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
@@ -24,15 +26,27 @@ function M.fetch_conversation(pr, opts, on_done)
 		end
 	end
 
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
+	local scope = request_scope.new()
+	scope.all({
+		threads = function(done)
+			return service.request("GET", endpoint, nil, done, {
+				action = "Fetch pull request conversation",
+				repo = pr.repo_full_name,
+				id = pr.id,
+			})
+		end,
+		viewer = users.fetch_user,
+	}, function(values, errors)
+		if errors.threads then
+			on_done(nil, errors.threads)
 			return
 		end
-		local conversation = mapper.to_conversation(result.value, pr)
+		local viewer = values.viewer and values.viewer.id
+		local conversation = mapper.to_conversation(values.threads.value, pr, viewer)
 		service.set_cache(cache_key, conversation)
 		on_done(conversation, nil)
-	end, { action = "Fetch pull request conversation", repo = pr.repo_full_name, id = pr.id })
+	end)
+	return scope
 end
 
 return M

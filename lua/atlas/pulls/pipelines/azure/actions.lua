@@ -13,7 +13,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.cancel(ctx.context, ctx.pipeline, function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -31,7 +31,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.update_stage(ctx.context, ctx.pipeline, ctx.stage, "retry", function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},
@@ -47,7 +47,7 @@ return {
 		end,
 		run = function(ctx, done)
 			return pipelines.update_stage(ctx.context, ctx.pipeline, ctx.stage, "cancel", function(_, err)
-				done(nil, err)
+				done(err == nil, err)
 			end)
 		end,
 	},

@@ -9,7 +9,7 @@ local projects_api = require("atlas.issues.providers.azure.api.projects")
 ---@param title string
 ---@param on_select fun(project: string)
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function select_project(title, on_select, done)
+function M.select_project(title, on_select, done)
 	notify.loading("Loading projects...")
 	projects_api.fetch_projects(function(projects, err)
 		if err then
@@ -101,7 +101,7 @@ end
 ---@param context AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 function M.issues(context, done)
-	select_project("Search Work Items - Project", function(project)
+	M.select_project("Search Work Items - Project", function(project)
 		search_issues(project, context, done)
 	end, done)
 end
@@ -109,7 +109,7 @@ end
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 function M.project(_, done)
-	select_project("Open Project", function(project)
+	M.select_project("Open Project", function(project)
 		require("atlas").open("issues", "azure", {
 			initial_view = {
 				name = "Search",

@@ -7,6 +7,7 @@ local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
+local request_scope = require("atlas.core.requests")
 local utils = require("atlas.core.utils")
 
 local function azure_config()
@@ -78,7 +79,6 @@ end
 
 function M.clear_cache()
 	memory_cache.clear_prefix("azure:")
-	cache.clear_prefix("azure:")
 end
 
 M.url_encode = utils.url_encode
@@ -101,8 +101,9 @@ end
 ---@param ctx? table
 ---@param api_version? string
 ---@param content_type? string
+---@param response_headers? boolean
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done, ctx, api_version, content_type)
+local function send(method, endpoint, data, on_done, ctx, api_version, content_type, response_headers)
 	local cfg = azure_config()
 	if not cfg.base_url or cfg.base_url == "" or not cfg.token or cfg.token == "" then
 		local err = "Missing Azure DevOps credentials in config"
@@ -126,20 +127,61 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 	log.action = nil
 	logger.loginfo(message, log)
 
-	return http.curl_request(
-		method,
-		M.base_url() .. endpoint,
-		headers,
-		payload,
-		function(result, err, _, response_headers)
+	return http.curl_request(method, M.base_url() .. endpoint, headers, payload, function(result, err, _, headers_out)
+		if err then
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+			on_done(nil, err)
+			return
+		end
+		on_done(result, nil, headers_out)
+	end, { response_headers = response_headers })
+end
+
+---@param method string
+---@param endpoint string
+---@param data? table
+---@param on_done fun(result: any, err: string|nil)
+---@param ctx? table
+---@param api_version? string
+---@param content_type? string
+---@return { job_id: integer, cancel: fun() }|nil
+function M.request(method, endpoint, data, on_done, ctx, api_version, content_type)
+	return send(method, endpoint, data, on_done, ctx, api_version, content_type)
+end
+
+---Fetch every page of a list endpoint that pages with continuation tokens.
+---@param endpoint string
+---@param params table<string, any>
+---@param ctx table
+---@param on_done fun(values: table[]|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.fetch_all(endpoint, params, ctx, on_done)
+	local scope = request_scope.new()
+	local values = {}
+	---@param continuation_token string|nil
+	local function fetch_page(continuation_token)
+		local query = M.build_query(vim.tbl_extend("force", params, {
+			["$top"] = 100,
+			continuationToken = continuation_token,
+		}))
+		scope.run(function(done)
+			return send("GET", endpoint .. query, nil, done, ctx, nil, nil, true)
+		end, function(result, err, headers)
 			if err then
-				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 				on_done(nil, err)
 				return
 			end
-			on_done(result, nil, response_headers)
-		end
-	)
+			vim.list_extend(values, result.value)
+			local next_token = headers and headers["x-ms-continuationtoken"]
+			if next_token then
+				fetch_page(next_token)
+				return
+			end
+			on_done(values, nil)
+		end)
+	end
+	fetch_page(nil)
+	return scope
 end
 
 return M

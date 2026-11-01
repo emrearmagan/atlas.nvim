@@ -41,26 +41,19 @@ describe("Azure pull request API logic", function()
 		end
 	end)
 
-	it("follows encoded commit continuation tokens and combines pages", function()
-		local calls = 0
-		client.request = function(_, url, _, done)
-			calls = calls + 1
-			assert.equal(
-				endpoint .. "/commits?$top=100" .. (calls == 1 and "" or "&continuationToken=next%2Fpage"),
-				url
-			)
-			done(
-				{ value = { { commitId = tostring(calls), comment = "Commit", author = {} } } },
-				nil,
-				calls == 1 and { ["x-ms-continuationtoken"] = "next/page" } or {}
-			)
+	it("maps all pull request commits", function()
+		client.fetch_all = function(url, _, _, done)
+			assert.equal(endpoint .. "/commits", url)
+			done({
+				{ commitId = "1", comment = "Commit", author = {} },
+				{ commitId = "2", comment = "Commit", author = {} },
+			})
 		end
 		local result
 		require("atlas.pulls.providers.azure.api.changes").fetch_commits(pr, {}, function(commits, err)
 			assert.is_nil(err)
 			result = commits
 		end)
-		assert.equal(2, calls)
 		assert.same({ "1", "2" }, { result[1].hash, result[2].hash })
 	end)
 

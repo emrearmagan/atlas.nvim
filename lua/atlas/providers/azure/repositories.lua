@@ -158,44 +158,23 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	local endpoint = repo_endpoint(repo) .. "/refs"
-	local tags = {}
-	local scope = request_scope.new()
+	local params = { filter = "tags/", peelTags = true }
 	local context = { action = "Fetch repository tags", repo = repo.id }
-
-	---@param continuation_token string|nil
-	local function fetch_page(continuation_token)
-		local query = service.build_query({
-			filter = "tags/",
-			peelTags = true,
-			["$top"] = 100,
-			continuationToken = continuation_token,
-		})
-		scope.run(function(done)
-			return service.request("GET", endpoint .. query, nil, done, context)
-		end, function(result, err, headers)
-			if err then
-				on_done(nil, err)
-				return
-			end
-
-			for _, raw in ipairs(result.value) do
-				table.insert(tags, {
-					name = raw.name:gsub("^refs/tags/", ""),
-					hash = json.safe_str(raw.peeledObjectId) or raw.objectId,
-					author = json.safe_table(raw.creator).displayName,
-				})
-			end
-			local next_token = headers["x-ms-continuationtoken"]
-			if next_token then
-				fetch_page(next_token)
-				return
-			end
-			on_done(matching(tags, opts.search), nil)
-		end)
-	end
-
-	fetch_page(nil)
-	return scope
+	return service.fetch_all(endpoint, params, context, function(values, err)
+		if not values then
+			on_done(nil, err)
+			return
+		end
+		local tags = {}
+		for _, raw in ipairs(values) do
+			table.insert(tags, {
+				name = raw.name:gsub("^refs/tags/", ""),
+				hash = json.safe_str(raw.peeledObjectId) or raw.objectId,
+				author = json.safe_table(raw.creator).displayName,
+			})
+		end
+		on_done(matching(tags, opts.search), nil)
+	end)
 end
 
 ---@param repo AtlasRepositoryDetails

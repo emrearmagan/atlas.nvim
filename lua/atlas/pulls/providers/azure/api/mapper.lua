@@ -203,11 +203,16 @@ end
 ---@param raw table
 ---@param thread table
 ---@param pr PullRequest
+---@param viewer string|nil Id of the current user
+---@param authors table<string, string>|nil Display names by user id; built from this comment when nil
 ---@return PullsComment
-function M.to_comment(raw, thread, pr)
+function M.to_comment(raw, thread, pr, viewer, authors)
 	local liked = {}
+	local reacted = false
 	for _, user in ipairs(json.safe_table(raw.usersLiked)) do
-		table.insert(liked, to_author(user))
+		local author = to_author(user)
+		table.insert(liked, author)
+		reacted = reacted or (viewer ~= nil and author.id == viewer)
 	end
 	local comment = {
 		id = thread.id .. ":" .. raw.id,
@@ -218,10 +223,11 @@ function M.to_comment(raw, thread, pr)
 		created_at = raw.publishedDate,
 		state = not raw.isDeleted and thread_states[thread.status] or nil,
 		deleted = raw.isDeleted or nil,
-		reactions = #liked > 0 and { { name = "thumbsup", count = #liked, users = liked } } or nil,
+		reactions = #liked > 0 and { { name = "thumbsup", count = #liked, users = liked, reacted = reacted } } or nil,
 		url = pr.link.html,
 	}
-	comment.body_display = users.resolve_mentions(comment.body, mention_authors(pr, { { comments = { raw } } }))
+	authors = authors or mention_authors(pr, { { comments = { raw } } })
+	comment.body_display = users.resolve_mentions(comment.body, authors)
 	local context = json.nilify(thread.threadContext)
 	if context then
 		local path = context.filePath:gsub("^/", "")
@@ -244,17 +250,16 @@ end
 
 ---@param raw_list table[]
 ---@param pr PullRequest
+---@param viewer string|nil Id of the current user
 ---@return PullsComment[]
-function M.to_review_comments(raw_list, pr)
+function M.to_review_comments(raw_list, pr, viewer)
 	local comments = {}
 	local authors = mention_authors(pr, raw_list)
 	for _, thread in ipairs(raw_list) do
 		if not thread.isDeleted and json.nilify(thread.threadContext) ~= nil then
 			for _, raw in ipairs(thread.comments) do
 				if raw.commentType == "text" then
-					local comment = M.to_comment(raw, thread, pr)
-					comment.body_display = users.resolve_mentions(comment.body, authors)
-					table.insert(comments, comment)
+					table.insert(comments, M.to_comment(raw, thread, pr, viewer, authors))
 				end
 			end
 		end
@@ -334,17 +339,16 @@ end
 
 ---@param raw_list table[]
 ---@param pr PullRequest
+---@param viewer string|nil Id of the current user
 ---@return PullsConversation
-function M.to_conversation(raw_list, pr)
+function M.to_conversation(raw_list, pr, viewer)
 	local conversation = { comments = {}, reviews = {}, activities = {} }
 	local authors = mention_authors(pr, raw_list)
 	for _, thread in ipairs(raw_list) do
 		if not thread.isDeleted and json.nilify(thread.threadContext) == nil then
 			for _, raw in ipairs(thread.comments) do
 				if raw.commentType == "text" then
-					local comment = M.to_comment(raw, thread, pr)
-					comment.body_display = users.resolve_mentions(comment.body, authors)
-					table.insert(conversation.comments, comment)
+					table.insert(conversation.comments, M.to_comment(raw, thread, pr, viewer, authors))
 				elseif raw.commentType == "system" and not raw.isDeleted then
 					table.insert(conversation.activities, to_activity(raw, thread))
 				end

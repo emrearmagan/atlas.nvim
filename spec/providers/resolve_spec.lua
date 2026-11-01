@@ -332,7 +332,11 @@ describe("providers.resolve", function()
 					"Team Project/api service",
 					"https://dev.azure.com/acme/Team%20Project/_git/api%20service",
 				},
-				{ "git@ssh.dev.azure.com:v3/acme/Platform/api", "Platform/api", "https://dev.azure.com/acme/Platform/_git/api" },
+				{
+					"git@ssh.dev.azure.com:v3/acme/Platform/api",
+					"Platform/api",
+					"https://dev.azure.com/acme/Platform/_git/api",
+				},
 				{
 					"ssh://git@ssh.dev.azure.com/v3/acme/Platform/api",
 					"Platform/api",

@@ -24,7 +24,6 @@ local M = {}
 ---@field repo string|nil
 ---@field project_path string|nil
 ---@field workspace string|nil
----@field organization string|nil
 ---@field number integer|nil
 ---@field id string|number|nil
 ---@field repo_full_name string|nil

@@ -578,6 +578,7 @@ AZURE DEVOPS PULLS                                          *atlas-pulls-azure*
           layout = "grouped", -- "compact", "grouped", or "plain"
           project = "YourProject",
           repository = "YourRepository", -- Optional; defaults to all in project.
+          -- current_repo = true, -- Limit this view to the local repository.
           scope = "assigned_to_me",
         },
         {

@@ -1,4 +1,6 @@
 local client = require("atlas.providers.azure.client")
+local comments = require("atlas.issues.providers.azure.api.comments")
+local issues = require("atlas.issues.providers.azure.api.issues")
 local users_api = require("atlas.providers.azure.users")
 local requests = require("atlas.core.requests")
 
@@ -55,8 +57,6 @@ return {
 			done(completion_items(authors, query), nil)
 		end
 		if issue then
-			local issues = require("atlas.issues.providers.azure.api.issues")
-			local comments = require("atlas.issues.providers.azure.api.comments")
 			scope.run(function(callback)
 				return issues.fetch_by_refs({ issue }, {}, callback)
 			end, function(items, err)
@@ -75,8 +75,8 @@ return {
 					local authors = {}
 					users_api.add_mention_name(authors, item.reporter)
 					users_api.add_mention_name(authors, item.assignee)
-					for _, entry in ipairs(conversation or {}) do
-						users_api.add_mention_name(authors, entry.entity and entry.entity.author)
+					for _, comment in ipairs(conversation and conversation.comments or {}) do
+						users_api.add_mention_name(authors, comment.author)
 					end
 					finish(authors)
 				end)
