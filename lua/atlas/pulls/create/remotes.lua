@@ -38,21 +38,9 @@ local function same_repository_host(left, right)
 end
 
 ---@param remotes AtlasCreateRemote[]
----@param configured string|nil
 ---@param tracked string|nil The remote the current branch tracks.
 ---@return AtlasCreateRemote|nil, string|nil
-function M.base_remote(remotes, configured, tracked)
-	if configured and configured ~= "" then
-		local remote = find(remotes, configured)
-		if not remote then
-			return nil, string.format("Base remote '%s' is not configured", configured)
-		end
-		if not remote.target then
-			return nil, string.format("Base remote '%s' is not a supported repository", configured)
-		end
-		return remote
-	end
-
+function M.base_remote(remotes, tracked)
 	if tracked and tracked ~= "" then
 		local remote = find(remotes, tracked)
 		if remote and remote.target then
@@ -71,19 +59,18 @@ function M.base_remote(remotes, configured, tracked)
 	return nil, "No supported Git remote found"
 end
 
+---Whether the head lives in the base repository. A head without a supported target is treated as the same repository.
+---@param head_target AtlasTarget|nil
+---@param base_repo_slug string
+---@return boolean
+function M.same_repository(head_target, base_repo_slug)
+	return not head_target or head_target.repo_full_name == base_repo_slug
+end
+
 ---@param remotes AtlasCreateRemote[]
----@param configured string|nil
 ---@param pushed string|nil The remote the current branch is pushed to.
 ---@return AtlasCreateRemote|nil, string|nil
-function M.head_remote(remotes, configured, pushed)
-	if configured and configured ~= "" then
-		local remote = find(remotes, configured)
-		if not remote then
-			return nil, string.format("Head remote '%s' is not configured", configured)
-		end
-		return remote
-	end
-
+function M.head_remote(remotes, pushed)
 	if pushed and pushed ~= "" then
 		local remote = find(remotes, pushed)
 		if remote then

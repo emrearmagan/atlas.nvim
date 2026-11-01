@@ -101,13 +101,8 @@
 ---@field gitlab AtlasGitLabConfig|nil
 ---@field jira AtlasJiraConfig|nil
 
----@class AtlasPullsCreateConfig
----@field base_remote string|nil Remote used for the target repository and base branches (default: the branch's tracked remote, then origin, then the first supported remote).
----@field head_remote string|nil Remote the current branch is pushed to (default: the branch's push remote, then origin, then the first remote).
-
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
----@field create AtlasPullsCreateConfig|nil
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field description AtlasPullsDescriptionConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil

@@ -1,6 +1,5 @@
 local M = {}
 
-local config = require("atlas.config")
 local create_remotes = require("atlas.pulls.create.remotes")
 local description = require("atlas.pulls.create.description")
 local form = require("atlas.ui.form")
@@ -271,7 +270,7 @@ local function submit(state, editor)
 		editor.statusline:notify("warn", "Title is required")
 		return
 	end
-	if state.head == state.base then
+	if state.head == state.base and create_remotes.same_repository(state.head_repository, state.repo_slug) then
 		editor.statusline:notify("warn", "Head and base branches must differ")
 		return
 	end
@@ -461,7 +460,6 @@ function M.open()
 				return
 			end
 
-			local create_options = (config.options.pulls or {}).create or {}
 			scope.run(function(done)
 				return git.branch_remotes(root, values.head, done)
 			end, function(branch_remotes, branch_remotes_err)
@@ -471,10 +469,8 @@ function M.open()
 				end
 				branch_remotes = branch_remotes or {}
 
-				local base_remote, base_err =
-					create_remotes.base_remote(values.remotes, create_options.base_remote, branch_remotes.merge)
-				local head_remote, head_err =
-					create_remotes.head_remote(values.remotes, create_options.head_remote, branch_remotes.push)
+				local base_remote, base_err = create_remotes.base_remote(values.remotes, branch_remotes.merge)
+				local head_remote, head_err = create_remotes.head_remote(values.remotes, branch_remotes.push)
 				local remote_err = base_err or head_err or create_remotes.validate(head_remote, base_remote)
 				if remote_err then
 					notify.error(remote_err)
@@ -512,8 +508,8 @@ function M.open()
 						return
 					end
 
-					local same_repository = not head_remote_info.target
-						or head_remote_info.target.repo_full_name == repository.repo_full_name
+					local same_repository =
+						create_remotes.same_repository(head_remote_info.target, repository.repo_full_name)
 					local available = (remote_values.branches or {})[base_remote_info.name] or {}
 					local reported_base = remote_values.base
 					local default_base =

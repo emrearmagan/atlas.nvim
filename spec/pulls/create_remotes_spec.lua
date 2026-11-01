@@ -23,7 +23,7 @@ describe("pulls.create.remotes", function()
 			local value = remotes.base_remote({
 				remote("upstream", "parent/repo"),
 				remote("origin", "me/repo"),
-			}, nil)
+			})
 
 			assert.equal("origin", assert(value).name)
 		end)
@@ -33,12 +33,12 @@ describe("pulls.create.remotes", function()
 				remote("mirror"),
 				remote("upstream", "parent/repo"),
 				remote("fork", "me/repo"),
-			}, nil)
+			})
 
 			assert.equal("upstream", assert(value).name)
 		end)
 
-		it("uses the configured remote", function()
+		it("uses the tracked remote before origin", function()
 			local value = remotes.base_remote({
 				remote("origin", "me/repo"),
 				remote("parent", "parent/repo"),
@@ -47,48 +47,37 @@ describe("pulls.create.remotes", function()
 			assert.equal("parent", assert(value).name)
 		end)
 
-		it("uses the tracked remote before origin", function()
-			local value = remotes.base_remote({
-				remote("origin", "me/repo"),
-				remote("parent", "parent/repo"),
-			}, nil, "parent")
-
-			assert.equal("parent", assert(value).name)
-		end)
-
 		it("ignores an unsupported tracked remote", function()
 			local value = remotes.base_remote({
 				remote("origin", "me/repo"),
 				remote("mirror"),
-			}, nil, "mirror")
+			}, "mirror")
 
 			assert.equal("origin", assert(value).name)
 		end)
 
-		it("rejects unknown or unsupported configured remotes", function()
-			local value, err = remotes.base_remote({ remote("origin", "me/repo") }, "upstream")
-			assert.is_nil(value)
-			assert.matches("not configured", assert(err), 1, true)
-
-			value, err = remotes.base_remote({ remote("origin", "me/repo"), remote("mirror") }, "mirror")
-			assert.is_nil(value)
-			assert.matches("not a supported repository", assert(err), 1, true)
-		end)
-
 		it("requires at least one supported remote", function()
-			local value, err = remotes.base_remote({ remote("mirror") }, nil)
+			local value, err = remotes.base_remote({ remote("mirror") })
 			assert.is_nil(value)
 			assert.matches("No supported Git remote", assert(err), 1, true)
 		end)
 	end)
 
+	describe("same_repository", function()
+		it("compares the head target with the base repository", function()
+			assert.is_true(remotes.same_repository(nil, "me/repo"))
+			assert.is_true(remotes.same_repository(assert(remote("origin", "me/repo").target), "me/repo"))
+			assert.is_false(remotes.same_repository(assert(remote("fork", "me/repo").target), "parent/repo"))
+		end)
+	end)
+
 	describe("head_remote", function()
 		it("prefers origin and otherwise uses the first remote", function()
-			assert.equal("origin", assert(remotes.head_remote({ remote("fork"), remote("origin") }, nil)).name)
-			assert.equal("fork", assert(remotes.head_remote({ remote("fork"), remote("other") }, nil)).name)
+			assert.equal("origin", assert(remotes.head_remote({ remote("fork"), remote("origin") })).name)
+			assert.equal("fork", assert(remotes.head_remote({ remote("fork"), remote("other") })).name)
 		end)
 
-		it("uses the configured remote", function()
+		it("uses the pushed remote before origin", function()
 			local value = remotes.head_remote({
 				remote("origin", "me/repo"),
 				remote("fork", "me/repo"),
@@ -97,23 +86,8 @@ describe("pulls.create.remotes", function()
 			assert.equal("fork", assert(value).name)
 		end)
 
-		it("uses the pushed remote before origin", function()
-			local value = remotes.head_remote({
-				remote("origin", "me/repo"),
-				remote("fork", "me/repo"),
-			}, nil, "fork")
-
-			assert.equal("fork", assert(value).name)
-		end)
-
-		it("rejects unknown remotes", function()
-			local value, err = remotes.head_remote({ remote("origin") }, "missing")
-			assert.is_nil(value)
-			assert.matches("Head remote 'missing' is not configured", assert(err), 1, true)
-		end)
-
 		it("requires at least one remote", function()
-			local value, err = remotes.head_remote({}, nil)
+			local value, err = remotes.head_remote({})
 			assert.is_nil(value)
 			assert.matches("No Git remotes configured", assert(err), 1, true)
 		end)

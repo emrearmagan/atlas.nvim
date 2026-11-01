@@ -391,14 +391,6 @@ pulls = {
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
 
-  create = {
-    -- Remote used for the PR target repository and base branches. Defaults to the remote the
-    -- current branch tracks, then origin, then the first supported remote.
-    base_remote = nil,
-    -- Remote the current branch is pushed to. Defaults to the branch's push remote, then origin,
-    -- then the first remote.
-    head_remote = nil,
-  },
 
   description = {
     include_summary = true,
