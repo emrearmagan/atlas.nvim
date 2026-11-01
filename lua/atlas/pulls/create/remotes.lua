@@ -1,3 +1,5 @@
+local git = require("atlas.core.git")
+
 local M = {}
 
 ---@class AtlasCreateRemote
@@ -47,14 +49,9 @@ function M.base_remote(remotes, tracked)
 			return remote
 		end
 	end
-	local origin = find(remotes, "origin")
-	if origin and origin.target then
-		return origin
-	end
-	for _, remote in ipairs(remotes) do
-		if remote.target then
-			return remote
-		end
+	local remote = git.select_base_remote(remotes)
+	if remote then
+		return remote
 	end
 	return nil, "No supported Git remote found"
 end

@@ -19,23 +19,23 @@ end
 
 describe("pulls.create.remotes", function()
 	describe("base_remote", function()
-		it("prefers origin", function()
+		it("prefers upstream like gh", function()
 			local value = remotes.base_remote({
-				remote("upstream", "parent/repo"),
 				remote("origin", "me/repo"),
+				remote("upstream", "parent/repo"),
 			})
 
-			assert.equal("origin", assert(value).name)
+			assert.equal("upstream", assert(value).name)
 		end)
 
 		it("falls back to the first supported remote", function()
 			local value = remotes.base_remote({
 				remote("mirror"),
-				remote("upstream", "parent/repo"),
+				remote("parent", "parent/repo"),
 				remote("fork", "me/repo"),
 			})
 
-			assert.equal("upstream", assert(value).name)
+			assert.equal("parent", assert(value).name)
 		end)
 
 		it("uses the tracked remote before origin", function()

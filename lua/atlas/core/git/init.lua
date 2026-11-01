@@ -478,6 +478,40 @@ function M.list_repository_remotes(root, on_done)
 	end)
 end
 
+---@param remote AtlasGitRemote
+---@return integer
+local function remote_priority(remote)
+	local name = remote.name:lower()
+	if name == "upstream" then
+		return 3
+	elseif name == remote.target.provider then
+		return 2
+	elseif name == "origin" then
+		return 1
+	end
+	return 0
+end
+
+--- Mirrors gh/glab: upstream > <provider> > origin > others.
+---@param remotes AtlasGitRemote[]
+---@return AtlasGitRemote|nil
+function M.select_base_remote(remotes)
+	local candidates = {}
+	for index, remote in ipairs(remotes) do
+		if remote.target then
+			table.insert(candidates, { remote = remote, index = index })
+		end
+	end
+	table.sort(candidates, function(left, right)
+		local left_priority, right_priority = remote_priority(left.remote), remote_priority(right.remote)
+		if left_priority ~= right_priority then
+			return left_priority > right_priority
+		end
+		return left.index < right.index
+	end)
+	return candidates[1] and candidates[1].remote
+end
+
 ---@param root string
 ---@param remotes string[]
 ---@param on_done fun(branches: table<string, string[]>|nil, err: string|nil)

@@ -47,6 +47,36 @@ describe("core.git remotes", function()
 		assert.is_nil(remotes[3].target)
 	end)
 
+	describe("select_base_remote", function()
+		---@param name string
+		---@param slug string|nil
+		---@param host string|nil
+		local function remote(name, slug, host)
+			local url = slug and ("https://" .. (host or "github.com") .. "/" .. slug .. ".git")
+				or "https://example.com/x"
+			return { name = name, url = url, target = slug and git.parse_remote_url(url) or nil }
+		end
+
+		local function selected(remotes)
+			local value = git.select_base_remote(remotes)
+			return value and value.name
+		end
+
+		it("orders remotes like gh and glab", function()
+			local fork, parent = "me/repo", "parent/repo"
+			assert.equal("upstream", selected({ remote("origin", fork), remote("upstream", parent) }))
+			assert.equal("github", selected({ remote("origin", fork), remote("github", parent) }))
+			assert.equal("gitlab", selected({ remote("origin", fork), remote("gitlab", parent, "gitlab.com") }))
+			assert.equal("origin", selected({ remote("foo", parent), remote("origin", fork) }))
+			assert.equal("foo", selected({ remote("foo", parent), remote("bar", fork) }))
+		end)
+
+		it("only considers remotes with a supported provider", function()
+			assert.equal("origin", selected({ remote("upstream"), remote("origin", "me/repo") }))
+			assert.is_nil(selected({ remote("upstream") }))
+		end)
+	end)
+
 	it("resolves the remotes a branch tracks and pushes to", function()
 		git.run = function(args, _, done)
 			assert.same({
