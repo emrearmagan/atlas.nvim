@@ -21,9 +21,17 @@ function M.complete(arglead)
 	end
 	local cache = completion
 	if not cache.request then
-		cache.request = git.list_remote_branches(cwd, "origin", function(branches)
-			cache.branches = branches or {}
-			cache.request = nil
+		local scope = request_scope.new()
+		cache.request = scope
+		scope.run(function(done)
+			return git.local_repository(cwd, done)
+		end, function(_, _, remote)
+			scope.run(function(done)
+				return git.list_remote_branches(cwd, remote or "origin", done)
+			end, function(branches)
+				cache.branches = branches or {}
+				cache.request = nil
+			end)
 		end)
 	end
 	if not cache.branches and arglead == "" then

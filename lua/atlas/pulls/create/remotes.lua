@@ -41,8 +41,13 @@ end
 
 ---@param remotes AtlasCreateRemote[]
 ---@param tracked string|nil The remote the current branch tracks.
+---@param resolved table<string, string>|nil Remotes marked by `gh repo set-default` or `glab repo set-default`.
 ---@return AtlasCreateRemote|nil, string|nil
-function M.base_remote(remotes, tracked)
+function M.base_remote(remotes, tracked, resolved)
+	local default = git.default_remote(remotes, resolved)
+	if default then
+		return default
+	end
 	if tracked and tracked ~= "" then
 		local remote = find(remotes, tracked)
 		if remote and remote.target then

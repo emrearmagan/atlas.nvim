@@ -389,6 +389,8 @@ vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
 - `:Atlas logs` - Toggle Atlas logs
 - `:Atlas console` - Open the latest command output
 
+The current repository is resolved from your Git remotes like `gh` and `glab` do: a default set with `gh repo set-default` or `glab repo set-default` wins, otherwise `upstream`, then a remote named after the provider (e.g. `github`), then `origin`.
+
 ## Pulls
 
 Use `:Atlas pulls [provider|.]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.

@@ -47,6 +47,15 @@ describe("pulls.create.remotes", function()
 			assert.equal("parent", assert(value).name)
 		end)
 
+		it("uses the gh or glab default before the tracked remote", function()
+			local value = remotes.base_remote({
+				remote("origin", "me/repo"),
+				remote("upstream", "parent/repo"),
+			}, "upstream", { origin = "base" })
+
+			assert.equal("origin", assert(value).name)
+		end)
+
 		it("ignores an unsupported tracked remote", function()
 			local value = remotes.base_remote({
 				remote("origin", "me/repo"),

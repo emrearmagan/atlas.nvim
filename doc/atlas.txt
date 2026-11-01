@@ -225,6 +225,11 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
 ==============================================================================
 4. COMMANDS                                                    *atlas-commands*
 
+The current repository is resolved from your Git remotes like `gh` and
+`glab` do: a default set with `gh repo set-default` or
+`glab repo set-default` wins, otherwise `upstream`, then a remote named
+after the provider (e.g. `github`), then `origin`.
+
                                                                       *:Atlas*
 :Atlas
         Pick an Atlas command.

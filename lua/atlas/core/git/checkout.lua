@@ -196,7 +196,7 @@ end
 ---@param ref PullsRef
 ---@param transport AtlasGitTransport
 ---@param provider string
----@return string remote
+---@return string|nil remote URL, or nil to fetch from the base remote
 ---@return string|nil err
 local function source_remote(ref, transport, provider)
 	if ref.https_url ~= nil or ref.ssh_url ~= nil then
@@ -209,7 +209,21 @@ local function source_remote(ref, transport, provider)
 		end
 		return selected, nil
 	end
-	return "origin", nil
+	return nil, nil
+end
+
+---@param root string
+---@param target AtlasTarget|nil
+---@param on_done fun(remote: AtlasGitRemote|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function repository_remote(root, target, on_done)
+	if not target then
+		on_done(nil, nil)
+		return nil
+	end
+	return git.list_repository_remotes(root, function(remotes, err)
+		on_done(remotes and git.remote_for_repository(remotes, target) or nil, err)
+	end)
 end
 
 ---@param pr PullRequest
@@ -227,6 +241,7 @@ local function fetch_pr_refs(pr, repo_path, on_done, opts)
 	local scope = requests.new()
 	local refs = {}
 	local index = 0
+	local base_remote = "origin"
 
 	local function verify_commits()
 		scope.run(function(done)
@@ -261,6 +276,27 @@ local function fetch_pr_refs(pr, repo_path, on_done, opts)
 		end)
 	end
 
+	local function queue_refs(exists)
+		if not exists[1] then
+			local ref = fetch_ref(pr.destination)
+			if ref ~= "" then
+				refs[#refs + 1] = { remote = base_remote, ref = ref }
+			end
+		end
+		if not exists[2] then
+			local remote, remote_err = source_remote(pr.source, configured_git_transport(), pr.provider)
+			if remote_err then
+				on_done(remote_err)
+				return
+			end
+			local ref = fetch_ref(pr.source)
+			if ref ~= "" then
+				refs[#refs + 1] = { remote = remote or base_remote, ref = ref }
+			end
+		end
+		next_ref()
+	end
+
 	scope.run(function(done)
 		return git.check_commits(repo_path, { base_revision, head_revision }, done)
 	end, function(exists, err)
@@ -272,24 +308,12 @@ local function fetch_pr_refs(pr, repo_path, on_done, opts)
 			on_done(nil)
 			return
 		end
-		if not exists[1] then
-			local ref = fetch_ref(pr.destination)
-			if ref ~= "" then
-				refs[#refs + 1] = { remote = "origin", ref = ref }
-			end
-		end
-		if not exists[2] then
-			local remote, remote_err = source_remote(pr.source, configured_git_transport(), pr.provider)
-			if remote_err then
-				on_done(remote_err)
-				return
-			end
-			local ref = fetch_ref(pr.source)
-			if ref ~= "" then
-				refs[#refs + 1] = { remote = remote, ref = ref }
-			end
-		end
-		next_ref()
+		scope.run(function(done)
+			return repository_remote(repo_path, pr.link and providers.resolve(pr.link.html) or nil, done)
+		end, function(remote)
+			base_remote = remote and remote.name or base_remote
+			queue_refs(exists)
+		end)
 	end)
 	return scope
 end
@@ -456,12 +480,9 @@ local function current_repo_path(pr, root, on_done)
 			return
 		end
 		scope.run(function(done)
-			return git.local_repository(repo_path, done)
-		end, function(current)
-			local matches = current
-				and current.provider == pr.provider
-				and current.repo_full_name:lower() == pr.repo_full_name:lower()
-			on_done(matches and repo_path or nil)
+			return repository_remote(repo_path, pr.link and providers.resolve(pr.link.html) or nil, done)
+		end, function(remote)
+			on_done(remote and repo_path or nil)
 		end)
 	end)
 	return scope
@@ -583,22 +604,9 @@ function M.checkout_pr(pr, on_done)
 	return scope
 end
 
----@param remote_url string|nil
----@param repo_url string|nil
----@return boolean
-local function matches_remote(remote_url, repo_url)
-	local remote = remote_url and git.parse_remote_url(remote_url) or nil
-	local target = repo_url and providers.resolve(repo_url) or nil
-	return remote ~= nil
-		and target ~= nil
-		and remote.provider == target.provider
-		and remote.host:lower() == target.host:lower()
-		and tostring(remote.repo_full_name):lower() == tostring(target.repo_full_name):lower()
-end
-
 ---@param repo_full_name string
----@param repo_url string|nil Web URL of the repository; the mapped checkout's origin must match it
----@param on_done fun(root: string|nil, err: string|nil)
+---@param repo_url string|nil Web URL of the repository; one of the mapped checkout's remotes must match it
+---@param on_done fun(root: string|nil, err: string|nil, remote: string|nil)
 ---@return { cancel: fun() }|nil
 function M.resolve_repo_root(repo_full_name, repo_url, on_done)
 	local paths = (config.options.pulls.repo_config or {}).paths or {}
@@ -618,14 +626,14 @@ function M.resolve_repo_root(repo_full_name, repo_url, on_done)
 		end
 
 		scope.run(function(done)
-			return git.remote_url(root, "origin", done)
+			return repository_remote(root, repo_url and providers.resolve(repo_url) or nil, done)
 		end, function(remote)
-			if not matches_remote(remote, repo_url) then
-				on_done(nil, string.format("origin of %s does not match %s", root, repo_full_name))
+			if not remote then
+				on_done(nil, string.format("no remote of %s matches %s", root, repo_full_name))
 				return
 			end
 
-			on_done(root, nil)
+			on_done(root, nil, remote.name)
 		end)
 	end)
 
@@ -633,10 +641,11 @@ function M.resolve_repo_root(repo_full_name, repo_url, on_done)
 end
 
 ---@param root string
+---@param remote string
 ---@param branches { name: string, hash: string }[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_commits(root, branches, on_done)
+function M.fetch_commits(root, remote, branches, on_done)
 	local hashes = {}
 	for _, branch in ipairs(branches) do
 		if branch.hash == "" then
@@ -669,7 +678,7 @@ function M.fetch_commits(root, branches, on_done)
 		end
 
 		scope.run(function(done)
-			return git.fetch_refs(root, "origin", refs, done)
+			return git.fetch_refs(root, remote, refs, done)
 		end, on_done)
 	end)
 
@@ -677,13 +686,14 @@ function M.fetch_commits(root, branches, on_done)
 end
 
 ---@param root string
+---@param remote string
 ---@param branch { name: string, hash: string }
 ---@param on_done fun(commits: AtlasGitCommit[]|nil, err: string|nil)
 ---@return AtlasRequestScope
-function M.branch_history(root, branch, on_done)
+function M.branch_history(root, remote, branch, on_done)
 	local scope = requests.new()
 	scope.run(function(done)
-		return M.fetch_commits(root, { branch }, done)
+		return M.fetch_commits(root, remote, { branch }, done)
 	end, function(ok, err)
 		if not ok then
 			on_done(nil, err)
@@ -699,10 +709,11 @@ function M.branch_history(root, branch, on_done)
 end
 
 ---@param root string
+---@param remote string
 ---@param name string Branch name
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.checkout_branch(root, name, on_done)
+function M.checkout_branch(root, remote, name, on_done)
 	local scope = requests.new()
 	scope.run(function(done)
 		return git.rev_exists(root, "refs/heads/" .. name, done)
@@ -714,9 +725,9 @@ function M.checkout_branch(root, name, on_done)
 			return
 		end
 
-		local remote_ref = "refs/remotes/origin/" .. name
+		local remote_ref = "refs/remotes/" .. remote .. "/" .. name
 		scope.run(function(done)
-			return git.fetch_refs(root, "origin", { "refs/heads/" .. name .. ":" .. remote_ref }, done)
+			return git.fetch_refs(root, remote, { "refs/heads/" .. name .. ":" .. remote_ref }, done)
 		end, function(ok, err)
 			if not ok then
 				on_done(false, err)
