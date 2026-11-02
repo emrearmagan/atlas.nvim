@@ -296,8 +296,10 @@ function M.fetch_review_threads(pr, opts, on_done)
 			local comment = mapper.to_comment(note, viewer, pr.author.username)
 			table.insert(comments, comment)
 			if comment.parent_id == nil then
-				roots[comment.thread_id] = comment
-				comment.hunk = mapper.to_diff_hunk(note.discussion.truncatedDiffLines)
+				if comment.thread_id then
+					roots[comment.thread_id] = comment
+				end
+				comment.hunk = mapper.to_diff_hunk(json.safe_table(note.discussion).truncatedDiffLines)
 			end
 		end
 		for _, comment in ipairs(comments) do
@@ -416,7 +418,7 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 			end)
 			local roots = {}
 			for _, comment in ipairs(comments) do
-				if comment.parent_id == nil then
+				if comment.parent_id == nil and comment.thread_id then
 					roots[comment.thread_id] = comment
 				end
 			end
