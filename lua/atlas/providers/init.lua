@@ -1,4 +1,6 @@
 local config = require("atlas.config")
+local gitea = require("atlas.providers.forge.gitea")
+local forgejo = require("atlas.providers.forge.forgejo")
 local url = require("atlas.providers.url")
 local jira = require("atlas.providers.jira")
 local github = require("atlas.providers.github")
@@ -7,8 +9,8 @@ local gitlab = require("atlas.providers.gitlab")
 
 local M = {}
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"|"forgejo"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"|"forgejo"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"|"pipeline"
@@ -155,5 +157,8 @@ add(jira)
 add(github)
 add(bitbucket)
 add(gitlab)
+
+add(gitea)
+add(forgejo)
 
 return M

@@ -155,6 +155,28 @@ local function check_gitlab()
 	check_provider_views("gitlab")
 end
 
+local function check_gitea()
+	local provider = config.provider_options("gitea")
+	if provider == nil then
+		vim.health.info("Gitea not configured")
+		return
+	end
+
+	check_credentials(provider, { "base_url", "token" }, "Gitea")
+	check_provider_views("gitea")
+end
+
+local function check_forgejo()
+	local provider = config.provider_options("forgejo")
+	if provider == nil then
+		vim.health.info("Forgejo not configured")
+		return
+	end
+
+	check_credentials(provider, { "base_url", "token" }, "Forgejo")
+	check_provider_views("forgejo")
+end
+
 local function check_jira()
 	local provider = config.provider_options("jira")
 	if provider == nil then
@@ -339,6 +361,12 @@ function M.check()
 
 	vim.health.start("GitLab")
 	check_gitlab()
+
+	vim.health.start("Gitea")
+	check_gitea()
+
+	vim.health.start("Forgejo")
+	check_forgejo()
 
 	vim.health.start("Jira")
 	check_jira()

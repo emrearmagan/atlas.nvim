@@ -1,0 +1,3 @@
+---@class AtlasForgejoConfig : AtlasProviderConfig
+---@field base_url string
+---@field token string

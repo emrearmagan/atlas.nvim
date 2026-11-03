@@ -11,16 +11,22 @@ describe("providers.resolve", function()
 				github = { hostname = "github.com" },
 				gitlab = { base_url = "https://gitlab.example.com", token = "token" },
 				bitbucket = { user = "user", token = "token" },
+				gitea = { base_url = "https://gitea.example.com", token = "token" },
+				forgejo = { base_url = "https://forgejo.example.com", token = "token" },
 				jira = { base_url = "https://jira.example.com", token = "token" },
 			},
 			pulls = {
 				github = {},
 				gitlab = {},
 				bitbucket = {},
+				gitea = {},
+				forgejo = {},
 			},
 			issues = {
 				github = {},
 				gitlab = {},
+				gitea = {},
+				forgejo = {},
 				jira = {},
 			},
 		}
@@ -272,6 +278,71 @@ describe("providers.resolve", function()
 				"Bitbucket Server/Data Center URLs are recognized, but this Atlas provider currently supports Bitbucket Cloud only",
 				err
 			)
+		end)
+	end)
+
+	describe("Gitea and Forgejo", function()
+		local gitea = "https://gitea.example.com/team/repo"
+		local forgejo = "https://forgejo.example.com/team/repo"
+
+		it("resolves a pull request and an issue", function()
+			local pull = assert(providers.resolve(gitea .. "/pulls/9"))
+			local issue = assert(providers.resolve(forgejo .. "/issues/10"))
+			assert.are.equal("gitea", pull.provider)
+			assert.are.equal("pulls", pull.domain)
+			assert.are.equal(9, pull.id)
+			assert.are.equal("team/repo", pull.repo_full_name)
+			assert.are.equal(gitea .. ".git", pull.repository_url)
+			assert.are.equal("forgejo", issue.provider)
+			assert.are.equal("issues", issue.domain)
+			assert.are.equal(10, issue.number)
+			assert.are.equal("team/repo#10", issue.issue_key)
+		end)
+
+		it("resolves an Actions run", function()
+			local run = assert(providers.resolve(gitea .. "/actions/runs/12"))
+			assert.are.equal("pipeline", run.entity)
+			assert.are.equal("pulls", run.domain)
+			assert.are.equal(12, run.id)
+			assert.are.equal(gitea .. "/actions/runs/12", run.url)
+			assert.are.equal(12, assert(providers.resolve(forgejo .. "/actions/runs/12/jobs/0")).number)
+		end)
+
+		it("resolves repository pages", function()
+			assert.are.equal("builds", assert(providers.resolve(gitea .. "/actions")).page)
+			assert.are.equal("issues", assert(providers.resolve(gitea .. "/issues")).page)
+			assert.are.equal("pulls", assert(providers.resolve(forgejo .. "/pulls")).page)
+			assert.are.equal("tags", assert(providers.resolve(gitea .. "/tags")).page)
+			assert.are.equal("branches", assert(providers.resolve(forgejo .. "/branches")).page)
+			assert.are.equal("releases", assert(providers.resolve(gitea .. "/releases")).page)
+			assert.are.equal("releases", assert(providers.resolve(forgejo .. "/releases/tag/v1.0.0")).page)
+			assert.is_nil(assert(providers.resolve(gitea)).page)
+			assert.is_nil(providers.resolve(gitea .. "/wiki"))
+		end)
+
+		it("resolves Git remotes as the repository", function()
+			local cases = {
+				{ gitea .. ".git", "gitea", gitea },
+				{ "git@forgejo.example.com:team/repo.git", "forgejo", forgejo },
+			}
+			for _, case in ipairs(cases) do
+				local target = assert(providers.resolve(case[1]))
+				assert.are.equal(case[2], target.provider)
+				assert.are.equal("repo", target.entity)
+				assert.are.equal("team/repo", target.repo_full_name)
+				assert.are.equal(case[3], target.url)
+				assert.are.equal(case[3] .. ".git", target.repository_url)
+			end
+		end)
+
+		it("ignores SSH transport ports", function()
+			config.options.providers.forgejo.base_url = "https://forgejo.example.com:3000"
+			local gitea_remote = assert(providers.resolve("ssh://git@gitea.example.com:2222/team/repo.git"))
+			local forgejo_remote = assert(providers.resolve("git@forgejo.example.com:team/repo.git"))
+			assert.are.equal("gitea.example.com", gitea_remote.host)
+			assert.are.equal(gitea, gitea_remote.url)
+			assert.are.equal("forgejo.example.com:3000", forgejo_remote.host)
+			assert.are.equal("https://forgejo.example.com:3000/team/repo", forgejo_remote.url)
 		end)
 	end)
 

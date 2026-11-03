@@ -99,6 +99,8 @@
 ---@field bitbucket AtlasBitbucketConfig|nil
 ---@field github AtlasGitHubConfig|nil
 ---@field gitlab AtlasGitLabConfig|nil
+---@field gitea AtlasGiteaConfig|nil
+---@field forgejo AtlasForgejoConfig|nil
 ---@field jira AtlasJiraConfig|nil
 
 ---@class AtlasPullsConfig
@@ -114,6 +116,8 @@
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
 ---@field github AtlasGitHubPullsConfig|nil
 ---@field gitlab AtlasGitLabPullsConfig|nil
+---@field gitea AtlasGiteaPullsConfig|nil
+---@field forgejo AtlasForgejoPullsConfig|nil
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
@@ -132,6 +136,8 @@
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil
 ---@field gitlab AtlasGitLabIssuesConfig|nil
+---@field gitea AtlasGiteaIssuesConfig|nil
+---@field forgejo AtlasForgejoIssuesConfig|nil
 ---@field jira AtlasJiraIssuesConfig|nil
 
 -- Config

@@ -170,6 +170,19 @@ local function edit_query(state)
 			view._states = nil
 			reload(state)
 		end)
+	elseif provider.id == "gitea" or provider.id == "forgejo" then
+		---@cast view AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig
+		local service = provider.id == "gitea" and require("atlas.providers.forge.gitea.api")
+			or require("atlas.providers.forge.forgejo.api")
+		require("atlas.providers.forge.completion.search").edit(service, "pulls", state.query .. " ", function(query)
+			local ok, err = require("atlas.pulls.providers.forge.query").apply(view, query)
+			if not ok then
+				notify.warn(err)
+				return
+			end
+
+			reload(state)
+		end)
 	end
 end
 
