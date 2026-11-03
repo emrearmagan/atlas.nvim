@@ -1,0 +1,56 @@
+-- Example:
+--   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasAzureConfig
+--       azure = {
+--         base_url = "https://dev.azure.com/your-organization",
+--         token = vim.env.AZURE_DEVOPS_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
+--     pulls = {
+--       ---@type AtlasAzurePullsConfig
+--       azure = {
+--         views = {
+--           {
+--             name = "Reviewing",
+--             key = "1",
+--             project = "YourProject",
+--             repository = "YourRepository",
+--             scope = "assigned_to_me",
+--           },
+--           {
+--             name = "Created",
+--             key = "2",
+--             project = "YourProject",
+--             scope = "created_by_me",
+--             extra_params = {
+--               ["searchCriteria.targetRefName"] = "refs/heads/main",
+--             },
+--           },
+--         },
+--       },
+--     },
+--   })
+--
+-- `scope` is the only first-class search filter. Any additional Azure
+-- pull-request query parameter can be passed through `extra_params`.
+
+---@class AtlasAzurePullsSearchConfig
+---@field project string
+---@field repository string|nil
+---@field scope "assigned_to_me"|"created_by_me"|"all"|nil
+---@field extra_params table<string, string>|nil
+
+---@class AtlasAzurePullsViewConfig : AtlasPullsViewConfig, AtlasAzurePullsSearchConfig
+
+---@class AtlasAzurePullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasAzurePullsSearchConfig
+
+---@class AtlasAzurePullsBookmarksConfig
+---@field key string|nil
+---@field label string|nil
+---@field items table<string, AtlasAzurePullsBookmarkConfig>|nil
+
+---@class AtlasAzurePullsConfig
+---@field views AtlasAzurePullsViewConfig[]|nil
+---@field bookmarks AtlasAzurePullsBookmarksConfig|nil
