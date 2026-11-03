@@ -2,27 +2,22 @@ local git = require("atlas.core.git")
 
 local M = {}
 
----@class AtlasCreateRemote
----@field name string
----@field url string
----@field target AtlasTarget|nil
-
 ---@class AtlasCreateBranchOption
 ---@field remote string
 ---@field branch string
 ---@field label string
 ---@field target AtlasTarget
 
----@param remote AtlasCreateRemote
+---@param remote AtlasGitRemote
 ---@param name string
 ---@return boolean
 local function named(remote, name)
 	return remote.name == name
 end
 
----@param remotes AtlasCreateRemote[]
+---@param remotes AtlasGitRemote[]
 ---@param name string
----@return AtlasCreateRemote|nil
+---@return AtlasGitRemote|nil
 local function find(remotes, name)
 	for _, remote in ipairs(remotes) do
 		if named(remote, name) then
@@ -39,10 +34,10 @@ local function same_repository_host(left, right)
 	return left.provider == right.provider and left.host == right.host
 end
 
----@param remotes AtlasCreateRemote[]
+---@param remotes AtlasGitRemote[]
 ---@param tracked string|nil The remote the current branch tracks.
 ---@param resolved table<string, string>|nil Remotes marked by `gh repo set-default` or `glab repo set-default`.
----@return AtlasCreateRemote|nil, string|nil
+---@return AtlasGitRemote|nil, string|nil
 function M.base_remote(remotes, tracked, resolved)
 	local default = git.default_remote(remotes, resolved)
 	if default then
@@ -69,9 +64,9 @@ function M.same_repository(head_target, base_repo_slug)
 	return not head_target or head_target.repo_full_name == base_repo_slug
 end
 
----@param remotes AtlasCreateRemote[]
+---@param remotes AtlasGitRemote[]
 ---@param pushed string|nil The remote the current branch is pushed to.
----@return AtlasCreateRemote|nil, string|nil
+---@return AtlasGitRemote|nil, string|nil
 function M.head_remote(remotes, pushed)
 	if pushed and pushed ~= "" then
 		local remote = find(remotes, pushed)
@@ -89,8 +84,8 @@ function M.head_remote(remotes, pushed)
 	return remotes[1]
 end
 
----@param head AtlasCreateRemote|nil
----@param base AtlasCreateRemote|nil
+---@param head AtlasGitRemote|nil
+---@param base AtlasGitRemote|nil
 ---@return string|nil
 function M.validate(head, base)
 	if not head or not base or not head.target or not base.target then
@@ -102,9 +97,9 @@ function M.validate(head, base)
 	return string.format("Head remote '%s' and base remote '%s' point to different providers", head.name, base.name)
 end
 
----@param remotes AtlasCreateRemote[]
----@param base AtlasCreateRemote
----@return AtlasCreateRemote[]
+---@param remotes AtlasGitRemote[]
+---@param base AtlasGitRemote
+---@return AtlasGitRemote[]
 function M.compatible_remotes(remotes, base)
 	local result = {}
 	if not base.target then
@@ -119,7 +114,7 @@ function M.compatible_remotes(remotes, base)
 end
 
 ---@param branches table<string, string[]>
----@param remotes AtlasCreateRemote[]
+---@param remotes AtlasGitRemote[]
 ---@param head_remote string
 ---@param head_branch string
 ---@param head_target AtlasTarget|nil
@@ -181,7 +176,7 @@ function M.base_branch(branches, preferred, head_branch, same_repository)
 end
 
 ---@param options AtlasCreateBranchOption[]
----@param remote AtlasCreateRemote
+---@param remote AtlasGitRemote
 ---@param branch string
 ---@return AtlasCreateBranchOption[]
 function M.ensure_branch_option(options, remote, branch)

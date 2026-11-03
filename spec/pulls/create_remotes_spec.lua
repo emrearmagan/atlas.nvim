@@ -4,7 +4,7 @@ local remotes = require("atlas.pulls.create.remotes")
 ---@param slug string|nil
 ---@param provider string|nil
 ---@param host string|nil
----@return AtlasCreateRemote
+---@return AtlasGitRemote
 local function remote(name, slug, provider, host)
 	local target
 	if slug then

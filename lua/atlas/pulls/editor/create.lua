@@ -482,9 +482,9 @@ function M.open()
 					return
 				end
 
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local base_remote_info = assert(base_remote)
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local head_remote_info = assert(head_remote)
 				local repository = base_remote_info.target --[[@as AtlasTarget]]
 				local provider = providers.load(repository.provider, "pulls")
