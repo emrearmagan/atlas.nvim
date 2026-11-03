@@ -454,6 +454,9 @@ function M.open()
 			head = function(done)
 				return git.current_branch(root, done)
 			end,
+			resolved = function(done)
+				return git.resolved_remotes(root, done)
+			end,
 		}, function(values, errors)
 			local load_err = errors.remotes or errors.head
 			if load_err then
@@ -470,7 +473,8 @@ function M.open()
 				end
 				branch_remotes = branch_remotes or {}
 
-				local base_remote, base_err = create_remotes.base_remote(values.remotes, branch_remotes.merge)
+				local base_remote, base_err =
+					create_remotes.base_remote(values.remotes, branch_remotes.merge, values.resolved)
 				local head_remote, head_err = create_remotes.head_remote(values.remotes, branch_remotes.push)
 				local remote_err = base_err or head_err or create_remotes.validate(head_remote, base_remote)
 				if remote_err then
@@ -478,9 +482,9 @@ function M.open()
 					return
 				end
 
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local base_remote_info = assert(base_remote)
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local head_remote_info = assert(head_remote)
 				local repository = base_remote_info.target --[[@as AtlasTarget]]
 				local provider = providers.load(repository.provider, "pulls")

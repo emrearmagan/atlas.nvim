@@ -121,7 +121,11 @@ describe("core.git.checkout", function()
 				run = function(args, _, done)
 					local root = args[2]
 					assert.is_true(root == "/mapped" or (current_root ~= nil and root == current_root))
-					assert.same({ "-C", root, "remote", "get-url", "origin" }, args)
+					if args[3] == "config" then
+						done({ code = 1, stdout = "" })
+						return { cancel = function() end }
+					end
+					assert.same({ "-C", root, "remote", "-v" }, args)
 					pending, pending_root = done, root
 					return {
 						cancel = function()
@@ -149,6 +153,8 @@ describe("core.git.checkout", function()
 					checked_out = { repo_path = root, local_branch = branch }
 					done(true, nil)
 				end,
+				fetch_refs = git.fetch_refs,
+				checkout_new_branch = git.checkout_new_branch,
 			}
 			original_git = {}
 			for name, stub in pairs(stubs) do
@@ -166,8 +172,13 @@ describe("core.git.checkout", function()
 			end
 		end)
 
-		local function complete_remote(remote)
-			pending({ code = 0, stdout = remote .. "\n" })
+		local function complete_remote(...)
+			local lines = {}
+			for index, url in ipairs({ ... }) do
+				local name = index == 1 and "origin" or ("remote" .. index)
+				table.insert(lines, string.format("%s\t%s (fetch)", name, url))
+			end
+			pending({ code = 0, stdout = table.concat(lines, "\n") .. "\n" })
 		end
 
 		it("opens mapped PR diffs from outside the repository for each supported provider", function()
@@ -207,6 +218,43 @@ describe("core.git.checkout", function()
 			assert.is_nil(failure)
 			assert.same({ repo_path = "/worktree", local_branch = "feature" }, result)
 			assert.same({ repo_path = "/worktree", local_branch = "feature" }, checked_out)
+		end)
+
+		it("checks out an upstream PR from a fork checkout", function()
+			current_root = "/worktree"
+			local result, failure
+			checkout.checkout_pr(pr, function(value, err)
+				result, failure = value, err
+			end)
+			complete_remote("https://github.com/me/repo.git", "https://github.com/owner/repo.git")
+			assert.is_nil(failure)
+			assert.same({ repo_path = "/worktree", local_branch = "feature" }, result)
+		end)
+
+		it("fetches missing PR refs from the remote that matches the PR repository", function()
+			local fetched
+			git.rev_exists = function(_, _, done)
+				done(false)
+			end
+			git.check_commits = function(_, _, done)
+				done({ false, false }, nil)
+			end
+			git.fetch_refs = function(_, remote, refs, done)
+				fetched = fetched or {}
+				table.insert(fetched, { remote = remote, ref = refs[1] })
+				done(true, nil)
+			end
+			git.checkout_new_branch = function(_, _, _, done)
+				done(true, nil)
+			end
+			pr.destination.branch = "main"
+			checkout.checkout_pr(pr, function() end)
+			complete_remote("https://github.com/owner/repo.git")
+			complete_remote("https://github.com/me/repo.git", "https://github.com/owner/repo.git")
+			assert.same({
+				{ remote = "remote2", ref = "refs/heads/main" },
+				{ remote = "remote2", ref = "refs/heads/feature" },
+			}, fetched)
 		end)
 
 		it("falls back to the configured mapping when the current checkout has another remote", function()
