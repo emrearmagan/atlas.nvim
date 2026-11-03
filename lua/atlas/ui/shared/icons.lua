@@ -11,6 +11,7 @@ local ICONS = {
 	fallback = { icon = "", hl_group = "AtlasTextMuted" },
 
 	overview = { icon = "", hl_group = "AtlasTextMuted" },
+	deployment = { icon = "", hl_group = "AtlasTextMuted" },
 	search = { icon = "", hl_group = "AtlasTextMuted" },
 	link = { icon = "", hl_group = "AtlasTextMuted" },
 
