@@ -492,16 +492,34 @@ end
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
-	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	issues_api.set_subscription(issue, issue.is_subscribed ~= true, function(subscribed, err)
-		if err then
-			notify.error(tostring(err))
-			done(nil, tostring(err))
+
+	---@param details IssueDetails
+	local function update(details)
+		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+		issues_api.set_subscription(issue, details.is_subscribed ~= true, function(subscribed, err)
+			if err then
+				notify.error(tostring(err))
+				done(nil, tostring(err))
+				return
+			end
+			details.is_subscribed = subscribed
+			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			done({ issue_key = issue.key }, nil)
+		end)
+	end
+
+	if ctx.details then
+		update(ctx.details)
+		return
+	end
+	issues_api.fetch_issue(issue, nil, function(details, err)
+		if details == nil then
+			local message = tostring(err or "Failed to load issue details")
+			notify.error(message)
+			done(nil, message)
 			return
 		end
-		issue.is_subscribed = subscribed
-		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
-		done({ issue_key = issue.key }, nil)
+		update(details)
 	end)
 end
 

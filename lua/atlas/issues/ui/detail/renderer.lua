@@ -65,9 +65,9 @@ function M.render()
 	local details = state.current_details
 	local width = vim.api.nvim_win_get_width(win)
 	local winbar = " "
-	if issue ~= nil and issue.is_subscribed ~= nil then
-		local bell, bell_hl = icons.get(issue.is_subscribed and "bell" or "bell_no")
-		if issue.is_subscribed then
+	if issue ~= nil and details ~= nil and details.is_subscribed ~= nil then
+		local bell, bell_hl = icons.get(details.is_subscribed and "bell" or "bell_no")
+		if details.is_subscribed then
 			bell_hl = "AtlasLogInfo"
 		end
 		winbar = string.format("%%=%%#%s#%s%%* ", bell_hl, bell)

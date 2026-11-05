@@ -91,6 +91,7 @@ local function fetch_thread_comments(pr, opts, on_done)
 	local sep = pr.links.comments:find("?") and "&" or "?"
 	local fields = "%2Bvalues.resolution.user%2C%2Bvalues.resolution.created_on%2C%2Bvalues.inline.*"
 		.. "%2C-values.inline.src_rev%2C-values.inline.dest_rev%2C-values.inline.base_rev"
+		.. "%2C-values.pullrequest%2C-values.user.links%2C-values.links.self%2C-values.links.code"
 	local url = string.format("%s%spagelen=100&fields=%s", pr.links.comments, sep, fields)
 	local key = "bitbucket:pr:threads:" .. url
 	if not (opts or {}).force_refresh then

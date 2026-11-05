@@ -95,8 +95,6 @@ function M.to_issue(raw, fallback_slug)
 
 	local issue_assignees = github_mapper.connection_nodes(raw.assignees)
 	local parent = issue_identity(json.nilify(raw.parent), fallback_slug)
-	local subscription = json.safe_str(raw.viewerSubscription)
-	local is_subscribed = subscription and subscription == "SUBSCRIBED"
 	local created_at = json.safe_str(raw.createdAt) or ""
 	local updated_at = json.safe_str(raw.updatedAt) or ""
 	local closed_at = json.safe_str(raw.closedAt)
@@ -122,7 +120,6 @@ function M.to_issue(raw, fallback_slug)
 		closed_at = closed_at,
 		comment_count = comment_count,
 		is_pinned = raw.isPinned == true,
-		is_subscribed = is_subscribed,
 		node_id = json.safe_str(raw.id),
 	}
 	return issue
@@ -145,6 +142,7 @@ function M.to_issue_details(raw, fallback_slug)
 		assignees = M.to_users(github_mapper.connection_nodes(raw.assignees)),
 		labels = labels(github_mapper.connection_nodes(raw.labels)),
 		milestone = milestone(raw.milestone),
+		is_subscribed = json.safe_str(raw.viewerSubscription) == "SUBSCRIBED",
 		sub_issues = {},
 	}
 	for _, child in ipairs(github_mapper.connection_nodes(raw.subIssues)) do

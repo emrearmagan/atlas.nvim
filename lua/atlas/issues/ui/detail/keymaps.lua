@@ -77,7 +77,7 @@ function M.register(buf)
 	local items = {}
 	local provider = assert(state.provider)
 	local function context(issue)
-		return { provider = provider, issue = issue }
+		return { provider = provider, issue = issue, details = state.current_details }
 	end
 
 	utils.insert_if(

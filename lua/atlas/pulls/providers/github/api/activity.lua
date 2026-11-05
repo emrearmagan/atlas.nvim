@@ -10,7 +10,12 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
     pullRequest(number:$number){
       id url body createdAt authorAssociation author{...actor}
       reactionGroups{content viewerHasReacted reactors(first:10){totalCount nodes{...on User{login name} ...on Bot{login}}}}
-      timelineItems(first:100,after:$endCursor){
+      timelineItems(first:100,after:$endCursor,itemTypes:[
+        ISSUE_COMMENT,PULL_REQUEST_REVIEW,PULL_REQUEST_COMMIT,REVIEW_DISMISSED_EVENT,REVIEW_REQUESTED_EVENT,
+        HEAD_REF_FORCE_PUSHED_EVENT,BASE_REF_FORCE_PUSHED_EVENT,MERGED_EVENT,CLOSED_EVENT,REOPENED_EVENT,
+        LABELED_EVENT,UNLABELED_EVENT,ASSIGNED_EVENT,UNASSIGNED_EVENT,RENAMED_TITLE_EVENT,
+        COMMENT_DELETED_EVENT,READY_FOR_REVIEW_EVENT,CONVERT_TO_DRAFT_EVENT
+      ]){
         pageInfo{hasNextPage endCursor}
         nodes{
           __typename

@@ -23,7 +23,6 @@
 ---@field closed_at string|nil
 ---@field comment_count integer|nil
 ---@field is_starred boolean|nil
----@field is_subscribed boolean|nil
 
 ---@class IssueDetails
 ---@field title string|nil
@@ -32,6 +31,7 @@
 ---@field assignees AtlasUser[]
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
+---@field is_subscribed boolean|nil
 
 --------------------------------------------------------------------------------
 -- Label

@@ -308,7 +308,8 @@ local function create_issue(_, done)
 	end
 
 	notify.loading("Loading projects...")
-	return projects_api.get_projects({ maxResults = 50, total = math.huge, status = "live" }, function(groups, err)
+	local opts = { maxResults = 50, total = math.huge, status = "live", action = "create" }
+	return projects_api.get_projects(opts, function(groups, err)
 		if err or not groups then
 			err = err or "Failed to load projects"
 			notify.error(err)
@@ -317,51 +318,20 @@ local function create_issue(_, done)
 		end
 
 		local projects = flatten_projects(groups)
+		notify.clear()
 		if #projects == 0 then
-			notify.info("No Jira projects found")
+			notify.info("No Jira projects allow creating issues")
 			done(nil, nil)
-			return
+		elseif #projects == 1 then
+			open_editor(projects[1])
+		else
+			picker.select({
+				title = "Create Issue",
+				items = projects,
+				format_item = format_project,
+				on_select = open_editor,
+			})
 		end
-
-		local project_ids = {}
-		for _, project in ipairs(projects) do
-			local project_id = tonumber(project.id)
-			if project_id then
-				table.insert(project_ids, project_id)
-			end
-		end
-
-		issues_api.get_permissions_bulk({
-			permissions = { "CREATE_ISSUES" },
-			project_ids = project_ids,
-		}, function(permission_map, perm_err)
-			if perm_err or not permission_map then
-				perm_err = perm_err or "Failed to load project permissions"
-				notify.error(perm_err)
-				done(nil, perm_err)
-				return
-			end
-
-			local allowed_map = permission_map.CREATE_ISSUES or {}
-			local allowed_projects = vim.tbl_filter(function(project)
-				return allowed_map[tonumber(project.id)] == true
-			end, projects)
-
-			notify.clear()
-			if #allowed_projects == 0 then
-				notify.info("No Jira projects allow creating issues")
-				done(nil, nil)
-			elseif #allowed_projects == 1 then
-				open_editor(allowed_projects[1])
-			else
-				picker.select({
-					title = "Create Issue",
-					items = allowed_projects,
-					format_item = format_project,
-					on_select = open_editor,
-				})
-			end
-		end)
 	end)
 end
 
@@ -586,40 +556,58 @@ end
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
-	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 
-	local function finish(subscribed, err)
-		if err then
-			notify.error(tostring(err))
-			done(nil, tostring(err))
+	---@param details IssueDetails
+	local function update(details)
+		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+
+		local function finish(subscribed, err)
+			if err then
+				notify.error(tostring(err))
+				done(nil, tostring(err))
+				return
+			end
+			details.is_subscribed = subscribed == true
+			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			done({ issue_key = issue.key }, nil)
+		end
+
+		if details.is_subscribed ~= true then
+			issues_api.set_subscription(issue_key, true, nil, finish)
 			return
 		end
-		issue.is_subscribed = subscribed == true
-		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
-		done({ issue_key = issue.key }, nil)
-	end
 
-	if issue.is_subscribed ~= true then
-		issues_api.set_subscription(issue_key, true, nil, finish)
-		return
-	end
+		local function unsubscribe(account_id)
+			issues_api.set_subscription(issue_key, false, account_id, finish)
+		end
 
-	local function unsubscribe(account_id)
-		issues_api.set_subscription(issue_key, false, account_id, finish)
-	end
-
-	local current = ctx.current_user
-	if current and (current.id or "") ~= "" then
-		unsubscribe(current.id)
-		return
-	end
-
-	users_api.fetch_user(function(user, err)
-		if err or not user or user.id == "" then
-			finish(nil, err or "Failed to fetch Jira user")
+		local current = ctx.current_user
+		if current and (current.id or "") ~= "" then
+			unsubscribe(current.id)
 			return
 		end
-		unsubscribe(user.id)
+
+		users_api.fetch_user(function(user, err)
+			if err or not user or user.id == "" then
+				finish(nil, err or "Failed to fetch Jira user")
+				return
+			end
+			unsubscribe(user.id)
+		end)
+	end
+
+	if ctx.details then
+		update(ctx.details)
+		return
+	end
+	issues_api.fetch_issue(issue, nil, function(details, err)
+		if details == nil then
+			local message = tostring(err or "Failed to load issue details")
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		update(details)
 	end)
 end
 

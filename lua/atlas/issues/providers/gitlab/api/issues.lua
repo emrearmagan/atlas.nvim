@@ -34,6 +34,7 @@ query($path: ID!, $iid: String!) {
     issue(iid: $iid) {
       title
       description
+      subscribed
       assignees(first: 100) { nodes { id username name } }
       labels(first: 100) { nodes { title color } }
       milestone { id title }
@@ -80,7 +81,6 @@ query(
       state
       issue_type: type
       confidential
-      subscribed
       author { id username name }
       assignees(first: 1) { nodes { id username name } }
       web_url: webUrl
