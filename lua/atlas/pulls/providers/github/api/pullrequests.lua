@@ -58,9 +58,7 @@ fragment PullRequestFields on PullRequest {
   headRefName baseRefName headRefOid baseRefOid
   totalCommentsCount
   repository { name nameWithOwner url sshUrl }
-  commits(last: 1) {
-    nodes { commit { statusCheckRollup { state } } }
-  }
+%s
 %s
 }
 ]]
@@ -78,13 +76,21 @@ local function stack_fields(detail)
 end
 
 ---@return string
+local function check_status_fields()
+	if cli.is_enterprise_server() then
+		return "  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+	end
+	return "  statusCheckRollup { state }"
+end
+
+---@return string
 local function get_pr_gql()
 	return string.format(GET_PR_GQL, stack_fields(true))
 end
 
 ---@return string
 local function pull_request_fields_gql()
-	return string.format(PULL_REQUEST_FIELDS_GQL, stack_fields(false))
+	return string.format(PULL_REQUEST_FIELDS_GQL, check_status_fields(), stack_fields(false))
 end
 
 local SEARCH_GQL = [[

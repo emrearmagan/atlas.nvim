@@ -1,8 +1,17 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client")
-local diff_parser = require("atlas.core.git.diff_parser")
 local json = require("atlas.core.json")
+
+local DIFF_STATS_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      diffStats{path additions deletions}
+    }
+  }
+}
+]]
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
@@ -65,29 +74,11 @@ function M.fetch_commits(pr, opts, on_done)
 	})
 end
 
----@param change table
----@return string
-local function rebuild_unified_diff(change)
-	local new_path = tostring(change.new_path or "")
-	local old_path = tostring(change.old_path or new_path)
-	local body = tostring(change.diff or "")
-	local header = string.format("diff --git a/%s b/%s\n", old_path, new_path)
-	if change.new_file == true then
-		header = header .. "new file\n"
-	elseif change.deleted_file == true then
-		header = header .. "deleted file\n"
-	end
-	if not body:find("^%-%-%- ") then
-		header = header .. string.format("--- a/%s\n+++ b/%s\n", old_path, new_path)
-	end
-	return header .. body
-end
-
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: DiffFile[]|nil, err: string|nil)
+---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_diff(pr, opts, on_done)
+function M.fetch_diffstat(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -97,7 +88,7 @@ local function fetch_diff(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab_pulls:diff:%s!%d", path, iid)
+	local cache_key = string.format("gitlab_pulls:diffstat:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -106,57 +97,28 @@ local function fetch_diff(pr, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/projects/%s/merge_requests/%d/changes", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local parts = {}
-		for _, change in ipairs(json.safe_table(json.safe_table(result).changes)) do
-			table.insert(parts, rebuild_unified_diff(change))
-		end
-		local files = diff_parser.parse(table.concat(parts, "\n"))
-		service.set_memory_cache(cache_key, files)
-		on_done(files, nil)
-	end, {
-		action = "Fetch MR diff",
-		project_path = path,
-		iid = iid,
-	})
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_diffstat(pr, opts, on_done)
-	return fetch_diff(pr, opts, function(files, err)
-		if not files then
-			on_done(nil, err)
+	return service.graphql(DIFF_STATS_QUERY, { path = path, iid = tostring(iid) }, function(result, err)
+		local merge_request = json.nilify(json.safe_table(json.safe_table(result).project).mergeRequest)
+		if err or not merge_request then
+			on_done(nil, err or "GitLab did not return the merge request")
 			return
 		end
 
 		local entries = {}
-		for _, file in ipairs(files) do
-			local additions, deletions = file.additions, file.deletions
-			if additions == nil and deletions == nil then
-				additions, deletions = 0, 0
-				for _, hunk in ipairs(file.hunks) do
-					additions = additions + hunk.additions
-					deletions = deletions + hunk.deletions
-				end
-			end
+		for _, stat in ipairs(json.safe_table(merge_request.diffStats)) do
 			table.insert(entries, {
-				status = file.status,
-				path = file.path,
-				old_path = file.old_path,
-				lines_added = additions or 0,
-				lines_removed = deletions or 0,
+				path = tostring(stat.path or ""),
+				lines_added = tonumber(stat.additions) or 0,
+				lines_removed = tonumber(stat.deletions) or 0,
 			})
 		end
+		service.set_memory_cache(cache_key, entries)
 		on_done(entries, nil)
-	end)
+	end, {
+		action = "Fetch MR diffstat",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 return M

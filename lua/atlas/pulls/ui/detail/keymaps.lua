@@ -61,16 +61,17 @@ local function supports_action(action_id)
 	return state.provider ~= nil and action_runner.find(state.provider.capabilities.actions, action_id) ~= nil
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@param map_item table
 ---@return table|nil
 local function item(action_id, map_item)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
 
-	map_item.key = #keys == 1 and keys[1] or keys
+	map_item.key = keymap.key
+	map_item.desc = keymap.desc
 	return map_item
 end
 
@@ -117,7 +118,6 @@ function M.register(buf)
 	utils.insert_if(
 		items,
 		item("ui.next_item", {
-			desc = "Next selectable item",
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
@@ -128,7 +128,6 @@ function M.register(buf)
 	utils.insert_if(
 		items,
 		item("ui.previous_item", {
-			desc = "Previous selectable item",
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
@@ -139,7 +138,6 @@ function M.register(buf)
 	utils.insert_if(
 		items,
 		item("ui.open_in_browser", {
-			desc = "Open in browser",
 			index = 4,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -158,25 +156,21 @@ function M.register(buf)
 		})
 	)
 
-	local refresh_keys = resolver.resolve("ui.refresh") or {}
-	vim.list_extend(refresh_keys, resolver.resolve("ui.refresh_view") or {})
-	if #refresh_keys > 0 then
-		table.insert(items, {
-			key = refresh_keys,
-			desc = "Refresh tab",
+	utils.insert_if(
+		items,
+		item({ "ui.refresh", "ui.refresh_view" }, {
 			index = 80,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				require("atlas.pulls.ui.detail").refresh()
 			end,
 		})
-	end
+	)
 
 	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
-				desc = "Open PR actions",
 				index = 1,
 				callback = function()
 					local pr = state.current_pr
@@ -204,7 +198,6 @@ function M.register(buf)
 	utils.insert_if(
 		items,
 		item("pulls.open_diff", {
-			desc = "Open PR diff",
 			index = 2,
 			opts = { nowait = true },
 			callback = function()
@@ -223,7 +216,6 @@ function M.register(buf)
 	utils.insert_if(
 		items,
 		item("pulls.checkout", {
-			desc = "Checkout PR branch",
 			index = 6,
 			opts = { nowait = true },
 			callback = function()
@@ -256,7 +248,6 @@ function M.register(buf)
 		utils.insert_if(
 			items,
 			item("pulls.edit_pr", {
-				desc = "Edit PR",
 				index = 5,
 				opts = { nowait = true, silent = true },
 				callback = run_pr_action("edit_pr"),
@@ -268,7 +259,6 @@ function M.register(buf)
 		utils.insert_if(
 			items,
 			item("ui.toggle_subscription", {
-				desc = "Toggle subscription",
 				index = 30,
 				opts = { nowait = true, silent = true },
 				callback = run_pr_action("toggle_subscription"),
@@ -281,7 +271,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.open_references", {
-			desc = "Open references",
 			index = 3,
 			opts = { nowait = true, silent = true },
 			callback = open_links,
@@ -291,7 +280,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.next_panel_tab", {
-			desc = "Next detail tab",
 			index = 11,
 			opts = { nowait = true },
 			callback = function()
@@ -305,7 +293,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.previous_panel_tab", {
-			desc = "Previous detail tab",
 			index = 10,
 			opts = { nowait = true },
 			callback = function()
@@ -319,7 +306,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.help", {
-			desc = "Toggle help",
 			index = 100,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -331,7 +317,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.toggle_panel", {
-			desc = "Toggle detail panel",
 			index = 12,
 			callback = function()
 				require("atlas.pulls.ui.detail").close()
@@ -342,7 +327,6 @@ function M.register(buf)
 	utils.insert_if(
 		general,
 		item("ui.close", {
-			desc = "Close detail panel",
 			index = 101,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -389,6 +373,18 @@ function M.remove(buf)
 		end
 		registrations[buf] = nil
 	end
+end
+
+---@return AtlasKeymapActionId[]
+function M.hints()
+	return {
+		"pulls.open_diff",
+		"pulls.checkout",
+		"ui.comments.add",
+		"ui.comments.reply",
+		"ui.open_actions",
+		"ui.next_panel_tab",
+	}
 end
 
 return M

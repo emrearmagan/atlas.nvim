@@ -9,7 +9,6 @@ local users = require("atlas.providers.github.users")
 local highlights = require("atlas.ui.highlights")
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.issues.ui.presentation")
-local keymaps = require("atlas.core.keymaps")
 
 ---@class GitHubIssueEditorValues
 ---@field title string
@@ -481,22 +480,19 @@ local function open_editor(repo_slug, issue, details, on_done)
 		end,
 		keymaps = {
 			{
-				key = keymaps.resolve("editor.assignees"),
-				desc = "assignees",
+				keymap = "editor.assignees",
 				action = function(editor)
 					select_assignees(state, editor)
 				end,
 			},
 			{
-				key = keymaps.resolve("editor.labels"),
-				desc = "labels",
+				keymap = "editor.labels",
 				action = function(editor)
 					select_labels(state, editor)
 				end,
 			},
 			{
-				key = keymaps.resolve("editor.milestone"),
-				desc = "milestone",
+				keymap = "editor.milestone",
 				action = function(editor)
 					select_milestone(state, editor)
 				end,

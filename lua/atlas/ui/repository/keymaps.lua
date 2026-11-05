@@ -8,56 +8,80 @@ local M = {}
 ---@param select_page fun(index: integer)
 function M.setup(session, close, select_page)
 	for _, pane in ipairs({ session.sidebar, session.content }) do
-		local items = {
+		local bindings = {
 			{
-				key = resolver.resolve("ui.close") or {},
-				desc = "Close repository",
+				keymap = resolver.resolve("ui.close"),
 				index = 101,
 				callback = close,
-				opts = { nowait = true, silent = true },
 			},
 			{
-				key = resolver.resolve("ui.help") or {},
-				desc = "Toggle help",
+				keymap = resolver.resolve("ui.help"),
 				index = 100,
 				callback = function()
 					help.toggle({ buffer = pane.buf })
 				end,
-				opts = { nowait = true, silent = true },
 			},
 		}
 
 		for _, direction in ipairs({
-			{ action = "ui.next_panel_tab", desc = "Next page", step = 1, index = 11 },
-			{ action = "ui.previous_panel_tab", desc = "Previous page", step = -1, index = 10 },
+			{ action = "ui.next_panel_tab", step = 1, index = 11 },
+			{ action = "ui.previous_panel_tab", step = -1, index = 10 },
 		}) do
-			table.insert(items, {
-				key = resolver.resolve(direction.action) or {},
-				desc = direction.desc,
+			table.insert(bindings, {
+				keymap = resolver.resolve(direction.action),
 				index = direction.index,
 				callback = function()
 					local index = (session.sidebar.selected - 1 + direction.step) % #session.sidebar.pages + 1
 					select_page(index)
 				end,
-				opts = { nowait = true, silent = true },
 			})
 		end
 
 		if pane == session.sidebar then
-			table.insert(items, {
-				key = resolver.resolve("ui.select") or {},
-				desc = "Open page",
+			table.insert(bindings, {
+				keymap = resolver.resolve("ui.select"),
 				index = 1,
 				callback = function()
 					select_page(vim.api.nvim_win_get_cursor(pane.win)[1])
 					vim.api.nvim_set_current_win(session.content.win)
 				end,
-				opts = { nowait = true, silent = true },
 			})
 		end
 
+		local items = {}
+		for _, binding in ipairs(bindings) do
+			if binding.keymap then
+				table.insert(items, {
+					key = binding.keymap.key,
+					desc = binding.keymap.desc,
+					index = binding.index,
+					callback = binding.callback,
+					opts = { nowait = true, silent = true },
+				})
+			end
+		end
 		help.register("General", items, { buffer = pane.buf, index = 1 })
 	end
+end
+
+---@param session RepositoryBrowser
+---@param buf integer
+---@return AtlasKeymapActionId[]
+function M.hints(session, buf)
+	if buf == session.sidebar.buf then
+		return {
+			"ui.select",
+			"ui.next_panel_tab",
+		}
+	end
+
+	return {
+		"ui.select",
+		"pulls.open_diff",
+		"ui.open_actions",
+		"ui.open_in_browser",
+		"ui.next_panel_tab",
+	}
 end
 
 return M

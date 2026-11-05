@@ -262,19 +262,19 @@ function M.open()
 	vim.api.nvim_set_option_value("wrap", false, { win = logs_win })
 	vim.api.nvim_set_option_value("cursorline", true, { win = logs_win })
 	vim.api.nvim_set_option_value("winfixheight", true, { win = logs_win })
-	local fold_keys = keymaps.resolve("ui.toggle_fold") or {}
-	local fold_all_keys = keymaps.resolve("ui.toggle_all_folds") or {}
-	local refresh_keys = keymaps.resolve("ui.refresh_view") or {}
-	local close_keys = keymaps.resolve("ui.close") or {}
+	local fold = keymaps.resolve("ui.toggle_fold")
+	local fold_all = keymaps.resolve("ui.toggle_all_folds")
+	local refresh = keymaps.resolve("ui.refresh_view")
+	local close = keymaps.resolve("ui.close")
 	local hints = {}
-	if #fold_keys > 0 then
-		table.insert(hints, table.concat(fold_keys, " / ") .. " Toggle details")
+	if fold then
+		table.insert(hints, table.concat(fold.key, " / ") .. " " .. fold.desc)
 	end
-	if #refresh_keys > 0 then
-		table.insert(hints, table.concat(refresh_keys, " / ") .. " Refresh")
+	if refresh then
+		table.insert(hints, table.concat(refresh.key, " / ") .. " " .. refresh.desc)
 	end
-	if #close_keys > 0 then
-		table.insert(hints, table.concat(close_keys, " / ") .. " Close")
+	if close then
+		table.insert(hints, table.concat(close.key, " / ") .. " " .. close.desc)
 	end
 	vim.api.nvim_set_option_value(
 		"winbar",
@@ -284,16 +284,16 @@ function M.open()
 	pcall(vim.api.nvim_win_set_height, logs_win, 12)
 
 	local opts = { buffer = buf, silent = true, nowait = true }
-	for _, key in ipairs(close_keys) do
+	for _, key in ipairs(close and close.key or {}) do
 		vim.keymap.set("n", key, M.close, opts)
 	end
-	for _, key in ipairs(refresh_keys) do
+	for _, key in ipairs(refresh and refresh.key or {}) do
 		vim.keymap.set("n", key, refresh_buffer, opts)
 	end
-	for _, key in ipairs(fold_keys) do
+	for _, key in ipairs(fold and fold.key or {}) do
 		vim.keymap.set("n", key, toggle_details, opts)
 	end
-	for _, key in ipairs(fold_all_keys) do
+	for _, key in ipairs(fold_all and fold_all.key or {}) do
 		vim.keymap.set("n", key, toggle_all_details, opts)
 	end
 

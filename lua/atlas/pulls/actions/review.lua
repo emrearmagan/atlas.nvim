@@ -98,8 +98,8 @@ end
 ---@return AtlasEditorAction|nil
 local function comment_template_action()
 	local templates = config.options.pulls.comment_templates.items
-	local key = (keymaps.resolve("pulls.review.comment_templates") or {})[1]
-	if #templates == 0 or not key then
+	local keymap = keymaps.resolve("pulls.review.comment_templates")
+	if #templates == 0 or not keymap then
 		return nil
 	end
 	local label_width = 0
@@ -107,8 +107,8 @@ local function comment_template_action()
 		label_width = math.max(label_width, vim.fn.strdisplaywidth(template.label))
 	end
 	return {
-		key = key,
-		description = "templates",
+		key = keymap.key[1],
+		description = keymap.label,
 		callback = function(context)
 			picker.select({
 				title = "Comment templates",

@@ -4,7 +4,6 @@ local create_remotes = require("atlas.pulls.create.remotes")
 local description = require("atlas.pulls.create.description")
 local form = require("atlas.ui.form")
 local git = require("atlas.core.git")
-local keymaps = require("atlas.core.keymaps")
 local meta = require("atlas.pulls.editor.meta")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
@@ -367,15 +366,13 @@ end
 local function open_editor(state, content)
 	local form_keymaps = {
 		{
-			key = keymaps.resolve("editor.base"),
-			desc = "base",
+			keymap = "editor.base",
 			action = function(editor)
 				select_base(state, editor)
 			end,
 		},
 		{
-			key = keymaps.resolve("editor.draft"),
-			desc = "draft",
+			keymap = "editor.draft",
 			action = function(editor)
 				if state.submitting then
 					return
@@ -387,23 +384,18 @@ local function open_editor(state, content)
 	}
 	if state.write.fetch_reviewer_candidates then
 		table.insert(form_keymaps, 2, {
-			key = keymaps.resolve("editor.reviewers"),
-			desc = "reviewers",
+			keymap = "editor.reviewers",
 			action = function(editor)
 				select_reviewers(state, editor)
 			end,
 		})
 	end
-	local diff_keys = keymaps.resolve("pulls.open_diff")
-	if diff_keys then
-		form_keymaps[#form_keymaps + 1] = {
-			key = diff_keys,
-			desc = "diff",
-			action = function(editor)
-				preview_diff(state, editor)
-			end,
-		}
-	end
+	form_keymaps[#form_keymaps + 1] = {
+		keymap = "pulls.open_diff",
+		action = function(editor)
+			preview_diff(state, editor)
+		end,
+	}
 
 	state.completion_context = { provider = state.repository.provider, repository = state.repo_slug }
 	local editor = form.open({

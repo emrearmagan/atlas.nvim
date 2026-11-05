@@ -71,7 +71,9 @@ function M.fetch_commits(pr, opts, on_done)
 
 	local force = (opts or {}).force_refresh == true
 	local sep = commits_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", commits_url, sep, 50)
+	local fields = "values.hash,values.message,values.date,values.author.user.display_name,values.author.user.nickname"
+		.. ",values.links.html.href,values.links.statuses.href,next"
+	local url = string.format("%s%spagelen=%d&fields=%s", commits_url, sep, 50, fields)
 	local key = "bitbucket:pr:commits:" .. url
 	if not force then
 		local cached, ok = service.get_cache(key)

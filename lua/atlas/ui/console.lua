@@ -43,10 +43,13 @@ local function show(output, focus)
 		vim.bo[output.buf].bufhidden = "hide"
 		vim.bo[output.buf].filetype = "atlas-ui.console"
 
-		for _, key in ipairs(keymaps.resolve("ui.close") or {}) do
-			vim.keymap.set("n", key, function()
-				hide(output)
-			end, { buffer = output.buf, silent = true, nowait = true, desc = "Hide console" })
+		local close = keymaps.resolve("ui.close")
+		if close then
+			for _, key in ipairs(close.key) do
+				vim.keymap.set("n", key, function()
+					hide(output)
+				end, { buffer = output.buf, silent = true, nowait = true, desc = close.desc })
+			end
 		end
 
 		vim.api.nvim_create_autocmd("BufWinLeave", {

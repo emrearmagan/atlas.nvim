@@ -7,7 +7,7 @@ local json = require("atlas.core.json")
 
 local ISSUE_FIELDS_GQL = [[
 fragment IssueFields on Issue {
-  id number title state isPinned viewerSubscription
+  id number title state isPinned
   createdAt updatedAt closedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
@@ -42,7 +42,7 @@ local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
-      title body
+      title body viewerSubscription
       reactionGroups { content viewerHasReacted reactors(first: 10) { totalCount nodes { ... on User { login name } ... on Bot { login } } } }
       assignees(first: 100) { nodes { login name } }
       labels(first: 100) { nodes { name color } }

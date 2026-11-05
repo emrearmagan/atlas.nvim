@@ -7,53 +7,8 @@ local state = require("atlas.pulls.state")
 local bookmarks = require("atlas.ui.shared.bookmarks")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
-local window = require("atlas.pulls.ui.dashboard.window")
 
 local M = {}
-
-local PR_ICON = icons.get("pr")
-
----@param pulls PullRequest[]
----@return table[]
-local function statusline_items(pulls)
-	local items = {
-		{
-			text = string.format("%s %d PR%s", PR_ICON, #pulls, #pulls == 1 and "" or "s"),
-			hl_group = "AtlasFooterInfo",
-		},
-	}
-	local page = state.page_history[state.current_page]
-	if page == nil and state.is_loading then
-		page = state.page_history[state.current_page - 1]
-	end
-	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
-		local page_number = tostring(state.current_page)
-		if page.total_pages ~= nil then
-			page_number = page_number .. "/" .. page.total_pages
-		end
-		table.insert(items, {
-			text = "Page",
-			hl_group = "AtlasFooterText",
-		})
-		table.insert(items, {
-			text = page_number,
-			hl_group = "AtlasFooterActive",
-		})
-	end
-	local user = state.current_user
-	if user ~= nil then
-		local user_name = tostring(user.username or user.name or "")
-		if user_name ~= "" then
-			table.insert(items, {
-				text = string.format("%s @%s", icons.get("user"), user_name),
-				hl_group = "AtlasFooterText",
-				priority = 50,
-				min_width = 8,
-			})
-		end
-	end
-	return items
-end
 
 ---@param lines string[]
 ---@param text string
@@ -161,7 +116,6 @@ function M.render(opts)
 	local lines, spans, line_map = {}, {}, {}
 	local pulls = state.pulls
 	local loading = string.format("%s Loading...", state.reload_spinner_frame)
-	window.statusline:set_items(statusline_items(pulls))
 
 	table.insert(lines, "")
 	render_header(lines, spans, opts.width)

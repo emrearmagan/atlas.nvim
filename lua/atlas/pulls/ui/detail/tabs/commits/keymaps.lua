@@ -6,26 +6,27 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@param map_item table
 ---@return table|nil
 local function item(action_id, map_item)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	map_item.key = #keys == 1 and keys[1] or keys
+	map_item.key = keymap.key
+	map_item.desc = keymap.desc
 	return map_item
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@return table|nil
 local function remove_item(action_id)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	return { key = (#keys == 1 and keys[1] or keys) }
+	return { key = keymap.key }
 end
 
 ---@param commit PullsCommit
@@ -52,7 +53,6 @@ function M.setup(buf, _refresh)
 	utils.insert_if(
 		items,
 		item("ui.show_details", {
-			desc = "Show full commit message (stays open while navigating)",
 			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()

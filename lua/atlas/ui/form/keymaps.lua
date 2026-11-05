@@ -4,35 +4,19 @@ local keymaps = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
 
 ---@class AtlasFormKeymap
----@field key string|string[]
+---@field keymap AtlasKeymapActionId
 ---@field mode string|string[]|nil
 ---@field action fun(form: AtlasForm)
----@field desc string
 
 ---@param opts AtlasFormOpenOpts
----@return AtlasStatuslineSegment[]
-function M.statusline_items(opts)
-	local items = {}
-	local function add(keys, label)
-		if not keys then
-			return
-		end
-		if #items > 0 then
-			items[#items + 1] = { text = "|", hl_group = "AtlasFooterText" }
-		end
-		local key = type(keys) == "table" and table.concat(keys, " / ") or keys
-		items[#items + 1] = { text = key, hl_group = "AtlasFooterBackground" }
-		items[#items + 1] = { text = label, hl_group = "AtlasFooterText", priority = 10 }
-	end
-
-	add(keymaps.resolve("ui.submit"), "submit")
-	add(keymaps.resolve("editor.templates"), "templates")
+---@return AtlasKeymapActionId[]
+function M.hints(opts)
+	local hints = { "ui.submit", "editor.templates" }
 	for _, keymap in ipairs(opts.keymaps or {}) do
-		add(keymap.key, keymap.desc)
+		hints[#hints + 1] = keymap.keymap
 	end
-	add(keymaps.resolve("ui.close"), "close")
-
-	return items
+	hints[#hints + 1] = "ui.close"
+	return hints
 end
 
 ---@param form AtlasForm
@@ -41,14 +25,14 @@ end
 function M.setup(form, on_close, buffers)
 	local opts = form.opts
 	local buf = form.editor_buf
-	local help_keys = keymaps.resolve("ui.help")
-	form.statusline.options.help_key = help_keys and help_keys[1]
+	local help_keymap = keymaps.resolve("ui.help")
 	local items = {}
-	local function add(keys, desc, callback, mode)
-		if keys then
+	---@param keymap AtlasKeymap|nil
+	local function add(keymap, callback, mode)
+		if keymap then
 			items[#items + 1] = {
-				key = keys,
-				desc = desc,
+				key = keymap.key,
+				desc = keymap.desc,
 				callback = callback,
 				mode = mode,
 				index = #items + 1,
@@ -57,11 +41,11 @@ function M.setup(form, on_close, buffers)
 		end
 	end
 
-	add(keymaps.resolve("ui.submit"), "Submit", function()
+	add(keymaps.resolve("ui.submit"), function()
 		vim.cmd("stopinsert")
 		opts.submit(form)
 	end, { "n", "i" })
-	add(keymaps.resolve("editor.templates"), "Templates", function()
+	add(keymaps.resolve("editor.templates"), function()
 		local editor = require("atlas.ui.form")
 		require("atlas.templates").open({
 			get_description = function()
@@ -76,17 +60,17 @@ function M.setup(form, on_close, buffers)
 		})
 	end)
 	for _, keymap in ipairs(opts.keymaps or {}) do
-		add(keymap.key, keymap.desc, function()
+		add(keymaps.resolve(keymap.keymap), function()
 			keymap.action(form)
 		end, keymap.mode)
 	end
-	add(help_keys, "Toggle help", function()
+	add(help_keymap, function()
 		help.toggle({ buffer = vim.api.nvim_get_current_buf() })
 	end)
 	local function close()
 		on_close(form)
 	end
-	add(keymaps.resolve("ui.close"), "Close", close)
+	add(keymaps.resolve("ui.close"), close)
 	for _, buffer in ipairs(buffers or { form.editor_buf, form.meta_buf }) do
 		help.register("Form", items, { buffer = buffer, index = 100 })
 		vim.api.nvim_buf_create_user_command(buffer, "AtlasEditorQuit", close, { desc = "Close Atlas editor" })

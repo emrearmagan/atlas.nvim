@@ -122,7 +122,6 @@ function M.to_issue(raw)
 		updated_at = updated_at,
 		closed_at = closed_at,
 		comment_count = tonumber(raw.user_notes_count) or 0,
-		is_subscribed = json.nilify(raw.subscribed),
 		node_id = json.safe_str(raw.node_id),
 	}
 	return issue
@@ -153,6 +152,7 @@ function M.to_issue_details(raw, work_item, viewer)
 		assignees = assignees(json.safe_table(raw.assignees).nodes),
 		labels = labels(json.safe_table(raw.labels).nodes),
 		milestone = milestone(raw.milestone),
+		is_subscribed = json.nilify(raw.subscribed),
 	}
 end
 

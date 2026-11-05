@@ -33,9 +33,6 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
         nodes { author { login } state submittedAt }
         pageInfo { hasNextPage endCursor }
       }
-      commits(last: 1) {
-        nodes { commit { statusCheckRollup { state } } }
-      }
 %s
     }
   }
@@ -45,9 +42,12 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
 ---@return string
 local function merge_checks_query()
 	if cli.is_enterprise_server() then
-		return string.format(MERGE_CHECKS_QUERY, "")
+		return string.format(
+			MERGE_CHECKS_QUERY,
+			"      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+		)
 	end
-	return string.format(MERGE_CHECKS_QUERY, STACK_FIELDS)
+	return string.format(MERGE_CHECKS_QUERY, "      statusCheckRollup { state }\n" .. STACK_FIELDS)
 end
 
 ---@type table<string, "successful"|"failed"|"inprogress">
@@ -211,8 +211,9 @@ local function fetch_merge_state(pr, on_done)
 		end
 
 		local latest_reviews, review_requests = parse_reviews(review_nodes, pull_request.reviewRequests.nodes)
-		local last_commit = pull_request.commits.nodes[1]
-		local rollup = last_commit and json.nilify(last_commit.commit.statusCheckRollup)
+		local last_commit = json.safe_table(json.safe_table(pull_request.commits).nodes)[1]
+		local rollup = json.nilify(pull_request.statusCheckRollup)
+			or last_commit and json.nilify(last_commit.commit.statusCheckRollup)
 		local out = {
 			mergeable = pull_request.mergeable,
 			review_decision = json.safe_str(pull_request.reviewDecision) or "",

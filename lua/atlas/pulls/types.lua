@@ -89,7 +89,7 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsDiffstatEntry
----@field status "added"|"removed"|"renamed"|"modified"|"deleted"
+---@field status "added"|"removed"|"renamed"|"modified"|"deleted"|nil
 ---@field path string
 ---@field old_path string|nil
 ---@field lines_added number

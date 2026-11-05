@@ -10,22 +10,24 @@ CONTENTS                                                       *atlas-contents*
   2. Installation ........................... |atlas-installation|
      Requirements ........................... |atlas-requirements|
   3. Configuration .......................... |atlas-configuration|
+     Statusline ............................. |atlas-statusline|
      Custom actions ......................... |atlas-custom-actions|
-  4. Commands ............................... |atlas-commands|
-  5. Pulls .................................. |atlas-pulls|
+  4. Pulls .................................. |atlas-pulls|
      Notes .................................. |atlas-notes|
      LSP for reviews ........................ |atlas-pulls-lsp|
      Pipelines .............................. |atlas-pulls-pipelines|
      GitHub ................................. |atlas-pulls-github|
      Bitbucket .............................. |atlas-pulls-bitbucket|
      GitLab ................................. |atlas-pulls-gitlab|
-  6. Issues ................................. |atlas-issues|
+  5. Issues ................................. |atlas-issues|
      Jira ................................... |atlas-issues-jira|
      Jira project fields .................... |atlas-issues-jira-fields|
      GitHub ................................. |atlas-issues-github|
      GitLab ................................. |atlas-issues-gitlab|
-  7. Events ................................. |atlas-events|
-  8. Keymaps ................................ |atlas-keymaps|
+  6. Highlights ............................. |atlas-highlights|
+  7. Commands ............................... |atlas-commands|
+  8. Events ................................. |atlas-events|
+  9. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
@@ -82,16 +84,8 @@ up and what's missing.
 >lua
   require("atlas").setup({
     ui = {
-      statusline = {
-        -- false keeps your existing statusline. A function(buf, win, context)
-        -- decides per window; `context` is "atlas" for dashboards/details and
-        -- "diff" for diff views.
-        enable = true,
-        -- For example, keep your statusline in Atlas detail views:
-        -- enable = function(buf, win, context)
-        --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
-        -- end,
-      },
+      -- See |atlas-statusline|.
+      statusline = { ... },
       -- "auto", "default", "snacks", or "fzf-lua".
       picker = "auto",
       -- Make the main Atlas dashboard a listed buffer.
@@ -138,13 +132,44 @@ up and what's missing.
 <
 
 ------------------------------------------------------------------------------
-HIGHLIGHTS                                                  *atlas-highlights*
+STATUSLINE                                                  *atlas-statusline*
 
-Atlas uses your colorscheme's standard highlight groups, so it adapts to
-light and dark backgrounds. Every `Atlas*` group is defined as a default, so
-you can override any of them after calling `setup()`: >lua
+>lua
+  local components = require("atlas.ui.statusline.components")
 
-  vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+  ui = {
+    statusline = {
+      -- false keeps your own statusline, a function decides per window.
+      enable = function(buf, win)
+        return vim.bo[buf].filetype ~= "atlas-ui.detail"
+      end,
+
+      -- Key hints for the current buffer, handy if you're new to Atlas.
+      show_hints = false,
+
+      -- Returning nil, or leaving layout unset, keeps the default.
+      layout = function(buf, win)
+        return {
+          components.user,
+          -- ctx has win, buf, user, pr, issue, list, diff and pipeline.
+          ---@param ctx AtlasStatuslineContext
+          function(ctx)
+            if ctx.pr then
+              -- A list of parts. Plain text or one { text, hl_group }
+              -- work too. nil hides it.
+              return {
+                { text = "#" .. ctx.pr.id, hl_group = "AtlasFooterInfo" },
+                { text = ctx.pr.title },
+              }
+            end
+          end,
+          "%=", -- "%=" moves everything after it to the right.
+          components.version,
+          components.help,
+        }
+      end,
+    },
+  },
 <
 
 ------------------------------------------------------------------------------
@@ -223,80 +248,7 @@ Use `ctx.write(text)` to show output and `done(ok, message)` to finish the actio
 <
 
 ==============================================================================
-4. COMMANDS                                                    *atlas-commands*
-
-The current repository is resolved from your Git remotes like `gh` and
-`glab` do: a default set with `gh repo set-default` or
-`glab repo set-default` wins, otherwise `upstream`, then a remote named
-after the provider (e.g. `github`), then `origin`.
-
-                                                                      *:Atlas*
-:Atlas
-        Pick an Atlas command.
-
-:Atlas pulls [provider|.]
-:Atlas issues [provider|.]
-        Open a provider dashboard. Without an argument, it opens the only
-        configured provider or asks you to choose. `.` uses the current
-        repository's provider.
-
-:Atlas review [pull-request-url|number|.]
-        Pick an open or draft pull request in the current repository and open
-        its diff. With a URL or a number (`12`, `#12`, or GitLab `!12`), open
-        that pull request directly. `.` opens the current branch's pull
-        request.
-
-:Atlas diff <base...head>
-        Open a Git range with the configured diff viewer
-        (`pulls.diff.open_cmd`).
-
-:Atlas pipelines [target|.]
-        Open pipelines by branch name, PR URL or number (`123`, `#123`, or
-        GitLab `!123`), or a GitHub Actions, GitLab pipeline, or Bitbucket
-        Pipelines build URL. Branch names use the local repository;
-        `.` uses the current branch.
-
-:Atlas notes [target|.]
-        Open the notes manager, optionally filtered to a pull request. `.`
-        shows the notes of the current repository's pull requests.
-
-:Atlas create pr
-        Create a pull request from the current branch.
-
-:Atlas create issue [provider|.]
-        Create an issue. Without a provider, it uses the only one that can
-        create issues or asks you to choose. `.` uses the current repository's
-        provider.
-
-:Atlas search [provider|.]
-        Search configured pull-request and issue providers. `.` uses the
-        current repository's provider.
-
-:Atlas open [target|.]
-        Open a pull request or issue by provider URL, Jira key, or PR/issue
-        number (`123`, `#123`, or GitLab `!123`) in the current Git
-        repository. `.` opens the current branch's pull request. Without a
-        target, it prompts for one.
-
-:Atlas browse [repository URL|.|page] [page]
-        Open the repository browser. Use `.` for the current repository.
-        With only a page name, pick a repository first. A URL to a
-        repository page or item, such as `/issues` or `/pull/3`, opens
-        that page.
-        Examples: `:Atlas browse . branches`, `:Atlas browse issues`
-
-:Atlas clear [cache|notes|reviewed|stars]
-        Clear all Atlas data, or only cached data and cloned repositories,
-        notes, locally saved reviewed file marks, or locally starred items.
-
-:Atlas logs
-        Toggle the Atlas log buffer.
-
-:Atlas console
-        Open the latest command output.
-
-==============================================================================
-5. PULLS                                                          *atlas-pulls*
+4. PULLS                                                          *atlas-pulls*
 
 Use `:Atlas pulls [provider|.]` to browse and manage pull requests from
 GitHub, Bitbucket, and GitLab. Shared authentication and endpoints are
@@ -573,7 +525,7 @@ self-hosted URL.
 <
 
 
-6. ISSUES                                                        *atlas-issues*
+5. ISSUES                                                        *atlas-issues*
 
 Use `:Atlas issues [provider|.]` to browse and manage Jira, GitHub, and GitLab
 issues. Shared authentication and endpoints are configured in
@@ -762,8 +714,90 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
     },
   }
 <
+
 ==============================================================================
-7. EVENTS                                                        *atlas-events*
+6. HIGHLIGHTS                                               *atlas-highlights*
+
+Atlas builds its `Atlas*` groups from your colorscheme, so it fits light and
+dark themes. Override any of them after `setup()`: >lua
+
+  vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+  vim.api.nvim_set_hl(0, "AtlasFooterInfo", { fg = "#7aa2f7", bold = true })
+<
+
+All groups:
+https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/ui/highlights.lua
+
+==============================================================================
+7. COMMANDS                                                    *atlas-commands*
+
+                                                                      *:Atlas*
+:Atlas
+        Pick an Atlas command.
+
+:Atlas pulls [provider|.]
+:Atlas issues [provider|.]
+        Open a provider dashboard. Without an argument, it opens the only
+        configured provider or asks you to choose. `.` uses the current
+        repository's provider.
+
+:Atlas review [pull-request-url|number|.]
+        Pick an open or draft pull request in the current repository and open
+        its diff. With a URL or a number (`12`, `#12`, or GitLab `!12`), open
+        that pull request directly. `.` opens the current branch's pull
+        request.
+
+:Atlas diff <base...head>
+        Open a Git range with the configured diff viewer
+        (`pulls.diff.open_cmd`).
+
+:Atlas pipelines [target|.]
+        Open pipelines by branch name, PR URL or number (`123`, `#123`, or
+        GitLab `!123`), or a GitHub Actions, GitLab pipeline, or Bitbucket
+        Pipelines build URL. Branch names use the local repository;
+        `.` uses the current branch.
+
+:Atlas notes [target|.]
+        Open the notes manager, optionally filtered to a pull request. `.`
+        shows the notes of the current repository's pull requests.
+
+:Atlas create pr
+        Create a pull request from the current branch.
+
+:Atlas create issue [provider|.]
+        Create an issue. Without a provider, it uses the only one that can
+        create issues or asks you to choose. `.` uses the current repository's
+        provider.
+
+:Atlas search [provider|.]
+        Search configured pull-request and issue providers. `.` uses the
+        current repository's provider.
+
+:Atlas open [target|.]
+        Open a pull request or issue by provider URL, Jira key, or PR/issue
+        number (`123`, `#123`, or GitLab `!123`) in the current Git
+        repository. `.` opens the current branch's pull request. Without a
+        target, it prompts for one.
+
+:Atlas browse [repository URL|.|page] [page]
+        Open the repository browser. Use `.` for the current repository.
+        With only a page name, pick a repository first. A URL to a
+        repository page or item, such as `/issues` or `/pull/3`, opens
+        that page.
+        Examples: `:Atlas browse . branches`, `:Atlas browse issues`
+
+:Atlas clear [cache|notes|reviewed|stars]
+        Clear all Atlas data, or only cached data and cloned repositories,
+        notes, locally saved reviewed file marks, or locally starred items.
+
+:Atlas logs
+        Toggle the Atlas log buffer.
+
+:Atlas console
+        Open the latest command output.
+
+==============================================================================
+8. EVENTS                                                        *atlas-events*
 
 These `User` events fire after setup or cleanup completes:
 
@@ -777,7 +811,7 @@ These `User` events fire after setup or cleanup completes:
       The current diff file changed in any of these viewers.
 
 ==============================================================================
-8. KEYMAPS                                                      *atlas-keymaps*
+9. KEYMAPS                                                      *atlas-keymaps*
 
 >lua
   require("atlas").setup({
@@ -799,6 +833,7 @@ These `User` events fire after setup or cleanup completes:
           reply  = "c",
           edit   = "e",
           react  = "gr",
+          upvote = "gu", -- GitHub discussions only.
         },
         toggle_panel            = "p",
         cycle_layout            = "t",
@@ -845,13 +880,15 @@ These `User` events fire after setup or cleanup completes:
         assignees  = "ga",
         labels     = "gl", -- GitHub and GitLab only.
         milestone  = "gm", -- GitHub and GitLab only.
-        reporter   = "gr", -- Jira only.
+        reporter   = "gR", -- Jira only.
         reviewers  = "gr", -- Pull requests only.
         base       = "gb", -- Pull requests only.
         draft      = "gD", -- Pull requests only.
         issue_type = "gt", -- Jira only.
         fields     = "gf", -- Jira only.
         templates  = "gT",
+        delete_template = "<C-d>",
+        complete   = "<C-x><C-u>",
       },
       pulls = {
         open_diff              = "gd",
@@ -892,6 +929,7 @@ These `User` events fire after setup or cleanup completes:
           add_suggestion = "s",
           submit_suggestion = "S",
           add_note = "<leader>n",
+          note_type = "!",
           view = {
             external_help = "gA", -- External diff viewer help.
             toggle_review_panel = "gR",
@@ -925,6 +963,10 @@ These `User` events fire after setup or cleanup completes:
           open                   = "gpo",
           merged                 = "gpm",
           declined               = "gpd",
+        },
+        merge = {
+          method                 = "gm",
+          delete_branch          = "gd",
         },
       },
     },

@@ -2,7 +2,7 @@ local M = {}
 
 local window = require("atlas.pulls.ui.dashboard.window")
 
-local DEBOUNCE_MS = 150
+local DEBOUNCE_MS = 250
 local selected_line = nil
 
 local function is_selectable(node)

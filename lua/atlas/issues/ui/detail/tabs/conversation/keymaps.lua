@@ -38,15 +38,16 @@ local function dispatch_with_entry(refresh, fn)
 	end
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@param map_item table
 ---@return table|nil
 local function from_action(action_id, map_item)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	map_item.key = #keys == 1 and keys[1] or keys
+	map_item.key = keymap.key
+	map_item.desc = keymap.desc
 	return map_item
 end
 
@@ -89,7 +90,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.comments.add", {
-				desc = "Add comment",
 				index = 20,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -100,7 +100,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.comments.reply", {
-				desc = "Reply to comment",
 				index = 21,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -113,7 +112,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.comments.edit", {
-				desc = "Edit comment",
 				index = 22,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -126,7 +124,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.delete", {
-				desc = "Delete comment",
 				index = 24,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -139,7 +136,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.comments.react", {
-				desc = "Add reaction",
 				index = 23,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -152,7 +148,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_fold", {
-			desc = "Expand / collapse comment or thread",
 			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -163,7 +158,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_all_folds", {
-			desc = "Expand / collapse all comments and threads",
 			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()

@@ -21,8 +21,8 @@ local filter_labels = { all = "All", unresolved = "Unresolved", mine = "Mine" }
 ---@param action AtlasKeymapActionId
 ---@return string|nil
 local function key_label(action)
-	local keys = keymap_resolver.resolve(action)
-	return keys and #keys > 0 and table.concat(keys, " / ") or nil
+	local keymap = keymap_resolver.resolve(action)
+	return keymap and table.concat(keymap.key, " / ") or nil
 end
 
 function ReviewPanel:render()

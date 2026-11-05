@@ -9,10 +9,10 @@ local M = {}
 local function register(buf, actions)
 	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
-		if action.key and #action.key > 0 then
+		if action.keymap then
 			table.insert(groups[action.group or "General"], {
-				key = action.key,
-				desc = action.desc,
+				key = action.keymap.key,
+				desc = action.keymap.desc,
 				index = action.index,
 				callback = action.callback,
 				opts = { silent = true, nowait = true },
@@ -30,16 +30,15 @@ end
 function M.setup(state, callbacks)
 	local actions = {
 		{
-			key = vim.list_extend(resolver.resolve("ui.refresh") or {}, resolver.resolve("ui.refresh_view") or {}),
-			desc = "Refresh builds",
+			keymap = resolver.resolve({ "ui.refresh", "ui.refresh_view" }),
 			callback = function()
 				callbacks.load(state)
 			end,
 			index = 80,
 		},
 		{
-			key = { "b" },
-			desc = "Change build branch",
+			-- TODO: add to config
+			keymap = { key = { "b" }, desc = "Change build branch", label = "branch" },
 			group = "Filters",
 			callback = function()
 				callbacks.change_branch(state)
@@ -53,16 +52,14 @@ function M.setup(state, callbacks)
 		state.buf,
 		vim.list_extend(actions, {
 			{
-				key = resolver.resolve("ui.select"),
-				desc = "Open build and logs",
+				keymap = resolver.resolve("ui.select"),
 				callback = function()
 					callbacks.open_build(state)
 				end,
 				index = 1,
 			},
 			{
-				key = resolver.resolve("ui.open_in_browser"),
-				desc = "Open build in browser",
+				keymap = resolver.resolve("ui.open_in_browser"),
 				callback = function()
 					callbacks.open_in_browser(state)
 				end,

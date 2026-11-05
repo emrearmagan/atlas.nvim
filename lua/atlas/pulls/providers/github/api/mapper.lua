@@ -247,8 +247,8 @@ function M.to_pull_request(raw)
 		https_url = https_url .. ".git"
 	end
 	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
-	local commit = json.safe_table(first_commit.commit)
-	local check_status = json.safe_str(json.safe_table(commit.statusCheckRollup).state)
+	local rollup = json.nilify(raw.statusCheckRollup) or json.safe_table(first_commit.commit).statusCheckRollup
+	local check_status = json.safe_str(json.safe_table(rollup).state)
 
 	return {
 		id = number,

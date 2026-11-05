@@ -177,7 +177,6 @@ function M.to_issue(raw, sp_field)
 		updated_at = json.safe_str(fields.updated),
 		closed_at = json.safe_str(fields.resolutiondate),
 		comment_count = tonumber(safe_get(fields, "comment", "total")),
-		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 	}
 end
 
@@ -205,6 +204,7 @@ function M.to_issue_details(raw, fields_config)
 		assignees = assignee and { assignee } or {},
 		labels = labels,
 		milestone = nil,
+		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 		raw_description = json.nilify(fields.description),
 		custom_fields = {},
 	}

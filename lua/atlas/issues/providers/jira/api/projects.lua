@@ -9,6 +9,13 @@ local json = require("atlas.core.json")
 ---@param callback fun(statuses: JiraIssueStatus[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_statuses(project, callback)
+	local cache_key = "jira:project-statuses:" .. project
+	local cached, ok = service.get_memory_cache(cache_key)
+	if ok then
+		callback(cached, nil)
+		return nil
+	end
+
 	return service.request("GET", "/project/" .. url_encode(project) .. "/statuses", nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
@@ -28,6 +35,7 @@ function M.get_statuses(project, callback)
 				end
 			end
 		end
+		service.set_memory_cache(cache_key, statuses)
 		callback(statuses, nil)
 	end, { action = "Fetch project statuses", project = project })
 end
@@ -36,7 +44,7 @@ end
 ---@field category table|nil
 ---@field projects JiraIssueProject[]
 
----@param opts { maxResults?: integer, total?: integer, status?: string, query?: string }|nil
+---@param opts { maxResults?: integer, total?: integer, status?: string, query?: string, action?: "view"|"browse"|"edit"|"create" }|nil
 ---@param callback fun(groups: JiraProjectGroup[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_projects(opts, callback)
@@ -97,6 +105,9 @@ function M.get_projects(opts, callback)
 				string.format("%s?maxResults=%d&startAt=%d&status=%s", path, max_results, start_at, url_encode(status))
 			if query ~= "" then
 				endpoint = endpoint .. "&query=" .. url_encode(query)
+			end
+			if opts.action then
+				endpoint = endpoint .. "&action=" .. opts.action
 			end
 		end
 

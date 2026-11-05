@@ -418,8 +418,8 @@ local function render_description(details, width, lines, spans)
 	end
 
 	if truncated then
-		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}
-		local key = keys[1] or "za"
+		local fold = require("atlas.core.keymaps").resolve("ui.toggle_fold")
+		local key = fold and fold.key[1] or "za"
 		local prefix = "Press "
 		local suffix = " to expand"
 		local hint = prefix .. key .. suffix
