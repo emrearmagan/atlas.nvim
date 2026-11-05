@@ -1,5 +1,6 @@
 local M = {}
 
+local conceal = require("atlas.formats.markdown.conceal")
 local elements = require("atlas.formats.markdown.elements")
 local html = require("atlas.formats.markdown.html")
 local parse_table = require("atlas.formats.markdown.table")
@@ -102,7 +103,7 @@ function M.parse(source, opts)
 	opts = opts or {}
 
 	local lines = {}
-	source = utils.normalize_newlines(source) .. "\n"
+	source = conceal.strip(utils.normalize_newlines(source)) .. "\n"
 	for line in source:gmatch("(.-)\n") do
 		lines[#lines + 1] = line
 	end
