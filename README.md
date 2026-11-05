@@ -457,7 +457,10 @@ pulls = {
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
-      show_commits = false, -- Set true to show commits below changed files initially.
+      commits = {
+        hidden = true, -- Set false to show commits below changed files initially.
+        height = 35, -- Height in percent of the explorer column.
+      },
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       preview = false, -- Show a file as soon as the explorer cursor moves onto it.

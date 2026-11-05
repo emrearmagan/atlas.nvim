@@ -41,12 +41,16 @@
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
----@field show_commits boolean|nil
+---@field commits AtlasPullsDiffCommitsConfig|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
 ---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
+
+---@class AtlasPullsDiffCommitsConfig
+---@field hidden boolean|nil
+---@field height integer|nil Percent of the explorer column.
 
 ---@class AtlasPullsDiffReviewPanelConfig
 ---@field hidden boolean|nil
@@ -209,7 +213,10 @@ local defaults = {
 			explorer = {
 				grouped = true,
 				hidden = false,
-				show_commits = false,
+				commits = {
+					hidden = true,
+					height = 35,
+				},
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
