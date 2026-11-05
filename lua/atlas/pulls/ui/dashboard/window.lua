@@ -2,16 +2,64 @@ local M = {}
 
 local config = require("atlas.config")
 local events = require("atlas.core.events")
-local resolver = require("atlas.core.keymaps")
+local icons = require("atlas.ui.shared.icons")
+local pulls_state = require("atlas.pulls.state")
 local statusline = require("atlas.ui.statusline")
+local components = require("atlas.ui.statusline.components")
 local utils = require("atlas.ui.shared.utils")
 
 M.statusline = statusline.new({
-	help_key = function()
-		local keys = resolver.resolve("ui.help")
-		return keys and keys[1]
+	layout = {
+		function(ctx)
+			if ctx.list then
+				local total = #ctx.list.items
+				return {
+					text = string.format("%s %d PR%s", icons.get("pr"), total, total == 1 and "" or "s"),
+					hl_group = "AtlasFooterInfo",
+				}
+			end
+		end,
+		function(ctx)
+			local current = ctx.list and ctx.list.page
+			if current then
+				local number = current.total and current.current .. "/" .. current.total or tostring(current.current)
+				return { { text = "Page" }, { text = number, hl_group = "AtlasFooterActive" } }
+			end
+		end,
+		components.user,
+		function(ctx)
+			if vim.bo[ctx.buf].filetype == "atlas-ui.detail" then
+				return components.hints(ctx.buf, require("atlas.pulls.ui.detail.keymaps").hints())
+			end
+			return components.hints(ctx.buf, require("atlas.pulls.ui.dashboard.keymaps").hints())
+		end,
+		"%=",
+		function(ctx)
+			if ctx.pr and vim.bo[ctx.buf].filetype == "atlas-ui.detail" then
+				return icons.get("branch") .. " " .. ctx.pr.source.branch
+			end
+		end,
+		function(ctx)
+			if vim.bo[ctx.buf].filetype ~= "atlas-ui.detail" then
+				return components.version()
+			end
+		end,
+		components.help,
+	},
+	context = function(ctx)
+		local item = require("atlas.pulls.ui.dashboard.navigation").current_item()
+		ctx.user = pulls_state.current_user
+		ctx.pr = item and item.pr
+
+		if not pulls_state.is_loading then
+			ctx.list = { items = pulls_state.pulls }
+
+			local loaded = pulls_state.loaded_page()
+			if loaded and (pulls_state.current_page > 1 or loaded.next_cursor) then
+				ctx.list.page = { current = pulls_state.current_page, total = loaded.total_pages }
+			end
+		end
 	end,
-	show_version = true,
 })
 
 ---@type table<integer, table>
@@ -92,7 +140,7 @@ local function restore_options()
 	end
 	statusline.detach(win)
 	for name, value in pairs(state.options) do
-		if name ~= "statusline" or statusline.enabled("atlas", win) then
+		if name ~= "statusline" or statusline.enabled(win) then
 			set_option(win, name, value)
 		end
 	end
@@ -175,7 +223,7 @@ local function close_session(session_id, reason, close_tab)
 	state.listed = false
 	state.options = nil
 	state.closing = false
-	M.statusline:reset()
+	M.statusline:clear_notice()
 	if close_tab and utils.window.valid(previous_win) then
 		vim.api.nvim_set_current_win(previous_win)
 	end

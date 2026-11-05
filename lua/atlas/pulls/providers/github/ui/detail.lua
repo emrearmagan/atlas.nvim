@@ -101,22 +101,22 @@ end
 function M.keymaps()
 	local keymaps = {}
 
-	local prev_keys = resolver.resolve("pulls.stack.prev")
-	if prev_keys then
+	local prev_keymap = resolver.resolve("pulls.stack.prev")
+	if prev_keymap then
 		table.insert(keymaps, {
-			key = prev_keys,
-			desc = "Previous PR in stack",
+			key = prev_keymap.key,
+			desc = prev_keymap.desc,
 			callback = function()
 				navigate_stack(-1)
 			end,
 		})
 	end
 
-	local next_keys = resolver.resolve("pulls.stack.next")
-	if next_keys then
+	local next_keymap = resolver.resolve("pulls.stack.next")
+	if next_keymap then
 		table.insert(keymaps, {
-			key = next_keys,
-			desc = "Next PR in stack",
+			key = next_keymap.key,
+			desc = next_keymap.desc,
 			callback = function()
 				navigate_stack(1)
 			end,

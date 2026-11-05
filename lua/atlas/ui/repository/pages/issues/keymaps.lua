@@ -9,10 +9,10 @@ local M = {}
 local function register(buf, actions)
 	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
-		if action.key and #action.key > 0 then
+		if action.keymap then
 			table.insert(groups[action.group or "General"], {
-				key = action.key,
-				desc = action.desc,
+				key = action.keymap.key,
+				desc = action.keymap.desc,
 				index = action.index,
 				callback = action.callback,
 				opts = { silent = true, nowait = true },
@@ -30,16 +30,14 @@ end
 function M.setup(state, callbacks)
 	local actions = {
 		{
-			key = vim.list_extend(resolver.resolve("ui.refresh") or {}, resolver.resolve("ui.refresh_view") or {}),
-			desc = "Refresh issues",
+			keymap = resolver.resolve({ "ui.refresh", "ui.refresh_view" }),
 			callback = function()
 				callbacks.refresh(state)
 			end,
 			index = 80,
 		},
 		{
-			key = vim.list_extend(resolver.resolve("ui.edit_search") or {}, resolver.resolve("ui.search") or {}),
-			desc = "Edit search",
+			keymap = resolver.resolve({ "ui.edit_search", "ui.search" }),
 			group = "Filters",
 			callback = function()
 				callbacks.edit_query(state)
@@ -47,8 +45,8 @@ function M.setup(state, callbacks)
 			index = 1,
 		},
 		{
-			key = { "t" },
-			desc = "Toggle open/closed issues",
+			-- TODO: add to config
+			keymap = { key = { "t" }, desc = "Toggle open/closed issues", label = "state" },
 			group = "Filters",
 			callback = function()
 				callbacks.toggle_state(state)
@@ -56,16 +54,14 @@ function M.setup(state, callbacks)
 			index = 10,
 		},
 		{
-			key = resolver.resolve("ui.next_page"),
-			desc = "Next issues",
+			keymap = resolver.resolve("ui.next_page"),
 			callback = function()
 				callbacks.next_page(state)
 			end,
 			index = 16,
 		},
 		{
-			key = resolver.resolve("ui.previous_page"),
-			desc = "Previous issues",
+			keymap = resolver.resolve("ui.previous_page"),
 			callback = function()
 				callbacks.previous_page(state)
 			end,
@@ -78,16 +74,14 @@ function M.setup(state, callbacks)
 		state.buf,
 		vim.list_extend(actions, {
 			{
-				key = vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_panel") or {}),
-				desc = "Open issue panel",
+				keymap = resolver.resolve({ "ui.select", "ui.toggle_panel" }),
 				callback = function()
 					callbacks.open_panel(state)
 				end,
 				index = 1,
 			},
 			{
-				key = resolver.resolve("ui.open_in_browser"),
-				desc = "Open issue in browser",
+				keymap = resolver.resolve("ui.open_in_browser"),
 				callback = function()
 					callbacks.open_in_browser(state)
 				end,

@@ -32,8 +32,8 @@ local state = {
 ---@param action AtlasKeymapActionId
 ---@return string|nil
 local function key_label(action)
-	local keys = resolver.resolve(action)
-	return keys and table.concat(keys, " / ") or nil
+	local keymap = resolver.resolve(action)
+	return keymap and table.concat(keymap.key, " / ") or nil
 end
 
 ---@return boolean

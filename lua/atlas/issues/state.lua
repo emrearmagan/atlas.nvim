@@ -100,6 +100,14 @@ function M.view_layout(view)
 	return require("atlas.issues.ui.layouts").resolve(layout, M.provider and M.provider.id)
 end
 
+---@return IssuesPage|nil
+function M.loaded_page()
+	if M.page_history[M.current_page] == nil and M.is_loading then
+		return M.page_history[M.current_page - 1]
+	end
+	return M.page_history[M.current_page]
+end
+
 ---@param issues Issue[]
 function M.set_issues(issues)
 	M.issues = starred_first(issues, function(issue)

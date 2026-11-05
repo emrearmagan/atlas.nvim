@@ -192,7 +192,8 @@ local function check_codediff_keymaps()
 		end
 
 		for _, action in ipairs(actions) do
-			add(action, keymaps.resolve(action))
+			local keymap = keymaps.resolve(action)
+			add(action, keymap and keymap.key)
 		end
 		for index, mapping in ipairs(config.options.keymaps.pulls.custom or {}) do
 			add(string.format("pulls.custom[%d]", index), mapping.key)

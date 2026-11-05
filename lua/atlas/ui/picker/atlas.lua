@@ -439,7 +439,8 @@ function M.open(request)
 
 	local map_opts = { buffer = main_buf, silent = true, nowait = true }
 	local function map_configured(action, callback, mode)
-		for _, key in ipairs(keymaps.resolve(action) or {}) do
+		local keymap = keymaps.resolve(action)
+		for _, key in ipairs(keymap and keymap.key or {}) do
 			vim.keymap.set(mode or "n", key, callback, map_opts)
 		end
 	end

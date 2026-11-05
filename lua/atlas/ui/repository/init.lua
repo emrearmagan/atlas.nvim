@@ -1,10 +1,10 @@
-local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local loading = require("atlas.ui.loading")
 local keymaps = require("atlas.ui.repository.keymaps")
 local sidebar = require("atlas.ui.repository.sidebar")
 local statusline = require("atlas.ui.statusline")
+local components = require("atlas.ui.statusline.components")
 local utils = require("atlas.ui.shared.utils")
 
 ---@class RepositoryPage
@@ -217,16 +217,24 @@ local function show(repo, provider, pages, page_key, ctx)
 		provider = provider,
 		sidebar = { pages = pages, selected = 1 },
 		content = {},
-		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
 	}
 	---@cast session RepositoryBrowser
+	session.statusline = statusline.new({
+		layout = {
+			function()
+				return repo.full_name
+			end,
+			function(statusline_ctx)
+				return components.hints(statusline_ctx.buf, keymaps.hints(session, statusline_ctx.buf))
+			end,
+			"%=",
+			components.help,
+		},
+	})
 
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)
-	session.statusline:set_items({
-		{ text = repo.full_name, hl_group = "AtlasFooterText" },
-	})
 
 	for index, page in ipairs(session.sidebar.pages) do
 		if page.key == (page_key or "overview") then
@@ -257,7 +265,7 @@ function M.open(repo_full_name, provider, opts)
 
 	local repo = { id = repo_full_name, full_name = repo_full_name, name = name, owner = owner, repo_name = name }
 	local requests = request_scope.new()
-	local view = loading.open("Loading repository...", requests.cancel)
+	local view = loading.open("Loading repository...", requests.cancel, repo_full_name)
 	requests.run(function(done)
 		return repository.fetch_details(repo, done)
 	end, function(details, err)

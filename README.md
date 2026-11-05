@@ -22,7 +22,6 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
 **Quick links**
 
 - [Configuration](#configuration)
-- [Commands](#commands)
 - [Pull requests](#pulls)
   - [GitHub](#github)
   - [GitLab](#gitlab)
@@ -31,6 +30,7 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   - [GitHub](#github-issues)
   - [GitLab](#gitlab-issues)
   - [Jira](#jira)
+- [Commands](#commands)
 
 ## Installation
 
@@ -305,15 +305,8 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 ```lua
 {
   ui = {
-    statusline = {
-      -- false keeps your existing statusline. A function(buf, win, context) decides per window;
-      -- `context` is "atlas" for dashboards/details and "diff" for diff views.
-      enable = true,
-      -- For example, keep your statusline in Atlas detail views:
-      -- enable = function(buf, win, context)
-      --   return vim.bo[buf].filetype ~= "atlas-ui.detail"
-      -- end,
-    },
+    -- See Statusline below.
+    statusline = { ... },
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
     -- Make the main Atlas dashboard a listed buffer.
@@ -363,33 +356,46 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 }
 ```
 
-### Highlights
+### Statusline
 
-Atlas uses your colorscheme's standard highlight groups, so it adapts to light and dark backgrounds. Every `Atlas*` group is defined as a default, so you can override any of them after calling `setup()`:
+Atlas shows its own statusline in its windows. You can turn it off or change what it shows.
 
 ```lua
-vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+local components = require("atlas.ui.statusline.components")
+
+ui = {
+  statusline = {
+    -- false keeps your own statusline, a function decides per window.
+    enable = function(buf, win)
+      return vim.bo[buf].filetype ~= "atlas-ui.detail"
+    end,
+
+    -- Key hints for the current buffer, handy if you're new to Atlas.
+    show_hints = false,
+
+    -- Returning nil, or leaving layout unset, keeps the default.
+    layout = function(buf, win)
+      return {
+        components.user,
+        -- ctx has win, buf, user, pr, issue, list, diff and pipeline.
+        ---@param ctx AtlasStatuslineContext
+        function(ctx)
+          if ctx.pr then
+            -- A list of parts. Plain text or one { text, hl_group } work too. nil hides it.
+            return {
+              { text = "#" .. ctx.pr.id, hl_group = "AtlasFooterInfo" },
+              { text = ctx.pr.title },
+            }
+          end
+        end,
+        "%=", -- "%=" moves everything after it to the right.
+        components.version,
+        components.help,
+      }
+    end,
+  },
+},
 ```
-
-## Commands
-
-- `:Atlas` - Pick a command
-- `:Atlas pulls [provider|.]` - Open a pull-request provider dashboard; `.` uses the current repository's provider
-- `:Atlas issues [provider|.]` - Open an issue provider dashboard; `.` uses the current repository's provider
-- `:Atlas review [pull-request-url|number|.]` - Review a pull request with the configured diff viewer; without an argument, pick one from the current repository; `.` reviews the current branch's pull request
-- `:Atlas diff <base...head>` - Open a Git range with the configured diff viewer
-- `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
-- `:Atlas create pr` - Create a pull request from the current branch
-- `:Atlas create issue [provider|.]` - Create an issue; `.` uses the current repository's provider
-- `:Atlas search [provider|.]` - Search configured pull-request and issue providers; `.` uses the current repository's provider
-- `:Atlas open [target|.]` - Open a pull request or issue by URL, Jira key, or number; `.` opens the current branch's pull request
-- `:Atlas browse [repository URL|.|page] [page]` - Open the repository browser; `.` uses the current repository, a page name alone picks a repository first, and a URL to a repository page or item opens that page, e.g. `:Atlas browse . branches`, `:Atlas browse issues` or `:Atlas browse https://github.com/owner/repo/discussions`
-- `:Atlas notes [target|.]` - Inspect notes; `.` shows the current repository's notes
-- `:Atlas clear [cache|notes|reviewed|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, reviewed file marks, or starred items
-- `:Atlas logs` - Toggle Atlas logs
-- `:Atlas console` - Open the latest command output
-
-The current repository is resolved from your Git remotes like `gh` and `glab` do: a default set with `gh repo set-default` or `glab repo set-default` wins, otherwise `upstream`, then a remote named after the provider (e.g. `github`), then `origin`.
 
 ## Pulls
 
@@ -867,6 +873,35 @@ issues = {
 
 </details>
 
+## Highlights
+
+Atlas builds its `Atlas*` groups from your colorscheme, so it fits light and dark themes. Override any of them after `setup()`:
+
+```lua
+vim.api.nvim_set_hl(0, "AtlasTextMuted", { link = "Comment" })
+vim.api.nvim_set_hl(0, "AtlasFooterInfo", { fg = "#7aa2f7", bold = true })
+```
+
+See [all highlight groups](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/ui/highlights.lua).
+
+## Commands
+
+- `:Atlas` - Pick a command
+- `:Atlas pulls [provider|.]` - Open a pull-request provider dashboard; `.` uses the current repository's provider
+- `:Atlas issues [provider|.]` - Open an issue provider dashboard; `.` uses the current repository's provider
+- `:Atlas review [pull-request-url|number|.]` - Review a pull request with the configured diff viewer; without an argument, pick one from the current repository; `.` reviews the current branch's pull request
+- `:Atlas diff <base...head>` - Open a Git range with the configured diff viewer
+- `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
+- `:Atlas create pr` - Create a pull request from the current branch
+- `:Atlas create issue [provider|.]` - Create an issue; `.` uses the current repository's provider
+- `:Atlas search [provider|.]` - Search configured pull-request and issue providers; `.` uses the current repository's provider
+- `:Atlas open [target|.]` - Open a pull request or issue by URL, Jira key, or number; `.` opens the current branch's pull request
+- `:Atlas browse [repository URL|.|page] [page]` - Open the repository browser; `.` uses the current repository, a page name alone picks a repository first, and a URL to a repository page or item opens that page, e.g. `:Atlas browse . branches`, `:Atlas browse issues` or `:Atlas browse https://github.com/owner/repo/discussions`
+- `:Atlas notes [target|.]` - Inspect notes; `.` shows the current repository's notes
+- `:Atlas clear [cache|notes|reviewed|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, reviewed file marks, or starred items
+- `:Atlas logs` - Toggle Atlas logs
+- `:Atlas console` - Open the latest command output
+
 ## Events
 
 These `User` events fire after the corresponding cleanup or setup has completed:
@@ -898,6 +933,7 @@ keymaps = {
       reply = "c",
       edit = "e",
       react = "gr",
+      upvote = "gu", -- GitHub discussions only.
     },
     toggle_panel = "p",
     cycle_layout = "t",
@@ -944,13 +980,15 @@ keymaps = {
     assignees = "ga",
     labels = "gl", -- GitHub and GitLab only.
     milestone = "gm", -- GitHub and GitLab only.
-    reporter = "gr", -- Jira only.
+    reporter = "gR", -- Jira only.
     reviewers = "gr", -- Pull requests only.
     base = "gb", -- Pull requests only.
     draft = "gD", -- Pull requests only.
     issue_type = "gt", -- Jira only.
     fields = "gf", -- Jira only.
     templates = "gT",
+    delete_template = "<C-d>",
+    complete = "<C-x><C-u>",
   },
   pulls = {
     open_diff = "gd",
@@ -983,6 +1021,7 @@ keymaps = {
       add_suggestion = "s",
       submit_suggestion = "S",
       add_note = "<leader>n",
+      note_type = "!",
       view = {
         external_help = "gA", -- External diff viewer help.
         toggle_review_panel = "gR",
@@ -1024,6 +1063,10 @@ keymaps = {
       open = "gpo",
       merged = "gpm",
       declined = "gpd",
+    },
+    merge = {
+      method = "gm",
+      delete_branch = "gd",
     },
   },
 },

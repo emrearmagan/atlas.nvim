@@ -11,114 +11,101 @@ function M.setup(panel, callbacks)
 		callbacks.render(panel)
 	end
 
-	local items = {
+	local bindings = {
 		{
-			key = resolver.resolve("ui.close"),
-			desc = "Close discussion",
+			keymap = resolver.resolve("ui.close"),
 			callback = function()
 				callbacks.close(panel)
 			end,
 			index = 90,
 		},
 		{
-			key = resolver.resolve("ui.help"),
-			desc = "Toggle help",
+			keymap = resolver.resolve("ui.help"),
 			callback = function()
 				help.toggle({ buffer = panel.buf })
 			end,
 			index = 100,
 		},
 		{
-			key = resolver.resolve("ui.toggle_panel"),
-			desc = "Toggle discussion panel",
+			keymap = resolver.resolve("ui.toggle_panel"),
 			callback = function()
 				callbacks.close(panel)
 			end,
 			index = 12,
 		},
 		{
-			key = resolver.resolve("ui.toggle_fold"),
-			desc = "Expand / collapse replies",
+			keymap = resolver.resolve("ui.toggle_fold"),
 			callback = function()
 				callbacks.toggle_fold(panel)
 			end,
 			index = 10,
 		},
 		{
-			key = resolver.resolve("ui.comments.add"),
-			desc = "Add comment",
+			keymap = resolver.resolve("ui.comments.add"),
 			callback = function()
 				actions.add(panel, redraw)
 			end,
 			index = 20,
 		},
 		{
-			key = resolver.resolve("ui.comments.reply"),
-			desc = "Reply to comment",
+			keymap = resolver.resolve("ui.comments.reply"),
 			callback = function()
 				actions.reply(panel, callbacks.current(panel), redraw)
 			end,
 			index = 21,
 		},
 		{
-			key = resolver.resolve("ui.comments.edit"),
-			desc = "Edit comment",
+			keymap = resolver.resolve("ui.comments.edit"),
 			callback = function()
 				actions.edit(panel, callbacks.current(panel), redraw)
 			end,
 			index = 22,
 		},
 		{
-			key = resolver.resolve("ui.comments.react"),
-			desc = "Add reaction",
+			keymap = resolver.resolve("ui.comments.react"),
 			callback = function()
 				actions.react(panel, callbacks.current(panel), redraw)
 			end,
 			index = 23,
 		},
 		{
-			key = resolver.resolve("ui.delete"),
-			desc = "Delete comment",
+			keymap = resolver.resolve("ui.delete"),
 			callback = function()
 				actions.delete(panel, callbacks.current(panel), redraw)
 			end,
 			index = 24,
 		},
 		{
-			key = { "gu" },
-			desc = "Toggle upvote",
+			keymap = resolver.resolve("ui.comments.upvote"),
 			callback = function()
 				actions.upvote(panel, callbacks.current(panel), redraw)
 			end,
 			index = 25,
 		},
 		{
-			key = { "ga" },
-			desc = "Mark / unmark answer",
+			-- TODO: add to config
+			keymap = { key = { "ga" }, desc = "Mark / unmark answer", label = "answer" },
 			callback = function()
 				actions.answer(panel, callbacks.current(panel), redraw)
 			end,
 			index = 26,
 		},
 		{
-			key = vim.list_extend(resolver.resolve("ui.refresh") or {}, resolver.resolve("ui.refresh_view") or {}),
-			desc = "Refresh discussion",
+			keymap = resolver.resolve({ "ui.refresh", "ui.refresh_view" }),
 			callback = function()
 				callbacks.load(panel)
 			end,
 			index = 80,
 		},
 		{
-			key = resolver.resolve("ui.open_in_browser"),
-			desc = "Open discussion in browser",
+			keymap = resolver.resolve("ui.open_in_browser"),
 			callback = function()
 				callbacks.open_in_browser(panel)
 			end,
 			index = 4,
 		},
 		{
-			key = resolver.resolve("ui.copy_url"),
-			desc = "Copy discussion URL",
+			keymap = resolver.resolve("ui.copy_url"),
 			callback = function()
 				callbacks.copy_url(panel)
 			end,
@@ -126,8 +113,17 @@ function M.setup(panel, callbacks)
 		},
 	}
 
-	for _, item in ipairs(items) do
-		item.opts = { silent = true, nowait = true }
+	local items = {}
+	for _, binding in ipairs(bindings) do
+		if binding.keymap then
+			table.insert(items, {
+				key = binding.keymap.key,
+				desc = binding.keymap.desc,
+				index = binding.index,
+				callback = binding.callback,
+				opts = { silent = true, nowait = true },
+			})
+		end
 	end
 
 	help.register("General", items, { buffer = panel.buf, index = 1 })

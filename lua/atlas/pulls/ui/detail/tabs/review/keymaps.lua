@@ -15,15 +15,16 @@ local function cursor_entry()
 	return detail.line_map[lnum]
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@param map_item table
 ---@return table|nil
 local function from_action(action_id, map_item)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	map_item.key = #keys == 1 and keys[1] or keys
+	map_item.key = keymap.key
+	map_item.desc = keymap.desc
 	return map_item
 end
 
@@ -50,15 +51,12 @@ function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.detail.tabs.review")
 	local provider = detail.provider
 	local tasks = provider and provider.capabilities.tasks
-	local edit_description = tasks and tasks.edit_task and "Edit comment / task" or "Edit comment"
-	local delete_description = tasks and tasks.delete_task and "Delete comment / task" or "Delete comment"
 	local can_react = provider and provider.capabilities.comments and provider.capabilities.comments.reactions ~= nil
 
 	local items = {}
 	utils.insert_if(
 		items,
 		from_action("ui.comments.reply", {
-			desc = "Reply to comment",
 			index = 21,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -73,7 +71,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.comments.edit", {
-			desc = edit_description,
 			index = 30,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -89,7 +86,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("pulls.review.add_task", {
-				desc = "Add task",
 				index = 22,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -104,7 +100,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.delete", {
-			desc = delete_description,
 			index = 41,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -120,7 +115,6 @@ function M.setup(buf, refresh)
 		utils.insert_if(
 			items,
 			from_action("ui.comments.react", {
-				desc = "Add reaction",
 				index = 23,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -136,7 +130,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("pulls.review.toggle_resolved", {
-			desc = "Toggle resolved",
 			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -151,7 +144,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.show_details", {
-			desc = "Show details",
 			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -163,7 +155,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_fold", {
-			desc = "Toggle thread fold",
 			index = 12,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -183,7 +174,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_all_folds", {
-			desc = "Toggle all thread folds",
 			index = 13,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -200,7 +190,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("pulls.review.atlas.next_hunk", {
-			desc = "Next hunk",
 			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -211,7 +200,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("pulls.review.atlas.prev_hunk", {
-			desc = "Previous hunk",
 			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -223,14 +211,14 @@ function M.setup(buf, refresh)
 	help.register("Detail", items, { index = 2, buffer = buf })
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@return table|nil
 local function remove_item(action_id)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	return { key = (#keys == 1 and keys[1] or keys) }
+	return { key = keymap.key }
 end
 
 ---@param buf integer

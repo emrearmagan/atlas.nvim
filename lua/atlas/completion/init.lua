@@ -1,4 +1,5 @@
 local M = {}
+local keymaps = require("atlas.core.keymaps")
 local requests = require("atlas.core.requests")
 local shared = require("atlas.completion.sources")
 ---@type table<integer, AtlasCompletionState>
@@ -343,9 +344,14 @@ function M.attach(buf, opts)
 	}
 	attached[buf] = state
 
-	vim.keymap.set("i", "<C-x><C-u>", function()
-		complete(state, true)
-	end, { buffer = buf, desc = "Complete Atlas references" })
+	local keymap = keymaps.resolve("editor.complete")
+	if keymap then
+		for _, key in ipairs(keymap.key) do
+			vim.keymap.set("i", key, function()
+				complete(state, true)
+			end, { buffer = buf, desc = keymap.desc })
+		end
+	end
 	vim.api.nvim_create_autocmd({
 		"TextChangedI",
 		"TextChangedP",

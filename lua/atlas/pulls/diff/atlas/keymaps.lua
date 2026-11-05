@@ -5,15 +5,14 @@ local M = {}
 
 ---@param items AtlasHelpKeyItem[]
 ---@param action AtlasKeymapActionId
----@param desc string
 ---@param index integer
 ---@param callback fun()
-local function add(items, action, desc, index, callback)
-	local keys = resolver.resolve(action)
-	if keys then
+local function add(items, action, index, callback)
+	local keymap = resolver.resolve(action)
+	if keymap then
 		items[#items + 1] = {
-			key = keys,
-			desc = desc,
+			key = keymap.key,
+			desc = keymap.desc,
 			index = index,
 			callback = callback,
 			opts = { nowait = true, silent = true },
@@ -28,72 +27,72 @@ function M.setup(renderer, viewer, groups)
 	local explorer = viewer.explorer
 
 	local navigation_items = {}
-	add(navigation_items, "pulls.review.atlas.prev_file", "Previous file", 10, function()
+	add(navigation_items, "pulls.review.atlas.prev_file", 10, function()
 		viewer:navigate_file(-1)
 	end)
-	add(navigation_items, "pulls.review.atlas.next_file", "Next file", 11, function()
+	add(navigation_items, "pulls.review.atlas.next_file", 11, function()
 		viewer:navigate_file(1)
 	end)
-	add(navigation_items, "pulls.review.atlas.toggle_explorer", "Toggle explorer", 40, function()
+	add(navigation_items, "pulls.review.atlas.toggle_explorer", 40, function()
 		viewer:toggle_explorer()
 	end)
-	add(navigation_items, "pulls.review.atlas.focus_explorer", "Focus explorer", 41, function()
+	add(navigation_items, "pulls.review.atlas.focus_explorer", 41, function()
 		viewer:focus_explorer()
 	end)
 
 	local layout_items = {}
-	add(layout_items, "pulls.review.atlas.toggle_layout", "Toggle diff layout", 60, function()
+	add(layout_items, "pulls.review.atlas.toggle_layout", 60, function()
 		renderer:toggle_layout()
 	end)
-	add(layout_items, "pulls.review.atlas.toggle_compact", "Toggle compact mode", 61, function()
+	add(layout_items, "pulls.review.atlas.toggle_compact", 61, function()
 		renderer:toggle_compact()
 	end)
-	add(layout_items, "ui.refresh_view", "Reload the diff", 80, function()
+	add(layout_items, "ui.refresh_view", 80, function()
 		viewer:reload()
 	end)
 
 	local file_items = {}
-	add(file_items, "pulls.review.atlas.open_file", "Open local file", 31, function()
+	add(file_items, "pulls.review.atlas.open_file", 31, function()
 		viewer:open_file()
 	end)
 	local close_items = {}
-	add(close_items, "ui.close", "Close review", 101, function()
+	add(close_items, "ui.close", 101, function()
 		if not help.is_open() then
 			viewer:close("user_close")
 		end
 	end)
 	local explorer_items = {}
-	add(explorer_items, "ui.select", "Select file / toggle folder", 1, function()
+	add(explorer_items, "ui.select", 1, function()
 		explorer:activate()
 	end)
-	add(explorer_items, "pulls.review.show_details", "Show file details", 2, function()
+	add(explorer_items, "pulls.review.show_details", 2, function()
 		explorer:show_details()
 	end)
-	add(explorer_items, "pulls.review.atlas.toggle_view_mode", "Toggle explorer mode", 50, function()
+	add(explorer_items, "pulls.review.atlas.toggle_view_mode", 50, function()
 		explorer:toggle_view_mode()
 	end)
-	add(explorer_items, "ui.toggle_fold", "Toggle folder", 51, function()
+	add(explorer_items, "ui.toggle_fold", 51, function()
 		explorer:toggle_folder()
 	end)
-	add(explorer_items, "ui.toggle_all_folds", "Toggle all folders", 52, function()
+	add(explorer_items, "ui.toggle_all_folds", 52, function()
 		explorer:toggle_all_folders()
 	end)
 	local hunk_items = {}
-	add(hunk_items, "pulls.review.atlas.prev_hunk", "Previous hunk", 12, function()
+	add(hunk_items, "pulls.review.atlas.prev_hunk", 12, function()
 		renderer:navigate_hunk(-1)
 	end)
-	add(hunk_items, "pulls.review.atlas.next_hunk", "Next hunk", 13, function()
+	add(hunk_items, "pulls.review.atlas.next_hunk", 13, function()
 		renderer:navigate_hunk(1)
 	end)
 
 	local thread_items = {}
 	if renderer.session.source.kind == "pr" then
-		add(thread_items, "ui.toggle_fold", "Toggle review thread / fold", 42, function()
+		add(thread_items, "ui.toggle_fold", 42, function()
 			if not viewer:toggle_threads() and vim.fn.foldlevel(".") > 0 then
 				vim.cmd("normal! za")
 			end
 		end)
-		add(thread_items, "ui.toggle_all_folds", "Toggle all review threads / folds", 43, function()
+		add(thread_items, "ui.toggle_all_folds", 43, function()
 			if not viewer:toggle_threads(true) and vim.fn.foldlevel(".") > 0 then
 				vim.cmd("normal! zA")
 			end

@@ -61,4 +61,12 @@ function M.is_pr_reloading(repo_id, pr_id)
 	return M.reloading_pr_keys[repo_id .. ":" .. tostring(pr_id)] == true
 end
 
+---@return PullsPage|nil
+function M.loaded_page()
+	if M.page_history[M.current_page] == nil and M.is_loading then
+		return M.page_history[M.current_page - 1]
+	end
+	return M.page_history[M.current_page]
+end
+
 return M

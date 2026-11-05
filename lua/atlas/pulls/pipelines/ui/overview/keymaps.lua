@@ -9,10 +9,9 @@ local overview = require("atlas.pulls.pipelines.ui.overview")
 ---@return AtlasHelpKeyItem[]
 function M.items(pane, explorer_pane)
 	local items = {}
-	for index, item in ipairs({
+	for index, binding in ipairs({
 		{
-			key = keymaps.resolve("ui.select") or {},
-			desc = "Open job logs",
+			keymap = keymaps.resolve("ui.select"),
 			callback = function()
 				local selection = overview.current_selection(pane)
 				if selection then
@@ -22,10 +21,14 @@ function M.items(pane, explorer_pane)
 			end,
 		},
 	}) do
-		if #item.key > 0 then
-			item.index = index
-			item.opts = { nowait = true, silent = true }
-			items[#items + 1] = item
+		if binding.keymap then
+			items[#items + 1] = {
+				key = binding.keymap.key,
+				desc = binding.keymap.desc,
+				callback = binding.callback,
+				index = index,
+				opts = { nowait = true, silent = true },
+			}
 		end
 	end
 	return items

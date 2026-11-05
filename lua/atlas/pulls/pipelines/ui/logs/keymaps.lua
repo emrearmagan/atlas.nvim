@@ -7,10 +7,9 @@ local logs = require("atlas.pulls.pipelines.ui.logs")
 ---@return AtlasHelpKeyItem[]
 function M.items(pane)
 	local items = {}
-	for index, item in ipairs({
+	for index, binding in ipairs({
 		{
-			key = keymaps.resolve("ui.refresh") or {},
-			desc = "Refresh job and logs",
+			keymap = keymaps.resolve("ui.refresh"),
 			callback = function()
 				if pane.selection and pane.on_reload then
 					pane.on_reload(pane.selection)
@@ -18,24 +17,26 @@ function M.items(pane)
 			end,
 		},
 		{
-			key = keymaps.resolve("ui.toggle_fold") or {},
-			desc = "Toggle log group",
+			keymap = keymaps.resolve("ui.toggle_fold"),
 			callback = function()
 				logs.toggle_fold(pane)
 			end,
 		},
 		{
-			key = keymaps.resolve("ui.toggle_all_folds") or {},
-			desc = "Toggle all log groups",
+			keymap = keymaps.resolve("ui.toggle_all_folds"),
 			callback = function()
 				logs.toggle_all_folds(pane)
 			end,
 		},
 	}) do
-		if #item.key > 0 then
-			item.index = index
-			item.opts = { nowait = true, silent = true }
-			items[#items + 1] = item
+		if binding.keymap then
+			items[#items + 1] = {
+				key = binding.keymap.key,
+				desc = binding.keymap.desc,
+				callback = binding.callback,
+				index = index,
+				opts = { nowait = true, silent = true },
+			}
 		end
 	end
 	return items

@@ -21,20 +21,22 @@ local reviewed_store = require("atlas.pulls.reviewed")
 
 ---@class AtlasDiffSession
 ---@field source AtlasDiffSource
---- This is the range that was initially opened like a pr or branch. It mainly just used to determine if the user is viewing a single commit or the full range and come back here
----@field full_range AtlasDiffRange
 ---@field range AtlasDiffRange
 ---@field files AtlasDiffFile[]
+---@field commits AtlasGitCommit[]
+---@field review PullsReviewData|nil
+---@field current_user AtlasUser|nil
+---@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
+
+---@class AtlasDiffSessionInternal: AtlasDiffSession
+--- This is the range that was initially opened like a pr or branch. It mainly just used to determine if the user is viewing a single commit or the full range and come back here
+---@field full_range AtlasDiffRange
 --- What the commits before (base) and after (head) the shown ones changed. nil while all commits are shown.
 --- THis is used to find where comments and notes are in the shown commits.
 ---@field hunks { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> }|nil
 ---@field worktree_root string|nil
----@field commits AtlasGitCommit[]
----@field review PullsReviewData|nil
 ---@field review_context PullsReviewContext|nil
 ---@field outdated_hunks table<string, DiffHunk[]>|nil
----@field current_user AtlasUser|nil
----@field notes { target: AtlasStorageTarget, items: AtlasNote[], positions: table<string, AtlasNotePosition> }|nil
 ---@field requests AtlasRequestScope
 ---@field closed boolean
 local Session = {}
@@ -74,7 +76,7 @@ local function review_starts(pr, root, head)
 	return starts
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param values table<string, any>
 local function apply_review(session, values)
 	if values.notes then
@@ -92,7 +94,7 @@ local function apply_review(session, values)
 	end
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param on_done fun()
 local function load_outdated_hunks(session, on_done)
 	local context = session.review_context
@@ -124,7 +126,7 @@ end
 ---@param base string
 ---@param head string
 ---@param opts { lsp?: AtlasPullsDiffLspConfig, on_progress: fun(message: string) }
----@param on_done fun(session: AtlasDiffSession|nil, err: string|nil)
+---@param on_done fun(session: AtlasDiffSessionInternal|nil, err: string|nil)
 ---@return { cancel: fun() }
 function Session.new(source, root, base, head, opts, on_done)
 	local session = setmetatable({

@@ -6,9 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local bookmarks = require("atlas.ui.shared.bookmarks")
 local layouts = require("atlas.issues.ui.layouts")
-local presentation = require("atlas.issues.ui.presentation")
 local notifications = require("atlas.ui.notifications")
-local window = require("atlas.issues.ui.dashboard.window")
 
 local M = {}
 
@@ -21,11 +19,11 @@ local function view_id(view)
 	return view.key or view.name or ""
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId
 ---@return string|nil
 local function key_label(action_id)
-	local keys = resolver.resolve(action_id)
-	return keys and keys[1] or nil
+	local keymap = resolver.resolve(action_id)
+	return keymap and keymap.key[1] or nil
 end
 
 ---@param lines string[]
@@ -49,35 +47,7 @@ function M.render(opts)
 	local provider_icon = provider and provider.icon or icons.get("fallback")
 	local provider_name = provider and provider.name or "Issues"
 	local provider_hl = provider and provider.hl_group or "Title"
-	local issue_count = #state.issues
-	local statusline_items = {
-		{ text = string.format("%d issues", issue_count), hl_group = "AtlasFooterText" },
-	}
-	local page = state.page_history[state.current_page]
-	if page == nil and state.is_loading then
-		page = state.page_history[state.current_page - 1]
-	end
-	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
-		local page_number = tostring(state.current_page)
-		if page.total_pages ~= nil then
-			page_number = page_number .. "/" .. page.total_pages
-		end
-		statusline_items[#statusline_items + 1] = { text = "Page", hl_group = "AtlasFooterText" }
-		statusline_items[#statusline_items + 1] = {
-			text = page_number,
-			hl_group = "AtlasFooterActive",
-		}
-	end
-	local user_name = state.current_user and presentation.person_name(state.current_user) or ""
-	if user_name ~= "" then
-		statusline_items[#statusline_items + 1] = {
-			text = "| @" .. user_name,
-			hl_group = "AtlasFooterText",
-			priority = 50,
-			min_width = 8,
-		}
-	end
-	window.statusline:set_items(statusline_items)
+	local page = state.loaded_page()
 
 	local views = bookmarks.views(state.views, state.bookmarks, state.starred_items)
 	local view = state.view

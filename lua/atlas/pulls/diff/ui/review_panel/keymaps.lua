@@ -8,15 +8,14 @@ local next_filter = { all = "unresolved", unresolved = "mine", mine = "all" }
 
 ---@param items AtlasHelpKeyItem[]
 ---@param action AtlasKeymapActionId
----@param description string
 ---@param index integer
 ---@param callback fun()
-local function add(items, action, description, index, callback)
-	local keys = resolver.resolve(action)
-	if keys then
+local function add(items, action, index, callback)
+	local keymap = resolver.resolve(action)
+	if keymap then
 		items[#items + 1] = {
-			key = keys,
-			desc = description,
+			key = keymap.key,
+			desc = keymap.desc,
 			index = index,
 			callback = callback,
 			opts = { nowait = true, silent = true },
@@ -87,28 +86,28 @@ function M.setup(state, callbacks)
 	end
 
 	local items = {}
-	add(items, "ui.close", "Close review panel", 101, close)
-	add(items, "pulls.review.view.toggle_review_panel", "Close review panel", 102, close)
-	add(items, "ui.help", "Toggle help", 100, function()
+	add(items, "ui.close", 101, close)
+	add(items, "pulls.review.view.toggle_review_panel", 102, close)
+	add(items, "ui.help", 100, function()
 		help.toggle({ buffer = state.buf })
 	end)
 
-	add(items, "ui.refresh", "Refresh review", 80, function()
+	add(items, "ui.refresh", 80, function()
 		callbacks.on_action("refresh_review", {})
 	end)
-	add(items, "ui.select", "Open item in diff", 1, function()
+	add(items, "ui.select", 1, function()
 		open_selected(true)
 	end)
-	add(items, "pulls.review.show_details", "Preview item in diff", 2, function()
+	add(items, "pulls.review.show_details", 2, function()
 		open_selected(false)
 	end)
-	add(items, "ui.toggle_fold", "Expand / collapse", 10, toggle_fold)
-	add(items, "ui.toggle_all_folds", "Expand / collapse all", 11, toggle_all_folds)
-	add(items, "pulls.review.panel.cycle_filter", "Cycle filter", 12, function()
+	add(items, "ui.toggle_fold", 10, toggle_fold)
+	add(items, "ui.toggle_all_folds", 11, toggle_all_folds)
+	add(items, "pulls.review.panel.cycle_filter", 12, function()
 		state.filter = next_filter[state.filter]
 		state:render()
 	end)
-	add(items, "ui.open_in_browser", "Open item in browser", 20, function()
+	add(items, "ui.open_in_browser", 20, function()
 		local entry = current(state)
 		local target = entry and (entry.review_entry or entry.comment or entry.thread_root)
 		local url = target and target.url
@@ -118,16 +117,16 @@ function M.setup(state, callbacks)
 	end)
 
 	if state.session.source.kind == "pr" then
-		add(items, "ui.open_actions", "Review actions", 0, function()
+		add(items, "ui.open_actions", 0, function()
 			callbacks.on_action("open_actions", {})
 		end)
-		add(items, "pulls.review.approve", "Approve", 60, function()
+		add(items, "pulls.review.approve", 60, function()
 			callbacks.on_action("approve", {})
 		end)
-		add(items, "pulls.review.request_changes", "Request changes", 61, function()
+		add(items, "pulls.review.request_changes", 61, function()
 			callbacks.on_action("request_changes", {})
 		end)
-		add(items, "pulls.review.submit_review", "Submit review", 62, function()
+		add(items, "pulls.review.submit_review", 62, function()
 			callbacks.on_action("submit_review", {})
 		end)
 
@@ -139,13 +138,13 @@ function M.setup(state, callbacks)
 				dispatch("add_comment", entry, pending)
 			end
 		end
-		add(items, "pulls.review.add_comment", "Reply with pending comment", 30, function()
+		add(items, "pulls.review.add_comment", 30, function()
 			reply(true)
 		end)
-		add(items, "pulls.review.submit_comment", "Post reply", 31, function()
+		add(items, "pulls.review.submit_comment", 31, function()
 			reply(false)
 		end)
-		add(items, "pulls.review.add_task", "Add task to comment", 35, function()
+		add(items, "pulls.review.add_task", 35, function()
 			local entry = current(state)
 			if entry and entry.comment and not entry.comment.is_task then
 				dispatch("add_task", entry)
@@ -158,7 +157,7 @@ function M.setup(state, callbacks)
 		---@cast provider PullsProvider
 		local comments = provider.capabilities.comments
 		if comments and comments.reactions then
-			add(items, "ui.comments.react", "Add reaction", 37, function()
+			add(items, "ui.comments.react", 37, function()
 				local entry = current(state)
 				if entry and entry.comment and not entry.comment.is_task then
 					dispatch("react", entry)
@@ -167,7 +166,7 @@ function M.setup(state, callbacks)
 		end
 	end
 
-	add(items, "ui.comments.edit", "Edit review item", 36, function()
+	add(items, "ui.comments.edit", 36, function()
 		local entry = current(state)
 		if not entry then
 			return
@@ -182,7 +181,7 @@ function M.setup(state, callbacks)
 			dispatch("edit_comment", entry)
 		end
 	end)
-	add(items, "ui.delete", "Delete review item", 41, function()
+	add(items, "ui.delete", 41, function()
 		local entry = current(state)
 		if not entry then
 			return
@@ -195,7 +194,7 @@ function M.setup(state, callbacks)
 		end
 	end)
 
-	add(items, "pulls.review.toggle_resolved", "Toggle resolved / completed", 40, function()
+	add(items, "pulls.review.toggle_resolved", 40, function()
 		local entry = current(state)
 		if not entry then
 			return

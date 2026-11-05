@@ -8,7 +8,6 @@ local users = require("atlas.providers.jira.users")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local requests = require("atlas.core.requests")
-local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.issues.ui.presentation")
 local field_input = require("atlas.issues.providers.jira.ui.field_input")
@@ -671,45 +670,36 @@ local function open_editor(project_key, issue, details, on_done)
 
 	local editor_keys = {
 		{
-			key = keymaps.resolve("editor.assignees"),
-			desc = "assignee",
+			keymap = "editor.assignees",
 			action = function(editor)
 				select_user(state, editor, "assignee")
 			end,
 		},
 		{
-			key = keymaps.resolve("editor.reporter"),
-			desc = "reporter",
+			keymap = "editor.reporter",
 			action = function(editor)
 				select_user(state, editor, "reporter")
 			end,
 		},
 		{
-			key = keymaps.resolve("editor.issue_type"),
-			desc = "issue type",
+			keymap = "editor.issue_type",
 			action = function(editor)
 				select_issue_type(state, editor)
 			end,
 		},
 		{
-			key = keymaps.resolve("editor.fields"),
-			desc = "fields",
+			keymap = "editor.fields",
 			action = function(editor)
 				select_field(state, editor)
 			end,
 		},
-	}
-
-	local preview_keys = keymaps.resolve("ui.toggle_description_mode")
-	if preview_keys then
-		table.insert(editor_keys, {
-			key = preview_keys,
-			desc = "raw preview",
+		{
+			keymap = "ui.toggle_description_mode",
 			action = function(editor)
 				preview_description(state, editor)
 			end,
-		})
-	end
+		},
+	}
 
 	local editor = form.open({
 		header = issue and "Edit issue " .. issue.key or "Create issue",
