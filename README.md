@@ -2,6 +2,7 @@
 [![Version](https://img.shields.io/github/v/tag/emrearmagan/atlas.nvim.svg)](https://github.com/emrearmagan/atlas.nvim/tags)
 [![CI](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/emrearmagan/atlas.nvim?style=flat-square&color=blue)](LICENSE)
+[![Playground](https://img.shields.io/badge/Playground-try_it-blue.svg)](https://playground.atlasnvim.dev)
 
 # atlas.nvim
 
