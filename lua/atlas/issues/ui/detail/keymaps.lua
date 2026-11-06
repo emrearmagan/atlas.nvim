@@ -175,6 +175,20 @@ function M.register(buf)
 
 	utils.insert_if(
 		items,
+		item("ui.copy_url", {
+			index = 9,
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local issue = state.current_issue
+				if issue then
+					actions.run("copy_issue_url", context(issue))
+				end
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
 		item("ui.toggle_subscription", {
 			index = 30,
 			opts = { nowait = true, silent = true },

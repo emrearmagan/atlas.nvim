@@ -124,6 +124,19 @@ local function open_actions(session, selection)
 	local available = vim.tbl_filter(function(action)
 		return action_runner.is_available(action, ctx)
 	end, backend and backend.actions or {})
+
+	local url = ctx.job and ctx.job.url or ctx.pipeline.url
+	if url and url ~= "" then
+		available[#available + 1] = {
+			label = "Copy URL",
+			icon = icons.get("link"),
+			callback = function()
+				vim.fn.setreg("+", url)
+				notify.success("Copied URL", { timeout = 1200 })
+			end,
+		}
+	end
+
 	if #available == 0 then
 		notify.warn("No pipeline actions available")
 		return
@@ -131,6 +144,11 @@ local function open_actions(session, selection)
 
 	local title = "Actions: " .. (ctx.job and ctx.job.name or ctx.stage and ctx.stage.name or ctx.pipeline.name)
 	action_runner.select(title, available, function(action)
+		if action.callback then
+			action.callback()
+			return
+		end
+
 		if session.closed or session.action then
 			return
 		end

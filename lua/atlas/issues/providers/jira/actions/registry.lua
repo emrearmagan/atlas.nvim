@@ -547,7 +547,7 @@ local function copy_issue_url(ctx, done)
 
 	vim.fn.setreg("+", url)
 	vim.fn.setreg('"', url)
-	notify.success("Copied issue URL", { timeout = 1200 })
+	notify.success("Copied URL", { timeout = 1200 })
 	done(nil, nil)
 end
 
@@ -686,7 +686,7 @@ register(actions.copy_issue_key)
 register({
 	id = "copy_issue_url",
 	label = "Copy Issue URL",
-	hidden = true,
+	icon = icons.get("link"),
 	is_available = has_issue_key,
 	run = copy_issue_url,
 })

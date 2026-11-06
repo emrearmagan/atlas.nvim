@@ -65,6 +65,13 @@ function M.setup(state, callbacks)
 				end,
 				index = 4,
 			},
+			{
+				keymap = resolver.resolve("ui.copy_url"),
+				callback = function()
+					callbacks.copy_url(state)
+				end,
+				index = 9,
+			},
 		})
 	)
 end
