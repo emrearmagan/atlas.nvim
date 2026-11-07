@@ -1,4 +1,5 @@
 local events = require("atlas.core.events")
+local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local actions = require("atlas.pulls.diff.actions")
@@ -56,6 +57,7 @@ local renderers = {
 ---@field review_panel AtlasDiffReviewPanel
 ---@field statusline AtlasStatusline
 ---@field group integer|nil
+---@field index_watcher uv.uv_fs_event_t|nil
 local Viewer = {}
 Viewer.__index = Viewer
 
@@ -130,6 +132,9 @@ function Viewer:close(reason)
 
 	if self.group then
 		vim.api.nvim_del_augroup_by_id(self.group)
+	end
+	if self.index_watcher then
+		self.index_watcher:close()
 	end
 
 	annotations.close(self.renderer.tabpage)
@@ -394,6 +399,49 @@ function Viewer:toggle_file_reviewed()
 	end
 end
 
+-- Reloads replace every file entry, so find the shown one again by path and section.
+---@param viewer AtlasDiffViewer
+---@param file AtlasDiffFile|nil
+---@return AtlasDiffFile|nil
+local function reloaded_file(viewer, file)
+	if not file then
+		return nil
+	end
+	return vim.iter(viewer.session.files):find(function(item)
+		return item.path == file.path and item.staged == file.staged
+	end)
+end
+
+function Viewer:reload_files()
+	local shown = self.renderer.current_file
+	self.session:reload_files(function()
+		self.explorer:set_files(self.session.files)
+		local file = reloaded_file(self, shown)
+		local views = {}
+		if file then
+			for _, pane in ipairs({ self.renderer.left, self.renderer.right }) do
+				if pane.win then
+					views[pane.win] = vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
+				end
+			end
+		end
+
+		file = file or self.explorer.files[1]
+		if not file then
+			return
+		end
+		select_file(self, file, false, function()
+			for win, view in pairs(views) do
+				if vim.api.nvim_win_is_valid(win) then
+					vim.api.nvim_win_call(win, function()
+						vim.fn.winrestview(view)
+					end)
+				end
+			end
+		end)
+	end)
+end
+
 function Viewer:toggle_file_staged()
 	local files = {}
 	if vim.api.nvim_get_current_buf() == self.explorer.buf then
@@ -410,13 +458,7 @@ function Viewer:toggle_file_staged()
 	local shown = self.renderer.current_file
 	self.session:set_staged(files, not files[1].staged, function()
 		self.explorer:set_files(self.session.files)
-		local next_file = self.explorer:current_file()
-		if not next_file and shown then
-			next_file = vim.iter(self.session.files):find(function(item)
-				return item.path == shown.path and item.staged == shown.staged
-			end)
-		end
-		next_file = next_file or self.explorer.files[1]
+		local next_file = self.explorer:current_file() or reloaded_file(self, shown) or self.explorer.files[1]
 		if next_file then
 			select_file(self, next_file)
 		end
@@ -597,6 +639,45 @@ local function setup_autocmds(viewer)
 			end
 		end),
 	})
+end
+
+---@param viewer AtlasDiffViewer
+local function setup_live_reload(viewer)
+	local tabpage = viewer.renderer.tabpage
+	local pending = false
+	local function reload()
+		if pending or vim.api.nvim_get_current_tabpage() ~= tabpage then
+			return
+		end
+		pending = true
+		vim.defer_fn(function()
+			pending = false
+			if not viewer.session.closed then
+				viewer:reload_files()
+			end
+		end, 100)
+	end
+
+	vim.api.nvim_create_autocmd({ "BufWritePost", "TabEnter", "FocusGained" }, {
+		group = viewer.group,
+		callback = reload,
+	})
+
+	git.run({ "rev-parse", "--absolute-git-dir" }, { cwd = viewer.session.range.root }, function(result)
+		if result.code ~= 0 or viewer.session.closed then
+			return
+		end
+		local watcher = vim.uv.new_fs_event()
+		if not watcher then
+			return
+		end
+		watcher:start(vim.trim(result.stdout), {}, function(_, filename)
+			if filename == "index" then
+				vim.schedule(reload)
+			end
+		end)
+		viewer.index_watcher = watcher
+	end)
 end
 
 function Viewer:reload()
@@ -876,6 +957,9 @@ local function setup(viewer)
 	resize(viewer)
 
 	setup_autocmds(viewer)
+	if session.source.kind == "worktree" then
+		setup_live_reload(viewer)
+	end
 	keymaps.setup(viewer)
 
 	for _, pane in pairs({ renderer.left, renderer.right, viewer.explorer, viewer.commits, viewer.review_panel }) do

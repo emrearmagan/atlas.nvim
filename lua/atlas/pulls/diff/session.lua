@@ -128,6 +128,19 @@ end
 ---@param source AtlasDiffSource
 ---@param root string
 ---@param base string
+---@param head string|nil
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@return { cancel: fun() }
+local function load_files(source, root, base, head, on_done)
+	if source.kind == "worktree" and not source.base then
+		return diff.load_status(root, base, on_done)
+	end
+	return diff.load(root, base, head, on_done)
+end
+
+---@param source AtlasDiffSource
+---@param root string
+---@param base string
 ---@param head string|nil Nil for the working tree.
 ---@param opts { lsp?: AtlasPullsDiffLspConfig, on_progress: fun(message: string) }
 ---@param on_done fun(session: AtlasDiffSessionInternal|nil, err: string|nil)
@@ -166,10 +179,7 @@ function Session.new(source, root, base, head, opts, on_done)
 	end
 	starts.diff = function(done)
 		session.requests.run(function(loaded)
-			if source.kind == "worktree" and not source.base then
-				return diff.load_status(root, base, loaded)
-			end
-			return diff.load(root, base, head, loaded)
+			return load_files(source, root, base, head, loaded)
 		end, function(result, err)
 			if not result then
 				done(nil, err)
@@ -301,18 +311,23 @@ function Session:set_staged(files, staged, on_done)
 			notify.error("Unable to update staged files\n\n" .. vim.trim(result.stderr), { vim_notify = true })
 			return
 		end
+		self:reload_files(on_done)
+	end)
+end
 
-		self.requests.run(function(done)
-			return diff.load_status(root, self.range.base_revision, done)
-		end, function(loaded, err)
-			if not loaded then
-				notify.error("Unable to load changed files\n\n" .. err, { vim_notify = true })
-				return
-			end
+---@param on_done fun()
+function Session:reload_files(on_done)
+	local range = self.range
+	self.requests.run(function(done)
+		return load_files(self.source, range.root, range.base_revision, range.head_revision, done)
+	end, function(loaded, err)
+		if not loaded then
+			notify.error("Unable to load changed files\n\n" .. err, { vim_notify = true })
+			return
+		end
 
-			self.files = loaded.files
-			on_done()
-		end)
+		self.files = loaded.files
+		on_done()
 	end)
 end
 
