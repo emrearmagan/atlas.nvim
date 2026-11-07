@@ -32,6 +32,7 @@ local statuses = {
 	renamed = { "R", "DiagnosticInfo" },
 	copied = { "C", "DiagnosticInfo" },
 	type_changed = { "T", "DiagnosticWarn" },
+	conflicted = { "!", "DiagnosticError" },
 }
 
 ---@param files AtlasDiffFile[]
@@ -96,10 +97,23 @@ local function tree(files)
 end
 
 ---@param state AtlasDiffExplorer
+---@param file AtlasDiffFile
+---@return "files"|"staged"|"reviewed"
+local function section_of(state, file)
+	if file.staged then
+		return "staged"
+	end
+	if state.reviewed_files and state.reviewed_files[file.path] then
+		return "reviewed"
+	end
+	return "files"
+end
+
+---@param state AtlasDiffExplorer
 local function build_rows(state)
-	local sections = { files = {}, reviewed = {} }
+	local sections = { files = {}, staged = {}, reviewed = {} }
 	for _, file in ipairs(state.source) do
-		local section = state.reviewed_files and state.reviewed_files[file.path] and sections.reviewed or sections.files
+		local section = sections[section_of(state, file)]
 		section[#section + 1] = file
 	end
 
@@ -160,6 +174,10 @@ local function build_rows(state)
 	append_section("files", "Files")
 	if #state.source == 0 then
 		rows[#rows + 1] = { label = " No changed files" }
+	end
+	if #sections.staged > 0 then
+		rows[#rows + 1] = { label = "" }
+		append_section("staged", "Staged")
 	end
 	if state.reviewed_files then
 		rows[#rows + 1] = { label = "" }
@@ -349,7 +367,7 @@ end
 
 ---@param file AtlasDiffFile
 local function expand_parents(state, file)
-	local section = state.reviewed_files and state.reviewed_files[file.path] and "reviewed" or "files"
+	local section = section_of(state, file)
 	for parent in pairs(state.collapsed[section]) do
 		if file.path:sub(1, #parent) == parent then
 			state.collapsed[section][parent] = nil
@@ -486,8 +504,7 @@ function Explorer:files_under_cursor()
 
 	local prefix = row.path or ""
 	return vim.tbl_filter(function(file)
-		local section = self.reviewed_files and self.reviewed_files[file.path] and "reviewed" or "files"
-		return section == row.section and file.path:sub(1, #prefix) == prefix
+		return section_of(self, file) == row.section and file.path:sub(1, #prefix) == prefix
 	end, self.source)
 end
 
@@ -514,7 +531,7 @@ function Explorer:set_all_folders_collapsed(collapsed)
 	end
 
 	local before = self.rows[current_row(self)]
-	self.collapsed = { files = {}, reviewed = {} }
+	self.collapsed = { files = {}, staged = {}, reviewed = {} }
 	if collapsed then
 		local path = before and (before.path or before.file and before.file.path)
 		local rows = build_rows(self)
@@ -632,7 +649,7 @@ function Explorer.new(opts)
 		files = source,
 		options = vim.deepcopy(options),
 		rows = {},
-		collapsed = { files = {}, reviewed = {} },
+		collapsed = { files = {}, staged = {}, reviewed = {} },
 		flatten_dirs = true,
 		reviewed_files = opts.review_context and opts.review_context.reviewed_files,
 		outdated_files = opts.review_context and opts.review_context.outdated_files,

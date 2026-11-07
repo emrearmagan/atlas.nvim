@@ -243,14 +243,15 @@ function M.open_range(opts, on_done)
 end
 
 -- Accepts a revision to compare with the working tree and an optional repository path.
----@param opts { base: string, root?: string }
+---@param opts { base?: string, root?: string }
 ---@param on_done (fun(err: string|nil))|nil
 function M.open_worktree(opts, on_done)
 	local cwd = opts.root or git.default_cwd()
+	local ref = opts.base or "HEAD"
 	local _, requests, fail, on_prepared = start_loading("Preparing diff...", {
 		kind = "worktree",
 		root = cwd,
-		base = opts.base,
+		base = ref,
 	}, on_done)
 
 	requests.run(function(done)
@@ -262,10 +263,10 @@ function M.open_worktree(opts, on_done)
 		end
 
 		requests.run(function(done)
-			return resolve_commit(root, opts.base, done)
+			return resolve_commit(root, ref, done)
 		end, function(base, base_err)
 			if not base then
-				fail("Unable to resolve commit: " .. opts.base, base_err)
+				fail("Unable to resolve commit: " .. ref, base_err)
 				return
 			end
 

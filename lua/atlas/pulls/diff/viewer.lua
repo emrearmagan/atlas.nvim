@@ -394,6 +394,35 @@ function Viewer:toggle_file_reviewed()
 	end
 end
 
+function Viewer:toggle_file_staged()
+	local files = {}
+	if vim.api.nvim_get_current_buf() == self.explorer.buf then
+		files = self.explorer:files_under_cursor()
+	end
+	local file = current_file(self)
+	if #files == 0 and file then
+		files = { file }
+	end
+	if #files == 0 then
+		return
+	end
+
+	local shown = self.renderer.current_file
+	self.session:set_staged(files, not files[1].staged, function()
+		self.explorer:set_files(self.session.files)
+		local next_file = self.explorer:current_file()
+		if not next_file and shown then
+			next_file = vim.iter(self.session.files):find(function(item)
+				return item.path == shown.path and item.staged == shown.staged
+			end)
+		end
+		next_file = next_file or self.explorer.files[1]
+		if next_file then
+			select_file(self, next_file)
+		end
+	end)
+end
+
 function Viewer:find_file()
 	picker.select({
 		title = "Changed files",

@@ -124,14 +124,10 @@ end
 
 ---@param renderer AtlasDiffRenderer
 ---@param content { lines: string[], endofline: boolean }
----@param revision string|nil Nil for the working tree.
-local function set_content(renderer, buf, content, path, revision, binary)
+local function set_content(renderer, buf, content, path, binary)
 	vim.bo[buf].readonly = false
 	vim.bo[buf].modifiable = true
-	vim.api.nvim_buf_set_name(
-		buf,
-		string.format("atlas-diff://%d/%d/%s/%s", renderer.tabpage, buf, revision or "WORKING", path)
-	)
+	vim.api.nvim_buf_set_name(buf, string.format("atlas-diff://%d/%d/%s", renderer.tabpage, buf, path))
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
 	vim.bo[buf].endofline = content.endofline
 	vim.bo[buf].fixendofline = false
@@ -184,10 +180,8 @@ local function display(renderer, document)
 	local old, new = document.contents.old, document.contents.new
 	local binary = document.binary
 	local right_content = new
-	local right_revision = renderer.session.range.head_revision
 	if file.status == "deleted" and not binary then
 		right_content = old
-		right_revision = renderer.session.range.base_revision
 	end
 
 	local right_buf = renderer.revision_buf
@@ -197,12 +191,11 @@ local function display(renderer, document)
 	end
 	set_right_buffer(renderer, right_buf)
 	if renderer.right.buf == renderer.revision_buf then
-		set_content(renderer, renderer.right.buf, right_content, file.path, right_revision, binary)
+		set_content(renderer, renderer.right.buf, right_content, file.path, binary)
 	end
 
 	if renderer.left.win then
-		local old_path = file.old_path or file.path
-		set_content(renderer, renderer.left.buf, old, old_path, renderer.session.range.base_revision, binary)
+		set_content(renderer, renderer.left.buf, old, file.old_path or file.path, binary)
 	end
 
 	render.render(renderer, document)
@@ -217,19 +210,19 @@ function Renderer:show_file(file, on_done)
 	self.requests.cancel()
 	self.requests = requests.new()
 
-	local function read(revision, path, missing)
+	local function read(blob, path, missing)
 		return function(done)
 			if missing or file.binary then
 				done("", nil)
 				return
 			end
-			return diff.read(session.range.root, revision, path, done)
+			return diff.read_blob(session.range.root, blob, path, done)
 		end
 	end
 
 	self.requests.all({
-		old = read(session.range.base_revision, file.old_path or file.path, file.status == "added"),
-		new = read(session.range.head_revision, file.path, file.status == "deleted"),
+		old = read(file.old_blob, file.old_path or file.path, file.status == "added"),
+		new = read(file.new_blob, file.path, file.status == "deleted"),
 	}, function(contents, errors)
 		local err = errors.old or errors.new
 		if err then

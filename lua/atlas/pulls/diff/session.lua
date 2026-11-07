@@ -19,7 +19,7 @@ local reviewed_store = require("atlas.pulls.reviewed")
 
 ---@class AtlasDiffWorktreeSource
 ---@field kind "worktree"
----@field base string
+---@field base string|nil Nil splits the changes into staged and unstaged files.
 
 ---@alias AtlasDiffSource AtlasDiffPullRequestSource|AtlasDiffRefsSource|AtlasDiffWorktreeSource
 
@@ -166,6 +166,9 @@ function Session.new(source, root, base, head, opts, on_done)
 	end
 	starts.diff = function(done)
 		session.requests.run(function(loaded)
+			if source.kind == "worktree" and not source.base then
+				return diff.load_status(root, base, loaded)
+			end
 			return diff.load(root, base, head, loaded)
 		end, function(result, err)
 			if not result then
@@ -274,6 +277,42 @@ function Session:set_reviewed(files, reviewed)
 		})
 		local message = "Unable to update reviewed files" .. (err and "\n\n" .. err or "")
 		notify.error(message, { vim_notify = true })
+	end)
+end
+
+---@param files AtlasDiffFile[]
+---@param staged boolean
+---@param on_done fun()
+function Session:set_staged(files, staged, on_done)
+	local root = self.range.root
+	local args = { staged and "add" or "reset", "--" }
+	for _, file in ipairs(files) do
+		args[#args + 1] = file.path
+		-- A staged rename only unstages fully with both paths.
+		if file.old_path then
+			args[#args + 1] = file.old_path
+		end
+	end
+
+	self.requests.run(function(done)
+		return git.run(args, { cwd = root }, done)
+	end, function(result)
+		if result.code ~= 0 then
+			notify.error("Unable to update staged files\n\n" .. vim.trim(result.stderr), { vim_notify = true })
+			return
+		end
+
+		self.requests.run(function(done)
+			return diff.load_status(root, self.range.base_revision, done)
+		end, function(loaded, err)
+			if not loaded then
+				notify.error("Unable to load changed files\n\n" .. err, { vim_notify = true })
+				return
+			end
+
+			self.files = loaded.files
+			on_done()
+		end)
 	end)
 end
 

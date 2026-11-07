@@ -54,7 +54,7 @@ end
 function M.open(value)
 	local base, head = value:match("^(.-)%.%.%.(.*)$")
 	if not base then
-		diff.open_worktree({ base = value ~= "" and value or "HEAD" }, function(open_err)
+		diff.open_worktree({ base = value ~= "" and value or nil }, function(open_err)
 			if open_err then
 				notify.error(open_err, { vim_notify = true })
 			end

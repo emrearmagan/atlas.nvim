@@ -54,12 +54,13 @@ M.action_ids = {
 ---@param index integer
 ---@param callback fun()
 ---@param mode string|string[]|nil
-local function add(items, actions, index, callback, mode)
+---@param desc string|nil
+local function add(items, actions, index, callback, mode, desc)
 	local keymap = resolver.resolve(actions)
 	if keymap then
 		items[#items + 1] = {
 			key = keymap.key,
-			desc = keymap.desc,
+			desc = desc or keymap.desc,
 			index = index,
 			callback = callback,
 			mode = mode,
@@ -153,6 +154,11 @@ function M.setup(viewer)
 		add(review_items, "pulls.review.next_unresolved", 95, function()
 			viewer:navigate_annotation(1, "unresolved")
 		end)
+	end
+	if session.source.kind == "worktree" and not session.source.base then
+		add(review_items, "pulls.review.toggle_file_reviewed", 2, function()
+			viewer:toggle_file_staged()
+		end, nil, "Toggle staged")
 	end
 	if session.notes then
 		add(review_items, "pulls.review.prev_note", 92, function()
@@ -268,6 +274,8 @@ function M.hints(viewer, buf)
 			"pulls.open_diff",
 			"pulls.review.show_details",
 		}
+	elseif viewer.session.source.kind == "worktree" and not viewer.session.source.base then
+		return { "pulls.review.show_details" }
 	end
 
 	return {

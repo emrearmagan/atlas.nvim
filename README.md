@@ -894,7 +894,7 @@ See [all highlight groups](https://github.com/emrearmagan/atlas.nvim/blob/main/l
 - `:Atlas pulls [provider|.]` - Open a pull-request provider dashboard; `.` uses the current repository's provider
 - `:Atlas issues [provider|.]` - Open an issue provider dashboard; `.` uses the current repository's provider
 - `:Atlas review [pull-request-url|number|.]` - Review a pull request with the configured diff viewer; without an argument, pick one from the current repository; `.` reviews the current branch's pull request
-- `:Atlas diff [ref|base...head]` - Open a Git range with the configured diff viewer; a single ref compares it with your working tree, including untracked files, and no argument uses `HEAD`
+- `:Atlas diff [ref|base...head]` - Open a Git range with the configured diff viewer; a single ref compares it with your working tree, including untracked files, and no argument shows your uncommitted changes with staged files in their own section
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create pr` - Create a pull request from the current branch
 - `:Atlas create issue [provider|.]` - Create an issue; `.` uses the current repository's provider
