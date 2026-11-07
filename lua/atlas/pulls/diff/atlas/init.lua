@@ -232,7 +232,11 @@ function Renderer:show_file(file, on_done)
 
 		local rendered, document = pcall(function()
 			local prepared = prepare_document(file, contents)
-			display(self, prepared)
+			local shown = self.document
+			-- Don't redraw a file that is already shown with the same content.
+			if not shown or shown.file.path ~= file.path or not vim.deep_equal(shown.contents, prepared.contents) then
+				display(self, prepared)
+			end
 			return prepared
 		end)
 		if not rendered then
