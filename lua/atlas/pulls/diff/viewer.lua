@@ -41,6 +41,7 @@ local renderers = {
 ---@field expanded_threads table<string, boolean>
 ---@field show_file fun(self: AtlasDiffRenderer, file: AtlasDiffFile, on_done: fun(err?: string))
 ---@field redraw fun(self: AtlasDiffRenderer)
+---@field clear fun(self: AtlasDiffRenderer)
 ---@field get_selection fun(self: AtlasDiffRenderer): AtlasDiffSelection|nil, string|nil
 ---@field navigate_annotation fun(self: AtlasDiffRenderer, direction: 1|-1, kind: AtlasDiffAnnotationKind, from_edge?: boolean): boolean
 ---@field resize fun(self: AtlasDiffRenderer)
@@ -175,12 +176,16 @@ function Viewer:close(reason)
 end
 
 ---@param viewer AtlasDiffViewer
----@param file AtlasDiffFile
+---@param file AtlasDiffFile|nil Nil shows the empty state.
 ---@param focus boolean|nil
 ---@param on_done (fun())|nil
 local function select_file(viewer, file, focus, on_done)
 	local session = viewer.session
 	if session.closed then
+		return
+	end
+	if not file then
+		viewer.renderer:clear()
 		return
 	end
 
@@ -425,11 +430,7 @@ function Viewer:reload_files()
 			end
 		end
 
-		file = file or self.explorer.files[1]
-		if not file then
-			return
-		end
-		select_file(self, file, false, function()
+		select_file(self, file or self.explorer.files[1], false, function()
 			for win, view in pairs(views) do
 				if vim.api.nvim_win_is_valid(win) then
 					vim.api.nvim_win_call(win, function()
@@ -445,10 +446,7 @@ end
 ---@param shown AtlasDiffFile|nil
 local function show_next_file(viewer, shown)
 	viewer.explorer:set_files(viewer.session.files)
-	local next_file = viewer.explorer:current_file() or reloaded_file(viewer, shown) or viewer.explorer.files[1]
-	if next_file then
-		select_file(viewer, next_file)
-	end
+	select_file(viewer, viewer.explorer:current_file() or reloaded_file(viewer, shown) or viewer.explorer.files[1])
 end
 
 function Viewer:toggle_file_staged()
@@ -847,10 +845,7 @@ function Viewer:show_commits(from, to)
 		self.commits:set_active(session:shown_commits())
 		self.explorer:set_files(session.files)
 		update_panels(self)
-		local first = self.explorer.files[1]
-		if first then
-			select_file(self, first)
-		end
+		select_file(self, self.explorer.files[1])
 	end)
 end
 
@@ -1010,10 +1005,7 @@ local function setup(viewer)
 	local focus_win = explorer_options.initial_focus == "explorer" and viewer.explorer.win or renderer.right.win
 	vim.api.nvim_set_current_win(focus_win)
 
-	local first = viewer.explorer.files[1]
-	if first then
-		select_file(viewer, first)
-	end
+	select_file(viewer, viewer.explorer.files[1])
 end
 
 ---@param session AtlasDiffSessionInternal

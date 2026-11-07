@@ -257,6 +257,20 @@ function Renderer:redraw()
 	end
 end
 
+function Renderer:clear()
+	self.requests.cancel()
+	self.document = nil
+	self.inline_hunk_lines = {}
+	self.annotations = {}
+	set_layout(self, "inline")
+	set_right_buffer(self, self.revision_buf)
+	vim.api.nvim_buf_clear_namespace(self.revision_buf, -1, 0, -1)
+	set_content(self, self.revision_buf, { lines = {}, endofline = false }, "", true)
+	vim.wo[self.right.win].winbar = ""
+	render.message(self.right.win, "No changes")
+	self.on_file(nil)
+end
+
 ---@param direction 1|-1
 function Renderer:navigate_hunk(direction)
 	if self.left.win then

@@ -65,6 +65,8 @@ function Renderer:redraw()
 	end
 end
 
+function Renderer:clear() end
+
 function Renderer:resize()
 	layout.arrange(self.tabpage)
 	self:redraw()

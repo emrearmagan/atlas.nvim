@@ -205,6 +205,8 @@ function Renderer:get_selection()
 	return annotation_ui.selection(self, file, side, lines, position)
 end
 
+function Renderer:clear() end
+
 function Renderer:dispose()
 	vim.api.nvim_del_augroup_by_id(self.group)
 	annotations.clear(self)
