@@ -779,7 +779,17 @@ function Viewer:open_file()
 		return
 	end
 
+	local win = vim.api.nvim_get_current_win()
+	local cursor
+	if win == self.renderer.right.win or win == self.renderer.left.win then
+		cursor = vim.api.nvim_win_get_cursor(win)
+	end
+
 	vim.cmd.tabedit({ args = { path } })
+	if cursor then
+		cursor[1] = math.min(cursor[1], vim.api.nvim_buf_line_count(0))
+		vim.api.nvim_win_set_cursor(0, cursor)
+	end
 	local options = vim.wo[0][0]
 	options.statusline = vim.go.statusline
 	options.winbar = vim.go.winbar

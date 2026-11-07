@@ -63,6 +63,7 @@ local function prepare_document(file, contents)
 end
 
 local function setup_buffer(buf)
+	vim.b[buf].atlas_diff = true
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].buflisted = false
 	vim.bo[buf].bufhidden = "hide"
