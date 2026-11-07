@@ -457,6 +457,19 @@ function M.setup(opts)
 	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
 	end
+
+	-- " example.atlassian.net/ " -> https://example.atlassian.net
+	for _, id in ipairs({ "gitlab", "jira" }) do
+		local options = M.provider_options(id) or {}
+		if type(options.base_url) == "string" then
+			local base_url = vim.trim(options.base_url):gsub("/+$", "")
+			if base_url ~= "" and not base_url:match("^%a+://") then
+				base_url = "https://" .. base_url
+			end
+
+			options.base_url = base_url
+		end
+	end
 end
 
 return M
