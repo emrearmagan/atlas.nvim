@@ -156,6 +156,17 @@ function Viewer:close(reason)
 	end
 
 	emit_event(self, "AtlasDiffClosed", reason or "viewer_closed")
+
+	local buf = vim.api.nvim_get_current_buf()
+	if
+		reason == "user_close"
+		and #vim.api.nvim_list_tabpages() == 1
+		and vim.api.nvim_buf_get_name(buf) == ""
+		and vim.bo[buf].buftype == ""
+		and not vim.bo[buf].modified
+	then
+		vim.cmd.qall({ mods = { confirm = true } })
+	end
 end
 
 ---@param viewer AtlasDiffViewer
