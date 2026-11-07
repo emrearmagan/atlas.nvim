@@ -124,10 +124,14 @@ end
 
 ---@param renderer AtlasDiffRenderer
 ---@param content { lines: string[], endofline: boolean }
+---@param revision string|nil Nil for the working tree.
 local function set_content(renderer, buf, content, path, revision, binary)
 	vim.bo[buf].readonly = false
 	vim.bo[buf].modifiable = true
-	vim.api.nvim_buf_set_name(buf, string.format("atlas-diff://%d/%d/%s/%s", renderer.tabpage, buf, revision, path))
+	vim.api.nvim_buf_set_name(
+		buf,
+		string.format("atlas-diff://%d/%d/%s/%s", renderer.tabpage, buf, revision or "WORKING", path)
+	)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
 	vim.bo[buf].endofline = content.endofline
 	vim.bo[buf].fixendofline = false

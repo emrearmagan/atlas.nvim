@@ -750,9 +750,10 @@ https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/ui/highlights.lua
         that pull request directly. `.` opens the current branch's pull
         request.
 
-:Atlas diff <base...head>
+:Atlas diff [ref|base...head]
         Open a Git range with the configured diff viewer
-        (`pulls.diff.open_cmd`).
+        (`pulls.diff.open_cmd`). A single ref compares it with your working
+        tree, including untracked files. Without an argument it uses `HEAD`.
 
 :Atlas pipelines [target|.]
         Open pipelines by branch name, PR URL or number (`123`, `#123`, or

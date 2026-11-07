@@ -11,7 +11,7 @@ local M = {}
 ---@class AtlasDiffRange
 ---@field root string
 ---@field base_revision string
----@field head_revision string
+---@field head_revision string|nil Nil for the working tree.
 
 ---@class AtlasDiffFile
 ---@field path string
@@ -22,6 +22,8 @@ local M = {}
 ---@field binary boolean
 ---@field old_blob string
 ---@field new_blob string
+
+local NULL_OID = string.rep("0", 40)
 
 local statuses = {
 	A = "added",
@@ -44,11 +46,25 @@ local function run(root, args, on_done)
 end
 
 ---@param root string
----@param revision string
+---@param revision string|nil Nil reads the file from the working tree.
 ---@param path string
 ---@param on_done fun(content: string|nil, err: string|nil)
----@return { cancel: fun() }
+---@return { cancel: fun() }|nil
 function M.read(root, revision, path, on_done)
+	if not revision then
+		local file = io.open(vim.fs.joinpath(root, path), "rb")
+		local content = file and file:read("*a")
+		if file then
+			file:close()
+		end
+		if not content then
+			on_done(nil, "Unable to read " .. path)
+			return nil
+		end
+		on_done(content, nil)
+		return nil
+	end
+
 	-- TODO: Submodules point to commits, not file contents. Show their hashes instead.
 	return run(root, { "cat-file", "blob", revision .. ":" .. path }, on_done)
 end
@@ -191,13 +207,17 @@ end
 
 ---@param root string
 ---@param base string
----@param head string
+---@param head string|nil Nil compares against the working tree
 ---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.load(root, base, head, on_done)
 	local requests = request_scope.new()
 
 	requests.run(function(done)
+		if not head then
+			done(base)
+			return nil
+		end
 		return run(root, { "merge-base", base, head }, done)
 	end, function(output, err)
 		if not output then
@@ -205,9 +225,9 @@ function M.load(root, base, head, on_done)
 			return
 		end
 
-		local merge_base = vim.trim(output)
+		local from = vim.trim(output)
 		local function diff(format, done)
-			return run(root, {
+			local args = {
 				"diff",
 				format,
 				"-z",
@@ -216,21 +236,31 @@ function M.load(root, base, head, on_done)
 				"--no-color",
 				"--no-ext-diff",
 				"--no-textconv",
-				merge_base,
-				head,
-				"--",
-			}, done)
+				from,
+			}
+			if head then
+				args[#args + 1] = head
+			end
+			args[#args + 1] = "--"
+			return run(root, args, done)
 		end
 
-		requests.all({
+		local starts = {
 			raw = function(done)
 				return diff("--raw", done)
 			end,
 			numstat = function(done)
 				return diff("--numstat", done)
 			end,
-		}, function(outputs, errors)
-			local diff_err = errors.raw or errors.numstat
+		}
+		if not head then
+			starts.untracked = function(done)
+				return run(root, { "ls-files", "--others", "--exclude-standard", "-z" }, done)
+			end
+		end
+
+		requests.all(starts, function(outputs, errors)
+			local diff_err = errors.raw or errors.numstat or errors.untracked
 			if diff_err then
 				on_done(nil, diff_err)
 				return
@@ -241,7 +271,16 @@ function M.load(root, base, head, on_done)
 				on_done(nil, parse_err)
 				return
 			end
-			on_done({ range = { root = root, base_revision = merge_base, head_revision = head }, files = files }, nil)
+			for path in fields(outputs.untracked or "") do
+				files[#files + 1] = {
+					path = path,
+					status = "added",
+					binary = false,
+					old_blob = NULL_OID,
+					new_blob = NULL_OID,
+				}
+			end
+			on_done({ range = { root = root, base_revision = from, head_revision = head }, files = files }, nil)
 		end)
 	end)
 
