@@ -315,6 +315,37 @@ function Session:set_staged(files, staged, on_done)
 	end)
 end
 
+---@param files AtlasDiffFile[]
+---@param on_done fun()
+function Session:discard_changes(files, on_done)
+	local root = self.range.root
+	local tracked, untracked = {}, {}
+	for _, file in ipairs(files) do
+		table.insert(file.status == "added" and untracked or tracked, file.path)
+	end
+
+	local starts = {}
+	if #tracked > 0 then
+		starts.tracked = function(done)
+			return git.run(vim.list_extend({ "restore", "--" }, tracked), { cwd = root }, done)
+		end
+	end
+	if #untracked > 0 then
+		starts.untracked = function(done)
+			return git.run(vim.list_extend({ "clean", "-f", "--" }, untracked), { cwd = root }, done)
+		end
+	end
+
+	self.requests.all(starts, function(results)
+		for _, result in pairs(results) do
+			if result.code ~= 0 then
+				notify.error("Unable to discard changes\n\n" .. vim.trim(result.stderr), { vim_notify = true })
+			end
+		end
+		self:reload_files(on_done)
+	end)
+end
+
 ---@param on_done fun()
 function Session:reload_files(on_done)
 	local range = self.range

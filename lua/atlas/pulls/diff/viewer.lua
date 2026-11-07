@@ -399,7 +399,6 @@ function Viewer:toggle_file_reviewed()
 	end
 end
 
--- Reloads replace every file entry, so find the shown one again by path and section.
 ---@param viewer AtlasDiffViewer
 ---@param file AtlasDiffFile|nil
 ---@return AtlasDiffFile|nil
@@ -442,6 +441,16 @@ function Viewer:reload_files()
 	end)
 end
 
+---@param viewer AtlasDiffViewer
+---@param shown AtlasDiffFile|nil
+local function show_next_file(viewer, shown)
+	viewer.explorer:set_files(viewer.session.files)
+	local next_file = viewer.explorer:current_file() or reloaded_file(viewer, shown) or viewer.explorer.files[1]
+	if next_file then
+		select_file(viewer, next_file)
+	end
+end
+
 function Viewer:toggle_file_staged()
 	local files = {}
 	if vim.api.nvim_get_current_buf() == self.explorer.buf then
@@ -457,11 +466,33 @@ function Viewer:toggle_file_staged()
 
 	local shown = self.renderer.current_file
 	self.session:set_staged(files, not files[1].staged, function()
-		self.explorer:set_files(self.session.files)
-		local next_file = self.explorer:current_file() or reloaded_file(self, shown) or self.explorer.files[1]
-		if next_file then
-			select_file(self, next_file)
-		end
+		show_next_file(self, shown)
+	end)
+end
+
+function Viewer:discard_changes()
+	local files = self.explorer:files_under_cursor()
+	local file = self.explorer:current_file()
+	if #files == 0 and file then
+		files = { file }
+	end
+	if #files == 0 then
+		return
+	end
+	if files[1].staged then
+		notify.info("Only unstaged changes can be discarded")
+		return
+	end
+
+	local name = #files == 1 and files[1].path or #files .. " files"
+	local action = #files == 1 and files[1].status == "added" and "Delete " or "Discard changes to "
+	if vim.fn.confirm(action .. name .. "?", "&Discard\n&Cancel", 2, "Warning") ~= 1 then
+		return
+	end
+
+	local shown = self.renderer.current_file
+	self.session:discard_changes(files, function()
+		show_next_file(self, shown)
 	end)
 end
 

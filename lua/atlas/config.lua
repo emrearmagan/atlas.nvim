@@ -361,6 +361,7 @@ local defaults = {
 					toggle_explorer = "<leader>b",
 					focus_explorer = "<leader>e",
 					open_file = "gf",
+					discard_changes = "X",
 					toggle_view_mode = "i",
 					next_hunk = "]h",
 					prev_hunk = "[h",

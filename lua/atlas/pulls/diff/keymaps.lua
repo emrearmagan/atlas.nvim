@@ -93,6 +93,7 @@ end
 ---@param viewer AtlasDiffViewer
 function M.setup(viewer)
 	local session = viewer.session
+	local staging = session.source.kind == "worktree" and not session.source.base
 
 	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", 20, function()
@@ -155,7 +156,7 @@ function M.setup(viewer)
 			viewer:navigate_annotation(1, "unresolved")
 		end)
 	end
-	if session.source.kind == "worktree" and not session.source.base then
+	if staging then
 		add(review_items, "pulls.review.toggle_file_reviewed", 2, function()
 			viewer:toggle_file_staged()
 		end, nil, "Toggle staged")
@@ -199,6 +200,11 @@ function M.setup(viewer)
 		end)
 		add(explorer_review_items, "pulls.review.submit_comment", 31, function()
 			viewer:add_comment(false)
+		end)
+	end
+	if staging then
+		add(explorer_review_items, "pulls.review.atlas.discard_changes", 3, function()
+			viewer:discard_changes()
 		end)
 	end
 
