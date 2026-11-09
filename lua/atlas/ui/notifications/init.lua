@@ -14,6 +14,7 @@ local function popup_keys()
 		refresh = resolver.resolve("ui.refresh_view"),
 		open = resolver.resolve("ui.select"),
 		open_in_browser = resolver.resolve("ui.open_in_browser"),
+		copy_url = resolver.resolve("ui.copy_url"),
 		close = resolver.resolve("ui.close"),
 	}
 end
@@ -94,6 +95,9 @@ local function build_footer_text(provider)
 	end
 	if keys.open_in_browser then
 		table.insert(items, keys.open_in_browser.key[1] .. " " .. keys.open_in_browser.label)
+	end
+	if keys.copy_url then
+		table.insert(items, keys.copy_url.key[1] .. " " .. keys.copy_url.label)
 	end
 	if keys.mark_read and capability(provider).mark_read then
 		table.insert(items, keys.mark_read.key[1] .. " " .. keys.mark_read.label)
@@ -177,6 +181,17 @@ local function open_in_browser(notification)
 		return
 	end
 	notify.info("Opened in browser")
+end
+
+---@param notification AtlasNotification|nil
+local function copy_url(notification)
+	if notification == nil or not notification.url or notification.url == "" then
+		notify.warn("Notification has no URL")
+		return
+	end
+
+	vim.fn.setreg("+", notification.url)
+	notify.success("Copied URL")
 end
 
 ---@param provider PullsProvider|IssuesProvider
@@ -284,6 +299,10 @@ local function register_keymaps(target_buf, provider, on_update)
 
 	map(keys.open_in_browser, function()
 		open_in_browser(notification_under_cursor())
+	end)
+
+	map(keys.copy_url, function()
+		copy_url(notification_under_cursor())
 	end)
 
 	if capability(provider).mark_read then

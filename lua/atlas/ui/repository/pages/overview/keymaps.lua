@@ -34,6 +34,18 @@ function M.setup(state, callbacks)
 				opts = { nowait = true, silent = true },
 			})
 		end
+		local copy_url = resolver.resolve("ui.copy_url")
+		if copy_url then
+			table.insert(items, {
+				key = copy_url.key,
+				desc = copy_url.desc,
+				index = 9,
+				callback = function()
+					callbacks.copy_url(state)
+				end,
+				opts = { nowait = true, silent = true },
+			})
+		end
 
 		help.register("General", items, { buffer = buf, index = 1 })
 		return items

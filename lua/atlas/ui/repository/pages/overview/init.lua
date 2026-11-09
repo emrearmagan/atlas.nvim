@@ -1,3 +1,4 @@
+local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local spinner = require("atlas.ui.components.spinner")
 local help = require("atlas.ui.popups.help")
@@ -95,6 +96,14 @@ local function open_in_browser(state)
 	end
 end
 
+---@param state RepositoryOverview
+local function copy_url(state)
+	if state.repo.html_url then
+		vim.fn.setreg("+", state.repo.html_url)
+		notify.success("Copied URL")
+	end
+end
+
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	---@type RepositoryOverview
@@ -120,7 +129,7 @@ function M.open(opts)
 
 	vim.wo[state.win].wrap = true
 	vim.wo[state.win].linebreak = true
-	keymaps.setup(state, { load = load, open_in_browser = open_in_browser })
+	keymaps.setup(state, { copy_url = copy_url, load = load, open_in_browser = open_in_browser })
 	render(state)
 end
 

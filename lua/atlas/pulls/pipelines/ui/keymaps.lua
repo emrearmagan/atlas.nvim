@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local explorer_keymaps = require("atlas.pulls.pipelines.ui.explorer.keymaps")
 local logs = require("atlas.pulls.pipelines.ui.logs")
@@ -66,6 +67,19 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions,
 				end
 			end,
 			index = 21,
+		},
+		{
+			keymap = keymaps.resolve("ui.copy_url"),
+			callback = function()
+				local selection = current_selection(pane, explorer_pane)
+				local url = selection
+					and (selection.job and selection.job.url or selection.pipeline and selection.pipeline.url)
+				if url and url ~= "" then
+					vim.fn.setreg("+", url)
+					notify.success("Copied URL")
+				end
+			end,
+			index = 23,
 		},
 		{
 			keymap = keymaps.resolve("pulls.pipelines.toggle_config"),

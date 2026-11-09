@@ -41,7 +41,7 @@ M.action_ids = {
 		"pulls.review.add_note",
 		"pulls.review.toggle_resolved",
 	}, shared_actions),
-	explorer = shared_actions,
+	explorer = vim.list_extend({ "ui.copy_url" }, shared_actions),
 }
 
 ---@class AtlasDiffKeymapGroup
@@ -178,6 +178,13 @@ function M.setup(viewer)
 	end
 	add(shared_items, "ui.help", 100, help.toggle)
 
+	local explorer_items = vim.list_extend({}, shared_items)
+	if session.source.kind == "pr" then
+		add(explorer_items, "ui.copy_url", 91, function()
+			viewer:run_action("copy_url")
+		end)
+	end
+
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
 	if session.source.kind == "pr" then
@@ -242,7 +249,7 @@ function M.setup(viewer)
 			end)
 		or {}
 	viewer.renderer:setup_keymaps(viewer, groups("View", shared_items, diff_review_items, custom_items))
-	register(viewer.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
+	register(viewer.explorer.buf, groups("Explorer", explorer_items, explorer_review_items, custom_items))
 	register(viewer.commits.buf, groups("Commits", commits_items, review_items, custom_items))
 end
 

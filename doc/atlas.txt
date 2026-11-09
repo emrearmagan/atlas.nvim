@@ -860,7 +860,7 @@ These `User` events fire after setup or cleanup completes:
         open_in_browser         = "gx",
         open_references         = "gl",
         copy_id                 = "y",
-        copy_url                = "Y",
+        copy_url                = "gy",
         show_details            = "K",
         search                  = "?",
         edit_search             = "i",
