@@ -36,6 +36,7 @@ local M = {}
 ---| "toggle_review_panel"
 ---| "toggle_commits"
 ---| "open_in_browser"
+---| "copy_url"
 ---| "open_actions"
 ---| "refresh_review"
 
@@ -581,6 +582,7 @@ M.open_actions = {
 		end
 		items[#items + 1] = M.refresh_review
 		items[#items + 1] = M.open_in_browser
+		add("copy_url")
 
 		action_runner.select("Review action", items, function(action)
 			M.dispatch(action.id, context, on_done)

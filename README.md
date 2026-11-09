@@ -2,6 +2,7 @@
 [![Version](https://img.shields.io/github/v/tag/emrearmagan/atlas.nvim.svg)](https://github.com/emrearmagan/atlas.nvim/tags)
 [![CI](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/emrearmagan/atlas.nvim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/emrearmagan/atlas.nvim?style=flat-square&color=blue)](LICENSE)
+[![Playground](https://img.shields.io/badge/Playground-try_it-blue.svg)](https://playground.atlasnvim.dev)
 
 # atlas.nvim
 
@@ -456,7 +457,10 @@ pulls = {
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
-      show_commits = false, -- Set true to show commits below changed files initially.
+      commits = {
+        hidden = true, -- Set false to show commits below changed files initially.
+        height = 35, -- Height in percent of the explorer column.
+      },
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       preview = false, -- Show a file as soon as the explorer cursor moves onto it.
@@ -957,7 +961,7 @@ keymaps = {
     open_in_browser = "gx",
     open_references = "gl",
     copy_id = "y",
-    copy_url = "Y",
+    copy_url = "gy",
     show_details = "K",
     search = "?",
     edit_search = "i",

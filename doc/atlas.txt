@@ -298,7 +298,10 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
-          show_commits = false, -- set true to show commits below changed files initially
+          commits = {
+            hidden = true, -- set false to show commits below changed files initially
+            height = 35, -- height in percent of the explorer column
+          },
           width = 40,
           initial_focus = "explorer", -- "explorer" or "diff"
           preview = false, -- show a file when the explorer cursor moves onto it
@@ -857,7 +860,7 @@ These `User` events fire after setup or cleanup completes:
         open_in_browser         = "gx",
         open_references         = "gl",
         copy_id                 = "y",
-        copy_url                = "Y",
+        copy_url                = "gy",
         show_details            = "K",
         search                  = "?",
         edit_search             = "i",

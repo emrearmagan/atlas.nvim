@@ -460,13 +460,13 @@ local strchars = vim.fn.strchars
 ---@param from_start? boolean
 ---@return string
 function M.truncate(str, max_dw, from_start)
-	if max_dw < 1 then
-		return ""
-	end
 	if strwidth(str) <= max_dw then
 		return str
 	end
-	local marker = max_dw == 1 and "." or ".."
+	if max_dw < 2 then
+		return ""
+	end
+	local marker = ".."
 
 	local nchars = strchars(str, true)
 	local low, high = 0, nchars - 1

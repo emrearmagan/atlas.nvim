@@ -41,12 +41,16 @@
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
----@field show_commits boolean|nil
+---@field commits AtlasPullsDiffCommitsConfig|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
 ---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
+
+---@class AtlasPullsDiffCommitsConfig
+---@field hidden boolean|nil
+---@field height integer|nil Percent of the explorer column.
 
 ---@class AtlasPullsDiffReviewPanelConfig
 ---@field hidden boolean|nil
@@ -209,7 +213,10 @@ local defaults = {
 			explorer = {
 				grouped = true,
 				hidden = false,
-				show_commits = false,
+				commits = {
+					hidden = true,
+					height = 35,
+				},
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
@@ -280,7 +287,7 @@ local defaults = {
 			open_in_browser = "gx",
 			open_references = "gl",
 			copy_id = "y",
-			copy_url = "Y",
+			copy_url = "gy",
 			show_details = "K",
 			search = "?",
 			edit_search = "i",
@@ -449,6 +456,19 @@ function M.setup(opts)
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
+	end
+
+	-- " example.atlassian.net/ " -> https://example.atlassian.net
+	for _, id in ipairs({ "gitlab", "jira" }) do
+		local options = M.provider_options(id) or {}
+		if type(options.base_url) == "string" then
+			local base_url = vim.trim(options.base_url):gsub("/+$", "")
+			if base_url ~= "" and not base_url:match("^%a+://") then
+				base_url = "https://" .. base_url
+			end
+
+			options.base_url = base_url
+		end
 	end
 end
 

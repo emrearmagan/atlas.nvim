@@ -3,6 +3,7 @@ local M = {}
 local config = require("atlas.config")
 local git_checkout = require("atlas.core.git.checkout")
 local console = require("atlas.ui.console")
+local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 
@@ -130,7 +131,7 @@ M.copy_id = {
 M.copy_url = {
 	id = "copy_url",
 	label = "Copy URL",
-	hidden = true,
+	icon = icons.get("link"),
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
@@ -141,7 +142,7 @@ M.copy_url = {
 			return
 		end
 		vim.fn.setreg("+", url)
-		notify.success("Copied URL to clipboard", { timeout = 1200 })
+		notify.success("Copied URL", { timeout = 1200 })
 		done({ changed_pr = false }, nil)
 	end,
 }

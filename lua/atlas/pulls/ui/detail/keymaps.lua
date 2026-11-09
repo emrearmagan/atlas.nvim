@@ -155,6 +155,14 @@ function M.register(buf)
 			end,
 		})
 	)
+	utils.insert_if(
+		items,
+		item("ui.copy_url", {
+			index = 9,
+			opts = { nowait = true, silent = true },
+			callback = run_pr_action("copy_url"),
+		})
+	)
 
 	utils.insert_if(
 		items,

@@ -796,7 +796,9 @@ local function setup(viewer)
 
 	vim.cmd.tcd(vim.fn.fnameescape(session.range.root))
 
-	viewer.commits = commits.new(session.commits, explorer_options.show_commits)
+	local commits_options = explorer_options.commits
+	---@cast commits_options AtlasPullsDiffCommitsConfig
+	viewer.commits = commits.new(session.commits, not commits_options.hidden, commits_options.height)
 	viewer.review_panel = review_panel.new(session, options.review_panel, {
 		on_resize = function()
 			resize(viewer)

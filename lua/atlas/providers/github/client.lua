@@ -19,7 +19,7 @@ function M.hostname()
 		return DEFAULT_HOST
 	end
 
-	return vim.trim(hostname):lower()
+	return (vim.trim(hostname):lower():gsub("^%a+://", ""):gsub("/.*$", ""))
 end
 
 ---@param key string
