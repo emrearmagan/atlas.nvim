@@ -106,11 +106,9 @@ local function set_layout(renderer, layout)
 		setup_window(win)
 		resize(renderer)
 	elseif layout == "inline" and renderer.left.win then
-		for _, win in ipairs({ renderer.left.win, renderer.right.win }) do
-			vim.api.nvim_win_call(win, function()
-				vim.cmd.diffoff()
-			end)
-		end
+		vim.api.nvim_win_call(renderer.right.win, function()
+			vim.cmd.diffoff({ bang = true })
+		end)
 
 		local win = renderer.left.win
 		---@cast win integer
