@@ -69,6 +69,7 @@ local function setup_buffer(buf)
 	vim.bo[buf].bufhidden = "hide"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].modifiable = false
+	vim.diagnostic.enable(false, { bufnr = buf })
 end
 
 local function setup_window(win)
@@ -131,10 +132,12 @@ local function set_content(renderer, buf, content, path, binary)
 	vim.bo[buf].endofline = content.endofline
 	vim.bo[buf].fixendofline = false
 
-	local filetype = not binary and vim.filetype.match({ filename = path, buf = buf }) or ""
-	if vim.bo[buf].filetype ~= filetype then
-		vim.treesitter.stop(buf)
-		vim.bo[buf].filetype = filetype
+	-- No filetype, otherwise LSPs attach to this copy and stick around.
+	vim.treesitter.stop(buf)
+	vim.bo[buf].syntax = ""
+	local filetype = not binary and vim.filetype.match({ filename = path, buf = buf })
+	if filetype and not pcall(vim.treesitter.start, buf, vim.treesitter.language.get_lang(filetype) or filetype) then
+		vim.bo[buf].syntax = filetype
 	end
 
 	vim.bo[buf].modified = false
