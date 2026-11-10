@@ -43,7 +43,7 @@ function M.file_buffer(root, path)
 	end
 
 	local buf = vim.fn.bufadd(full_path)
-	if not pcall(vim.fn.bufload, buf) then
+	if not vim.api.nvim_buf_is_loaded(buf) and not pcall(vim.api.nvim_buf_call, buf, vim.cmd.edit) then
 		return
 	end
 	return buf
