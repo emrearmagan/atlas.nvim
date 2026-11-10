@@ -252,6 +252,13 @@ function Renderer:clear()
 	self.on_file(nil)
 end
 
+function Renderer:resize()
+	vim.api.nvim_win_call(self.right.win, function()
+		vim.cmd("wincmd =")
+	end)
+	annotations.render(self)
+end
+
 function Renderer:dispose()
 	vim.api.nvim_del_augroup_by_id(self.group)
 	annotations.clear(self)
@@ -261,7 +268,6 @@ end
 
 Renderer.redraw = annotations.render
 Renderer.navigate_annotation = annotations.navigate
-Renderer.resize = annotations.render
 Renderer.setup_keymaps = keymaps.setup
 
 return Renderer
