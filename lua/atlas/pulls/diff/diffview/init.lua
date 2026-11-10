@@ -37,26 +37,65 @@ local function update_panes(renderer)
 end
 
 ---@param session AtlasDiffSession
+---@diagnostic disable-next-line: undefined-doc-name
+---@return GitRev left, GitRev right
+local function revisions(session)
+	local range = session.range
+	if range.head_revision then
+		return GitRev(RevType.COMMIT, range.base_revision), GitRev(RevType.COMMIT, range.head_revision)
+	end
+	if session.source.kind == "worktree" and not session.source.base then
+		return GitRev(RevType.STAGE, 0), GitRev(RevType.LOCAL)
+	end
+	return GitRev(RevType.COMMIT, range.base_revision), GitRev(RevType.LOCAL)
+end
+
+---@param files AtlasDiffFile[]
+local function file_data(files)
+	local data = { working = {}, staged = {}, conflicting = {} }
+	for _, file in ipairs(files) do
+		local kind = "working"
+		if file.staged then
+			kind = "staged"
+		elseif file.status == "conflicted" then
+			kind = "conflicting"
+		end
+		data[kind][#data[kind] + 1] = { path = file.path, oldpath = file.old_path, status = statuses[file.status] }
+	end
+	return data
+end
+
+---@param file AtlasDiffFile
+local function same_file(entry, file)
+	return entry.path == file.path and (entry.kind == "staged") == (file.staged == true)
+end
+
+---@param renderer AtlasDiffDiffviewRenderer
+local function open_pending_file(renderer)
+	local file = renderer.pending_file.file
+	for _, entry in renderer.diffview.files:iter() do
+		if same_file(entry, file) then
+			renderer.diffview:set_file(entry, false)
+			return
+		end
+	end
+	-- A reload can add files Diffview doesn't know yet. Its update opens a file again, which lands back here.
+	renderer.diffview:update_files()
+end
+
+---@param session AtlasDiffSession
 ---@param options AtlasPullsDiffConfig
 ---@param on_file fun(file: AtlasDiffFile|nil)
 ---@return AtlasDiffDiffviewRenderer
 function Renderer.new(session, options, on_file)
-	local files = { working = {} }
-	for _, file in ipairs(session.files) do
-		files.working[#files.working + 1] = {
-			path = file.path,
-			oldpath = file.old_path,
-			status = statuses[file.status],
-		}
-	end
-
+	local left, right = revisions(session)
 	local diffview = CDiffView({
 		git_root = session.range.root,
-		left = GitRev(RevType.COMMIT, session.range.base_revision),
-		right = GitRev(RevType.COMMIT, session.range.head_revision),
-		files = files,
+		left = left,
+		right = right,
+		files = file_data(session.files),
 		update_files = function()
-			return files
+			return file_data(session.files)
 		end,
 	})
 	for _, entry in diffview.files:iter() do
@@ -111,15 +150,15 @@ function Renderer.new(session, options, on_file)
 			end
 
 			local pending = renderer.pending_file
-			if pending and pending.file.path ~= entry.path then
-				diffview:set_file_by_path(pending.file.path, false)
+			if pending and not same_file(entry, pending.file) then
+				open_pending_file(renderer)
 				return
 			end
 			renderer.pending_file = nil
 
 			update_panes(renderer)
 			local file = vim.iter(session.files):find(function(item)
-				return item.path == entry.path
+				return same_file(entry, item)
 			end)
 			local old = table.concat(vim.api.nvim_buf_get_lines(renderer.left.buf, 0, -1, false), "\n")
 			local new = table.concat(vim.api.nvim_buf_get_lines(renderer.right.buf, 0, -1, false), "\n")
@@ -156,7 +195,7 @@ function Renderer:show_file(file, on_done)
 		return
 	end
 
-	self.diffview:set_file_by_path(file.path, false)
+	open_pending_file(self)
 end
 
 ---@return AtlasDiffSelection|nil, string|nil
@@ -205,7 +244,13 @@ function Renderer:get_selection()
 	return annotation_ui.selection(self, file, side, lines, position)
 end
 
-function Renderer:clear() end
+function Renderer:clear()
+	self.pending_file = nil
+	annotation_ui.close(self.tabpage)
+	annotations.clear(self)
+	self.diffview:update_files()
+	self.on_file(nil)
+end
 
 function Renderer:dispose()
 	vim.api.nvim_del_augroup_by_id(self.group)
