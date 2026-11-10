@@ -75,8 +75,8 @@ local function start_loading(message, context, on_done)
 	local options = vim.deepcopy(config.options.pulls.diff)
 	---@cast options AtlasPullsDiffConfig
 	options.open_cmd = config.diff_command()
-	-- TODO: open the working tree in CodeDiff and Diffview too
-	if context.kind == "worktree" then
+	-- TODO: open the working tree in Diffview too
+	if context.kind == "worktree" and options.open_cmd ~= "CodeDiff" then
 		options.open_cmd = "AtlasDiff"
 	end
 	context.command = options.open_cmd
