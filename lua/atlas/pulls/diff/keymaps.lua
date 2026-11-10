@@ -5,6 +5,7 @@ local M = {}
 
 local shared_actions = {
 	"ui.help",
+	"ui.close",
 	"ui.open_actions",
 	"ui.open_in_browser",
 	"ui.refresh",
@@ -184,6 +185,11 @@ function M.setup(viewer)
 		end)
 	end
 	add(shared_items, "ui.help", 100, help.toggle)
+	add(shared_items, "ui.close", 101, function()
+		if not help.is_open() then
+			viewer:close("user_close")
+		end
+	end)
 
 	local explorer_items = vim.list_extend({}, shared_items)
 	if session.source.kind == "pr" then

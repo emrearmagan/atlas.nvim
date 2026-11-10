@@ -136,11 +136,6 @@ function M.setup(renderer, viewer, groups)
 	add(explorer_items, explorer_keys.fold_toggle, "Toggle folder", function()
 		explorer:toggle_folder()
 	end)
-	add(explorer_items, view_keys.quit, "Close review", function()
-		if not help.is_open() then
-			viewer:close("user_close")
-		end
-	end)
 
 	local threads = {}
 	if renderer.session.source.kind == "pr" then

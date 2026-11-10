@@ -55,12 +55,6 @@ function M.setup(renderer, viewer, groups)
 	add(file_items, "pulls.review.atlas.open_file", 31, function()
 		viewer:open_file()
 	end)
-	local close_items = {}
-	add(close_items, "ui.close", 101, function()
-		if not help.is_open() then
-			viewer:close("user_close")
-		end
-	end)
 	local explorer_items = {}
 	add(explorer_items, "ui.select", 1, function()
 		explorer:activate()
@@ -109,7 +103,6 @@ function M.setup(renderer, viewer, groups)
 		help.register(name, layout_items, { buffer = buf })
 		if buf ~= viewer.commits.buf then
 			help.register(name, file_items, { buffer = buf })
-			help.register(name, close_items, { buffer = buf })
 		end
 	end
 
