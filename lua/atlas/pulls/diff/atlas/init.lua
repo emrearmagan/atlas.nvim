@@ -16,6 +16,7 @@ local winbar = require("atlas.pulls.diff.ui.winbar")
 ---@field inline_hunk_lines integer[] Buffer lines to jump to in inline mode.
 ---@field document AtlasDiffDocument|nil
 ---@field revision_buf integer
+---@field right_options table<string, any>|nil The real file's own window options, put back when it leaves the right pane.
 ---@field group integer
 local Renderer = {}
 Renderer.__index = Renderer
@@ -173,16 +174,61 @@ local function release_buffer(renderer, buf)
 	end
 end
 
+-- Neovim remembers window options per buffer and starts the next window showing it with them,
+-- so a real file gets its own back when it leaves the right pane.
+local window_options = {
+	"statusline",
+	"winbar",
+	"statuscolumn",
+	"signcolumn",
+	"number",
+	"relativenumber",
+	"fillchars",
+	"winhighlight",
+	"wrap",
+	"diff",
+	"scrollbind",
+	"cursorbind",
+	"foldmethod",
+	"foldenable",
+	"foldlevel",
+	"foldminlines",
+	"foldcolumn",
+}
+
+---@param renderer AtlasDiffNativeRenderer
+local function save_window_options(renderer)
+	renderer.right_options = {}
+	for _, name in ipairs(window_options) do
+		renderer.right_options[name] = vim.wo[renderer.right.win][0][name]
+	end
+end
+
+---@param renderer AtlasDiffNativeRenderer
+local function restore_window_options(renderer)
+	local options = renderer.right_options
+	renderer.right_options = nil
+	if options and vim.api.nvim_win_is_valid(renderer.right.win) then
+		for name, value in pairs(options) do
+			vim.wo[renderer.right.win][0][name] = value
+		end
+	end
+end
+
 local function set_right_buffer(renderer, buf)
 	if buf == renderer.right.buf and vim.api.nvim_win_get_buf(renderer.right.win) == buf then
 		return
 	end
 
 	release_buffer(renderer, renderer.right.buf)
+	restore_window_options(renderer)
 
 	-- Our own buffer switches should not trigger another file load.
 	renderer.right.buf = buf
 	vim.api.nvim_win_set_buf(renderer.right.win, buf)
+	if buf ~= renderer.revision_buf then
+		save_window_options(renderer)
+	end
 	setup_window(renderer.right.win)
 end
 
@@ -434,6 +480,49 @@ function Renderer:get_selection()
 end
 
 local function setup_autocmds(renderer)
+	vim.api.nvim_create_autocmd("WinClosed", {
+		group = renderer.group,
+		pattern = tostring(renderer.right.win),
+		callback = function()
+			restore_window_options(renderer)
+		end,
+	})
+
+	if renderer.session.source.kind == "worktree" then
+		-- Other tabs can show your file from the working tree, so take the diff off it while this tab is hidden.
+		vim.api.nvim_create_autocmd("TabLeave", {
+			group = renderer.group,
+			callback = function()
+				local document = renderer.document
+				if vim.api.nvim_get_current_tabpage() == renderer.tabpage and document and document.buf then
+					release_buffer(renderer, document.buf)
+					restore_window_options(renderer)
+				end
+			end,
+		})
+
+		-- The reverse of TabLeave: put the diff back on the file when we return.
+		vim.api.nvim_create_autocmd("TabEnter", {
+			group = renderer.group,
+			callback = function()
+				local document = renderer.document
+				if vim.api.nvim_get_current_tabpage() ~= renderer.tabpage or not document or not document.buf then
+					return
+				end
+
+				local view = vim.api.nvim_win_call(renderer.right.win, vim.fn.winsaveview)
+				save_window_options(renderer)
+				setup_window(renderer.right.win)
+				render.render(renderer, document)
+				renderer.annotations = annotations.render(renderer, document)
+				renderer.on_file(document.file)
+				vim.api.nvim_win_call(renderer.right.win, function()
+					vim.fn.winrestview(view)
+				end)
+			end,
+		})
+	end
+
 	vim.api.nvim_create_autocmd("WinResized", {
 		group = renderer.group,
 		callback = function()
