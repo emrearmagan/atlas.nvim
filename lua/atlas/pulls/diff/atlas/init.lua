@@ -24,13 +24,15 @@ Renderer.__index = Renderer
 ---@field file AtlasDiffFile
 ---@field contents { old: { lines: string[], endofline: boolean }, new: { lines: string[], endofline: boolean } }
 ---@field binary boolean
+---@field buf integer|nil The real file shown on the right instead of a copy.
 ---@field hunks DiffHunk[] Used by inline mode and comment positions.
 ---@field split_hunks DiffHunk[] Used by side-by-side mode.
 
 ---@param file AtlasDiffFile
 ---@param contents { old: string, new: string }
+---@param buf integer|nil
 ---@return AtlasDiffDocument
-local function prepare_document(file, contents)
+local function prepare_document(file, contents, buf)
 	local old = contents.old:gsub("\r\n", "\n")
 	local new = contents.new:gsub("\r\n", "\n")
 	local binary = file.binary or old:find("\0", 1, true) ~= nil or new:find("\0", 1, true) ~= nil
@@ -57,6 +59,7 @@ local function prepare_document(file, contents)
 		file = file,
 		contents = { old = prepare_content(old), new = prepare_content(new) },
 		binary = binary,
+		buf = not binary and buf or nil,
 		hunks = hunks,
 		split_hunks = split_hunks,
 	}
@@ -73,6 +76,7 @@ local function setup_buffer(buf)
 end
 
 local function setup_window(win)
+	vim.w[win].atlas_diff = true
 	local options = vim.wo[win][0]
 	options.statuscolumn = vim.go.statuscolumn
 	options.signcolumn = vim.go.signcolumn
@@ -145,10 +149,28 @@ local function set_content(renderer, buf, content, path, binary)
 	vim.bo[buf].readonly = true
 end
 
+---@param renderer AtlasDiffNativeRenderer
+---@return string|nil
+local function files_root(renderer)
+	local session = renderer.session
+	if session.source.kind == "worktree" then
+		return session.range.root
+	end
+	return session.worktree_root
+end
+
 local function owns_buffer(renderer, buf)
 	return buf == renderer.left.buf
 		or buf == renderer.revision_buf
-		or worktree.relative_path(renderer.session.worktree_root, vim.api.nvim_buf_get_name(buf)) ~= nil
+		or worktree.relative_path(files_root(renderer), vim.api.nvim_buf_get_name(buf)) ~= nil
+end
+
+local function release_buffer(renderer, buf)
+	if vim.api.nvim_buf_is_valid(buf) and owns_buffer(renderer, buf) then
+		render.clear(buf)
+		annotations.clear(buf)
+		help.remove_buffer(buf)
+	end
 end
 
 local function set_right_buffer(renderer, buf)
@@ -156,12 +178,7 @@ local function set_right_buffer(renderer, buf)
 		return
 	end
 
-	local previous = renderer.right.buf
-	if vim.api.nvim_buf_is_valid(previous) and owns_buffer(renderer, previous) then
-		render.clear(previous)
-		annotations.clear(previous)
-		help.remove_buffer(previous)
-	end
+	release_buffer(renderer, renderer.right.buf)
 
 	-- Our own buffer switches should not trigger another file load.
 	renderer.right.buf = buf
@@ -186,12 +203,7 @@ local function display(renderer, document)
 		right_content = old
 	end
 
-	local right_buf = renderer.revision_buf
-	local root = renderer.session:head_worktree()
-	if root and not binary and file.status ~= "deleted" then
-		right_buf = worktree.load(root, file.path) or right_buf
-	end
-	set_right_buffer(renderer, right_buf)
+	set_right_buffer(renderer, document.buf or renderer.revision_buf)
 	if renderer.right.buf == renderer.revision_buf then
 		set_content(renderer, renderer.right.buf, right_content, file.path, binary)
 	end
@@ -202,6 +214,21 @@ local function display(renderer, document)
 
 	render.render(renderer, document)
 	renderer.annotations = annotations.render(renderer, document)
+end
+
+-- Staged files show the index, so they have no real file.
+---@param session AtlasDiffSessionInternal
+---@param file AtlasDiffFile
+---@return integer|nil
+local function right_buffer(session, file)
+	if file.binary or file.status == "deleted" then
+		return nil
+	end
+	if session.source.kind == "worktree" then
+		return not file.staged and worktree.file_buffer(session.range.root, file.path) or nil
+	end
+	local root = session:head_worktree()
+	return root and worktree.load(root, file.path) or nil
 end
 
 ---@param file AtlasDiffFile
@@ -222,9 +249,19 @@ function Renderer:show_file(file, on_done)
 		end
 	end
 
+	local buf = right_buffer(session, file)
+	local new = read(file.new_blob, file.path, file.status == "deleted")
+	if buf and session.source.kind == "worktree" then
+		-- Read your buffer instead of the disk, so unsaved edits show up too.
+		new = function(done)
+			local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+			done(vim.bo[buf].endofline and text .. "\n" or text, nil)
+		end
+	end
+
 	self.requests.all({
 		old = read(file.old_blob, file.old_path or file.path, file.status == "added"),
-		new = read(file.new_blob, file.path, file.status == "deleted"),
+		new = new,
 	}, function(contents, errors)
 		local err = errors.old or errors.new
 		if err then
@@ -233,10 +270,15 @@ function Renderer:show_file(file, on_done)
 		end
 
 		local rendered, document = pcall(function()
-			local prepared = prepare_document(file, contents)
+			local prepared = prepare_document(file, contents, buf)
 			local shown = self.document
 			-- Don't redraw a file that is already shown with the same content.
-			if not shown or shown.file.path ~= file.path or not vim.deep_equal(shown.contents, prepared.contents) then
+			if
+				not shown
+				or shown.file.path ~= file.path
+				or shown.buf ~= prepared.buf
+				or not vim.deep_equal(shown.contents, prepared.contents)
+			then
 				display(self, prepared)
 			end
 			return prepared
@@ -306,6 +348,7 @@ end
 function Renderer:dispose()
 	self.requests.cancel()
 	vim.api.nvim_del_augroup_by_id(self.group)
+	release_buffer(self, self.right.buf)
 	for _, buf in ipairs({ self.left.buf, self.revision_buf }) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			vim.api.nvim_buf_delete(buf, { force = true })
@@ -425,10 +468,11 @@ local function setup_autocmds(renderer)
 		group = renderer.group,
 		callback = function(event)
 			local buf = event.buf
-			local path = worktree.relative_path(renderer.session.worktree_root, vim.api.nvim_buf_get_name(buf))
-			if path and not vim.bo[buf].modified then
+			local name = vim.api.nvim_buf_get_name(buf)
+			if worktree.relative_path(renderer.session.worktree_root, name) and not vim.bo[buf].modified then
 				worktree.protect(buf)
 			end
+			local path = worktree.relative_path(files_root(renderer), name)
 			if vim.api.nvim_get_current_win() ~= renderer.right.win or buf == renderer.right.buf then
 				return
 			end
@@ -447,7 +491,7 @@ local function setup_autocmds(renderer)
 
 				local file
 				for _, item in ipairs(renderer.session.files) do
-					if item.path == path then
+					if item.path == path and not item.staged then
 						file = item
 						break
 					end

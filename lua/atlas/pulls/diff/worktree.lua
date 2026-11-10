@@ -34,7 +34,7 @@ end
 ---@param root string
 ---@param path string
 ---@return integer|nil
-function M.load(root, path)
+function M.file_buffer(root, path)
 	local full_path = vim.fs.joinpath(root, path)
 	-- A symlink's Git blob is its target path, not the target's contents.
 	local stat = vim.uv.fs_lstat(full_path)
@@ -43,10 +43,18 @@ function M.load(root, path)
 	end
 
 	local buf = vim.fn.bufadd(full_path)
-	if vim.bo[buf].modified then
+	if not pcall(vim.fn.bufload, buf) then
 		return
 	end
-	if not pcall(vim.fn.bufload, buf) then
+	return buf
+end
+
+---@param root string
+---@param path string
+---@return integer|nil
+function M.load(root, path)
+	local buf = M.file_buffer(root, path)
+	if not buf or vim.bo[buf].modified then
 		return
 	end
 
