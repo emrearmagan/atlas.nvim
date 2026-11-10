@@ -72,12 +72,8 @@ function M.layout(viewer)
 	end
 
 	local function lsp()
-		local client = vim.lsp.get_clients({ bufnr = viewer.renderer.right.buf })[1]
-		if client then
-			return {
-				text = string.format("%s %s", icons.get("lsp"), client.name),
-				hl_group = "AtlasFooterInfo",
-			}
+		if #vim.lsp.get_clients({ bufnr = viewer.renderer.right.buf }) > 0 then
+			return { text = icons.get("lsp"), hl_group = "AtlasFooterInfo" }
 		end
 	end
 
