@@ -388,6 +388,10 @@ local function toggle_subscription(ctx, done)
 			end
 			details.is_subscribed = subscribed
 			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			if ctx.details then
+				done({ changed_pr = false }, nil)
+				return
+			end
 			done({ changed_pr = true }, nil)
 		end)
 	end

@@ -4,7 +4,6 @@ local create_remotes = require("atlas.pulls.create.remotes")
 local description = require("atlas.pulls.create.description")
 local form = require("atlas.ui.form")
 local git = require("atlas.core.git")
-local keymaps = require("atlas.core.keymaps")
 local meta = require("atlas.pulls.editor.meta")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
@@ -367,15 +366,13 @@ end
 local function open_editor(state, content)
 	local form_keymaps = {
 		{
-			key = keymaps.resolve("editor.base"),
-			desc = "base",
+			keymap = "editor.base",
 			action = function(editor)
 				select_base(state, editor)
 			end,
 		},
 		{
-			key = keymaps.resolve("editor.draft"),
-			desc = "draft",
+			keymap = "editor.draft",
 			action = function(editor)
 				if state.submitting then
 					return
@@ -387,23 +384,18 @@ local function open_editor(state, content)
 	}
 	if state.write.fetch_reviewer_candidates then
 		table.insert(form_keymaps, 2, {
-			key = keymaps.resolve("editor.reviewers"),
-			desc = "reviewers",
+			keymap = "editor.reviewers",
 			action = function(editor)
 				select_reviewers(state, editor)
 			end,
 		})
 	end
-	local diff_keys = keymaps.resolve("pulls.open_diff")
-	if diff_keys then
-		form_keymaps[#form_keymaps + 1] = {
-			key = diff_keys,
-			desc = "diff",
-			action = function(editor)
-				preview_diff(state, editor)
-			end,
-		}
-	end
+	form_keymaps[#form_keymaps + 1] = {
+		keymap = "pulls.open_diff",
+		action = function(editor)
+			preview_diff(state, editor)
+		end,
+	}
 
 	state.completion_context = { provider = state.repository.provider, repository = state.repo_slug }
 	local editor = form.open({
@@ -454,6 +446,9 @@ function M.open()
 			head = function(done)
 				return git.current_branch(root, done)
 			end,
+			resolved = function(done)
+				return git.resolved_remotes(root, done)
+			end,
 		}, function(values, errors)
 			local load_err = errors.remotes or errors.head
 			if load_err then
@@ -470,7 +465,8 @@ function M.open()
 				end
 				branch_remotes = branch_remotes or {}
 
-				local base_remote, base_err = create_remotes.base_remote(values.remotes, branch_remotes.merge)
+				local base_remote, base_err =
+					create_remotes.base_remote(values.remotes, branch_remotes.merge, values.resolved)
 				local head_remote, head_err = create_remotes.head_remote(values.remotes, branch_remotes.push)
 				local remote_err = base_err or head_err or create_remotes.validate(head_remote, base_remote)
 				if remote_err then
@@ -478,9 +474,9 @@ function M.open()
 					return
 				end
 
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local base_remote_info = assert(base_remote)
-				---@type AtlasCreateRemote
+				---@type AtlasGitRemote
 				local head_remote_info = assert(head_remote)
 				local repository = base_remote_info.target --[[@as AtlasTarget]]
 				local provider = providers.load(repository.provider, "pulls")

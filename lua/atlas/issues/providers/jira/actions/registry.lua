@@ -10,7 +10,6 @@ local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
-local service = require("atlas.providers.jira.client")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.providers.jira.users")
@@ -274,16 +273,6 @@ local function edit_issue(ctx, done)
 	end)
 end
 
----@param groups JiraProjectGroup[]
----@return JiraIssueProject[]
-local function flatten_projects(groups)
-	local projects = {}
-	for _, group in ipairs(groups) do
-		vim.list_extend(projects, group.projects)
-	end
-	return projects
-end
-
 ---@param project JiraIssueProject
 ---@return string
 local function format_project(project)
@@ -308,60 +297,29 @@ local function create_issue(_, done)
 	end
 
 	notify.loading("Loading projects...")
-	return projects_api.get_projects({ maxResults = 50, total = math.huge, status = "live" }, function(groups, err)
-		if err or not groups then
+	local opts = { maxResults = 50, total = math.huge, status = "live", action = "create" }
+	return projects_api.get_projects(opts, function(projects, err)
+		if err or not projects then
 			err = err or "Failed to load projects"
 			notify.error(err)
 			done(nil, err)
 			return
 		end
 
-		local projects = flatten_projects(groups)
+		notify.clear()
 		if #projects == 0 then
-			notify.info("No Jira projects found")
+			notify.info("No Jira projects allow creating issues")
 			done(nil, nil)
-			return
+		elseif #projects == 1 then
+			open_editor(projects[1])
+		else
+			picker.select({
+				title = "Create Issue",
+				items = projects,
+				format_item = format_project,
+				on_select = open_editor,
+			})
 		end
-
-		local project_ids = {}
-		for _, project in ipairs(projects) do
-			local project_id = tonumber(project.id)
-			if project_id then
-				table.insert(project_ids, project_id)
-			end
-		end
-
-		issues_api.get_permissions_bulk({
-			permissions = { "CREATE_ISSUES" },
-			project_ids = project_ids,
-		}, function(permission_map, perm_err)
-			if perm_err or not permission_map then
-				perm_err = perm_err or "Failed to load project permissions"
-				notify.error(perm_err)
-				done(nil, perm_err)
-				return
-			end
-
-			local allowed_map = permission_map.CREATE_ISSUES or {}
-			local allowed_projects = vim.tbl_filter(function(project)
-				return allowed_map[tonumber(project.id)] == true
-			end, projects)
-
-			notify.clear()
-			if #allowed_projects == 0 then
-				notify.info("No Jira projects allow creating issues")
-				done(nil, nil)
-			elseif #allowed_projects == 1 then
-				open_editor(allowed_projects[1])
-			else
-				picker.select({
-					title = "Create Issue",
-					items = allowed_projects,
-					format_item = format_project,
-					on_select = open_editor,
-				})
-			end
-		end)
 	end)
 end
 
@@ -457,14 +415,13 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search_issue(ctx, done)
-	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-		if err or not groups then
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(projects, err)
+		if err or not projects then
 			notify.error(err or "Failed to load projects")
 			done(nil, err or "Failed to load projects")
 			return
 		end
 
-		local projects = flatten_projects(groups)
 		if #projects <= 1 then
 			search_issues(projects[1], ctx, done)
 			return
@@ -498,14 +455,13 @@ end
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function open_project(_, done)
-	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-		if err or not groups then
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(projects, err)
+		if err or not projects then
 			notify.error(err or "Failed to load projects")
 			done(nil, err or "Failed to load projects")
 			return
 		end
 
-		local projects = flatten_projects(groups)
 		if #projects == 0 then
 			notify.info("No Jira projects found")
 			done(nil, nil)
@@ -536,90 +492,67 @@ local function search_jql(_, done)
 	done(nil, nil)
 end
 
----@param issue Issue
----@return string|nil
-local function issue_url(issue)
-	local base_url = service.base_url():gsub("/$", "")
-	if base_url == "" then
-		return nil
-	end
-	return base_url .. "/browse/" .. issue.key
-end
-
----@param ctx AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function browse_issue(ctx, done)
-	local issue = assert(ctx.issue)
-
-	local url = issue_url(issue)
-	if url == nil then
-		notify.error("No URL found for issue")
-		done(nil, "No URL found for issue")
-		return
-	end
-
-	vim.ui.open(url)
-	notify.success(string.format("Opened %s in browser", issue.key), { timeout = 1200 })
-	done(nil, nil)
-end
-
----@param ctx AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function copy_issue_url(ctx, done)
-	local issue = assert(ctx.issue)
-
-	local url = issue_url(issue)
-	if url == nil then
-		notify.error("No URL found for issue")
-		done(nil, "No URL found for issue")
-		return
-	end
-
-	vim.fn.setreg("+", url)
-	vim.fn.setreg('"', url)
-	notify.success("Copied issue URL", { timeout = 1200 })
-	done(nil, nil)
-end
-
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
-	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 
-	local function finish(subscribed, err)
-		if err then
-			notify.error(tostring(err))
-			done(nil, tostring(err))
+	---@param details IssueDetails
+	local function update(details)
+		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+
+		local function finish(subscribed, err)
+			if err then
+				notify.error(tostring(err))
+				done(nil, tostring(err))
+				return
+			end
+			details.is_subscribed = subscribed == true
+			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			if ctx.details then
+				done(nil, nil)
+				return
+			end
+			done({ issue_key = issue.key }, nil)
+		end
+
+		if details.is_subscribed ~= true then
+			issues_api.set_subscription(issue_key, true, nil, finish)
 			return
 		end
-		issue.is_subscribed = subscribed == true
-		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
-		done({ issue_key = issue.key }, nil)
-	end
 
-	if issue.is_subscribed ~= true then
-		issues_api.set_subscription(issue_key, true, nil, finish)
-		return
-	end
+		local function unsubscribe(account_id)
+			issues_api.set_subscription(issue_key, false, account_id, finish)
+		end
 
-	local function unsubscribe(account_id)
-		issues_api.set_subscription(issue_key, false, account_id, finish)
-	end
-
-	local current = ctx.current_user
-	if current and (current.id or "") ~= "" then
-		unsubscribe(current.id)
-		return
-	end
-
-	users_api.fetch_user(function(user, err)
-		if err or not user or user.id == "" then
-			finish(nil, err or "Failed to fetch Jira user")
+		local current = ctx.current_user
+		if current and (current.id or "") ~= "" then
+			unsubscribe(current.id)
 			return
 		end
-		unsubscribe(user.id)
+
+		users_api.fetch_user(function(user, err)
+			if err or not user or user.id == "" then
+				finish(nil, err or "Failed to fetch Jira user")
+				return
+			end
+			unsubscribe(user.id)
+		end)
+	end
+
+	if ctx.details then
+		update(ctx.details)
+		return
+	end
+	issues_api.fetch_issue(issue, nil, function(details, err)
+		if details == nil then
+			local message = tostring(err or "Failed to load issue details")
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		update(details)
 	end)
 end
 
@@ -687,21 +620,9 @@ register({
 	end,
 })
 register(actions.manage_templates)
-register({
-	id = "browse_issue",
-	label = "Open Issue In Browser",
-	hidden = true,
-	is_available = has_issue_key,
-	run = browse_issue,
-})
+register(actions.browse_issue)
 register(actions.copy_issue_key)
-register({
-	id = "copy_issue_url",
-	label = "Copy Issue URL",
-	hidden = true,
-	is_available = has_issue_key,
-	run = copy_issue_url,
-})
+register(actions.copy_issue_url)
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",

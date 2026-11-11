@@ -110,11 +110,6 @@ function M.delete_memory_cache(key)
 	memory_cache.delete(key)
 end
 
----@param prefix string
-function M.clear_memory_cache(prefix)
-	memory_cache.clear_prefix(prefix)
-end
-
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)
@@ -181,12 +176,6 @@ function M.request(method, endpoint, data, on_done, ctx)
 		build_headers(),
 		payload,
 		function(result, err, status)
-			if err then
-				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-				on_done(nil, err, status)
-				return
-			end
-
 			if type(result) == "table" and not vim.islist(result) then
 				local api_err = error_message(result.message) or error_message(result.error_description)
 				if api_err == nil and result.error ~= nil and result.error ~= vim.NIL then
@@ -197,6 +186,12 @@ function M.request(method, endpoint, data, on_done, ctx)
 					on_done(nil, api_err, status)
 					return
 				end
+			end
+
+			if err then
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+				on_done(nil, err, status)
+				return
 			end
 
 			on_done(result, nil, status)
@@ -250,15 +245,15 @@ function M.graphql(query, variables, on_done, ctx)
 	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
 	local message, log = log_request("GitLab GraphQL", { transport = "graphql" }, ctx)
 	return http.curl_request("POST", M.base_url() .. "/api/graphql", build_headers(), payload, function(result, err)
-		if err then
-			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-			on_done(nil, err)
-			return
-		end
 		if type(result) == "table" and type(result.errors) == "table" and #result.errors > 0 then
 			local graphql_err = tostring(result.errors[1].message or "GraphQL error")
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = graphql_err }))
 			on_done(nil, graphql_err)
+			return
+		end
+		if err then
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+			on_done(nil, err)
 			return
 		end
 		on_done(type(result) == "table" and result.data or nil, nil)

@@ -192,7 +192,7 @@ end
 ---@param url string Full URL
 ---@param headers table<string, string> HTTP headers
 ---@param data? string JSON data for POST/PUT
----@param callback fun(result?: table, err?: string, status?: integer, headers?: table<string, string>)
+---@param callback fun(result?: table, err?: string, status?: integer, headers?: table<string, string>) result is the decoded error body on non-2xx
 ---@param opts? { response_headers?: boolean }
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_request(method, url, headers, data, callback, opts)
@@ -212,11 +212,16 @@ function M.curl_request(method, url, headers, data, callback, opts)
 		end
 
 		if http_status ~= nil and (http_status < 200 or http_status >= 300) then
+			local ok, error_body = pcall(vim.json.decode, body)
+			if not ok then
+				error_body = nil
+			end
+
 			local response_text = one_line(body)
 			if response_text == "" then
-				callback(nil, string.format("HTTP %d", http_status), http_status)
+				callback(error_body, string.format("HTTP %d", http_status), http_status)
 			else
-				callback(nil, string.format("HTTP %d: %s", http_status, response_text), http_status)
+				callback(error_body, string.format("HTTP %d: %s", http_status, response_text), http_status)
 			end
 			return
 		end

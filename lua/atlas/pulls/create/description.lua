@@ -112,7 +112,7 @@ local function jira_url()
 	if jira == nil then
 		return nil
 	end
-	local base_url = vim.trim(jira.base_url or ""):gsub("/+$", "")
+	local base_url = jira.base_url or ""
 	if base_url == "" then
 		return nil
 	end

@@ -1,6 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local keymaps = require("atlas.core.keymaps")
 local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
@@ -256,34 +257,37 @@ local function edit_template(selected, on_done)
 	end
 
 	local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
+	local actions = {}
+	local delete_keymap = keymaps.resolve("editor.delete_template")
+	if delete_keymap then
+		actions[1] = {
+			key = delete_keymap.key[1],
+			description = delete_keymap.label,
+			callback = function(editor_context)
+				vim.ui.input({
+					prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
+				}, function(confirm)
+					if vim.trim(confirm or ""):lower() ~= "y" then
+						return
+					end
+
+					local deleted, delete_err = delete(selected.name)
+					if not deleted then
+						on_done(delete_err or "Failed to delete template")
+						return
+					end
+
+					editor_context.close()
+					on_done()
+				end)
+			end,
+		}
+	end
 	markdown_editor.open({
 		key = key,
 		title = string.format(" Template: %s ", selected.name),
 		initial_text = content,
-		actions = {
-			{
-				key = "<C-d>",
-				description = "delete",
-				callback = function(editor_context)
-					vim.ui.input({
-						prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
-					}, function(confirm)
-						if vim.trim(confirm or ""):lower() ~= "y" then
-							return
-						end
-
-						local deleted, delete_err = delete(selected.name)
-						if not deleted then
-							on_done(delete_err or "Failed to delete template")
-							return
-						end
-
-						editor_context.close()
-						on_done()
-					end)
-				end,
-			},
-		},
+		actions = actions,
 		on_save = function(text)
 			local ok, write_err = write(selected.name, text, { overwrite = true })
 			if not ok then

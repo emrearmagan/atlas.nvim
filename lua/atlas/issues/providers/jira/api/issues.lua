@@ -20,7 +20,6 @@ local function search_fields(story_points_field)
 		"priority",
 		"issuetype",
 		"duedate",
-		"watches",
 		"created",
 		"updated",
 		"resolutiondate",
@@ -42,7 +41,8 @@ end
 ---@param extra_fields string[]
 ---@return string[]
 local function detail_fields(extra_fields)
-	local fields = { "summary", "description", "issuetype", "labels", "status", "priority", "assignee", "reporter" }
+	local fields =
+		{ "summary", "description", "issuetype", "labels", "status", "priority", "assignee", "reporter", "watches" }
 	vim.list_extend(fields, extra_fields)
 	return fields
 end
@@ -52,7 +52,7 @@ end
 ---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
-	local cache_key = string.format("jira:search:v7:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("jira:search:v8:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if opts.force_refresh then
 		service.clear_memory_cache()
@@ -86,7 +86,7 @@ function M.search_issues(jql, on_done, opts)
 			return
 		end
 
-		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field, service.base_url())
 		local next_cursor
 		local total_pages
 		if service.is_server() then
@@ -249,7 +249,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 			return
 		end
 
-		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field, service.base_url())
 		service.set_memory_cache(cache_key, items)
 		on_done(items, nil)
 	end, {
@@ -339,7 +339,7 @@ function M.create_issue(fields, callback)
 		end
 
 		service.clear_memory_cache()
-		callback({ key = result.key, id = result.id, self = result.self }, nil)
+		callback({ key = result.key }, nil)
 	end, {
 		action = "Create issue",
 		summary = fields.summary,
@@ -606,88 +606,6 @@ function M.get_assignable_users(opts, query, callback)
 		issue_key = issue_key,
 		project = project,
 		query = q,
-	})
-end
-
----@param opts { permissions?: string[]|nil, project_ids?: integer[]|nil, issue_ids?: integer[]|nil, account_id?: string|nil }
----@param callback fun(permissions: table<string, table<number, boolean>>|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.get_permissions_bulk(opts, callback)
-	opts = opts or {}
-
-	local permissions_list = {}
-	for _, key in ipairs(opts.permissions or {}) do
-		local value = vim.trim(key)
-		if value ~= "" then
-			table.insert(permissions_list, value)
-		end
-	end
-
-	if #permissions_list == 0 then
-		callback(nil, "Missing permissions")
-		return nil
-	end
-
-	local project_ids = opts.project_ids or {}
-	local issue_ids = opts.issue_ids or {}
-
-	local payload = {
-		projectPermissions = {
-			{
-				permissions = permissions_list,
-				projects = project_ids,
-				issues = issue_ids,
-			},
-		},
-	}
-
-	if opts.account_id and opts.account_id ~= "" then
-		payload.accountId = opts.account_id
-	end
-
-	return service.request("POST", "/permissions/check", payload, function(result, err)
-		if err ~= nil then
-			-- Handle 404 as a fallback since Jira server API don't have bulk permissions endpoint
-			if err and err:find("HTTP 404", 1, true) == 1 then
-				local fallback = {}
-				for _, key in ipairs(permissions_list) do
-					fallback[key] = {}
-					for _, pid in ipairs(project_ids) do
-						fallback[key][pid] = true
-					end
-					for _, iid in ipairs(issue_ids) do
-						fallback[key][iid] = true
-					end
-				end
-				callback(fallback, nil)
-				return
-			end
-			callback(nil, err or "Empty response")
-			return
-		end
-
-		---@type table<string, table<number, boolean>>
-		local permissions = {}
-		for _, entry in ipairs(result.projectPermissions or {}) do
-			local permission_key = type(entry.permission) == "string" and entry.permission or ""
-			if permission_key ~= "" then
-				permissions[permission_key] = permissions[permission_key] or {}
-				for _, project_id in ipairs(entry.projects or {}) do
-					local id_num = tonumber(project_id)
-					if id_num ~= nil then
-						permissions[permission_key][id_num] = true
-					end
-				end
-			end
-		end
-
-		callback(permissions, nil)
-	end, {
-		action = "Fetch bulk permissions",
-		permissions = permissions_list,
-		project_count = #project_ids,
-		issue_count = #issue_ids,
-		account_id = opts.account_id,
 	})
 end
 

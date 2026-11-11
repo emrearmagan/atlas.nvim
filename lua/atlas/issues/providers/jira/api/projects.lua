@@ -9,6 +9,13 @@ local json = require("atlas.core.json")
 ---@param callback fun(statuses: JiraIssueStatus[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_statuses(project, callback)
+	local cache_key = "jira:project-statuses:" .. project
+	local cached, ok = service.get_memory_cache(cache_key)
+	if ok then
+		callback(cached, nil)
+		return nil
+	end
+
 	return service.request("GET", "/project/" .. url_encode(project) .. "/statuses", nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
@@ -28,16 +35,13 @@ function M.get_statuses(project, callback)
 				end
 			end
 		end
+		service.set_memory_cache(cache_key, statuses)
 		callback(statuses, nil)
 	end, { action = "Fetch project statuses", project = project })
 end
 
----@class JiraProjectGroup
----@field category table|nil
----@field projects JiraIssueProject[]
-
----@param opts { maxResults?: integer, total?: integer, status?: string, query?: string }|nil
----@param callback fun(groups: JiraProjectGroup[]|nil, err: string|nil)
+---@param opts { maxResults?: integer, total?: integer, status?: string, query?: string, action?: "view"|"browse"|"edit"|"create" }|nil
+---@param callback fun(projects: JiraIssueProject[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_projects(opts, callback)
 	opts = opts or {}
@@ -58,31 +62,6 @@ function M.get_projects(opts, callback)
 		end
 	end
 
-	local function build_groups(items)
-		---@type JiraProjectGroup[]
-		local groups = {}
-		local index_by_key = {}
-
-		for _, project in ipairs(items) do
-			local category = project.category
-			local category_key = "uncategorized"
-			if category ~= nil and category.id ~= "" then
-				category_key = category.id
-			end
-
-			local group_idx = index_by_key[category_key]
-			if group_idx == nil then
-				group_idx = #groups + 1
-				index_by_key[category_key] = group_idx
-				groups[group_idx] = { category = category, projects = {} }
-			end
-
-			table.insert(groups[group_idx].projects, project)
-		end
-
-		return groups
-	end
-
 	local function fetch_page(start_at)
 		if cancelled then
 			return
@@ -97,6 +76,9 @@ function M.get_projects(opts, callback)
 				string.format("%s?maxResults=%d&startAt=%d&status=%s", path, max_results, start_at, url_encode(status))
 			if query ~= "" then
 				endpoint = endpoint .. "&query=" .. url_encode(query)
+			end
+			if opts.action then
+				endpoint = endpoint .. "&action=" .. opts.action
 			end
 		end
 
@@ -131,7 +113,7 @@ function M.get_projects(opts, callback)
 
 			pages_loaded = pages_loaded + 1
 			if normalized.isLast == true or pages_loaded >= total_pages then
-				callback(build_groups(projects), nil)
+				callback(projects, nil)
 				return
 			end
 

@@ -17,7 +17,7 @@ local function append_issue(links, raw, relationship)
 	local fields = json.safe_table(raw.fields)
 	table.insert(links, {
 		kind = "issue",
-		url = service.base_url():gsub("/+$", "") .. "/browse/" .. key,
+		url = service.base_url() .. "/browse/" .. key,
 		key = key,
 		title = json.safe_str(fields.summary),
 		relationship = relationship,

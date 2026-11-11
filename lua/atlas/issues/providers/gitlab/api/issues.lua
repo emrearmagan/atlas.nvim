@@ -34,6 +34,7 @@ query($path: ID!, $iid: String!) {
     issue(iid: $iid) {
       title
       description
+      subscribed
       assignees(first: 100) { nodes { id username name } }
       labels(first: 100) { nodes { title color } }
       milestone { id title }
@@ -80,7 +81,6 @@ query(
       state
       issue_type: type
       confidential
-      subscribed
       author { id username name }
       assignees(first: 1) { nodes { id username name } }
       web_url: webUrl
@@ -507,7 +507,7 @@ function M.set_assignee_ids(key, ids, on_done)
 	})
 end
 
----@param opts { project_path: string, title: string, description: string|nil, assignee_ids: integer[]|nil, labels: string[]|nil, milestone_id: integer|nil, due_date: string|nil, confidential: boolean|nil }
+---@param opts { project_path: string, title: string, description: string|nil, assignee_ids: integer[]|nil, labels: string[]|nil, milestone_id: integer|nil }
 ---@param on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
@@ -534,12 +534,6 @@ function M.create_issue(opts, on_done)
 	end
 	if opts.milestone_id then
 		payload.milestone_id = opts.milestone_id
-	end
-	if opts.due_date and opts.due_date ~= "" then
-		payload.due_date = opts.due_date
-	end
-	if opts.confidential == true then
-		payload.confidential = true
 	end
 
 	local endpoint = string.format("/projects/%s/issues", service.url_encode(path))

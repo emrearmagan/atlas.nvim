@@ -23,7 +23,6 @@
 ---@field closed_at string|nil
 ---@field comment_count integer|nil
 ---@field is_starred boolean|nil
----@field is_subscribed boolean|nil
 
 ---@class IssueDetails
 ---@field title string|nil
@@ -32,6 +31,7 @@
 ---@field assignees AtlasUser[]
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
+---@field is_subscribed boolean|nil
 
 --------------------------------------------------------------------------------
 -- Label
@@ -76,10 +76,7 @@
 ---@field id string
 ---@field name string
 ---@field icon AtlasIconStyle|nil
----@field to_status_id string|nil
 ---@field to_status_name string|nil
----@field to_status_category string|nil
----@field to_status_color string|nil
 
 --------------------------------------------------------------------------------
 -- Comment

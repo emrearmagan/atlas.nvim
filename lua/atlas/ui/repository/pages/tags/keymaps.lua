@@ -9,10 +9,10 @@ local M = {}
 local function register(buf, actions)
 	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
-		if action.key and #action.key > 0 then
+		if action.keymap then
 			table.insert(groups[action.group or "General"], {
-				key = action.key,
-				desc = action.desc,
+				key = action.keymap.key,
+				desc = action.keymap.desc,
 				index = action.index,
 				callback = action.callback,
 				opts = { nowait = true, silent = true },
@@ -29,8 +29,7 @@ end
 ---@param callbacks table<string, function>
 function M.setup(state, callbacks)
 	local refresh = {
-		key = vim.list_extend(resolver.resolve("ui.refresh") or {}, resolver.resolve("ui.refresh_view") or {}),
-		desc = "Refresh tags",
+		keymap = resolver.resolve({ "ui.refresh", "ui.refresh_view" }),
 		callback = function()
 			callbacks.load(state)
 		end,
@@ -41,24 +40,21 @@ function M.setup(state, callbacks)
 	register(state.buf, {
 		refresh,
 		{
-			key = resolver.resolve("ui.next_page"),
-			desc = "Next page",
+			keymap = resolver.resolve("ui.next_page"),
 			callback = function()
 				callbacks.next_page(state)
 			end,
 			index = 16,
 		},
 		{
-			key = resolver.resolve("ui.previous_page"),
-			desc = "Previous page",
+			keymap = resolver.resolve("ui.previous_page"),
 			callback = function()
 				callbacks.previous_page(state)
 			end,
 			index = 15,
 		},
 		{
-			key = resolver.resolve("ui.search"),
-			desc = "Search tags",
+			keymap = resolver.resolve("ui.search"),
 			group = "Filters",
 			callback = function()
 				callbacks.search(state)
@@ -66,48 +62,42 @@ function M.setup(state, callbacks)
 			index = 1,
 		},
 		{
-			key = vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
-			desc = "Toggle tag details",
+			keymap = resolver.resolve({ "ui.toggle_fold", "ui.select" }),
 			callback = function()
 				callbacks.toggle_details(state)
 			end,
 			index = 1,
 		},
 		{
-			key = resolver.resolve("pulls.open_diff"),
-			desc = "Open diff",
+			keymap = resolver.resolve("pulls.open_diff"),
 			callback = function()
 				callbacks.open_diff(state)
 			end,
 			index = 2,
 		},
 		{
-			key = resolver.resolve("ui.show_details"),
-			desc = "Show tag details",
+			keymap = resolver.resolve("ui.show_details"),
 			callback = function()
 				callbacks.show_details(state)
 			end,
 			index = 3,
 		},
 		{
-			key = resolver.resolve("ui.open_in_browser"),
-			desc = "Open tag in browser",
+			keymap = resolver.resolve("ui.open_in_browser"),
 			callback = function()
 				callbacks.open_in_browser(state)
 			end,
 			index = 4,
 		},
 		{
-			key = resolver.resolve("ui.copy_id"),
-			desc = "Copy commit SHA",
+			keymap = resolver.resolve("ui.copy_id"),
 			callback = function()
 				callbacks.copy_sha(state)
 			end,
 			index = 8,
 		},
 		{
-			key = resolver.resolve("ui.copy_url"),
-			desc = "Copy tag URL",
+			keymap = resolver.resolve("ui.copy_url"),
 			callback = function()
 				callbacks.copy_url(state)
 			end,

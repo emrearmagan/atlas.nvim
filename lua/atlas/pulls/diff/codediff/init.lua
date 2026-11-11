@@ -278,7 +278,7 @@ local function setup_worktree(renderer)
 	})
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param options AtlasPullsDiffConfig
 ---@param on_file fun(file: AtlasDiffFile|nil)
 ---@return AtlasDiffCodeDiffRenderer

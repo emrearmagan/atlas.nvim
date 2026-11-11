@@ -176,6 +176,17 @@ local function open_in_browser(state)
 	end
 end
 
+---@param state RepositoryBuilds
+local function copy_url(state)
+	local run = current(state)
+	if run and run.url then
+		vim.fn.setreg("+", run.url)
+		notify.success("Copied URL")
+	elseif run then
+		notify.info("This build has no browser URL")
+	end
+end
+
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	local provider = providers.load(opts.provider.id, "pulls")
@@ -205,10 +216,13 @@ function M.open(opts)
 		end
 	end
 
-	keymaps.setup(
-		state,
-		{ change_branch = change_branch, load = load, open_build = open_build, open_in_browser = open_in_browser }
-	)
+	keymaps.setup(state, {
+		change_branch = change_branch,
+		copy_url = copy_url,
+		load = load,
+		open_build = open_build,
+		open_in_browser = open_in_browser,
+	})
 	load(state)
 end
 

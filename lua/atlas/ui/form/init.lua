@@ -5,6 +5,7 @@ local form_keymaps = require("atlas.ui.form.keymaps")
 local renderer = require("atlas.ui.form.renderer")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
+local components = require("atlas.ui.statusline.components")
 local utils = require("atlas.ui.shared.utils")
 
 ---@class AtlasForm
@@ -80,14 +81,6 @@ local function configure_window(win)
 end
 
 ---@param form AtlasForm
-local function render_statusline(form)
-	local modified = form.opts.is_modified and form.opts.is_modified(form)
-	local items = form_keymaps.statusline_items(form.opts)
-	items[#items + 1] = { text = modified and "Modified" or "", hl_group = "AtlasFooterWarning", align = "right" }
-	form.statusline:set_items(items)
-end
-
----@param form AtlasForm
 local function setup_autocmds(form)
 	local title_deleted = false
 	vim.api.nvim_buf_attach(form.editor_buf, false, {
@@ -107,7 +100,7 @@ local function setup_autocmds(form)
 				vim.api.nvim_buf_set_lines(form.editor_buf, row, row, false, { "" })
 				vim.api.nvim_win_set_cursor(form.editor_win, { row + 1, 0 })
 			end
-			render_statusline(form)
+			form.statusline:redraw()
 		end,
 	})
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
@@ -161,7 +154,6 @@ function M.open(opts)
 	vim.api.nvim_buf_set_name(meta_buf, string.format("atlas://form/%d/meta", editor_buf))
 	local meta_win = vim.api.nvim_open_win(meta_buf, false, { split = "above", win = editor_win, height = 1 })
 
-	---@type AtlasForm
 	local form = {
 		tab = vim.api.nvim_get_current_tabpage(),
 		source_tab = source_tab,
@@ -175,8 +167,23 @@ function M.open(opts)
 		meta_spinner = spinner.create(),
 		augroup = vim.api.nvim_create_augroup("AtlasForm" .. editor_buf, { clear = true }),
 		closed = false,
-		statusline = statusline.new({ show_version = true }),
 	}
+	---@cast form AtlasForm
+	form.statusline = statusline.new({
+		layout = {
+			function(ctx)
+				return components.hints(ctx.buf, form_keymaps.hints(opts), true)
+			end,
+			"%=",
+			function()
+				if opts.is_modified and opts.is_modified(form) then
+					return { text = "Modified", hl_group = "AtlasFooterWarning" }
+				end
+			end,
+			components.version,
+			components.help,
+		},
+	})
 	form.meta_spinner.on_tick = function()
 		renderer.render_meta(form)
 	end
@@ -224,7 +231,7 @@ function M.render_meta(form)
 		form.meta_spinner:stop()
 	end
 	renderer.render_meta(form)
-	render_statusline(form)
+	form.statusline:redraw()
 end
 
 ---@param form AtlasForm
@@ -253,7 +260,7 @@ function M.set_content(form, content)
 		vim.api.nvim_buf_set_lines(form.editor_buf, 1, -1, false, vim.split(content.body, "\n", { plain = true }))
 	end
 	vim.bo[form.editor_buf].modifiable = modifiable
-	render_statusline(form)
+	form.statusline:redraw()
 	return true
 end
 

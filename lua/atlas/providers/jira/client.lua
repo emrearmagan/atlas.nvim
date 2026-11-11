@@ -85,12 +85,11 @@ end
 
 ---@param key string
 ---@param value any
----@param ttl number|nil
-function M.set_memory_cache(key, value, ttl)
+function M.set_memory_cache(key, value)
 	if cache_ttl() <= 0 then
 		return
 	end
-	memory_cache.set(key, value, ttl or cache_ttl())
+	memory_cache.set(key, value, cache_ttl())
 end
 
 ---@param key string
@@ -149,22 +148,7 @@ function M.request(method, endpoint, data, on_done, ctx)
 	log.action = nil
 	logger.loginfo(message, log)
 	return http.curl_request(method, url, headers, payload, function(result, err)
-		if err then
-			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-			on_done(nil, err)
-			return
-		end
-
-		if type(result) ~= "table" then
-			logger.logerror(
-				message .. " failed",
-				vim.tbl_extend("force", {}, log, { error = "Jira response is not a JSON object" })
-			)
-			on_done(nil, "Jira response is not a JSON object")
-			return
-		end
-
-		if result.errorMessage or result.errorMessages or result.errors then
+		if result and (result.errorMessage or result.errorMessages or result.errors) then
 			local messages = {}
 			if result.errorMessage then
 				table.insert(messages, result.errorMessage)
@@ -183,6 +167,21 @@ function M.request(method, endpoint, data, on_done, ctx)
 				on_done(nil, table.concat(messages, "; "))
 				return
 			end
+		end
+
+		if err then
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+			on_done(nil, err)
+			return
+		end
+
+		if type(result) ~= "table" then
+			logger.logerror(
+				message .. " failed",
+				vim.tbl_extend("force", {}, log, { error = "Jira response is not a JSON object" })
+			)
+			on_done(nil, "Jira response is not a JSON object")
+			return
 		end
 
 		on_done(result, nil)

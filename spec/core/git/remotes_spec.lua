@@ -57,8 +57,8 @@ describe("core.git remotes", function()
 			return { name = name, url = url, target = slug and git.parse_remote_url(url) or nil }
 		end
 
-		local function selected(remotes)
-			local value = git.select_base_remote(remotes)
+		local function selected(remotes, resolved)
+			local value = git.select_base_remote(remotes, resolved)
 			return value and value.name
 		end
 
@@ -75,6 +75,43 @@ describe("core.git remotes", function()
 			assert.equal("origin", selected({ remote("upstream"), remote("origin", "me/repo") }))
 			assert.is_nil(selected({ remote("upstream") }))
 		end)
+
+		it("prefers the default set with gh or glab", function()
+			local remotes = { remote("origin", "me/repo"), remote("upstream", "parent/repo") }
+			assert.equal("origin", selected(remotes, { origin = "base" }))
+			assert.equal("upstream", selected(remotes, { origin = "head" }))
+		end)
+
+		it("resolves a default that names another repository", function()
+			local remotes = { remote("origin", "me/repo") }
+			for _, value in ipairs({ "parent/repo", "base:parent/repo" }) do
+				local base = assert(git.select_base_remote(remotes, { origin = value }))
+				assert.equal("origin", base.name)
+				assert.equal("parent/repo", base.target.repo_full_name)
+			end
+		end)
+	end)
+
+	it("resolves the local repository from the base remote", function()
+		git.run = function(args, _, done)
+			if args[3] == "config" then
+				assert.same({ "-C", "/repo", "config", "--get-regexp", "^remote\\..*\\.(gh|glab)-resolved$" }, args)
+				return complete("remote.origin.gh-resolved base\n", done)
+			end
+			return complete(
+				"origin\thttps://github.com/me/repo.git (fetch)\n"
+					.. "upstream\thttps://github.com/parent/repo.git (fetch)\n",
+				done
+			)
+		end
+
+		local target, remote
+		git.local_repository("/repo", function(value, _, name)
+			target, remote = value, name
+		end)
+
+		assert.equal("me/repo", target.repo_full_name)
+		assert.equal("origin", remote)
 	end)
 
 	it("resolves the remotes a branch tracks and pushes to", function()

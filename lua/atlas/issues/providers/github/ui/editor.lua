@@ -9,7 +9,6 @@ local users = require("atlas.providers.github.users")
 local highlights = require("atlas.ui.highlights")
 local icons = require("atlas.ui.shared.icons")
 local presentation = require("atlas.issues.ui.presentation")
-local keymaps = require("atlas.core.keymaps")
 
 ---@class GitHubIssueEditorValues
 ---@field title string
@@ -74,6 +73,20 @@ end
 
 ---@param state GitHubIssueEditorState
 ---@param editor AtlasForm
+local function update_loading_notice(state, editor)
+	local statusline = editor.statusline
+	if statusline.loading_spinner then
+		local pending = next(state.loading)
+		if pending then
+			statusline:notify("loading", "Loading " .. pending .. "...")
+		else
+			statusline:clear_notice()
+		end
+	end
+end
+
+---@param state GitHubIssueEditorState
+---@param editor AtlasForm
 local function load_reporter(state, editor)
 	local statusline = editor.statusline
 	state.loading.reporter = true
@@ -91,14 +104,7 @@ local function load_reporter(state, editor)
 			statusline:notify("error", err or "Unable to load reporter")
 			return
 		end
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 	end)
 end
 
@@ -126,14 +132,7 @@ local function select_assignees(state, editor)
 			statusline:notify("error", err or "Unable to load assignees")
 			return
 		end
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 		picker.multi_select({
 			title = "Assignees",
 			items = items,
@@ -180,14 +179,7 @@ local function select_labels(state, editor)
 			return
 		end
 
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 
 		picker.multi_select({
 			title = "Labels",
@@ -235,14 +227,7 @@ local function select_milestone(state, editor)
 			return
 		end
 
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 
 		local none = { title = "None" }
 		picker.select({
@@ -481,22 +466,19 @@ local function open_editor(repo_slug, issue, details, on_done)
 		end,
 		keymaps = {
 			{
-				key = keymaps.resolve("editor.assignees"),
-				desc = "assignees",
+				keymap = "editor.assignees",
 				action = function(editor)
 					select_assignees(state, editor)
 				end,
 			},
 			{
-				key = keymaps.resolve("editor.labels"),
-				desc = "labels",
+				keymap = "editor.labels",
 				action = function(editor)
 					select_labels(state, editor)
 				end,
 			},
 			{
-				key = keymaps.resolve("editor.milestone"),
-				desc = "milestone",
+				keymap = "editor.milestone",
 				action = function(editor)
 					select_milestone(state, editor)
 				end,

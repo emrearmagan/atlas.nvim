@@ -1,4 +1,3 @@
-local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local action_runner = require("atlas.core.actions")
 local config = require("atlas.pulls.pipelines.ui.config")
@@ -9,6 +8,7 @@ local overview = require("atlas.pulls.pipelines.ui.overview")
 local icons = require("atlas.ui.shared.icons")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local statusline = require("atlas.ui.statusline")
+local components = require("atlas.ui.statusline.components")
 local utils = require("atlas.ui.shared.utils")
 
 ---@class PullsPipelinesSession
@@ -24,79 +24,69 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@param pane PullsPipelinesLogs
----@return AtlasStatuslineSegment[]
-local function log_counts(pane)
-	local items = {}
-	local counts = pane.counts
-	if not counts then
-		return items
+---@param session PullsPipelinesSession
+---@return AtlasStatuslineLayout
+local function statusline_layout(session)
+	local function title(ctx)
+		local context = session.explorer.context
+		local target = context.target
+		local text = context.repo_full_name
+
+		if type(target) == "string" then
+			text = text .. " - " .. target
+		elseif ctx.pr then
+			text = string.format("#%s %s", ctx.pr.id, ctx.pr.title)
+		end
+
+		return text
 	end
-	for _, counter in ipairs({
-		{ "error", "error", "AtlasFooterError" },
-		{ "warn", "warning", "AtlasFooterWarning" },
-		{ "canceled", "canceled", "AtlasFooterWarning" },
-		{ "success", "successful", "AtlasFooterSuccess" },
-		{ "skipped", "skipped", "AtlasFooterText" },
-	}) do
-		local count = counts[counter[1]] or 0
-		if count > 0 then
-			local label = counter[2]
-			if count > 1 and (counter[1] == "error" or counter[1] == "warn") then
-				label = label .. "s"
+
+	local function log_counts()
+		local segments = {}
+		for _, counter in ipairs({
+			{ "error", "error", "AtlasFooterError" },
+			{ "warn", "warning", "AtlasFooterWarning" },
+			{ "canceled", "canceled", "AtlasFooterWarning" },
+			{ "success", "successful", "AtlasFooterSuccess" },
+			{ "skipped", "skipped", "AtlasFooterText" },
+		}) do
+			local count = session.logs.counts and session.logs.counts[counter[1]] or 0
+			if count > 0 then
+				local label = counter[2]
+				if count > 1 and (counter[1] == "error" or counter[1] == "warn") then
+					label = label .. "s"
+				end
+				segments[#segments + 1] = { text = count .. " " .. label, hl_group = counter[3] }
 			end
-			items[#items + 1] = {
-				text = count .. " " .. label,
-				hl_group = counter[3],
-				align = "right",
-				priority = 1,
-			}
+		end
+
+		return segments
+	end
+
+	local function duration()
+		local job = session.logs.selection and session.logs.selection.job
+		if job and job.duration then
+			return icons.get("updated") .. " " .. pipeline_utils.format_duration(job.duration)
 		end
 	end
-	return items
+
+	local function started()
+		local job = session.logs.selection and session.logs.selection.job
+		local started_at = job and utils.relative_time(job.started_at) or "-"
+		if started_at ~= "-" then
+			return icons.get("created") .. " " .. (started_at == "now" and "just now" or started_at .. " ago")
+		end
+	end
+
+	local function hints(ctx)
+		return components.hints(ctx.buf, keymaps.hints(session, ctx.buf))
+	end
+
+	return { title, hints, "%=", log_counts, duration, started, components.help }
 end
 
 ---@param session PullsPipelinesSession
 local function update_statusline(session)
-	local context = session.explorer.context
-	local target = context.target
-	local title = context.repo_full_name
-	if type(target) == "string" then
-		title = title .. " - " .. target
-	elseif target.source then
-		title = string.format("#%s %s", target.id, target.title)
-	end
-	local heading = {
-		text = title,
-		hl_group = "AtlasFooterText",
-		priority = 5,
-		min_width = 12,
-	}
-	local items = vim.list_extend({ heading }, log_counts(session.logs))
-
-	local job = session.logs.selection and session.logs.selection.job
-	if job then
-		if job.duration then
-			local duration = pipeline_utils.format_duration(job.duration)
-			items[#items + 1] = {
-				text = icons.get("updated") .. " " .. duration,
-				hl_group = "AtlasFooterText",
-				align = "right",
-				priority = 0,
-			}
-		end
-		local started = utils.relative_time(job.started_at)
-		if started ~= "-" then
-			items[#items + 1] = {
-				text = icons.get("created") .. " " .. (started == "now" and "just now" or started .. " ago"),
-				hl_group = "AtlasFooterText",
-				align = "right",
-				priority = 0,
-			}
-		end
-	end
-
-	session.statusline:set_items(items)
 	if session.action then
 		session.statusline:notify("loading", session.action.label .. "...")
 	elseif session.explorer.pipelines == "loading" then
@@ -134,6 +124,19 @@ local function open_actions(session, selection)
 	local available = vim.tbl_filter(function(action)
 		return action_runner.is_available(action, ctx)
 	end, backend and backend.actions or {})
+
+	local url = ctx.job and ctx.job.url or ctx.pipeline.url
+	if url and url ~= "" then
+		available[#available + 1] = {
+			label = "Copy URL",
+			icon = icons.get("link"),
+			callback = function()
+				vim.fn.setreg("+", url)
+				notify.success("Copied URL", { timeout = 1200 })
+			end,
+		}
+	end
+
 	if #available == 0 then
 		notify.warn("No pipeline actions available")
 		return
@@ -141,6 +144,11 @@ local function open_actions(session, selection)
 
 	local title = "Actions: " .. (ctx.job and ctx.job.name or ctx.stage and ctx.stage.name or ctx.pipeline.name)
 	action_runner.select(title, available, function(action)
+		if action.callback then
+			action.callback()
+			return
+		end
+
 		if session.closed or session.action then
 			return
 		end
@@ -339,13 +347,24 @@ function M.open(context, backend, opts)
 	local session = {
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
-		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
 		explorer = { context = context, backend = backend, pipelines = "loading", line_map = {} },
 		logs = { context = context, backend = backend, collapsed = {}, line_map = {}, entry_rows = {} },
 		overview = { line_map = {} },
 		config = { context = context, backend = backend },
 	}
 	---@cast session PullsPipelinesSession
+	session.statusline = statusline.new({
+		layout = statusline_layout(session),
+		context = function(ctx)
+			local target = session.explorer.context.target
+			if type(target) == "table" and target.source then
+				---@cast target PullRequest
+				ctx.pr = target
+			end
+
+			ctx.pipeline = session.explorer.selection
+		end,
+	})
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)
@@ -359,7 +378,8 @@ function M.open(context, backend, opts)
 	end)
 	explorer.refresh(
 		session.explorer,
-		{ pipeline = opts.selected_pipeline, stage = opts.selected_stage, job = opts.selected_job }
+		{ pipeline = opts.selected_pipeline, stage = opts.selected_stage, job = opts.selected_job },
+		{ force_refresh = false }
 	)
 end
 

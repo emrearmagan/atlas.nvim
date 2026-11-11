@@ -64,9 +64,6 @@ local function jira_rows(issue)
 	if project then
 		add(rows, "Project", project.name ~= "" and project.name or project.key)
 	end
-	if issue.is_subscribed ~= nil then
-		add(rows, "Watching", issue.is_subscribed and "Yes" or "No")
-	end
 	return rows
 end
 

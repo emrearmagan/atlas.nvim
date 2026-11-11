@@ -17,7 +17,6 @@ local request_scope = require("atlas.core.requests")
 ---@field issue_loading boolean
 ---@field issue_error string|nil
 ---@field requests AtlasRequestScope
----@field spinner_timer uv.uv_timer_t|nil
 local M = {
 	win = nil,
 	buf = nil,
@@ -33,7 +32,6 @@ local M = {
 	issue_loading = false,
 	issue_error = nil,
 	requests = request_scope.new(),
-	spinner_timer = nil,
 }
 
 ---@param key string|nil
@@ -63,7 +61,6 @@ function M.reset()
 	M.issue_error = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
-	M.spinner_timer = nil
 end
 
 return M

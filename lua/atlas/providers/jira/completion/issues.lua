@@ -33,7 +33,7 @@ return {
 
 			local icons = require("atlas.ui.shared.icons")
 			local status_icons = require("atlas.config").options.issues.jira.project_config.status_icons
-			local base_url = service.base_url():gsub("/+$", "")
+			local base_url = service.base_url()
 			local items = {}
 			for _, item in ipairs(result.issues) do
 				local status = item.fields.status

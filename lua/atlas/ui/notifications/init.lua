@@ -7,20 +7,15 @@ local resolver = require("atlas.core.keymaps")
 local renderer = require("atlas.ui.notifications.renderer")
 local state = require("atlas.ui.notifications.state")
 
----@param action_id AtlasKeymapActionId|string
----@return string[]
-local function resolve_keys(action_id)
-	return resolver.resolve(action_id) or {}
-end
-
 local function popup_keys()
 	return {
-		mark_read = resolve_keys("ui.notifications.mark_read"),
-		mark_done = resolve_keys("ui.notifications.mark_done"),
-		refresh = resolve_keys("ui.refresh_view"),
-		open = resolve_keys("ui.select"),
-		open_in_browser = resolve_keys("ui.open_in_browser"),
-		close = resolve_keys("ui.close"),
+		mark_read = resolver.resolve("ui.notifications.mark_read"),
+		mark_done = resolver.resolve("ui.notifications.mark_done"),
+		refresh = resolver.resolve("ui.refresh_view"),
+		open = resolver.resolve("ui.select"),
+		open_in_browser = resolver.resolve("ui.open_in_browser"),
+		copy_url = resolver.resolve("ui.copy_url"),
+		close = resolver.resolve("ui.close"),
 	}
 end
 
@@ -95,23 +90,26 @@ end
 local function build_footer_text(provider)
 	local keys = popup_keys()
 	local items = {}
-	if keys.open[1] then
-		table.insert(items, keys.open[1] .. " open")
+	if keys.open then
+		table.insert(items, keys.open.key[1] .. " " .. keys.open.label)
 	end
-	if keys.open_in_browser[1] then
-		table.insert(items, keys.open_in_browser[1] .. " browser")
+	if keys.open_in_browser then
+		table.insert(items, keys.open_in_browser.key[1] .. " " .. keys.open_in_browser.label)
 	end
-	if keys.mark_read[1] and capability(provider).mark_read then
-		table.insert(items, keys.mark_read[1] .. " mark read")
+	if keys.copy_url then
+		table.insert(items, keys.copy_url.key[1] .. " " .. keys.copy_url.label)
 	end
-	if keys.mark_done[1] then
-		table.insert(items, keys.mark_done[1] .. " mark done")
+	if keys.mark_read and capability(provider).mark_read then
+		table.insert(items, keys.mark_read.key[1] .. " " .. keys.mark_read.label)
 	end
-	if keys.refresh[1] then
-		table.insert(items, keys.refresh[1] .. " refresh")
+	if keys.mark_done then
+		table.insert(items, keys.mark_done.key[1] .. " " .. keys.mark_done.label)
 	end
-	if keys.close[1] then
-		table.insert(items, keys.close[1] .. " close")
+	if keys.refresh then
+		table.insert(items, keys.refresh.key[1] .. " " .. keys.refresh.label)
+	end
+	if keys.close then
+		table.insert(items, keys.close.key[1] .. " " .. keys.close.label)
 	end
 	return " " .. table.concat(items, " | ") .. " "
 end
@@ -183,6 +181,17 @@ local function open_in_browser(notification)
 		return
 	end
 	notify.info("Opened in browser")
+end
+
+---@param notification AtlasNotification|nil
+local function copy_url(notification)
+	if notification == nil or not notification.url or notification.url == "" then
+		notify.warn("Notification has no URL")
+		return
+	end
+
+	vim.fn.setreg("+", notification.url)
+	notify.success("Copied URL")
 end
 
 ---@param provider PullsProvider|IssuesProvider
@@ -261,52 +270,50 @@ end
 ---@param provider PullsProvider|IssuesProvider
 ---@param on_update fun()|nil
 local function register_keymaps(target_buf, provider, on_update)
-	local function map(lhs, fn, desc)
-		vim.keymap.set("n", lhs, fn, { buffer = target_buf, nowait = true, silent = true, desc = desc })
+	---@param keymap AtlasKeymap|nil
+	local function map(keymap, fn)
+		if not keymap then
+			return
+		end
+		for _, lhs in ipairs(keymap.key) do
+			vim.keymap.set("n", lhs, fn, { buffer = target_buf, nowait = true, silent = true, desc = keymap.desc })
+		end
 	end
 
 	local keys = popup_keys()
 
-	for _, k in ipairs(keys.close) do
-		map(k, function()
-			M.close()
-		end, "Close notifications")
-	end
-	map("<Esc>", function()
+	map(keys.close, function()
 		M.close()
-	end, "Close notifications")
+	end)
+	vim.keymap.set("n", "<Esc>", function()
+		M.close()
+	end, { buffer = target_buf, nowait = true, silent = true, desc = "Close" })
 
-	for _, k in ipairs(keys.refresh) do
-		map(k, function()
-			load(provider, true)
-		end, "Refresh notifications")
-	end
+	map(keys.refresh, function()
+		load(provider, true)
+	end)
 
-	for _, k in ipairs(keys.open) do
-		map(k, function()
-			open(provider, notification_under_cursor(), on_update)
-		end, "Open notification")
-	end
+	map(keys.open, function()
+		open(provider, notification_under_cursor(), on_update)
+	end)
 
-	for _, k in ipairs(keys.open_in_browser) do
-		map(k, function()
-			open_in_browser(notification_under_cursor())
-		end, "Open notification in browser")
-	end
+	map(keys.open_in_browser, function()
+		open_in_browser(notification_under_cursor())
+	end)
+
+	map(keys.copy_url, function()
+		copy_url(notification_under_cursor())
+	end)
 
 	if capability(provider).mark_read then
-		for _, k in ipairs(keys.mark_read) do
-			map(k, function()
-				mark_read(provider, notification_under_cursor(), on_update)
-			end, "Mark notification as read")
-		end
+		map(keys.mark_read, function()
+			mark_read(provider, notification_under_cursor(), on_update)
+		end)
 	end
 
-	for _, k in ipairs(keys.mark_done) do
-		map(k, function()
-			mark_done(provider, notification_under_cursor(), on_update)
-		end, "Mark notification as done")
-	end
+	map(keys.mark_done, function()
+		mark_done(provider, notification_under_cursor(), on_update)
+	end)
 end
 
 ---@param provider PullsProvider|IssuesProvider

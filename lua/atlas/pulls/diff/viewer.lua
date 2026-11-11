@@ -30,7 +30,7 @@ local renderers = {
 
 ---@class AtlasDiffRenderer
 ---@field tabpage integer
----@field session AtlasDiffSession
+---@field session AtlasDiffSessionInternal
 ---@field options AtlasPullsDiffConfig
 ---@field on_file fun(file: AtlasDiffFile|nil)
 ---@field current_file AtlasDiffFile|nil
@@ -48,7 +48,7 @@ local renderers = {
 
 ---@class AtlasDiffViewer
 ---@field id string|nil
----@field session AtlasDiffSession
+---@field session AtlasDiffSessionInternal
 ---@field options AtlasPullsDiffConfig
 ---@field renderer AtlasDiffRenderer
 ---@field explorer AtlasDiffExplorer
@@ -87,7 +87,7 @@ local function close_tab(tabpage)
 	vim.cmd.tabclose({ range = { vim.api.nvim_tabpage_get_number(tabpage) } })
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param command string
 ---@return boolean, string|nil
 local function open_command(session, command)
@@ -203,17 +203,12 @@ local function select_file(viewer, file, focus, on_done)
 end
 
 ---@param viewer AtlasDiffViewer
-local function update_statusline(viewer)
-	diff_statusline.update(viewer.statusline, viewer.session, viewer.explorer.files, viewer.renderer.right.buf)
-end
-
----@param viewer AtlasDiffViewer
 local function update_panels(viewer)
 	local session = viewer.session
 	local review_context = not session:shown_commits() and session.review_context or nil
 	viewer.explorer:update(review_context, session.review, session.notes and session.notes.items)
 	viewer.review_panel:render()
-	update_statusline(viewer)
+	viewer.statusline:redraw()
 end
 
 ---@param viewer AtlasDiffViewer
@@ -527,7 +522,7 @@ local function setup_autocmds(viewer)
 		-- Let Neovim finish updating the buffer's attached clients.
 		callback = vim.schedule_wrap(function(event)
 			if not viewer.session.closed and event.buf == renderer.right.buf then
-				update_statusline(viewer)
+				viewer.statusline:redraw()
 			end
 		end),
 	})
@@ -752,7 +747,7 @@ local function on_file(viewer, file)
 	local changed = viewer.renderer.current_file ~= file
 	viewer.renderer.current_file = file
 	winbar.update(viewer.renderer)
-	update_statusline(viewer)
+	viewer.statusline:redraw()
 	if viewer.explorer.selected ~= file then
 		viewer.explorer:reveal(file)
 	end
@@ -801,7 +796,9 @@ local function setup(viewer)
 
 	vim.cmd.tcd(vim.fn.fnameescape(session.range.root))
 
-	viewer.commits = commits.new(session.commits, explorer_options.show_commits)
+	local commits_options = explorer_options.commits
+	---@cast commits_options AtlasPullsDiffCommitsConfig
+	viewer.commits = commits.new(session.commits, not commits_options.hidden, commits_options.height)
 	viewer.review_panel = review_panel.new(session, options.review_panel, {
 		on_resize = function()
 			resize(viewer)
@@ -841,7 +838,6 @@ local function setup(viewer)
 	setup_autocmds(viewer)
 	keymaps.setup(viewer)
 
-	update_statusline(viewer)
 	for _, pane in pairs({ renderer.left, renderer.right, viewer.explorer, viewer.commits, viewer.review_panel }) do
 		viewer.statusline:attach(pane.win)
 	end
@@ -855,7 +851,7 @@ local function setup(viewer)
 	end
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param options AtlasPullsDiffConfig
 function Viewer.open(session, options)
 	local module = renderers[options.open_cmd]
@@ -872,8 +868,16 @@ function Viewer.open(session, options)
 	local viewer = setmetatable({
 		session = session,
 		options = options,
-		statusline = statusline.new({ context = "diff" }),
 	}, Viewer)
+	viewer.statusline = statusline.new({
+		layout = diff_statusline.layout(viewer),
+		context = function(ctx)
+			ctx.diff = session
+			if session.source.kind == "pr" then
+				ctx.pr = session.source.pr
+			end
+		end,
+	})
 
 	open_renderer(viewer, module)
 

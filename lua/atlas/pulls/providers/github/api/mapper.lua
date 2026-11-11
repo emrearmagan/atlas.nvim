@@ -33,12 +33,8 @@ local function comment_author(raw)
 end
 
 ---@param raw table
----@return AtlasUser[]|nil
+---@return AtlasUser[]
 local function pull_assignees(raw)
-	if json.nilify(raw.assignees) == nil then
-		return nil
-	end
-
 	local assignees = {}
 	for _, node in ipairs(github_mapper.connection_nodes(raw.assignees)) do
 		local assignee = pull_author(node)
@@ -50,12 +46,8 @@ local function pull_assignees(raw)
 end
 
 ---@param raw table
----@return PullsLabel[]|nil
+---@return PullsLabel[]
 local function pull_labels(raw)
-	if json.nilify(raw.labels) == nil then
-		return nil
-	end
-
 	local labels = {}
 	for _, node in ipairs(github_mapper.connection_nodes(raw.labels)) do
 		local name = json.safe_str(node.name)
@@ -227,7 +219,6 @@ end
 function M.to_pull_request(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
-	local reviewers = M.to_reviewers(raw)
 
 	local state = "open"
 	local raw_state = tostring(raw.state or ""):upper()
@@ -247,8 +238,8 @@ function M.to_pull_request(raw)
 		https_url = https_url .. ".git"
 	end
 	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
-	local commit = json.safe_table(first_commit.commit)
-	local check_status = json.safe_str(json.safe_table(commit.statusCheckRollup).state)
+	local rollup = json.nilify(raw.statusCheckRollup) or json.safe_table(first_commit.commit).statusCheckRollup
+	local check_status = json.safe_str(json.safe_table(rollup).state)
 
 	return {
 		id = number,
@@ -282,9 +273,9 @@ function M.to_pull_request(raw)
 			html_url = repository_url,
 		},
 		repo_full_name = repo_full_name,
-		reviewers = reviewers,
 		stack = pull_stack(raw.stackEntry),
 		node_id = json.safe_str(raw.id),
+		head_repository = json.safe_str(json.safe_table(raw.headRepository).nameWithOwner),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
 		lines_added = tonumber(raw.additions) or 0,
@@ -299,8 +290,8 @@ function M.to_pull_request_details(raw)
 	local details = {
 		description = json.safe_str(raw.body) or "",
 		reactions = github_mapper.graphql_reactions(raw.reactionGroups),
-		assignees = pull_assignees(raw) or {},
-		labels = pull_labels(raw) or {},
+		assignees = pull_assignees(raw),
+		labels = pull_labels(raw),
 		stack = pull_stack(raw.stackEntry, true),
 	}
 	local subscription = tostring(raw.viewerSubscription or "")

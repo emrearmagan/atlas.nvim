@@ -173,24 +173,29 @@ function M.fetch_pipeline(context, pipeline, on_done)
 
 	local scope = requests.new()
 	local endpoint = string.format("/repositories/%s/pipelines/%s", repo, id)
-	scope.run(function(done)
-		return service.request("GET", endpoint, nil, nil, done, {
-			action = "Fetch pipeline details",
-			repo = repo,
-			pipeline_id = id,
-		})
-	end, function(result, err)
+	scope.all({
+		details = function(done)
+			return service.request("GET", endpoint, nil, nil, done, {
+				action = "Fetch pipeline details",
+				repo = repo,
+				pipeline_id = id,
+			})
+		end,
+		jobs = function(done)
+			return fetch_jobs(context, pipeline, done)
+		end,
+	}, function(values, errors)
+		local err = errors.details or errors.jobs
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local selected = parse_pipeline(result)
+		local selected = parse_pipeline(values.details)
 		selected.id = id
 		selected.number = selected.number or tonumber(id)
 		selected.url = selected.url or string.format("https://bitbucket.org/%s/pipelines/results/%s", repo, selected.id)
-		scope.run(function(done)
-			return fetch_jobs(context, selected, done)
-		end, on_done)
+		selected.stages = values.jobs.stages
+		on_done(selected, nil)
 	end)
 	return scope
 end

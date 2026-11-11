@@ -7,26 +7,27 @@ local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@param map_item table
 ---@return table|nil
 local function item(action_id, map_item)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	map_item.key = #keys == 1 and keys[1] or keys
+	map_item.key = keymap.key
+	map_item.desc = keymap.desc
 	return map_item
 end
 
----@param action_id AtlasKeymapActionId|string
+---@param action_id AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@return table|nil
 local function remove_item(action_id)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
+	local keymap = resolver.resolve(action_id)
+	if keymap == nil then
 		return nil
 	end
-	return { key = (#keys == 1 and keys[1] or keys) }
+	return { key = keymap.key }
 end
 
 ---@param buf integer
@@ -36,7 +37,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		item("ui.toggle_description_mode", {
-			desc = "Toggle description mode",
 			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -48,7 +48,6 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		item("ui.toggle_fold", {
-			desc = "Toggle description",
 			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -57,12 +56,9 @@ function M.setup(buf, refresh)
 			end,
 		})
 	)
-	local open_keys = resolver.resolve("ui.show_details") or {}
-	vim.list_extend(open_keys, resolver.resolve("ui.select") or {})
-	if #open_keys > 0 then
-		table.insert(items, {
-			key = open_keys,
-			desc = "Show pipeline details",
+	utils.insert_if(
+		items,
+		item({ "ui.show_details", "ui.select" }, {
 			index = 1,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -78,7 +74,7 @@ function M.setup(buf, refresh)
 				end
 			end,
 		})
-	end
+	)
 	help.register("Detail", items, { index = 2, buffer = buf })
 end
 
@@ -87,11 +83,7 @@ function M.teardown(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.toggle_description_mode"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	local open_keys = resolver.resolve("ui.show_details") or {}
-	vim.list_extend(open_keys, resolver.resolve("ui.select") or {})
-	if #open_keys > 0 then
-		table.insert(items, { key = open_keys })
-	end
+	utils.insert_if(items, remove_item({ "ui.show_details", "ui.select" }))
 	help.remove("Detail", items, { buffer = buf })
 end
 

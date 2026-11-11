@@ -277,6 +277,15 @@ local function open_in_browser(state)
 	end
 end
 
+---@param state RepositoryIssues
+local function copy_url(state)
+	local issue = current(state)
+	if issue and issue.url and issue.url ~= "" then
+		vim.fn.setreg("+", issue.url)
+		notify.success("Copied URL")
+	end
+end
+
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	local issue_provider = providers.load(opts.provider.id, "issues")
@@ -310,6 +319,7 @@ function M.open(opts)
 	vim.wo[state.win].cursorline = true
 	vim.wo[state.win].wrap = false
 	keymaps.setup(state, {
+		copy_url = copy_url,
 		edit_query = edit_query,
 		next_page = next_page,
 		open_in_browser = open_in_browser,

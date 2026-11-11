@@ -170,24 +170,14 @@ end
 ---@param raw table|nil
 ---@return AtlasUser|nil
 local function review_author(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local user = github_mapper.identity(raw) or { id = "", login = "", name = "" }
-	local slug = json.safe_str(raw.slug) or ""
-	local organization = json.safe_table(raw.organization)
-	local organization_login = json.safe_str(organization.login) or ""
-	local team = json.safe_str(raw.combinedSlug)
-		or (organization_login ~= "" and slug ~= "" and organization_login .. "/" .. slug or slug)
-	local login = user.login ~= "" and user.login or team
-	if not login or login == "" then
+	local user = github_mapper.identity(raw)
+	if not user or user.login == "" then
 		return nil
 	end
 	return {
-		id = user.id ~= "" and user.id or login,
-		name = user.name ~= "" and user.name or (json.safe_str(raw.teamName) or login),
-		username = login,
+		id = user.id ~= "" and user.id or user.login,
+		name = user.name,
+		username = user.login,
 	}
 end
 
@@ -644,7 +634,7 @@ local function fetch_review_details(pr, opts, on_done)
 			on_done(nil, "Missing pull request review history")
 			return
 		end
-		cli.set_mem(cache_key, details, cli.cache_ttl())
+		cli.set_mem(cache_key, details)
 		on_done(details, nil)
 	end, {
 		action = "Fetch PR review history",
@@ -717,7 +707,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 			reviewRequests = pull_request.reviewRequests,
 			reviewRequestEvents = pull_request.reviewRequestEvents,
 		}) or {}
-		cli.set_mem(cache_key, reviewers, cli.cache_ttl())
+		cli.set_mem(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end, {
 		action = "Fetch PR reviewers",
@@ -813,14 +803,13 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
-local function fetch_review(pr, opts, include_hunks, on_done)
+function M.fetch(pr, opts, on_done)
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			return fetch_comments(pr, include_hunks, done)
+			return fetch_comments(pr, false, done)
 		end,
 		details = function(done)
 			return fetch_review_details(pr, opts, done)
@@ -841,20 +830,25 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 	return requests
 end
 
+-- Reviewers and history are only shown in the diff review panel.
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }
-function M.fetch(pr, opts, on_done)
-	return fetch_review(pr, opts, false, on_done)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }
-function M.fetch_threads(pr, opts, on_done)
-	return fetch_review(pr, opts, true, on_done)
+---@return { cancel: fun() }|nil
+function M.fetch_threads(pr, _opts, on_done)
+	return fetch_comments(pr, true, function(result, err)
+		if result == nil then
+			on_done(nil, err)
+			return
+		end
+		on_done({
+			review = result.review,
+			comments = result.comments,
+			tasks = {},
+			reviewers = {},
+			history = {},
+		}, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -1124,7 +1118,7 @@ function M.fetch_context(pr, opts, on_done)
 			end
 		end
 		local context = { reviewed_files = reviewed_files, outdated_files = outdated_files }
-		cli.set_mem(cache_key, context, cli.cache_ttl())
+		cli.set_mem(cache_key, context)
 		on_done(context, nil)
 	end, { action = "Fetch PR reviewed files", repo = repo_slug, number = pr.id })
 end

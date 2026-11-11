@@ -15,8 +15,8 @@ local PADDING_X = 1
 ---@param action AtlasKeymapActionId
 ---@return string|nil
 local function action_key(action)
-	local keys = keymaps.resolve(action)
-	return keys and keys[1]
+	local keymap = keymaps.resolve(action)
+	return keymap and keymap.key[1]
 end
 
 ---@param comment PullsComment

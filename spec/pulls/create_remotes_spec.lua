@@ -4,7 +4,7 @@ local remotes = require("atlas.pulls.create.remotes")
 ---@param slug string|nil
 ---@param provider string|nil
 ---@param host string|nil
----@return AtlasCreateRemote
+---@return AtlasGitRemote
 local function remote(name, slug, provider, host)
 	local target
 	if slug then
@@ -45,6 +45,15 @@ describe("pulls.create.remotes", function()
 			}, "parent")
 
 			assert.equal("parent", assert(value).name)
+		end)
+
+		it("uses the gh or glab default before the tracked remote", function()
+			local value = remotes.base_remote({
+				remote("origin", "me/repo"),
+				remote("upstream", "parent/repo"),
+			}, "upstream", { origin = "base" })
+
+			assert.equal("origin", assert(value).name)
 		end)
 
 		it("ignores an unsupported tracked remote", function()

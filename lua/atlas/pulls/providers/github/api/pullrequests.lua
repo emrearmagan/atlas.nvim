@@ -56,11 +56,10 @@ fragment PullRequestFields on PullRequest {
   additions deletions
   author { login ... on User { name } }
   headRefName baseRefName headRefOid baseRefOid
+  headRepository { nameWithOwner }
   totalCommentsCount
   repository { name nameWithOwner url sshUrl }
-  commits(last: 1) {
-    nodes { commit { statusCheckRollup { state } } }
-  }
+%s
 %s
 }
 ]]
@@ -78,13 +77,21 @@ local function stack_fields(detail)
 end
 
 ---@return string
+local function check_status_fields()
+	if cli.is_enterprise_server() then
+		return "  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+	end
+	return "  statusCheckRollup { state }"
+end
+
+---@return string
 local function get_pr_gql()
 	return string.format(GET_PR_GQL, stack_fields(true))
 end
 
 ---@return string
 local function pull_request_fields_gql()
-	return string.format(PULL_REQUEST_FIELDS_GQL, stack_fields(false))
+	return string.format(PULL_REQUEST_FIELDS_GQL, check_status_fields(), stack_fields(false))
 end
 
 local SEARCH_GQL = [[
@@ -334,53 +341,6 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		action = "Fetch PR details",
 		repo = repo_slug,
 		number = number,
-	})
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_description(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = string.format("github:desc:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"body",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch description")
-			return
-		end
-		local body = tostring(result.body or "")
-		cli.set_mem(cache_key, body)
-		on_done(body, nil)
-	end, {
-		action = "Fetch PR description",
-		repo = repo_slug,
-		number = pr.id,
 	})
 end
 
@@ -753,9 +713,6 @@ function M.update_pr(pr, opts, on_done)
 			return cli.gh(args, function(_, err)
 				if not err then
 					invalidate_details(pr.repo_full_name, pr.id)
-					if opts.body ~= nil then
-						cli.delete_mem(string.format("github:desc:%s:%s", pr.repo_full_name, tostring(pr.id)))
-					end
 				end
 				done(not err, err)
 			end, context)

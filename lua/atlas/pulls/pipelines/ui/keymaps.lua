@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local explorer_keymaps = require("atlas.pulls.pipelines.ui.explorer.keymaps")
 local logs = require("atlas.pulls.pipelines.ui.logs")
@@ -26,47 +27,37 @@ end
 ---@param toggle_config fun(selection: PullsPipelinesSelection|nil)
 ---@return AtlasHelpKeyItem[]
 local function shared_items(pane, explorer_pane, logs_pane, close, open_actions, toggle_config)
-	local close_keys = keymaps.resolve("ui.close") or {}
-	local items = {
+	local bindings = {
 		{
-			key = keymaps.resolve("ui.refresh_view") or {},
-			desc = "Refresh build",
+			keymap = keymaps.resolve("ui.refresh_view"),
 			callback = function()
 				explorer.reload_pipeline(explorer_pane, current_selection(pane, explorer_pane))
 			end,
 			index = 50,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("pulls.pipelines.next_job") or {},
-			desc = "Next job",
+			keymap = keymaps.resolve("pulls.pipelines.next_job"),
 			callback = function()
 				explorer.navigate_job(explorer_pane, 1, current_selection(pane, explorer_pane))
 			end,
 			index = 11,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("pulls.pipelines.previous_job") or {},
-			desc = "Previous job",
+			keymap = keymaps.resolve("pulls.pipelines.previous_job"),
 			callback = function()
 				explorer.navigate_job(explorer_pane, -1, current_selection(pane, explorer_pane))
 			end,
 			index = 10,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("pulls.pipelines.show_history") or {},
-			desc = "Show build history",
+			keymap = keymaps.resolve("pulls.pipelines.show_history"),
 			callback = function()
 				explorer.show_history(explorer_pane)
 			end,
 			index = 20,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("ui.open_in_browser") or {},
-			desc = "Open job or pipeline in browser",
+			keymap = keymaps.resolve("ui.open_in_browser"),
 			callback = function()
 				local selection = current_selection(pane, explorer_pane)
 				local url = selection
@@ -76,62 +67,75 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions,
 				end
 			end,
 			index = 21,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("pulls.pipelines.toggle_config") or {},
-			desc = "Toggle configuration",
+			keymap = keymaps.resolve("ui.copy_url"),
+			callback = function()
+				local selection = current_selection(pane, explorer_pane)
+				local url = selection
+					and (selection.job and selection.job.url or selection.pipeline and selection.pipeline.url)
+				if url and url ~= "" then
+					vim.fn.setreg("+", url)
+					notify.success("Copied URL")
+				end
+			end,
+			index = 23,
+		},
+		{
+			keymap = keymaps.resolve("pulls.pipelines.toggle_config"),
 			callback = function()
 				toggle_config(current_selection(pane, explorer_pane))
 			end,
 			index = 22,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("ui.open_actions") or {},
-			desc = "Open pipeline actions",
+			keymap = keymaps.resolve("ui.open_actions"),
 			callback = function()
 				open_actions(current_selection(pane, explorer_pane))
 			end,
 			index = 30,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = close_keys,
-			desc = "Close pipelines",
+			keymap = keymaps.resolve("ui.close"),
 			callback = close,
 			index = 101,
-			opts = { nowait = true, silent = true },
 		},
 		{
-			key = keymaps.resolve("ui.help") or {},
-			desc = "Toggle help",
+			keymap = keymaps.resolve("ui.help"),
 			callback = function()
 				help.toggle({ buffer = pane.buf })
 			end,
 			index = 100,
-			opts = { nowait = true, silent = true },
 		},
 	}
 	if pane == explorer_pane or pane == logs_pane then
-		items[#items + 1] = {
-			key = keymaps.resolve("pulls.pipelines.toggle_auto_refresh") or {},
-			desc = "Toggle auto refresh",
+		bindings[#bindings + 1] = {
+			keymap = keymaps.resolve("pulls.pipelines.toggle_auto_refresh"),
 			callback = function()
 				logs.toggle_auto_refresh(logs_pane)
 			end,
 			index = 51,
-			opts = { nowait = true, silent = true },
 		}
-		items[#items + 1] = {
-			key = keymaps.resolve("pulls.pipelines.toggle_raw_logs") or {},
-			desc = "Toggle raw logs",
+		bindings[#bindings + 1] = {
+			keymap = keymaps.resolve("pulls.pipelines.toggle_raw_logs"),
 			callback = function()
 				logs.toggle_raw(logs_pane)
 			end,
 			index = 52,
-			opts = { nowait = true, silent = true },
 		}
+	end
+
+	local items = {}
+	for _, binding in ipairs(bindings) do
+		if binding.keymap then
+			items[#items + 1] = {
+				key = binding.keymap.key,
+				desc = binding.keymap.desc,
+				callback = binding.callback,
+				index = binding.index,
+				opts = { nowait = true, silent = true },
+			}
+		end
 	end
 	return items
 end
@@ -177,6 +181,25 @@ function M.setup(session, close, open_actions, toggle_config)
 			{ buffer = pane.buf, index = 300 }
 		)
 	end
+end
+
+---@param session PullsPipelinesSession
+---@param buf integer
+---@return AtlasKeymapActionId[]
+function M.hints(session, buf)
+	if buf == session.logs.buf then
+		return {
+			"ui.toggle_fold",
+			"pulls.pipelines.toggle_raw_logs",
+			"pulls.pipelines.toggle_auto_refresh",
+		}
+	end
+
+	return {
+		"ui.select",
+		"ui.open_actions",
+		"pulls.pipelines.toggle_config",
+	}
 end
 
 return M

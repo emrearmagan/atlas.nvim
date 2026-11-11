@@ -49,7 +49,7 @@ query($path:ID!,$iid:String!,$after:String){
       webUrl
       author{id name username}
       awardEmoji(first:100){nodes{name user{name username}}}
-      notes(filter:ONLY_COMMENTS,first:100,after:$after){
+      notes(filter:ALL_NOTES,first:100,after:$after){
         pageInfo{hasNextPage endCursor}
         nodes{
           id
@@ -57,14 +57,13 @@ query($path:ID!,$iid:String!,$after:String){
           system
           createdAt
           url
-          position{positionType}
+          position{positionType oldPath newPath oldLine newLine}
           maxAccessLevelOfAuthor
           authorIsContributor
           author{id name username bot}
           awardEmoji(first:100){nodes{name user{name username}}}
           discussion{
-            id
-            resolved
+            id resolved
             resolvedAt
             resolvedBy{id name username}
             notes(first:1){nodes{id}}
@@ -296,8 +295,10 @@ function M.fetch_review_threads(pr, opts, on_done)
 			local comment = mapper.to_comment(note, viewer, pr.author.username)
 			table.insert(comments, comment)
 			if comment.parent_id == nil then
-				roots[comment.thread_id] = comment
-				comment.hunk = mapper.to_diff_hunk(note.discussion.truncatedDiffLines)
+				if comment.thread_id then
+					roots[comment.thread_id] = comment
+				end
+				comment.hunk = mapper.to_diff_hunk(json.safe_table(note.discussion).truncatedDiffLines)
 			end
 		end
 		for _, comment in ipairs(comments) do
@@ -321,7 +322,6 @@ function M.invalidate_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end
 
 ---@param path string
@@ -347,7 +347,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(conversation: { description: PullsComment|nil, comments: PullsComment[] }|nil, err: string|nil)
+---@param on_done fun(conversation: { description: PullsComment|nil, comments: PullsComment[], activities: PullsActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation_comments(pr, opts, on_done)
 	opts = opts or {}
@@ -366,7 +366,7 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 		end
 	end
 
-	local comments = {}
+	local comments, activity_notes = {}, {}
 	local description, after
 	local requests = request_scope.new()
 
@@ -400,6 +400,8 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 			for _, note in ipairs(json.safe_table(notes.nodes)) do
 				if note.system ~= true and json.nilify(note.position) == nil then
 					table.insert(comments, mapper.to_comment(note, viewer, pr.author.username))
+				else
+					table.insert(activity_notes, note)
 				end
 			end
 
@@ -416,7 +418,7 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 			end)
 			local roots = {}
 			for _, comment in ipairs(comments) do
-				if comment.parent_id == nil then
+				if comment.parent_id == nil and comment.thread_id then
 					roots[comment.thread_id] = comment
 				end
 			end
@@ -425,7 +427,11 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 					inherit_thread_context(comment, roots[comment.thread_id])
 				end
 			end
-			local conversation = { description = description, comments = comments }
+			local conversation = {
+				description = description,
+				comments = comments,
+				activities = mapper.to_activities(activity_notes),
+			}
 			service.set_memory_cache(cache_key, conversation)
 			on_done(conversation, nil)
 		end)

@@ -125,8 +125,10 @@ function M.open(opts)
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
-	local submit_keys = keymaps.resolve("ui.submit") or {}
-	local close_keys = keymaps.resolve("ui.close") or {}
+	local submit = keymaps.resolve("ui.submit")
+	local close = keymaps.resolve("ui.close")
+	local submit_keys = submit and submit.key or {}
+	local close_keys = close and close.key or {}
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
@@ -168,11 +170,11 @@ function M.open(opts)
 		render_preview(buf, preview, width)
 	end
 	local footer_items = {}
-	if #close_keys > 0 then
-		table.insert(footer_items, string.format("%s quit", table.concat(close_keys, " / ")))
+	if close then
+		table.insert(footer_items, string.format("%s %s", table.concat(close.key, " / "), close.label))
 	end
-	if #submit_keys > 0 then
-		table.insert(footer_items, string.format("%s save+close", table.concat(submit_keys, " / ")))
+	if submit then
+		table.insert(footer_items, string.format("%s %s", table.concat(submit.key, " / "), submit.label))
 	end
 	for _, action in ipairs(opts.actions or {}) do
 		local description = action.description

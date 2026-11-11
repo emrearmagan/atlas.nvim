@@ -66,12 +66,12 @@ end
 local function normalize_labels(values)
 	local labels = {}
 	for _, raw in ipairs(values) do
-		local name = type(raw) == "table" and json.safe_str(raw.name) or json.safe_str(raw)
+		local name = json.safe_str(raw.name)
 		if name and name ~= "" then
 			table.insert(labels, {
 				name = name,
-				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
-				text_color = type(raw) == "table" and json.safe_str(raw.text_color) or nil,
+				color = json.safe_str(raw.color),
+				text_color = json.safe_str(raw.text_color),
 			})
 		end
 	end
@@ -177,8 +177,8 @@ function M.to_pull_request_details(raw, viewer)
 		description = json.safe_str(value.description) or "",
 		reactions = gitlab_mapper.award_reactions(json.safe_table(value.awardEmoji).nodes, viewer),
 		is_subscribed = json.nilify(value.subscribed),
-		assignees = normalize_authors(json.safe_table(json.safe_table(value.assignees).nodes or value.assignees)),
-		labels = normalize_labels(json.safe_table(json.safe_table(value.labels).nodes or value.labels)),
+		assignees = normalize_authors(json.safe_table(json.safe_table(value.assignees).nodes)),
+		labels = normalize_labels(json.safe_table(json.safe_table(value.labels).nodes)),
 	}
 end
 
@@ -193,25 +193,6 @@ function M.to_pull_requests(raw_list)
 		end
 	end
 	return pulls
-end
-
----@param user any
----@return AtlasUser|nil
-local function actor_from(user)
-	if type(user) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(user.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(user.name) or ""
-	local id = tostring(user.id or "")
-	return {
-		name = name ~= "" and name or username,
-		id = id:match("([^/]+)$") or id,
-		username = username,
-	}
 end
 
 ---@param body string
@@ -318,12 +299,12 @@ function M.to_comment(note, viewer, author_username)
 		id = id,
 		parent_id = not is_root and root_id or nil,
 		thread_id = json.safe_str(discussion.id),
-		author = actor_from(note.author),
+		author = gitlab_mapper.to_user(note.author),
 		author_roles = gitlab_mapper.author_roles(note, author_username),
 		body = tostring(note.body or ""),
 		created_at = json.safe_str(note.createdAt) or "",
 		resolved_at = resolved and is_root and json.safe_str(discussion.resolvedAt) or nil,
-		resolved_by = resolved and is_root and actor_from(discussion.resolvedBy) or nil,
+		resolved_by = resolved and is_root and gitlab_mapper.to_user(discussion.resolvedBy) or nil,
 		file = file,
 		inline = inline,
 		state = resolved and "RESOLVED" or nil,
@@ -343,7 +324,7 @@ function M.to_description(raw, viewer, author_username)
 	end
 	return {
 		id = id,
-		author = actor_from(raw.author),
+		author = gitlab_mapper.to_user(raw.author),
 		author_roles = gitlab_mapper.author_roles(raw, author_username),
 		body = tostring(raw.description or ""),
 		created_at = json.safe_str(raw.createdAt) or "",
@@ -369,12 +350,12 @@ function M.to_discussion_note(note, discussion, mr_url, author_username)
 		id = gitlab_mapper.note_id(note.id),
 		parent_id = not is_root and gitlab_mapper.note_id(root.id) or nil,
 		thread_id = "gid://gitlab/Discussion/" .. tostring(discussion.id),
-		author = actor_from(note.author),
+		author = gitlab_mapper.to_user(note.author),
 		author_roles = gitlab_mapper.author_roles(note, author_username),
 		body = tostring(note.body or ""),
 		created_at = tostring(note.created_at or ""),
 		resolved_at = resolved and is_root and json.safe_str(note.resolved_at) or nil,
-		resolved_by = resolved and is_root and actor_from(note.resolved_by) or nil,
+		resolved_by = resolved and is_root and gitlab_mapper.to_user(note.resolved_by) or nil,
 		file = file,
 		inline = inline,
 		state = resolved and "RESOLVED" or (outdated and "OUTDATED" or nil),
@@ -446,33 +427,26 @@ function M.to_diff_hunk(values)
 	return hunk
 end
 
----@param note table
+---@param note table GraphQL `Note`
 ---@return GitLabPullsActivityEntry|nil
 local function to_inline_thread_activity(note)
-	if note.system == true then
-		return nil
-	end
-	local position = type(note.position) == "table" and note.position or nil
-	if not position or tostring(position.position_type or "text") ~= "text" then
-		return nil
-	end
-	local inline = to_inline_position(position)
+	local _, inline = to_graphql_position(json.nilify(note.position))
 	local line = inline and (inline.to or inline.from)
 	if not inline or not line then
 		return nil
 	end
 	return {
 		kind = "comment",
-		actor = actor_from(note.author),
-		date = tostring(note.created_at or ""),
+		actor = gitlab_mapper.to_user(note.author),
+		date = json.safe_str(note.createdAt) or "",
 		label = string.format("started a review thread on %s:%d", inline.path, line),
 		inline_thread = true,
 	}
 end
 
----@param note table
+---@param note table GraphQL `Note`
 ---@return PullsActivityEntry|nil
-function M.to_activity(note)
+local function to_activity(note)
 	if note.system ~= true then
 		return to_inline_thread_activity(note)
 	end
@@ -490,10 +464,71 @@ function M.to_activity(note)
 	end
 	return {
 		kind = kind,
-		actor = actor_from(note.author),
-		date = tostring(note.created_at or ""),
+		actor = gitlab_mapper.to_user(note.author),
+		date = json.safe_str(note.createdAt) or "",
 		label = label,
 	}
+end
+
+local function same_actor(left, right)
+	return left.actor ~= nil and right.actor ~= nil and left.actor.username == right.actor.username
+end
+
+---@param entries PullsActivityEntry[]
+---@return PullsActivityEntry[]
+local function squash_inline_thread_activity(entries)
+	local squashed, current, count = {}, nil, 0
+
+	local function flush()
+		if not current then
+			return
+		end
+		if count > 1 then
+			current = {
+				kind = "comment",
+				actor = current.actor,
+				date = current.date,
+				label = string.format("started %d review threads", count),
+				inline_thread = true,
+			}
+		end
+		table.insert(squashed, current)
+		current, count = nil, 0
+	end
+
+	for _, entry in ipairs(entries) do
+		---@cast entry GitLabPullsActivityEntry
+		if entry.inline_thread then
+			if current and same_actor(current, entry) then
+				count = count + 1
+				current.date = entry.date or current.date
+			else
+				flush()
+				current, count = entry, 1
+			end
+		else
+			flush()
+			table.insert(squashed, entry)
+		end
+	end
+	flush()
+	return squashed
+end
+
+---@param notes table[] GraphQL `Note`s
+---@return PullsActivityEntry[]
+function M.to_activities(notes)
+	local entries = {}
+	for _, note in ipairs(notes) do
+		local entry = to_activity(note)
+		if entry then
+			table.insert(entries, entry)
+		end
+	end
+	table.sort(entries, function(a, b)
+		return a.date < b.date
+	end)
+	return squash_inline_thread_activity(entries)
 end
 
 return M

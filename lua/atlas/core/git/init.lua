@@ -409,17 +409,68 @@ function M.parse_remote_url(remote)
 	return nil, err or "Expected a supported Git repository remote"
 end
 
+---@param root string
+---@param on_done fun(resolved: table<string, string>)
+---@return { cancel: fun() }
+function M.resolved_remotes(root, on_done)
+	local pattern = "^remote\\..*\\.(gh|glab)-resolved$"
+	return M.run({ "-C", root, "config", "--get-regexp", pattern }, { text = true }, function(res)
+		local resolved = {}
+		if res.code == 0 then
+			for line in (res.stdout or ""):gmatch("[^\r\n]+") do
+				local name, value = line:match("^remote%.(.+)%.%a+%-resolved%s+(.-)%s*$")
+				if name and value ~= "" then
+					resolved[name] = value
+				end
+			end
+		end
+		on_done(resolved)
+	end)
+end
+
+---@param remotes AtlasGitRemote[]
+---@param target AtlasTarget
+---@return AtlasGitRemote|nil
+function M.remote_for_repository(remotes, target)
+	for _, remote in ipairs(remotes) do
+		local candidate = remote.target
+		if
+			candidate
+			and candidate.provider == target.provider
+			and candidate.host:lower() == target.host:lower()
+			and candidate.repo_full_name:lower() == target.repo_full_name:lower()
+		then
+			return remote
+		end
+	end
+	return nil
+end
+
 ---@param cwd string|nil
----@param on_done fun(target: AtlasTarget|nil, err: string|nil)
+---@param on_done fun(target: AtlasTarget|nil, err: string|nil, remote: string|nil)
 ---@return { cancel: fun() }
 function M.local_repository(cwd, on_done)
-	return M.remote_url(cwd or M.default_cwd(), "origin", function(remote, err)
-		if not remote then
+	local root = cwd or M.default_cwd()
+	local scope = requests.new()
+	scope.run(function(done)
+		return M.list_repository_remotes(root, done)
+	end, function(remotes, err)
+		if not remotes then
 			on_done(nil, err)
 			return
 		end
-		on_done(M.parse_remote_url(remote))
+		scope.run(function(done)
+			return M.resolved_remotes(root, done)
+		end, function(resolved)
+			local remote = M.select_base_remote(remotes, resolved)
+			if not remote then
+				on_done(nil, "No supported Git remote is configured")
+				return
+			end
+			on_done(remote.target, nil, remote.name)
+		end)
 	end)
+	return scope
 end
 
 ---@class AtlasGitBranchRemotes
@@ -492,10 +543,46 @@ local function remote_priority(remote)
 	return 0
 end
 
---- Mirrors gh/glab: upstream > <provider> > origin > others.
+---@param remote AtlasGitRemote
+---@param repo_full_name string
+---@return AtlasGitRemote
+local function with_repository(remote, repo_full_name)
+	if repo_full_name:lower() == remote.target.repo_full_name:lower() then
+		return remote
+	end
+	local base_url = remote.target.url:match("^(https?://[^/]+)")
+	local target = base_url and M.parse_remote_url(base_url .. "/" .. repo_full_name)
+	if not target then
+		return remote
+	end
+	return { name = remote.name, url = remote.url, target = target }
+end
+
+--- The remote chosen with `gh repo set-default` or `glab repo set-default`.
 ---@param remotes AtlasGitRemote[]
+---@param resolved table<string, string>|nil
 ---@return AtlasGitRemote|nil
-function M.select_base_remote(remotes)
+function M.default_remote(remotes, resolved)
+	for _, remote in ipairs(remotes) do
+		local value = remote.target and resolved and resolved[remote.name]
+		if value == "base" then
+			return remote
+		elseif value and not value:match("^head") then
+			return with_repository(remote, (value:gsub("^base:", "")))
+		end
+	end
+	return nil
+end
+
+--- Mirrors gh/glab: an explicit `repo set-default` wins, then upstream > <provider> > origin > others.
+---@param remotes AtlasGitRemote[]
+---@param resolved table<string, string>|nil
+---@return AtlasGitRemote|nil
+function M.select_base_remote(remotes, resolved)
+	local default = M.default_remote(remotes, resolved)
+	if default then
+		return default
+	end
 	local candidates = {}
 	for index, remote in ipairs(remotes) do
 		if remote.target then

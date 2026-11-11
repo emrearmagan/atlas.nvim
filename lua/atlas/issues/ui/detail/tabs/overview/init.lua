@@ -50,12 +50,12 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.activate(buf, refresh)
-	local toggle_keys = keymaps.resolve("ui.toggle_description_mode")
-	if toggle_keys then
+	local toggle = keymaps.resolve("ui.toggle_description_mode")
+	if toggle then
 		help.register("Detail", {
 			{
-				key = #toggle_keys == 1 and toggle_keys[1] or toggle_keys,
-				desc = "Toggle description mode",
+				key = toggle.key,
+				desc = toggle.desc,
 				index = 10,
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -69,9 +69,9 @@ end
 
 ---@param buf integer
 function M.deactivate(buf)
-	local keys = keymaps.resolve("ui.toggle_description_mode")
-	if keys then
-		help.remove("Detail", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
+	local toggle = keymaps.resolve("ui.toggle_description_mode")
+	if toggle then
+		help.remove("Detail", { { key = toggle.key } }, { buffer = buf })
 	end
 end
 

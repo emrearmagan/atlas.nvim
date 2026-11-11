@@ -1,4 +1,5 @@
 local code_preview = require("atlas.ui.components.code_preview")
+local keymaps = require("atlas.core.keymaps")
 local notes = require("atlas.pulls.notes")
 local popup_editor = require("atlas.ui.popups.editor")
 local info = require("atlas.ui.popups.info")
@@ -30,6 +31,19 @@ local function open_body_editor(value, key, on_save)
 	local function window_title()
 		return " " .. renderer.note_title(note_type, value) .. " "
 	end
+	local actions = {}
+	local note_type_keymap = keymaps.resolve("pulls.review.note_type")
+	if note_type_keymap then
+		actions[1] = {
+			key = note_type_keymap.key[1],
+			description = note_type_keymap.label,
+			callback = function(editor_context)
+				local index = vim.fn.index(notes.types, note_type)
+				note_type = notes.types[(index + 1) % #notes.types + 1]
+				vim.api.nvim_win_set_config(editor_context.win, { title = window_title(), title_pos = "left" })
+			end,
+		}
+	end
 	popup_editor.open({
 		key = key,
 		title = window_title(),
@@ -38,17 +52,7 @@ local function open_body_editor(value, key, on_save)
 		width_ratio = 0.7,
 		height_ratio = 0.5,
 		preview = context_preview(value),
-		actions = {
-			{
-				key = "!",
-				description = "type",
-				callback = function(editor_context)
-					local index = vim.fn.index(notes.types, note_type)
-					note_type = notes.types[(index + 1) % #notes.types + 1]
-					vim.api.nvim_win_set_config(editor_context.win, { title = window_title(), title_pos = "left" })
-				end,
-			},
-		},
+		actions = actions,
 		on_save = function(body)
 			on_save(body, note_type)
 		end,

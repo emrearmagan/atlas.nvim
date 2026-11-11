@@ -52,7 +52,7 @@ end
 -- Dim sign on lines that other commits change. Comments and notes on those lines are hidden here.
 ---@param ns integer
 ---@param buf integer
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param file AtlasDiffFile
 ---@param side "LEFT"|"RIGHT"
 function M.draw_changed_lines(ns, buf, session, file, side)
@@ -96,7 +96,7 @@ end
 -- Updates the item's lines to match the diff on screen.
 -- Returns false when they can't be found there, so the item isn't drawn.
 -- File comments have no lines, so they're always kept.
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param file AtlasDiffFile
 ---@param item AtlasDiffAnnotation
 ---@return boolean
@@ -116,7 +116,7 @@ local function place(session, file, item)
 	return true
 end
 
----@param session AtlasDiffSession
+---@param session AtlasDiffSessionInternal
 ---@param file AtlasDiffFile
 ---@return AtlasDiffAnnotation[]
 function M.for_file(session, file)
@@ -507,19 +507,21 @@ function M.open(owner, pr, path, items, on_action)
 	local comments = provider and provider.capabilities.comments
 	local can_react = comments and comments.reactions ~= nil
 
-	local keys = {
-		close = keymaps.resolve("ui.close"),
-		reply = keymaps.resolve("ui.comments.reply"),
-		add_task = can_add_task and keymaps.resolve("pulls.review.add_task") or nil,
-		edit = keymaps.resolve("ui.comments.edit"),
-		delete = keymaps.resolve("ui.delete"),
-		react = can_react and keymaps.resolve("ui.comments.react") or nil,
-		toggle_resolved = keymaps.resolve("pulls.review.toggle_resolved"),
+	local action_ids = {
+		close = "ui.close",
+		reply = "ui.comments.reply",
+		add_task = can_add_task and "pulls.review.add_task" or nil,
+		edit = "ui.comments.edit",
+		delete = "ui.delete",
+		react = can_react and "ui.comments.react" or nil,
+		toggle_resolved = "pulls.review.toggle_resolved",
 	}
-	local labels = {}
-	for name, bindings in pairs(keys) do
-		if #bindings > 0 then
-			labels[name] = table.concat(bindings, " / ")
+	local keys, labels = {}, {}
+	for name, action_id in pairs(action_ids) do
+		local keymap = keymaps.resolve(action_id)
+		if keymap then
+			keys[name] = keymap.key
+			labels[name] = table.concat(keymap.key, " / ")
 		end
 	end
 

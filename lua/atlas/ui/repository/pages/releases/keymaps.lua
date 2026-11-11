@@ -9,10 +9,10 @@ local M = {}
 local function register(buf, actions)
 	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
-		if action.key and #action.key > 0 then
+		if action.keymap then
 			table.insert(groups[action.group or "General"], {
-				key = action.key,
-				desc = action.desc,
+				key = action.keymap.key,
+				desc = action.keymap.desc,
 				index = action.index,
 				callback = action.callback,
 				opts = { silent = true, nowait = true },
@@ -30,16 +30,14 @@ end
 function M.setup(state, callbacks)
 	local actions = {
 		{
-			key = vim.list_extend(resolver.resolve("ui.refresh") or {}, resolver.resolve("ui.refresh_view") or {}),
-			desc = "Refresh release",
+			keymap = resolver.resolve({ "ui.refresh", "ui.refresh_view" }),
 			callback = function()
 				callbacks.refresh(state)
 			end,
 			index = 80,
 		},
 		{
-			key = resolver.resolve("ui.search"),
-			desc = "Search releases",
+			keymap = resolver.resolve("ui.search"),
 			group = "Filters",
 			callback = function()
 				callbacks.search(state)
@@ -47,16 +45,14 @@ function M.setup(state, callbacks)
 			index = 1,
 		},
 		{
-			key = resolver.resolve("ui.next_page"),
-			desc = "Next release",
+			keymap = resolver.resolve("ui.next_page"),
 			callback = function()
 				callbacks.next_release(state)
 			end,
 			index = 16,
 		},
 		{
-			key = resolver.resolve("ui.previous_page"),
-			desc = "Previous release",
+			keymap = resolver.resolve("ui.previous_page"),
 			callback = function()
 				callbacks.previous_release(state)
 			end,
@@ -69,24 +65,21 @@ function M.setup(state, callbacks)
 		state.buf,
 		vim.list_extend(actions, {
 			{
-				key = resolver.resolve("ui.open_in_browser"),
-				desc = "Open in browser",
+				keymap = resolver.resolve("ui.open_in_browser"),
 				callback = function()
 					callbacks.open_in_browser(state)
 				end,
 				index = 4,
 			},
 			{
-				key = resolver.resolve("ui.copy_id"),
-				desc = "Copy release tag",
+				keymap = resolver.resolve("ui.copy_id"),
 				callback = function()
 					callbacks.copy_tag(state)
 				end,
 				index = 8,
 			},
 			{
-				key = resolver.resolve("ui.copy_url"),
-				desc = "Copy URL",
+				keymap = resolver.resolve("ui.copy_url"),
 				callback = function()
 					callbacks.copy_url(state)
 				end,

@@ -93,6 +93,17 @@ describe("GitHub client host routing", function()
 		assert.is_false(client.is_enterprise_server())
 	end)
 
+	it("strips the protocol and path from the hostname", function()
+		for _, hostname in ipairs({
+			"https://github.company.com",
+			"HTTPS://GitHub.Company.com/",
+			" github.company.com/owner/repo ",
+		}) do
+			options.hostname = hostname
+			assert.are.equal("github.company.com", client.hostname())
+		end
+	end)
+
 	it("uses GH_HOST when no hostname is configured", function()
 		vim.env.GH_HOST = "github.company.com"
 		assert.is_true(client.is_enterprise_server())

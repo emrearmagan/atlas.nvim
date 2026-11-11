@@ -170,7 +170,93 @@ mutation($id:ID!,$body:String!){
 }
 ]]
 
-local reply_comment
+local ADD_REVIEW_REPLY_MUTATION = [[
+mutation($threadId:ID!,$reviewId:ID!,$body:String!){
+  addPullRequestReviewThreadReply(input:{
+    pullRequestReviewThreadId:$threadId
+    pullRequestReviewId:$reviewId
+    body:$body
+  }){
+    comment{
+      id body url createdAt
+      authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}
+      pullRequestReview{id state commit{oid}}
+    }
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param parent PullsComment
+---@param content string
+---@param opts PullsAddCommentOpts
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function reply_comment(pr, parent, content, opts, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	if parent.inline ~= nil or parent.file ~= nil then
+		local pending = opts.pending == true
+		local thread_id = tostring(parent.thread_id or "")
+		if thread_id == "" then
+			on_done(nil, "Missing review thread id")
+			return nil
+		end
+
+		local function add_reply(review_id, done)
+			local args = {
+				"api",
+				"graphql",
+				"-f",
+				"threadId=" .. thread_id,
+				"-f",
+				"body=" .. content,
+				"-f",
+				"reviewId=" .. review_id,
+				"-f",
+				"query=" .. ADD_REVIEW_REPLY_MUTATION,
+			}
+
+			return cli.gh(args, function(result, err)
+				if err or type(result) ~= "table" then
+					done(nil, err or "Failed to create reply")
+					return
+				end
+				local payload = json.nilify(result.data.addPullRequestReviewThreadReply)
+				local reply = payload and json.nilify(payload.comment)
+				if not reply or json.nilify(reply.id) == nil then
+					done(nil, "GitHub did not return the created reply")
+					return
+				end
+				local review = json.safe_table(reply.pullRequestReview)
+				if pending then
+					reviews.update(opts.review, review)
+				end
+				local created =
+					mapper.to_thread_comment(reply, parent, parent.parent_id or parent.id, pr.author.username)
+				done(created, nil)
+			end, {
+				action = "Reply comment",
+				repo = pr.repo_full_name,
+				number = pr.id,
+				parent_id = parent.id,
+			})
+		end
+
+		if pending then
+			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
+		end
+		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
+	end
+
+	return M.add_comment(pr, content, nil, on_done)
+end
 
 ---@param pr PullRequest
 ---@param content string
@@ -420,94 +506,6 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 		repo = pr.repo_full_name,
 		number = pr.id,
 	})
-end
-
-local ADD_REVIEW_REPLY_MUTATION = [[
-mutation($threadId:ID!,$reviewId:ID!,$body:String!){
-  addPullRequestReviewThreadReply(input:{
-    pullRequestReviewThreadId:$threadId
-    pullRequestReviewId:$reviewId
-    body:$body
-  }){
-    comment{
-      id body url createdAt
-      authorAssociation author{__typename login ...on User{databaseId} ...on Bot{databaseId}}
-      pullRequestReview{id state commit{oid}}
-    }
-  }
-}
-]]
-
----@param pr PullRequest
----@param parent PullsComment
----@param content string
----@param opts PullsAddCommentOpts
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-reply_comment = function(pr, parent, content, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	if parent.inline ~= nil or parent.file ~= nil then
-		local pending = opts.pending == true
-		local thread_id = tostring(parent.thread_id or "")
-		if thread_id == "" then
-			on_done(nil, "Missing review thread id")
-			return nil
-		end
-
-		local function add_reply(review_id, done)
-			local args = {
-				"api",
-				"graphql",
-				"-f",
-				"threadId=" .. thread_id,
-				"-f",
-				"body=" .. content,
-				"-f",
-				"reviewId=" .. review_id,
-				"-f",
-				"query=" .. ADD_REVIEW_REPLY_MUTATION,
-			}
-
-			return cli.gh(args, function(result, err)
-				if err or type(result) ~= "table" then
-					done(nil, err or "Failed to create reply")
-					return
-				end
-				local payload = json.nilify(result.data.addPullRequestReviewThreadReply)
-				local reply = payload and json.nilify(payload.comment)
-				if not reply or json.nilify(reply.id) == nil then
-					done(nil, "GitHub did not return the created reply")
-					return
-				end
-				local review = json.safe_table(reply.pullRequestReview)
-				if pending then
-					reviews.update(opts.review, review)
-				end
-				local created =
-					mapper.to_thread_comment(reply, parent, parent.parent_id or parent.id, pr.author.username)
-				done(created, nil)
-			end, {
-				action = "Reply comment",
-				repo = pr.repo_full_name,
-				number = pr.id,
-				parent_id = parent.id,
-			})
-		end
-
-		if pending then
-			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
-		end
-		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, on_done)
-	end
-
-	return M.add_comment(pr, content, nil, on_done)
 end
 
 ---@param _pr PullRequest

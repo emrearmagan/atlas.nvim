@@ -30,8 +30,8 @@ end
 ---@param collapsed boolean
 ---@param width integer
 local function render_thread(thread, collapsed, width)
-	local fold_keys = keymaps.resolve("ui.toggle_fold")
-	local fold_key = fold_keys and fold_keys[1]
+	local fold = keymaps.resolve("ui.toggle_fold")
+	local fold_key = fold and fold.key[1]
 	local opts = {
 		boxed = true,
 		expanded = function()

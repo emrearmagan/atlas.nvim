@@ -98,8 +98,8 @@ end
 ---@return AtlasEditorAction|nil
 local function comment_template_action()
 	local templates = config.options.pulls.comment_templates.items
-	local key = (keymaps.resolve("pulls.review.comment_templates") or {})[1]
-	if #templates == 0 or not key then
+	local keymap = keymaps.resolve("pulls.review.comment_templates")
+	if #templates == 0 or not keymap then
 		return nil
 	end
 	local label_width = 0
@@ -107,8 +107,8 @@ local function comment_template_action()
 		label_width = math.max(label_width, vim.fn.strdisplaywidth(template.label))
 	end
 	return {
-		key = key,
-		description = "templates",
+		key = keymap.key[1],
+		description = keymap.label,
 		callback = function(context)
 			picker.select({
 				title = "Comment templates",
@@ -387,7 +387,7 @@ M.edit_comment = {
 				if comment.is_task then
 					local desired = vim.tbl_extend("force", {}, comment, { body = text })
 					desired.body_display = nil
-					update(desired, callback)
+					update(context.pr, desired, callback)
 				else
 					update(context.pr, comment, text, callback)
 				end
@@ -498,11 +498,7 @@ M.delete_comment = {
 			notify.success(comment.is_task and "Task deleted" or "Comment deleted", { timeout = 1200 })
 			on_done({ changed_pr = review_changed == true }, nil)
 		end
-		if comment.is_task then
-			remove(comment, callback)
-		else
-			remove(context.pr, comment, callback)
-		end
+		remove(context.pr, comment, callback)
 		return true
 	end,
 }
@@ -536,7 +532,7 @@ M.toggle_task = {
 			desired.state = "RESOLVED"
 		end
 		notify.loading(is_resolved and "Reopening task..." or "Resolving task...")
-		update(desired, function(updated, err)
+		update(context.pr, desired, function(updated, err)
 			if err then
 				notify.error(tostring(err))
 				on_done(nil, tostring(err))

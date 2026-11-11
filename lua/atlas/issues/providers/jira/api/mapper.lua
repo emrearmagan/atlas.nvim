@@ -152,15 +152,18 @@ end
 
 ---@param raw table
 ---@param sp_field string|nil
+---@param base_url string
 ---@return JiraIssue
-function M.to_issue(raw, sp_field)
+function M.to_issue(raw, sp_field, base_url)
 	local fields = json.safe_table(raw.fields)
 	local status, status_id = extract_status(safe_get(fields, "status"))
 	local issue_type = M.to_issue_type(safe_get(fields, "issuetype"))
+	local key = tostring(raw.key or "")
 
 	return {
 		id = raw.id,
-		key = tostring(raw.key or ""),
+		key = key,
+		url = base_url .. "/browse/" .. key,
 		title = tostring(fields.summary or ""),
 		project = M.to_project(safe_get(fields, "project")),
 		status = status,
@@ -176,8 +179,6 @@ function M.to_issue(raw, sp_field)
 		created_at = json.safe_str(fields.created),
 		updated_at = json.safe_str(fields.updated),
 		closed_at = json.safe_str(fields.resolutiondate),
-		comment_count = tonumber(safe_get(fields, "comment", "total")),
-		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 	}
 end
 
@@ -205,6 +206,7 @@ function M.to_issue_details(raw, fields_config)
 		assignees = assignee and { assignee } or {},
 		labels = labels,
 		milestone = nil,
+		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 		raw_description = json.nilify(fields.description),
 		custom_fields = {},
 	}
@@ -314,11 +316,12 @@ end
 
 ---@param raw_issues table[]
 ---@param sp_field string|nil
+---@param base_url string
 ---@return Issue[]
-function M.to_issues_list(raw_issues, sp_field)
+function M.to_issues_list(raw_issues, sp_field, base_url)
 	local out = {}
 	for _, raw in ipairs(raw_issues or {}) do
-		table.insert(out, M.to_issue(raw, sp_field))
+		table.insert(out, M.to_issue(raw, sp_field, base_url))
 	end
 	return out
 end
@@ -340,7 +343,6 @@ local function normalize_comment(raw_comment, issue_key, base_url, reporter_id)
 
 	local author = normalize_issue_user(raw_comment.author)
 	local comment_id = tostring(raw_comment.id or "")
-	base_url = base_url:gsub("/+$", "")
 	local url = nil
 	if base_url ~= "" and issue_key ~= "" and comment_id ~= "" then
 		url = string.format("%s/browse/%s?focusedCommentId=%s", base_url, issue_key, comment_id)

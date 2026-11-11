@@ -77,7 +77,10 @@ local function start_loading(message, context, on_done)
 	options.open_cmd = config.diff_command()
 	context.command = options.open_cmd
 
-	local view = loading.open(message, requests.cancel, "diff")
+	local label = context.kind == "pr" and string.format("%s #%s", context.repo, context.pr_id)
+		or context.kind == "commit" and context.commit:sub(1, 8)
+		or string.format("%s...%s", context.base, context.head)
+	local view = loading.open(message, requests.cancel, label)
 
 	local function fail(title, description)
 		requests.cancel()

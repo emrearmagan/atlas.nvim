@@ -3,7 +3,7 @@ local M = {}
 local state = require("atlas.issues.state")
 local window = require("atlas.issues.ui.dashboard.window")
 
-local DEBOUNCE_MS = 150
+local DEBOUNCE_MS = 250
 local highlight_ns = vim.api.nvim_create_namespace("atlas.issues.board")
 local selected_line, selected_column = nil, nil
 

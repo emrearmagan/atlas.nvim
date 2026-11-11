@@ -2,7 +2,6 @@ local M = {}
 
 local form = require("atlas.ui.form")
 local github_stack = require("atlas.pulls.providers.github.stack")
-local keymaps = require("atlas.core.keymaps")
 local meta = require("atlas.pulls.editor.meta")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
@@ -436,8 +435,7 @@ local function open_editor(state)
 	if state.pr.state == "open" or state.pr.state == "draft" then
 		if state.provider.capabilities.repository and not is_stacked(state) then
 			form_keymaps[#form_keymaps + 1] = {
-				key = keymaps.resolve("editor.base"),
-				desc = "base",
+				keymap = "editor.base",
 				action = function(editor)
 					select_base(state, editor)
 				end,
@@ -445,16 +443,14 @@ local function open_editor(state)
 		end
 		if write.fetch_reviewer_candidates then
 			form_keymaps[#form_keymaps + 1] = {
-				key = keymaps.resolve("editor.reviewers"),
-				desc = "reviewers",
+				keymap = "editor.reviewers",
 				action = function(editor)
 					select_reviewers(state, editor)
 				end,
 			}
 		end
 		form_keymaps[#form_keymaps + 1] = {
-			key = keymaps.resolve("editor.draft"),
-			desc = "draft",
+			keymap = "editor.draft",
 			action = function(editor)
 				if state.submitting then
 					return
@@ -466,8 +462,7 @@ local function open_editor(state)
 	end
 	if write.fetch_assignees then
 		form_keymaps[#form_keymaps + 1] = {
-			key = keymaps.resolve("editor.assignees"),
-			desc = "assignees",
+			keymap = "editor.assignees",
 			action = function(editor)
 				select_assignees(state, editor)
 			end,
@@ -475,23 +470,18 @@ local function open_editor(state)
 	end
 	if write.fetch_labels then
 		form_keymaps[#form_keymaps + 1] = {
-			key = keymaps.resolve("editor.labels"),
-			desc = "labels",
+			keymap = "editor.labels",
 			action = function(editor)
 				select_labels(state, editor)
 			end,
 		}
 	end
-	local diff_keys = keymaps.resolve("pulls.open_diff")
-	if diff_keys then
-		form_keymaps[#form_keymaps + 1] = {
-			key = diff_keys,
-			desc = "diff",
-			action = function(editor)
-				preview_diff(state, editor)
-			end,
-		}
-	end
+	form_keymaps[#form_keymaps + 1] = {
+		keymap = "pulls.open_diff",
+		action = function(editor)
+			preview_diff(state, editor)
+		end,
+	}
 
 	return form.open({
 		header = "Edit PR #" .. state.pr.id,

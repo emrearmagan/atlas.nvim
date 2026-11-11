@@ -10,6 +10,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field active table<string, boolean>|nil Hashes of the shown commits, nil while all commits are shown.
 ---@field seen table<string, boolean> Hashes of commits shown before.
 ---@field cursor_row integer
+---@field height integer Percent of the explorer column.
 ---@field group integer
 local Commits = {}
 Commits.__index = Commits
@@ -24,13 +25,12 @@ local function render(state)
 
 	for _, commit in ipairs(state.items) do
 		local marker = state.active and state.active[commit.hash] and "▸" or state.seen[commit.hash] and "✓" or " "
-		local hash = commit.hash:sub(1, 8)
-		local message = commit.message:match("[^\r\n]*")
-		local prefix = marker .. hash .. " "
-
-		lines[#lines + 1] = prefix
-			.. utils.truncate(vim.fn.strtrans(message), math.max(1, width - vim.fn.strdisplaywidth(prefix)))
-		highlights[#highlights + 1] = { #lines - 1, #marker, #marker + #hash, "AtlasTextMuted" }
+		local age = utils.relative_time(commit.date)
+		local subject_width = math.max(1, width - vim.fn.strdisplaywidth(marker) - #age - 1)
+		local subject = utils.truncate(vim.fn.strtrans(commit.message:match("[^\r\n]*")), subject_width)
+		local line = marker .. subject .. string.rep(" ", subject_width - vim.fn.strdisplaywidth(subject) + 1)
+		highlights[#highlights + 1] = { #lines, #line, #line + #age, "AtlasTextMuted" }
+		lines[#lines + 1] = line .. age
 	end
 
 	vim.bo[state.buf].modifiable = true
@@ -82,8 +82,9 @@ end
 
 ---@param items AtlasGitCommit[]
 ---@param shown boolean
+---@param height integer Percent of the explorer column.
 ---@return AtlasDiffCommits
-function Commits.new(items, shown)
+function Commits.new(items, shown, height)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, string.format("Commits [%d]", vim.api.nvim_get_current_tabpage()))
 	local state = setmetatable({
@@ -92,6 +93,7 @@ function Commits.new(items, shown)
 		items = items,
 		seen = {},
 		cursor_row = 2,
+		height = height,
 		group = vim.api.nvim_create_augroup("AtlasDiffCommits" .. buf, { clear = true }),
 	}, Commits)
 
@@ -134,7 +136,10 @@ end
 function Commits:resize(parent_win)
 	if self.win and parent_win then
 		local height = vim.api.nvim_win_get_height(parent_win) + vim.api.nvim_win_get_height(self.win) + 1
-		vim.api.nvim_win_set_height(self.win, math.max(2, math.floor(height * 0.2)))
+		vim.api.nvim_win_set_height(
+			self.win,
+			math.max(2, math.min(#self.items + 2, math.floor(height * self.height / 100)))
+		)
 	end
 end
 
@@ -149,7 +154,10 @@ function Commits:open(parent_win)
 	self.win = vim.api.nvim_open_win(self.buf, false, {
 		split = "below",
 		win = parent_win,
-		height = math.max(2, math.floor(vim.api.nvim_win_get_height(parent_win) * 0.2)),
+		height = math.max(
+			2,
+			math.min(#self.items + 2, math.floor(vim.api.nvim_win_get_height(parent_win) * self.height / 100))
+		),
 	})
 
 	local options = vim.wo[self.win][0]
@@ -195,8 +203,19 @@ function Commits:set_active(commits)
 			self.seen[commit.hash] = true
 		end
 	end
-	if self.win then
-		render(self)
+	if not self.win then
+		return
+	end
+
+	render(self)
+	if self.active and vim.api.nvim_get_current_win() ~= self.win then
+		for index, item in ipairs(self.items) do
+			if self.active[item.hash] then
+				self.cursor_row = index + 1
+				vim.api.nvim_win_set_cursor(self.win, { self.cursor_row, 0 })
+				break
+			end
+		end
 	end
 end
 

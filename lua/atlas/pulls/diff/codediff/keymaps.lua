@@ -71,9 +71,12 @@ function M.setup(renderer, viewer, groups)
 	local view_keys = codediff_keys.keymaps_for("view")
 	local explorer_keys = codediff_keys.keymaps_for("explorer")
 	local help_items = {}
-	add(help_items, resolver.resolve("pulls.review.view.external_help"), "Show CodeDiff help", function()
-		codediff_help.toggle(renderer.tabpage)
-	end, 101)
+	local external_help = resolver.resolve("pulls.review.view.external_help")
+	if external_help then
+		add(help_items, external_help.key, external_help.desc, function()
+			codediff_help.toggle(renderer.tabpage)
+		end, 101)
+	end
 
 	local function navigate_file(direction)
 		if not config.options.diff.cycle_next_file then

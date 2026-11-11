@@ -11,6 +11,7 @@ local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
+local pipeline_api = require("atlas.pulls.pipelines")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
@@ -51,8 +52,14 @@ function M.on_select(pr, refresh, opts)
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	if should_fetch_reviewers then
+	local backend = pipeline_api.get(provider)
+	local should_fetch_pipelines = backend ~= nil
+		and (force_refresh or detail.pipelines == nil or detail.pipelines == "loading")
+	if should_fetch_reviewers or should_fetch_pipelines then
 		reset_requests()
+	end
+
+	if should_fetch_reviewers then
 		state.reviewers = "loading"
 		state.requests.run(function(done)
 			return core.fetch_reviewers(pr, opts, done)
@@ -65,6 +72,24 @@ function M.on_select(pr, refresh, opts)
 			else
 				state.reviewers = reviewers or {}
 			end
+			refresh()
+		end)
+	end
+
+	if should_fetch_pipelines then
+		---@cast backend -nil
+		detail.pipelines = "loading"
+		state.requests.run(function(done)
+			return backend.fetch(
+				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
+				{ force_refresh = force_refresh },
+				done
+			)
+		end, function(items, err)
+			if not is_current(pr) then
+				return
+			end
+			detail.pipelines = err or items or {}
 			refresh()
 		end)
 	end
@@ -418,8 +443,8 @@ local function render_description(details, width, lines, spans)
 	end
 
 	if truncated then
-		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}
-		local key = keys[1] or "za"
+		local fold = require("atlas.core.keymaps").resolve("ui.toggle_fold")
+		local key = fold and fold.key[1] or "za"
 		local prefix = "Press "
 		local suffix = " to expand"
 		local hint = prefix .. key .. suffix
@@ -574,13 +599,7 @@ function M.render(pr, details, width)
 	render_merge_checks(width, lines, spans)
 	render_pipelines(pr, width, lines, spans, line_map)
 
-	if
-		state.reviewers == "loading"
-		or detail.merge_checks == "loading"
-		or detail.details_loading
-		or detail.pipelines == "loading"
-		or detail.diffstat == "loading"
-	then
+	if M.is_loading() or detail.merge_checks == "loading" or detail.details_loading or detail.diffstat == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading overview..."), "AtlasTextMuted", PADDING_X)
 	end
 

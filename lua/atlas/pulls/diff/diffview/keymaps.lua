@@ -28,7 +28,7 @@ end
 function M.setup(renderer, viewer, groups)
 	local explorer = viewer.explorer
 	local native_keys = config.get_config().keymaps
-	local external_help_keys = resolver.resolve("pulls.review.view.external_help")
+	local external_help = resolver.resolve("pulls.review.view.external_help")
 
 	-- Adapt this view's internal lookup so native file actions see our explorer selection.
 	renderer.diffview.infer_cur_file = function(self, allow_dir)
@@ -131,11 +131,11 @@ function M.setup(renderer, viewer, groups)
 		end,
 	})
 	bind_native(explorer.buf, native_keys.file_panel, explorer_actions)
-	if external_help_keys then
+	if external_help then
 		help.register("Explorer", {
 			{
-				key = external_help_keys,
-				desc = "Show Diffview help",
+				key = external_help.key,
+				desc = external_help.desc,
 				index = 101,
 				callback = diffview_actions.help("file_panel"),
 				opts = { nowait = true, silent = true },
@@ -143,12 +143,12 @@ function M.setup(renderer, viewer, groups)
 		}, { buffer = explorer.buf, index = 1 })
 	end
 
-	local details_keys = resolver.resolve("pulls.review.show_details")
-	if details_keys then
+	local details = resolver.resolve("pulls.review.show_details")
+	if details then
 		help.register("Explorer", {
 			{
-				key = details_keys,
-				desc = "Show file details",
+				key = details.key,
+				desc = details.desc,
 				index = 2,
 				callback = function()
 					explorer:show_details()
@@ -174,11 +174,11 @@ function M.setup(renderer, viewer, groups)
 		if pane.win then
 			bind_native(pane.buf, refresh_keys, navigation)
 			bind_native(pane.buf, native_keys.view, shared)
-			if external_help_keys then
+			if external_help then
 				help.register("View", {
 					{
-						key = external_help_keys,
-						desc = "Show Diffview help",
+						key = external_help.key,
+						desc = external_help.desc,
 						index = 101,
 						callback = diffview_actions.help({ "view", "diff2" }),
 						opts = { nowait = true, silent = true },

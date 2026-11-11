@@ -29,6 +29,7 @@ function M.render()
 	})
 
 	window.line_map = line_map
+	window.statusline:redraw()
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -107,7 +108,6 @@ function M.init(provider, opts)
 	local initial_view = opts and opts.initial_view
 	state.view = initial_view and vim.tbl_extend("force", {}, initial_view)
 		or bookmarks.views(state.views, state.bookmarks, state.starred_items)[1]
-	window.statusline:clear_items()
 
 	local buf = window.buf()
 	if buf ~= nil then

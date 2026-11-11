@@ -19,7 +19,7 @@ function M.hostname()
 		return DEFAULT_HOST
 	end
 
-	return vim.trim(hostname):lower()
+	return (vim.trim(hostname):lower():gsub("^%a+://", ""):gsub("/.*$", ""))
 end
 
 ---@param key string
@@ -92,11 +92,6 @@ end
 
 function M.delete_mem(key)
 	memory.delete(cache_key(key))
-end
-
----@param prefix string
-function M.clear_mem(prefix)
-	memory.clear_prefix(cache_key(prefix))
 end
 
 ---@param args string[]
@@ -193,16 +188,9 @@ function M.gh_text(args, callback, ctx)
 	return run(args, false, callback, ctx)
 end
 
-function M.api(method, endpoint, body, callback, ctx)
-	local args = { "api", "-X", method, endpoint }
-	if body then
-		for key, value in pairs(body) do
-			table.insert(args, "-f")
-			table.insert(args, string.format("%s=%s", key, tostring(value)))
-		end
-	end
+function M.api(method, endpoint, callback, ctx)
 	return M.gh(
-		args,
+		{ "api", "-X", method, endpoint },
 		callback,
 		vim.tbl_extend("keep", ctx or {}, {
 			method = method,

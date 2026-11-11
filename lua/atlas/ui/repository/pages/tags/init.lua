@@ -276,7 +276,7 @@ local function copy_url(state)
 	local tag = current(state)
 	if tag and tag.url and tag.url ~= "" then
 		vim.fn.setreg("+", tag.url)
-		notify.success("Copied tag URL")
+		notify.success("Copied URL")
 	elseif tag then
 		notify.warn("No URL available for this tag")
 	end

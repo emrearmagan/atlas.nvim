@@ -41,12 +41,16 @@
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
----@field show_commits boolean|nil
+---@field commits AtlasPullsDiffCommitsConfig|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
 ---@field focus_on_select boolean|nil
 ---@field ignore string[]|nil
+
+---@class AtlasPullsDiffCommitsConfig
+---@field hidden boolean|nil
+---@field height integer|nil Percent of the explorer column.
 
 ---@class AtlasPullsDiffReviewPanelConfig
 ---@field hidden boolean|nil
@@ -139,11 +143,10 @@
 
 -- Config
 
----@alias AtlasStatuslineContext "atlas"|"diff"
----@alias AtlasStatuslineEnable fun(buf: integer, win: integer, context: AtlasStatuslineContext): boolean
-
 ---@class AtlasUIStatuslineConfig
----@field enable? boolean|AtlasStatuslineEnable Predicate for where Atlas's statusline is shown (default: true)
+---@field enable? boolean|fun(buf: integer, win: integer): boolean Predicate for where Atlas's statusline is shown (default: true)
+---@field layout? fun(buf: integer, win: integer, ctx: AtlasStatuslineContext): AtlasStatuslineLayout|nil
+---@field show_hints? boolean
 
 ---@class AtlasUIConfig
 ---@field statusline AtlasUIStatuslineConfig|nil
@@ -162,7 +165,11 @@ local M = {}
 ---@type AtlasConfig
 local defaults = {
 	ui = {
-		statusline = { enable = true },
+		statusline = {
+			enable = true,
+			layout = nil,
+			show_hints = false,
+		},
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -209,7 +216,10 @@ local defaults = {
 			explorer = {
 				grouped = true,
 				hidden = false,
-				show_commits = false,
+				commits = {
+					hidden = true,
+					height = 35,
+				},
 				width = 40,
 				initial_focus = "explorer",
 				preview = false,
@@ -256,6 +266,7 @@ local defaults = {
 				reply = "c",
 				edit = "e",
 				react = "gr",
+				upvote = "gu",
 			},
 			toggle_panel = "p",
 			cycle_layout = "t",
@@ -279,7 +290,7 @@ local defaults = {
 			open_in_browser = "gx",
 			open_references = "gl",
 			copy_id = "y",
-			copy_url = "Y",
+			copy_url = "gy",
 			show_details = "K",
 			search = "?",
 			edit_search = "i",
@@ -324,6 +335,7 @@ local defaults = {
 				add_suggestion = "s",
 				submit_suggestion = "S",
 				add_note = "<leader>n",
+				note_type = "!",
 				toggle_resolved = "x",
 				approve = "<leader>ga",
 				request_changes = "<leader>gr",
@@ -364,6 +376,10 @@ local defaults = {
 				merged = "gpm",
 				declined = "gpd",
 			},
+			merge = {
+				method = "gm",
+				delete_branch = "gd",
+			},
 		},
 		issues = {
 			transition_issue = "gs",
@@ -376,13 +392,15 @@ local defaults = {
 			assignees = "ga",
 			labels = "gl",
 			milestone = "gm",
-			reporter = "gr",
+			reporter = "gR",
 			reviewers = "gr",
 			base = "gb",
 			draft = "gD",
 			issue_type = "gt",
 			fields = "gf",
 			templates = "gT",
+			delete_template = "<C-d>",
+			complete = "<C-x><C-u>",
 		},
 	},
 }
@@ -390,16 +408,15 @@ local defaults = {
 ---@type AtlasConfig
 M.options = vim.deepcopy(defaults)
 
----@param context AtlasStatuslineContext
 ---@param buf integer
 ---@param win integer
 ---@return boolean
-function M.statusline_enabled(context, buf, win)
+function M.statusline_enabled(buf, win)
 	local enable = M.options.ui.statusline.enable
 	if type(enable) ~= "function" then
 		return enable ~= false
 	end
-	return enable(buf, win, context) == true
+	return enable(buf, win) == true
 end
 
 ---@return string
@@ -442,6 +459,19 @@ function M.setup(opts)
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
 	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
+	end
+
+	-- " example.atlassian.net/ " -> https://example.atlassian.net
+	for _, id in ipairs({ "gitlab", "jira" }) do
+		local options = M.provider_options(id) or {}
+		if type(options.base_url) == "string" then
+			local base_url = vim.trim(options.base_url):gsub("/+$", "")
+			if base_url ~= "" and not base_url:match("^%a+://") then
+				base_url = "https://" .. base_url
+			end
+
+			options.base_url = base_url
+		end
 	end
 end
 
