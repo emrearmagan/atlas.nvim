@@ -122,9 +122,18 @@ end
 
 ---@param context PullsPipelineContext
 ---@param branch string
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
----@return AtlasRequestScope
-local function fetch_branch(context, branch, on_done)
+---@return AtlasRequestScope|nil
+local function fetch_branch(context, branch, opts, on_done)
+	local cache_key = string.format("pipelines:%s:branch:%s", context.repo_full_name, branch)
+	if not (opts or {}).force_refresh then
+		local cached, found = service.get_cache(cache_key)
+		if found then
+			on_done(cached, nil)
+			return nil
+		end
+	end
 	local scope = request_scope.new()
 	scope.run(function(done)
 		return fetch_repository_id(context, done)
@@ -146,6 +155,7 @@ local function fetch_branch(context, branch, on_done)
 			for _, build in ipairs(builds) do
 				table.insert(pipelines, to_pipeline(build))
 			end
+			service.set_cache(cache_key, pipelines)
 			on_done(pipelines, nil)
 		end)
 	end)
@@ -320,7 +330,7 @@ function M.fetch(context, opts, on_done)
 		if pr then
 			return fetch_pr(context, pr, opts, done)
 		end
-		return fetch_branch(context, assert(branch), done)
+		return fetch_branch(context, assert(branch), opts, done)
 	end, function(pipelines, err)
 		if err then
 			on_done(nil, err)
@@ -351,20 +361,26 @@ end
 ---@return AtlasRequestScope|nil
 function M.fetch_pipeline(context, pipeline, on_done)
 	local scope = request_scope.new()
-	scope.run(function(done)
-		return service.request("GET", builds_endpoint(context) .. "/" .. pipeline.id, nil, done, {
-			action = "Fetch build",
-			pipeline_id = pipeline.id,
-		})
-	end, function(result, err)
+	scope.all({
+		build = function(done)
+			return service.request("GET", builds_endpoint(context) .. "/" .. pipeline.id, nil, done, {
+				action = "Fetch build",
+				pipeline_id = pipeline.id,
+			})
+		end,
+		timeline = function(done)
+			return fetch_timeline(context, pipeline, { force_refresh = true }, done)
+		end,
+	}, function(values, errors)
+		local err = errors.build or errors.timeline
 		if err then
 			on_done(nil, err)
 			return
 		end
 
-		scope.run(function(done)
-			return fetch_timeline(context, to_pipeline(result), { force_refresh = true }, done)
-		end, on_done)
+		local selected = to_pipeline(values.build)
+		selected.stages = values.timeline.stages
+		on_done(selected, nil)
 	end)
 	return scope
 end

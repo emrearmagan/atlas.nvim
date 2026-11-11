@@ -56,7 +56,7 @@ end
 
 register({
 	id = "transition",
-	label = "Change state",
+	label = "Change State",
 	icon = icons.get("transition", "actions"),
 	is_available = has_issue,
 	run = function(context, done)
@@ -70,9 +70,12 @@ register({
 			end
 			notify.clear()
 			---@cast states table[]
+			local available = vim.tbl_filter(function(state)
+				return state.name ~= issue.status
+			end, states)
 			picker.select({
 				title = "Work item state",
-				items = states,
+				items = available,
 				format_item = function(state)
 					return state.name
 				end,
@@ -90,7 +93,7 @@ register({
 
 register({
 	id = "edit_issue",
-	label = "Edit Issue",
+	label = "Edit Work Item",
 	icon = icons.get("edit", "actions"),
 	is_available = has_issue,
 	run = function(context, done)
@@ -107,7 +110,7 @@ register({
 
 register({
 	id = "assign",
-	label = "Assign work item",
+	label = "Assign Work Item",
 	icon = icons.get("user", "actions"),
 	is_available = has_issue,
 	run = function(context, done)
@@ -153,7 +156,7 @@ register({
 
 register({
 	id = "labels",
-	label = "Edit tags",
+	label = "Edit Tags",
 	icon = icons.get("label", "actions"),
 	is_available = has_issue,
 	run = function(context, done)
@@ -181,7 +184,7 @@ register({
 
 register({
 	id = "create_issue",
-	label = "Create work item",
+	label = "Create Work Item",
 	icon = icons.get("create", "actions"),
 	run = function(context, done)
 		with_project(context, function(project)
@@ -197,7 +200,7 @@ register({
 
 register({
 	id = "delete_issue",
-	label = "Delete work item",
+	label = "Delete Work Item",
 	icon = icons.get("delete", "actions"),
 	confirm = function(context)
 		return string.format("Move work item #%s to the recycle bin?", assert(context.issue).key)
@@ -219,7 +222,7 @@ register({
 
 register({
 	id = "search",
-	label = "Search work items",
+	label = "Search Work Items",
 	icon = icons.get("search", "actions"),
 	run = search.issues,
 })

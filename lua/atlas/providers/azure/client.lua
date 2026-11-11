@@ -103,7 +103,7 @@ end
 ---@param content_type? string
 ---@param response_headers? boolean
 ---@return { job_id: integer, cancel: fun() }|nil
-local function send(method, endpoint, data, on_done, ctx, api_version, content_type, response_headers)
+function M.request(method, endpoint, data, on_done, ctx, api_version, content_type, response_headers)
 	local cfg = azure_config()
 	if not cfg.base_url or cfg.base_url == "" or not cfg.token or cfg.token == "" then
 		local err = "Missing Azure DevOps credentials in config"
@@ -129,24 +129,15 @@ local function send(method, endpoint, data, on_done, ctx, api_version, content_t
 
 	return http.curl_request(method, M.base_url() .. endpoint, headers, payload, function(result, err, _, headers_out)
 		if err then
+			if type(result) == "table" and type(result.message) == "string" and result.message ~= "" then
+				err = result.message
+			end
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
 		end
 		on_done(result, nil, headers_out)
 	end, { response_headers = response_headers })
-end
-
----@param method string
----@param endpoint string
----@param data? table
----@param on_done fun(result: any, err: string|nil)
----@param ctx? table
----@param api_version? string
----@param content_type? string
----@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done, ctx, api_version, content_type)
-	return send(method, endpoint, data, on_done, ctx, api_version, content_type)
 end
 
 ---Fetch every page of a list endpoint that pages with continuation tokens.
@@ -165,7 +156,7 @@ function M.fetch_all(endpoint, params, ctx, on_done)
 			continuationToken = continuation_token,
 		}))
 		scope.run(function(done)
-			return send("GET", endpoint .. query, nil, done, ctx, nil, nil, true)
+			return M.request("GET", endpoint .. query, nil, done, ctx, nil, nil, true)
 		end, function(result, err, headers)
 			if err then
 				on_done(nil, err)

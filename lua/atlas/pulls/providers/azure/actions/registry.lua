@@ -53,7 +53,7 @@ register({
 register(actions.edit_pr)
 register({
 	id = "labels",
-	label = "Edit tags",
+	label = "Edit Tags",
 	icon = icons.get("label", "actions"),
 	is_available = action_utils.has_pr,
 	run = function(ctx, done)
@@ -101,7 +101,7 @@ register(actions.convert_to_draft)
 register(actions.edit_reviewers)
 
 register({ id = "search", label = "Search Pull Requests", icon = icons.get("search", "actions"), run = search.search })
-register({ id = "open_repo", label = "Open Repo", icon = icons.get("search", "actions"), run = search.open_repo })
+register({ id = "open_repo", label = "Open Repository", icon = icons.get("search", "actions"), run = search.open_repo })
 register(actions.browse_repository)
 register({
 	id = "browse_repositories",
@@ -117,7 +117,7 @@ register({
 })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.get("search", "actions"),
 	is_available = function(context)
 		return state.provider == context.provider and state.search_view() ~= nil

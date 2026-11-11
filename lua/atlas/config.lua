@@ -462,7 +462,7 @@ function M.setup(opts)
 	end
 
 	-- " example.atlassian.net/ " -> https://example.atlassian.net
-	for _, id in ipairs({ "gitlab", "jira" }) do
+	for _, id in ipairs({ "azure", "gitlab", "jira" }) do
 		local options = M.provider_options(id) or {}
 		if type(options.base_url) == "string" then
 			local base_url = vim.trim(options.base_url):gsub("/+$", "")

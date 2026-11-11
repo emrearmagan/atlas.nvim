@@ -8,6 +8,8 @@ local users = require("atlas.providers.azure.users")
 local markdown = require("atlas.issues.providers.azure.markdown")
 local service = require("atlas.providers.azure.client")
 
+local CONVERT_BATCH_SIZE = 10
+
 ---@type AtlasReactionOption[]
 M.reactions = {
 	{ name = "thumbsup", key = "like" },
@@ -43,6 +45,8 @@ local function to_comment(raw, issue)
 	end
 	local author = users.to_user(raw.createdBy)
 	local authors = {}
+	users.add_mention_name(authors, issue.reporter)
+	users.add_mention_name(authors, issue.assignee)
 	users.add_mention_name(authors, author)
 	local reporter_id = issue.reporter and issue.reporter.id
 	return {
@@ -92,8 +96,9 @@ function M.fetch_conversation(issue, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			local function convert_comment(index)
-				if index > #result.comments then
+			local function convert_batch(first)
+				local last = math.min(first + CONVERT_BATCH_SIZE - 1, #result.comments)
+				if first > last then
 					local next_token = json.safe_str(result.continuationToken)
 					if next_token and next_token ~= "" then
 						fetch_page(next_token)
@@ -114,18 +119,28 @@ function M.fetch_conversation(issue, opts, on_done)
 					return
 				end
 
-				local raw = result.comments[index]
-				scope.run(function(done)
-					return markdown.to_markdown(raw.text or "", raw.format, done)
-				end, function(body, format)
-					local comment = to_comment(raw, issue)
-					comment.body = body
-					comment.body_format = format
-					table.insert(comments, comment)
-					convert_comment(index + 1)
+				-- NOTE: This starts a Pandoc process for every HTML comment (10 at a time), which might not be the best.
+				-- Might wanna join them with a marker into one Pandoc call later.
+				local starts = {}
+				for index = first, last do
+					local raw = result.comments[index]
+					starts[index] = function(done)
+						return markdown.to_markdown(raw.text or "", raw.format, function(body, format)
+							done({ body = body, format = format })
+						end)
+					end
+				end
+				scope.all(starts, function(converted)
+					for index = first, last do
+						local comment = to_comment(result.comments[index], issue)
+						comment.body = converted[index].body
+						comment.body_format = converted[index].format
+						table.insert(comments, comment)
+					end
+					convert_batch(last + 1)
 				end)
 			end
-			convert_comment(1)
+			convert_batch(1)
 		end)
 	end
 	fetch_page(nil)
@@ -141,7 +156,7 @@ function M.add_comment(issue, text, _opts, on_done)
 	---@cast issue AzureIssue
 	return service.request(
 		"POST",
-		comments_endpoint(issue) .. "?format=markdown",
+		comments_endpoint(issue) .. service.build_query({ format = "markdown" }),
 		{ text = text },
 		function(result, err)
 			if err then
@@ -172,7 +187,9 @@ function M.edit_comment(issue, comment, text, on_done)
 			return
 		end
 		service.clear_cache()
-		on_done(to_comment(result, issue), nil)
+		local updated = to_comment(result, issue)
+		updated.reactions = comment.reactions
+		on_done(updated, nil)
 	end, { action = "Edit work item comment", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.4")
 end
 

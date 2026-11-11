@@ -5,6 +5,22 @@ local markdown = require("atlas.issues.providers.azure.markdown")
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.providers.azure.client")
 
+local LIST_FIELDS = {
+	"System.TeamProject",
+	"System.WorkItemType",
+	"System.Parent",
+	"System.Title",
+	"System.State",
+	"System.AssignedTo",
+	"System.CreatedBy",
+	"Microsoft.VSTS.Scheduling.StoryPoints",
+	"Microsoft.VSTS.Scheduling.DueDate",
+	"System.CreatedDate",
+	"System.ChangedDate",
+	"Microsoft.VSTS.Common.ClosedDate",
+	"System.CommentCount",
+}
+
 ---@param endpoint string
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(result: table|nil, err: string|nil)
@@ -38,7 +54,11 @@ local function fetch_items(ids, opts, on_done)
 	for first = 1, #ids, 200 do
 		local chunk = vim.list_slice(ids, first, math.min(first + 199, #ids))
 		table.insert(starts, function(done)
-			return get("/_apis/wit/workitems" .. service.build_query({ ids = table.concat(chunk, ",") }), opts, done)
+			local query = service.build_query({
+				ids = table.concat(chunk, ","),
+				fields = table.concat(LIST_FIELDS, ","),
+			})
+			return get("/_apis/wit/workitems" .. query, opts, done)
 		end)
 	end
 	scope.all(starts, function(results, errors)
@@ -186,7 +206,7 @@ function M.update(issue, fields, on_done, opts)
 		-- Azure's HTML-to-Markdown format switch is permanent.
 		table.insert(patch, { op = "add", path = "/multilineFieldsFormat/System.Description", value = "Markdown" })
 	end
-	return service.request("PATCH", "/_apis/wit/workitems/" .. issue.key, patch, function(_, err)
+	return service.request("PATCH", "/_apis/wit/workitems/" .. service.url_encode(issue.key), patch, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -200,7 +220,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete(issue, on_done)
-	return service.request("DELETE", "/_apis/wit/workitems/" .. issue.key, nil, function(_, err)
+	return service.request("DELETE", "/_apis/wit/workitems/" .. service.url_encode(issue.key), nil, function(_, err)
 		if err then
 			on_done(false, err)
 			return

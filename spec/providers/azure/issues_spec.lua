@@ -5,6 +5,7 @@ local module_names = {
 	"atlas.issues.providers.azure.api.mapper",
 	"atlas.issues.providers.azure.api.issues",
 	"atlas.issues.providers.azure.api.comments",
+	"atlas.issues.providers.azure.markdown",
 }
 
 describe("Azure work items", function()
@@ -62,6 +63,7 @@ describe("Azure work items", function()
 				done({ queryType = "flat", workItems = { { id = 1 }, { id = 3 }, { id = 2 }, { id = 4 } } })
 			else
 				assert.is_truthy(endpoint:find("ids=3%%2C2"))
+				assert.is_truthy(endpoint:find("fields=System.TeamProject%%2C"))
 				done({
 					value = {
 						{ id = 2, fields = { ["System.TeamProject"] = "Platform" } },
@@ -122,6 +124,47 @@ describe("Azure work items", function()
 		assert.same({}, result.activities)
 		assert.equal("Hi @<alice> and @<unknown>", result.comments[1].body)
 		assert.equal("Hi @Alice and @<unknown>", result.comments[1].body_display)
+	end)
+
+	it("converts HTML comments in parallel batches and keeps their order", function()
+		local raw_comments = {}
+		for id = 1, 12 do
+			raw_comments[id] = { id = id, text = "<p>" .. id .. "</p>", format = "html" }
+		end
+		client.request = function(_, _, _, done)
+			done({ comments = raw_comments })
+		end
+		local conversions = {}
+		package.loaded["atlas.issues.providers.azure.markdown"] = {
+			to_markdown = function(text, _, done)
+				conversions[#conversions + 1] = { text = text, done = done }
+			end,
+		}
+		local result
+		require("atlas.issues.providers.azure.api.comments").fetch_conversation(
+			{ id = 42, key = "42", title = "Title", project = "Platform" },
+			{},
+			function(conversation, err)
+				assert.is_nil(err)
+				result = conversation
+			end
+		)
+
+		assert.equal(10, #conversions)
+		for index = 10, 1, -1 do
+			conversions[index].done("comment " .. index, "markdown")
+		end
+		assert.equal(12, #conversions)
+		assert.is_nil(result)
+
+		conversions[12].done("comment 12", "markdown")
+		conversions[11].done("comment 11", "markdown")
+		assert.equal(12, #result.comments)
+		for index, comment in ipairs(result.comments) do
+			assert.equal(tostring(index), comment.id)
+			assert.equal("comment " .. index, comment.body)
+			assert.equal("markdown", comment.body_format)
+		end
 	end)
 
 	it("only switches the description format when a Markdown description is written", function()

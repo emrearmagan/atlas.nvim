@@ -85,4 +85,15 @@ describe("Azure client HTTP contract", function()
 		assert.equal("application/json-patch+json", captured.headers["Content-Type"])
 		assert.equal("https://dev.azure.com/acme/_apis/wit/workitems/42?api-version=7.1-preview.4", captured.url)
 	end)
+
+	it("shows the Azure error message instead of the raw error body", function()
+		response, response_error, status =
+			{ message = "TF401232: Work item 42 does not exist." }, "HTTP 404: {...}", 404
+		local received_error
+		require("atlas.providers.azure.client").request("GET", "/_apis/wit/workitems/42", nil, function(result, err)
+			received_error = err
+			assert.is_nil(result)
+		end)
+		assert.equal("TF401232: Work item 42 does not exist.", received_error)
+	end)
 end)

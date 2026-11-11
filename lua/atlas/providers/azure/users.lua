@@ -76,7 +76,7 @@ local function fetch_list(endpoint, on_done)
 	local function fetch_page(skip)
 		local query = service.build_query({ ["$top"] = 100, ["$skip"] = skip })
 		scope.run(function(done)
-			return service.request("GET", endpoint .. query, nil, done, { action = "Fetch reviewer candidates" })
+			return service.request("GET", endpoint .. query, nil, done, { action = "Fetch project members" })
 		end, function(result, err)
 			if err then
 				on_done(nil, err)

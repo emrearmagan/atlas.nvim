@@ -117,15 +117,15 @@ end
 ---@param context AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 function M.open_view(context, done)
-	local current = state.provider == context.provider and state.search_view() or nil
-	local view = current
-		or {
+	local current = state.provider == context.provider and state.query ~= "" and state.query or nil
+	local initial = current
+		or query.query({
 			name = "Search",
 			project = context.pr and context.pr.repo.owner,
 			repository = context.pr and context.pr.repo.repo_name,
 			scope = "all",
-		}
-	azure_search.edit("pulls", query.query(view), function(input)
+		})
+	azure_search.edit("pulls", initial, function(input)
 		local filters, err = query.parse(input)
 		if not filters then
 			notify.warn(err)
@@ -145,7 +145,7 @@ function M.edit(_, done)
 		return
 	end
 	---@cast view AtlasAzurePullsViewConfig
-	azure_search.edit("pulls", query.query(view), function(input)
+	azure_search.edit("pulls", state.query, function(input)
 		local ok, err = query.apply(view, input)
 		if not ok then
 			notify.warn(err)
@@ -169,7 +169,7 @@ end
 ---@param _ AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 function M.open_repo(_, done)
-	select_repository("Open Repo", function(repo)
+	select_repository("Open Repository", function(repo)
 		require("atlas").open("pulls", "azure", {
 			initial_view = {
 				name = "Search",

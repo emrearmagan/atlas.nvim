@@ -1,6 +1,5 @@
 local M = {}
 
-local json = require("atlas.core.json")
 local service = require("atlas.providers.azure.client")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
 local users_api = require("atlas.providers.azure.users")
@@ -23,7 +22,7 @@ end
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_pullrequest(ref, opts, on_done)
+local function fetch_raw_pullrequest(ref, opts, on_done)
 	opts = opts or {}
 	local endpoint = pullrequest_endpoint(ref)
 	local cache_key = "pullrequest:" .. endpoint
@@ -183,7 +182,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local starts = {}
 	for index, ref in ipairs(refs) do
 		starts[index] = function(done)
-			return fetch_pullrequest(ref, opts, done)
+			return fetch_raw_pullrequest(ref, opts, done)
 		end
 	end
 	scope.all(starts, function(results, errors)
@@ -219,7 +218,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 	local scope = request_scope.new()
 	scope.all({
 		pullrequest = function(done)
-			return fetch_pullrequest(ref, opts, done)
+			return fetch_raw_pullrequest(ref, opts, done)
 		end,
 		labels = function(done)
 			return service.request("GET", endpoint .. "/labels", nil, done, {
@@ -239,20 +238,6 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		on_done(details, nil)
 	end)
 	return scope
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(pr, opts, on_done)
-	return fetch_pullrequest(pr, opts, function(result, err)
-		if err or not result then
-			on_done(nil, err)
-			return
-		end
-		on_done(json.safe_str(result.description) or "", nil)
-	end)
 end
 
 ---@param opts PullsCreatePROpts

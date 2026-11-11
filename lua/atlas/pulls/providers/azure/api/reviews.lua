@@ -86,9 +86,9 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 			end
 		end
 		scope.all(starts, function(values, errors)
-			local error = errors.comments or errors.files or errors.reviewers
-			if error then
-				on_done(nil, error)
+			local fetch_err = errors.comments or errors.files or errors.reviewers
+			if fetch_err then
+				on_done(nil, fetch_err)
 				return
 			end
 			local viewer = values.viewer and values.viewer.id

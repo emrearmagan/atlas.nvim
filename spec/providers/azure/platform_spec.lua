@@ -149,13 +149,17 @@ describe("Azure repositories and builds", function()
 			assert.is_nil(err)
 			result = value
 		end)
-		assert.equal("/Project/_apis/build/builds/12", requests[1].endpoint)
-		requests[1].done(vim.tbl_extend("force", build(12, "merge-sha"), {
+		assert.equal(2, #requests)
+		local by_endpoint = {}
+		for _, request in ipairs(requests) do
+			by_endpoint[request.endpoint] = request
+		end
+
+		by_endpoint["/Project/_apis/build/builds/12"].done(vim.tbl_extend("force", build(12, "merge-sha"), {
 			sourceBranch = "refs/heads/feature",
 			reason = "individualCI",
 		}))
-		assert.equal("/Project/_apis/build/builds/12/timeline", requests[2].endpoint)
-		requests[2].done(timeline())
+		by_endpoint["/Project/_apis/build/builds/12/timeline"].done(timeline())
 		assert.equal("12", result.id)
 		assert.equal("feature", result.branch)
 		assert.equal("individual ci", result.trigger)
