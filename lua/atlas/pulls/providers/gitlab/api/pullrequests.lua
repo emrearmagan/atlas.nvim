@@ -402,30 +402,6 @@ local function project_iid(pr)
 end
 
 ---@param pr PullRequest
----@param _ { force_refresh?: boolean }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(pr, _, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(json.safe_str(json.safe_table(result).description) or "", nil)
-	end, {
-		action = "Fetch MR description",
-		project_path = path,
-		iid = iid,
-	})
-end
-
----@param pr PullRequest
 local function invalidate_detail_caches(pr)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -553,14 +529,6 @@ function M.update_pr(pr, opts, on_done)
 	end)
 end
 
----@param pr PullRequest
----@param draft boolean
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.set_draft(pr, draft, on_done)
-	return M.update_pr(pr, { draft = draft }, on_done)
-end
-
 ---@param opts { repo_slug: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -573,13 +541,9 @@ function M.fetch_reviewer_candidates(opts, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
 	local starts = {
 		members = function(done)
-			return service.request("GET", endpoint, nil, done, {
-				action = "Fetch reviewer candidates",
-				project_path = slug,
-			})
+			return users_api.list_members(slug, "", done)
 		end,
 	}
 	if opts.pr then
@@ -607,23 +571,20 @@ function M.fetch_reviewer_candidates(opts, on_done)
 
 		local reviewers = {}
 		local candidates = {}
-		for _, raw in ipairs(values.members or {}) do
-			local username = tostring(raw.username or "")
-			local id = tonumber(raw.id)
-			if username ~= "" and id then
-				local key = username:lower()
+		for _, member in ipairs(values.members) do
+			if tonumber(member.id) then
+				local key = member.username:lower()
 				candidates[key] = true
 				table.insert(reviewers, {
-					label = "@" .. username,
-					provider_id = tostring(id),
+					label = "@" .. member.username,
+					provider_id = member.id,
 					selected = selected[key] ~= nil,
 				})
 			end
 		end
 		for _, reviewer in ipairs(current_reviewers) do
 			local key = tostring(reviewer.username or ""):lower()
-			local raw_id = tostring(reviewer.provider_id or reviewer.id or "")
-			local id = raw_id:match("([^/]+)$") or raw_id
+			local id = tostring(reviewer.id or "")
 			if selected[key] and not candidates[key] and tonumber(id) then
 				table.insert(reviewers, {
 					label = "@" .. tostring(reviewer.username),
@@ -635,24 +596,6 @@ function M.fetch_reviewer_candidates(opts, on_done)
 		on_done(reviewers, nil)
 	end)
 	return requests
-end
-
----@param pr PullRequest
----@param reviewers PullsReviewerCandidate[]
----@param _ PullsReviewerCandidate[]
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.update_reviewers(pr, reviewers, _, on_done)
-	local ids = {}
-	for _, reviewer in ipairs(reviewers) do
-		local id = tonumber(reviewer.provider_id)
-		if id then
-			table.insert(ids, id)
-		end
-	end
-	-- GitLab requires non-empty array; pass {0} to clear.
-	local body = { reviewer_ids = (#ids == 0) and { 0 } or ids }
-	return update(pr, body, on_done)
 end
 
 ---@param pr PullRequest

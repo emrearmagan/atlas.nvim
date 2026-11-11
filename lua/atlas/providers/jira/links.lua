@@ -8,7 +8,7 @@ local config = require("atlas.config")
 ---@return AtlasRelatedItem[]
 function M.resolve(...)
 	local options = config.provider_options("jira") or {}
-	local base_url = type(options.base_url) == "string" and options.base_url:gsub("/+$", "") or ""
+	local base_url = tostring(options.base_url or "")
 	if not base_url:match("^https?://") then
 		return {}
 	end

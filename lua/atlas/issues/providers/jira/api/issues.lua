@@ -52,7 +52,7 @@ end
 ---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
-	local cache_key = string.format("jira:search:v7:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("jira:search:v8:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if opts.force_refresh then
 		service.clear_memory_cache()
@@ -86,7 +86,7 @@ function M.search_issues(jql, on_done, opts)
 			return
 		end
 
-		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field, service.base_url())
 		local next_cursor
 		local total_pages
 		if service.is_server() then
@@ -249,7 +249,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 			return
 		end
 
-		local items = normalizer.to_issues_list(result.issues or {}, story_points_field)
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field, service.base_url())
 		service.set_memory_cache(cache_key, items)
 		on_done(items, nil)
 	end, {
@@ -339,7 +339,7 @@ function M.create_issue(fields, callback)
 		end
 
 		service.clear_memory_cache()
-		callback({ key = result.key, id = result.id, self = result.self }, nil)
+		callback({ key = result.key }, nil)
 	end, {
 		action = "Create issue",
 		summary = fields.summary,

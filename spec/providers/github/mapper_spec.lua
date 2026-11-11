@@ -126,9 +126,9 @@ describe("GitHub reviewer decisions", function()
 			},
 		}
 
-		local pr = normalizer.to_pull_request(raw)
+		local reviewers = assert(normalizer.to_reviewers(raw))
 
-		assert.equal("pending", pr.reviewers[1].decision)
+		assert.equal("pending", reviewers[1].decision)
 	end)
 
 	it("keeps an approval after a later comment", function()
@@ -140,11 +140,11 @@ describe("GitHub reviewer decisions", function()
 			},
 		}
 
-		local pr = normalizer.to_pull_request(raw)
+		local reviewers = assert(normalizer.to_reviewers(raw))
 
-		assert.equal(1, #pr.reviewers)
-		assert.equal("approved", pr.reviewers[1].decision)
-		assert.equal("participant", pr.reviewers[1].role)
+		assert.equal(1, #reviewers)
+		assert.equal("approved", reviewers[1].decision)
+		assert.equal("participant", reviewers[1].role)
 	end)
 
 	it("removes a dismissed decision", function()
@@ -156,9 +156,7 @@ describe("GitHub reviewer decisions", function()
 			},
 		}
 
-		local pr = normalizer.to_pull_request(raw)
-
-		assert.same({}, pr.reviewers)
+		assert.same({}, normalizer.to_reviewers(raw))
 	end)
 end)
 

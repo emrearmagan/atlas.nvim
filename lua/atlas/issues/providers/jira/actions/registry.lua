@@ -10,7 +10,6 @@ local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
-local service = require("atlas.providers.jira.client")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.providers.jira.users")
@@ -274,16 +273,6 @@ local function edit_issue(ctx, done)
 	end)
 end
 
----@param groups JiraProjectGroup[]
----@return JiraIssueProject[]
-local function flatten_projects(groups)
-	local projects = {}
-	for _, group in ipairs(groups) do
-		vim.list_extend(projects, group.projects)
-	end
-	return projects
-end
-
 ---@param project JiraIssueProject
 ---@return string
 local function format_project(project)
@@ -309,15 +298,14 @@ local function create_issue(_, done)
 
 	notify.loading("Loading projects...")
 	local opts = { maxResults = 50, total = math.huge, status = "live", action = "create" }
-	return projects_api.get_projects(opts, function(groups, err)
-		if err or not groups then
+	return projects_api.get_projects(opts, function(projects, err)
+		if err or not projects then
 			err = err or "Failed to load projects"
 			notify.error(err)
 			done(nil, err)
 			return
 		end
 
-		local projects = flatten_projects(groups)
 		notify.clear()
 		if #projects == 0 then
 			notify.info("No Jira projects allow creating issues")
@@ -427,14 +415,13 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search_issue(ctx, done)
-	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-		if err or not groups then
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(projects, err)
+		if err or not projects then
 			notify.error(err or "Failed to load projects")
 			done(nil, err or "Failed to load projects")
 			return
 		end
 
-		local projects = flatten_projects(groups)
 		if #projects <= 1 then
 			search_issues(projects[1], ctx, done)
 			return
@@ -468,14 +455,13 @@ end
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function open_project(_, done)
-	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-		if err or not groups then
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(projects, err)
+		if err or not projects then
 			notify.error(err or "Failed to load projects")
 			done(nil, err or "Failed to load projects")
 			return
 		end
 
-		local projects = flatten_projects(groups)
 		if #projects == 0 then
 			notify.info("No Jira projects found")
 			done(nil, nil)
@@ -506,51 +492,6 @@ local function search_jql(_, done)
 	done(nil, nil)
 end
 
----@param issue Issue
----@return string|nil
-local function issue_url(issue)
-	local base_url = service.base_url():gsub("/$", "")
-	if base_url == "" then
-		return nil
-	end
-	return base_url .. "/browse/" .. issue.key
-end
-
----@param ctx AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function browse_issue(ctx, done)
-	local issue = assert(ctx.issue)
-
-	local url = issue_url(issue)
-	if url == nil then
-		notify.error("No URL found for issue")
-		done(nil, "No URL found for issue")
-		return
-	end
-
-	vim.ui.open(url)
-	notify.success(string.format("Opened %s in browser", issue.key), { timeout = 1200 })
-	done(nil, nil)
-end
-
----@param ctx AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function copy_issue_url(ctx, done)
-	local issue = assert(ctx.issue)
-
-	local url = issue_url(issue)
-	if url == nil then
-		notify.error("No URL found for issue")
-		done(nil, "No URL found for issue")
-		return
-	end
-
-	vim.fn.setreg("+", url)
-	vim.fn.setreg('"', url)
-	notify.success("Copied URL", { timeout = 1200 })
-	done(nil, nil)
-end
-
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
@@ -569,6 +510,10 @@ local function toggle_subscription(ctx, done)
 			end
 			details.is_subscribed = subscribed == true
 			notify.success(details.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
+			if ctx.details then
+				done(nil, nil)
+				return
+			end
 			done({ issue_key = issue.key }, nil)
 		end
 
@@ -675,21 +620,9 @@ register({
 	end,
 })
 register(actions.manage_templates)
-register({
-	id = "browse_issue",
-	label = "Open Issue In Browser",
-	hidden = true,
-	is_available = has_issue_key,
-	run = browse_issue,
-})
+register(actions.browse_issue)
 register(actions.copy_issue_key)
-register({
-	id = "copy_issue_url",
-	label = "Copy Issue URL",
-	icon = icons.get("link"),
-	is_available = has_issue_key,
-	run = copy_issue_url,
-})
+register(actions.copy_issue_url)
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",

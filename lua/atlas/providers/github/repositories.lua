@@ -105,7 +105,7 @@ function M.fetch_details(repo, on_done)
 			)
 		end,
 		readme = function(done)
-			return cli.gh(
+			return cli.gh_text(
 				{
 					"api",
 					string.format("repos/%s/readme", slug),
@@ -401,7 +401,7 @@ function M.delete_branch(repo, branch, on_done)
 	end
 
 	local endpoint = string.format("repos/%s/git/refs/heads/%s", slug, utils.url_encode(name))
-	return cli.api("DELETE", endpoint, nil, function(_, err)
+	return cli.api("DELETE", endpoint, function(_, err)
 		if err then
 			on_done(false, err)
 			return

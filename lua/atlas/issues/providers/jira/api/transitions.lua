@@ -31,10 +31,7 @@ function M.get_transitions(issue_key, callback)
 					icon = status_icons[to.name] or status_icons[category.key] or icons.get("fallback"),
 					hl_group = category.key == "done" and "AtlasTextPositive" or "AtlasTextMuted",
 				},
-				to_status_id = to.id and tostring(to.id) or nil,
 				to_status_name = to.name and tostring(to.name) or nil,
-				to_status_category = category.key and tostring(category.key) or nil,
-				to_status_color = category.colorName and tostring(category.colorName) or nil,
 			})
 		end
 

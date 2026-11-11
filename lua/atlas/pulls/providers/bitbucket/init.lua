@@ -72,13 +72,12 @@ local function fetch_pullrequests(view, opts, on_done)
 	requests.run(function(done)
 		return resolve_view(view, done)
 	end, function(resolved)
-		local query = search_query.query(resolved)
+		local query, states = search_query.query(resolved)
 		local parsed, parse_err = search_query.parse(resolved.search)
 		if parsed == nil then
 			on_done({ items = {}, next_cursor = nil, query = query }, { parse_err })
 			return
 		end
-		local states = resolved._states or parsed.states or { "open" }
 		requests.run(function(done)
 			return pullrequests_api.fetch_for_targets(parsed.targets, {
 				cursor = opts.cursor,
@@ -117,7 +116,6 @@ return {
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			-- fetch_links = nil,
-			fetch_description = pullrequests_api.fetch_description,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
 			fetch_merge_checks = checks_api.fetch,
 			merge = pullrequests_api.merge,

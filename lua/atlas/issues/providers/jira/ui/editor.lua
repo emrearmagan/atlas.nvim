@@ -15,8 +15,6 @@ local adf = require("atlas.formats.adf.from_markdown")
 
 ---@class JiraIssueEditorResult
 ---@field key string
----@field id string|nil
----@field self string|nil
 
 ---@class JiraIssueEditorValues
 ---@field title string

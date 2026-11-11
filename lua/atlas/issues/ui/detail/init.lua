@@ -5,6 +5,7 @@ local renderer = require("atlas.issues.ui.detail.renderer")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local links = require("atlas.ui.links")
+local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.issues.ui.detail.state")
 
 local SPINNER_INTERVAL_MS = 100
@@ -25,14 +26,6 @@ local function cancel_requests()
 	state.requests = request_scope.new()
 end
 
-local function stop_spinner()
-	if state.spinner_timer ~= nil then
-		state.spinner_timer:stop()
-		state.spinner_timer:close()
-		state.spinner_timer = nil
-	end
-end
-
 local function is_loading()
 	if state.issue_loading or state.details_loading or (state.links and state.links.loading) then
 		return true
@@ -48,32 +41,21 @@ local function render()
 	renderer.render()
 end
 
-local function start_spinner()
-	if state.spinner_timer ~= nil then
+local loading_spinner = spinner.create({ interval_ms = SPINNER_INTERVAL_MS })
+
+loading_spinner.on_tick = function()
+	if not detail_window.is_open() or not is_loading() then
+		loading_spinner:stop()
 		return
 	end
-	state.spinner_timer = vim.uv.new_timer()
-	if state.spinner_timer == nil then
-		return
-	end
-	state.spinner_timer:start(
-		SPINNER_INTERVAL_MS,
-		SPINNER_INTERVAL_MS,
-		vim.schedule_wrap(function()
-			if not detail_window.is_open() or not is_loading() then
-				stop_spinner()
-				return
-			end
-			render()
-		end)
-	)
+	render()
 end
 
 local function update_spinner()
 	if is_loading() then
-		start_spinner()
+		loading_spinner:start()
 	else
-		stop_spinner()
+		loading_spinner:stop()
 	end
 end
 
@@ -190,7 +172,7 @@ local function load_details(ref, force_refresh)
 end
 
 local function clear_issue()
-	stop_spinner()
+	loading_spinner:stop()
 	cancel_requests()
 	reset_tabs()
 	pending_ref = nil
@@ -240,7 +222,7 @@ local function cleanup()
 	if buf and vim.api.nvim_buf_is_valid(buf) then
 		require("atlas.issues.ui.detail.keymaps").remove(buf)
 	end
-	stop_spinner()
+	loading_spinner:stop()
 	reset_tabs()
 	pending_ref = nil
 	state.reset()
@@ -445,6 +427,7 @@ end
 ---@param result IssuesActionResult|nil
 function M.apply_action_result(issue, on_update, result)
 	if not result or not result.issue_key then
+		render_if_open()
 		return
 	end
 	if on_update then

@@ -290,29 +290,6 @@ function M.fetch_pullrequest(ref, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _ { force_refresh?: boolean }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_description(pr, _, on_done)
-	local workspace, repo = pr.repo.owner, pr.repo.repo_name
-	if workspace == "" or repo == "" then
-		on_done(nil, "PR missing workspace/repo info")
-		return nil
-	end
-
-	local endpoint =
-		string.format("/repositories/%s/%s/pullrequests/%s?fields=description", workspace, repo, tostring(pr.id))
-	return service.request("GET", endpoint, nil, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		---@cast result table
-		on_done(json.safe_str(result.description) or "", nil)
-	end, { action = "Fetch PR description", repo = pr.repo_full_name, id = pr.id })
-end
-
----@param pr PullRequest
 ---@param fields table
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -332,14 +309,6 @@ local function update_pullrequest(pr, fields, on_done)
 		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Update pull request", repo = pr.repo_full_name, id = pr.id })
-end
-
----@param pr PullRequest
----@param draft boolean
----@param on_done fun(ok: boolean, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.set_draft(pr, draft, on_done)
-	return update_pullrequest(pr, { draft = draft }, on_done)
 end
 
 ---@param pr PullRequest
@@ -454,6 +423,10 @@ function M.fetch_reviewers(pr, opts, on_done)
 	local self_url = tostring(pr.links.self or "")
 	local key = "bitbucket:pr:reviewers:" .. self_url
 	if not (opts or {}).force_refresh then
+		if pr.reviewers then
+			on_done(pr.reviewers, nil)
+			return nil
+		end
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)
@@ -470,19 +443,6 @@ function M.fetch_reviewers(pr, opts, on_done)
 		service.set_cache(key, reviewers)
 		on_done(reviewers, nil)
 	end)
-end
-
----@param pr PullRequest
----@param selected PullsReviewerCandidate[]
----@param _ PullsReviewerCandidate[]
----@param on_done fun(ok: boolean, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.update_reviewers(pr, selected, _, on_done)
-	local reviewers = {}
-	for _, reviewer in ipairs(selected) do
-		table.insert(reviewers, { uuid = reviewer.provider_id })
-	end
-	return update_pullrequest(pr, { reviewers = reviewers }, on_done)
 end
 
 ---@param opts PullsCreatePROpts
