@@ -1,4 +1,5 @@
 local logger = require("atlas.core.logger")
+local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local parser = require("atlas.pulls.pipelines.parser")
 local renderer = require("atlas.pulls.pipelines.ui.logs.renderer")
@@ -189,6 +190,13 @@ local function sync_spinner(pane)
 end
 
 ---@param pane PullsPipelinesLogs
+local function stop_auto_refresh(pane)
+	pane.refresh_timer:close()
+	pane.refresh_timer = nil
+	pane.follow_pending = false
+end
+
+---@param pane PullsPipelinesLogs
 ---@param on_update fun()
 ---@param on_reload fun(selection: PullsPipelinesSelection, opts?: { background?: boolean })
 function M.setup(pane, on_update, on_reload)
@@ -278,6 +286,9 @@ function M.show(pane, selection, opts)
 			logger.logerror("Fetch job logs failed", { job_id = selection.job.id, error = err })
 			if not background then
 				pane.log = err
+			elseif pane.refresh_timer then
+				stop_auto_refresh(pane)
+				notify.warn("Auto refresh stopped: " .. err)
 			end
 		elseif not pane.source or pane.source.raw ~= (log and log.raw or "") then
 			pane.source = log or { raw = "" }
@@ -303,9 +314,7 @@ end
 ---@param pane PullsPipelinesLogs
 function M.toggle_auto_refresh(pane)
 	if pane.refresh_timer then
-		pane.refresh_timer:close()
-		pane.refresh_timer = nil
-		pane.follow_pending = false
+		stop_auto_refresh(pane)
 	else
 		local timer = vim.uv.new_timer()
 		pane.refresh_timer = timer

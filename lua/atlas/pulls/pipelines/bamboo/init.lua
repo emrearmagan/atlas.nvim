@@ -6,7 +6,6 @@ local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local actions = require("atlas.pulls.pipelines.bamboo.actions")
 local parser = require("atlas.pulls.pipelines.bamboo.parser")
-local bitbucket = require("atlas.pulls.pipelines.bitbucket")
 local bitbucket_service = require("atlas.providers.bitbucket.client")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local url_encode = require("atlas.core.utils").url_encode
@@ -54,29 +53,6 @@ local function result_key_from_url(url, web_base)
 		return nil
 	end
 	return url:sub(#prefix + 1):match("^([%w%-_.]+%-%d+)")
-end
-
----@param pipelines PullsPipeline[]
----@param web_base string
----@return PullsPipeline[]
-local function linked_builds(pipelines, web_base)
-	local builds, seen = {}, {}
-	for _, pipeline in ipairs(pipelines) do
-		local candidates = {}
-		for _, stage in ipairs(pipeline.stages or {}) do
-			vim.list_extend(candidates, stage.jobs or {})
-		end
-		table.insert(candidates, pipeline)
-
-		for _, candidate in ipairs(candidates) do
-			local key = result_key_from_url(candidate.url, web_base)
-			if key and not seen[key] then
-				seen[key] = true
-				table.insert(builds, vim.tbl_extend("force", {}, candidate, { id = key }))
-			end
-		end
-	end
-	return builds
 end
 
 ---@param web_base string
@@ -191,30 +167,37 @@ function M.new(opts)
 		return request("GET", url, "commit builds", on_done)
 	end
 
-	local function fetch_builds(context, fetch_opts, on_done)
+	local function fetch_builds(context, on_done)
 		local target = context.target
-		if type(target) ~= "string" then
-			return bitbucket.fetch(context, fetch_opts, function(pipelines, err)
-				on_done(pipelines and linked_builds(pipelines, web_base), err)
-			end)
+		local endpoint
+		if type(target) == "string" then
+			local branch = url_encode(target)
+			endpoint = string.format(
+				"/repositories/%s/commit/%s/statuses?refname=%s&pagelen=100",
+				context.repo_full_name,
+				branch,
+				branch
+			)
+		else
+			---@cast target BitbucketPullRequest
+			local statuses_url = tostring(target.links.statuses or "")
+			if statuses_url == "" then
+				on_done({}, nil)
+				return nil
+			end
+			endpoint = statuses_url .. "?pagelen=100"
 		end
 
-		local branch = url_encode(target)
-		local endpoint = string.format(
-			"/repositories/%s/commit/%s/statuses?refname=%s&pagelen=100",
-			context.repo_full_name,
-			branch,
-			branch
-		)
 		return bitbucket_service.fetch_all_values(endpoint, function(body, err)
 			if err then
 				on_done(nil, err)
 				return
 			end
-			local builds = {}
+			local builds, seen = {}, {}
 			for _, status in ipairs(body.values) do
 				local key = result_key_from_url(status.url, web_base)
-				if key then
+				if key and not seen[key] then
+					seen[key] = true
 					table.insert(builds, {
 						id = key,
 						name = status.name,
@@ -226,7 +209,7 @@ function M.new(opts)
 				end
 			end
 			on_done(builds, nil)
-		end, { action = "Fetch branch builds", branch = target, repo = context.repo_full_name })
+		end, { action = "Fetch Bamboo builds", repo = context.repo_full_name })
 	end
 
 	local function fetch_plan_history(key, name, on_done)
@@ -294,7 +277,7 @@ function M.new(opts)
 			fetch_plans({ target })
 		else
 			scope.run(function(done)
-				return fetch_builds(context, nil, done)
+				return fetch_builds(context, done)
 			end, function(builds, err)
 				if err then
 					on_done(nil, err)
@@ -318,7 +301,7 @@ function M.new(opts)
 		return fetch_result(vim.tbl_extend("force", {}, pipeline), on_done)
 	end
 
-	local function fetch(context, fetch_opts, on_done)
+	local function fetch(context, _opts, on_done)
 		if context.provider ~= "bitbucket" then
 			on_done(nil, "The Bamboo backend currently supports Bitbucket only.")
 			return nil
@@ -326,7 +309,7 @@ function M.new(opts)
 
 		local scope = requests.new()
 		scope.run(function(done)
-			return fetch_builds(context, fetch_opts, done)
+			return fetch_builds(context, done)
 		end, function(builds, err)
 			if err then
 				on_done(nil, err)

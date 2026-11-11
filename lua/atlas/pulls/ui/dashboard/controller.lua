@@ -380,7 +380,8 @@ function M.cycle_layout()
 	navigation.focus_first_item()
 end
 
-function M.refresh_view()
+---@param force_refresh boolean
+local function reload_view(force_refresh)
 	if state.view == nil then
 		return
 	end
@@ -410,11 +411,15 @@ function M.refresh_view()
 		end
 
 		if detail.is_open() then
-			detail.select(item.pr, { force_refresh = true })
+			detail.select(item.pr, { force_refresh = force_refresh })
 		end
 	end
 
-	load_view(true, finish)
+	load_view(force_refresh, finish)
+end
+
+function M.refresh_view()
+	reload_view(true)
 end
 
 ---@param pr PullRequest
@@ -535,7 +540,7 @@ function M.toggle_status_filter(status)
 			table.insert(view._states, value)
 		end
 	end
-	M.refresh_view()
+	reload_view(false)
 end
 
 function M.dispose()

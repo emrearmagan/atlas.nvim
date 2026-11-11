@@ -47,7 +47,6 @@
 ---@field fetch_links (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field merge fun(pr: PullRequest, opts: PullsMergeOpts, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field fetch_description fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_reviewers fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -89,8 +88,8 @@
 
 ---@class PullsTasksCapability
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field edit_task (fun(task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field delete_task (fun(task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field edit_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsUICapability
 ---@field detail PullsProviderDetail|nil

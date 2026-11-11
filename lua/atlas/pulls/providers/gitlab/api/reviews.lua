@@ -1,6 +1,7 @@
 local M = {}
 
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
+local gitlab_mapper = require("atlas.providers.gitlab.mapper")
 local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client")
 local request_scope = require("atlas.core.requests")
@@ -80,29 +81,13 @@ local function invalidate_details_cache(pr)
 	end
 end
 
----@param raw table|nil
----@return AtlasUser|nil
-local function to_author(raw)
-	raw = json.safe_table(raw)
-	local username = json.safe_str(raw.username) or ""
-	local name = json.safe_str(raw.name) or ""
-	if username == "" and name == "" then
-		return nil
-	end
-	return {
-		id = json.safe_str(raw.id) or "",
-		name = name ~= "" and name or username,
-		username = username,
-	}
-end
-
 ---@param merge_request table
 ---@return PullsReviewer[]
 local function map_reviewers(merge_request)
 	local reviewers = {}
 	local by_id = {}
 	for _, node in ipairs(json.safe_table(json.safe_table(merge_request.reviewers).nodes)) do
-		local author = to_author(node)
+		local author = gitlab_mapper.to_user(node)
 		if author then
 			local interaction = json.safe_table(node.mergeRequestInteraction)
 			local state = (json.safe_str(interaction.reviewState) or ""):lower()
@@ -118,7 +103,7 @@ local function map_reviewers(merge_request)
 		end
 	end
 	for _, node in ipairs(json.safe_table(json.safe_table(merge_request.approvedBy).nodes)) do
-		local author = to_author(node)
+		local author = gitlab_mapper.to_user(node)
 		if author then
 			local reviewer = by_id[author.id]
 			if reviewer then
@@ -202,7 +187,7 @@ local function fetch_metadata(pr, opts, on_done)
 				if state then
 					table.insert(history, {
 						id = json.safe_str(note.id),
-						author = to_author(note.author),
+						author = gitlab_mapper.to_user(note.author),
 						state = state,
 						submitted_on = json.safe_str(note.createdAt) or "",
 						body = nil,
@@ -267,17 +252,40 @@ local function mark_outdated(comments, current)
 	end
 end
 
+---@param all_comments PullsComment[]
+---@param diff_refs GitLabPullRequestDiffRefs|nil
+---@param reviewers PullsReviewer[]
+---@param history PullsReviewHistoryEntry[]
+---@return PullsReviewData
+local function review_data(all_comments, diff_refs, reviewers, history)
+	local comments = {}
+	local has_pending = false
+	for _, comment in ipairs(all_comments) do
+		has_pending = has_pending or comment.pending == true
+		if comment.inline or comment.file then
+			table.insert(comments, comment)
+		end
+	end
+	mark_outdated(comments, diff_refs)
+	return {
+		review = { id = nil, commit_hash = nil, pending = has_pending },
+		comments = comments,
+		tasks = {},
+		reviewers = reviewers,
+		history = history,
+	}
+end
+
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@param fetch_comments function
 ---@return { cancel: fun() }
-local function fetch_review(pr, opts, on_done, fetch_comments)
+function M.fetch(pr, opts, on_done)
 	---@cast pr GitLabPullRequest
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			return fetch_comments(pr, opts, done)
+			return comments_api.fetch_review_comments(pr, opts, done)
 		end,
 		metadata = function(done)
 			return fetch_metadata(pr, opts, done)
@@ -289,44 +297,29 @@ local function fetch_review(pr, opts, on_done, fetch_comments)
 		end
 
 		local metadata = values.metadata
-		local comments = {}
-		local has_pending = false
-		for _, comment in ipairs(values.comments) do
-			has_pending = has_pending or comment.pending == true
-			if comment.inline or comment.file then
-				table.insert(comments, comment)
-			end
-		end
-		mark_outdated(comments, metadata.diff_refs)
 		if complete_diff_refs(metadata.diff_refs) then
 			pr.diff_refs = metadata.diff_refs
 		end
-		on_done({
-			review = { id = nil, commit_hash = nil, pending = has_pending },
-			comments = comments,
-			tasks = {},
-			reviewers = metadata.reviewers,
-			history = metadata.history,
-		}, nil)
+		on_done(review_data(values.comments, metadata.diff_refs, metadata.reviewers, metadata.history), nil)
 	end)
 	return requests
 end
 
+-- Reviewers and history are only shown in the diff review panel.
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }
-function M.fetch(pr, opts, on_done)
-	return fetch_review(pr, opts, on_done, comments_api.fetch_review_comments)
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }
+---@return { cancel: fun() }|nil
 function M.fetch_threads(pr, opts, on_done)
+	---@cast pr GitLabPullRequest
 	-- Requires GitLab 19.1+ for comment diff snippets.
-	return fetch_review(pr, opts, on_done, comments_api.fetch_review_threads)
+	return comments_api.fetch_review_threads(pr, opts, function(comments, err)
+		if comments == nil then
+			on_done(nil, err)
+			return
+		end
+		on_done(review_data(comments, pr.diff_refs, {}, {}), nil)
+	end)
 end
 
 ---@param pr PullRequest

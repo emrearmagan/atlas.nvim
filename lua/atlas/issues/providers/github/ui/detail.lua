@@ -71,25 +71,13 @@ local function milestone_display(milestone)
 		return ""
 	end
 
-	local percent = milestone.progress_percentage
-	local open_count = milestone.open_issues
-	local closed_count = milestone.closed_issues
-	local total = open_count and closed_count and (open_count + closed_count) or nil
-
-	if percent == nil and total and total > 0 then
-		percent = (closed_count / total) * 100
+	local percent = math.floor((milestone.progress_percentage or 0) + 0.5)
+	local closed_count = milestone.closed_issues or 0
+	local total = (milestone.open_issues or 0) + closed_count
+	if total > 0 then
+		return string.format("%s %d%% (%d/%d)", title, percent, closed_count, total)
 	end
-
-	if percent ~= nil and total and total > 0 then
-		return string.format("%s %d%% (%d/%d)", title, math.floor(percent + 0.5), closed_count, total)
-	end
-	if percent ~= nil then
-		return string.format("%s %d%%", title, math.floor(percent + 0.5))
-	end
-	if total and total > 0 then
-		return string.format("%s %d/%d", title, closed_count, total)
-	end
-	return title
+	return string.format("%s %d%%", title, percent)
 end
 
 -- Header fields

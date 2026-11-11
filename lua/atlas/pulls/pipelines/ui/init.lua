@@ -378,7 +378,8 @@ function M.open(context, backend, opts)
 	end)
 	explorer.refresh(
 		session.explorer,
-		{ pipeline = opts.selected_pipeline, stage = opts.selected_stage, job = opts.selected_job }
+		{ pipeline = opts.selected_pipeline, stage = opts.selected_stage, job = opts.selected_job },
+		{ force_refresh = false }
 	)
 end
 

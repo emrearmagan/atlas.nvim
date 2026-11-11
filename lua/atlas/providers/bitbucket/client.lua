@@ -163,6 +163,16 @@ function M.request(method, url, headers, body, callback, ctx)
 	local message, log = log_request(method, full_url, ctx)
 
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
+		if result then
+			local api_err = api_error_message(result)
+			if api_err then
+				api_err = sanitize_error(api_err)
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
+				callback(nil, api_err)
+				return
+			end
+		end
+
 		if err then
 			local safe_err = sanitize_error(err)
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
@@ -176,14 +186,6 @@ function M.request(method, url, headers, body, callback, ctx)
 				vim.tbl_extend("force", {}, log, { error = "Response is not a JSON object" })
 			)
 			callback(nil, "Bitbucket response is not a JSON object")
-			return
-		end
-
-		local api_err = api_error_message(result)
-		if api_err then
-			api_err = sanitize_error(api_err)
-			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
-			callback(nil, api_err)
 			return
 		end
 

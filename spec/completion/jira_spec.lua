@@ -46,7 +46,7 @@ describe("Jira completion", function()
 		local cache = {}
 		package.loaded["atlas.providers.jira.client"] = {
 			base_url = function()
-				return "https://jira.example/jira/"
+				return "https://jira.example/jira"
 			end,
 			is_server = function()
 				return server

@@ -73,6 +73,20 @@ end
 
 ---@param state GitHubIssueEditorState
 ---@param editor AtlasForm
+local function update_loading_notice(state, editor)
+	local statusline = editor.statusline
+	if statusline.loading_spinner then
+		local pending = next(state.loading)
+		if pending then
+			statusline:notify("loading", "Loading " .. pending .. "...")
+		else
+			statusline:clear_notice()
+		end
+	end
+end
+
+---@param state GitHubIssueEditorState
+---@param editor AtlasForm
 local function load_reporter(state, editor)
 	local statusline = editor.statusline
 	state.loading.reporter = true
@@ -90,14 +104,7 @@ local function load_reporter(state, editor)
 			statusline:notify("error", err or "Unable to load reporter")
 			return
 		end
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 	end)
 end
 
@@ -125,14 +132,7 @@ local function select_assignees(state, editor)
 			statusline:notify("error", err or "Unable to load assignees")
 			return
 		end
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 		picker.multi_select({
 			title = "Assignees",
 			items = items,
@@ -179,14 +179,7 @@ local function select_labels(state, editor)
 			return
 		end
 
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 
 		picker.multi_select({
 			title = "Labels",
@@ -234,14 +227,7 @@ local function select_milestone(state, editor)
 			return
 		end
 
-		if statusline.loading_spinner then
-			local pending = next(state.loading)
-			if pending then
-				statusline:notify("loading", "Loading " .. pending .. "...")
-			else
-				statusline:clear_notice()
-			end
-		end
+		update_loading_notice(state, editor)
 
 		local none = { title = "None" }
 		picker.select({

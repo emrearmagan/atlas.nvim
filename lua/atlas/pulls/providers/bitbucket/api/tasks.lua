@@ -31,7 +31,6 @@ function M.fetch_tasks(pr, opts, on_done)
 		"values.resolved_by.account_id",
 		"values.pending",
 		"values.state",
-		"values.links.self.href",
 		"values.links.html.href",
 		"next",
 	}, ",")
@@ -90,16 +89,12 @@ function M.add_task(pr, content, parent, on_done)
 	end, { action = "Add PR task", repo = pr.repo_full_name, id = pr.id })
 end
 
+---@param pr PullRequest
 ---@param task PullsComment
 ---@param on_done fun(task: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_task(task, on_done)
-	local url = tostring(task.url or "")
-	if url == "" then
-		on_done(nil, "Missing task URL")
-		return nil
-	end
-
+function M.edit_task(pr, task, on_done)
+	local url = endpoint(pr) .. "/" .. tostring(task.id)
 	local payload = { state = task.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED" }
 	if task.body ~= "" then
 		payload.content = { raw = task.body }
@@ -110,26 +105,21 @@ function M.edit_task(task, on_done)
 			return
 		end
 		service.clear_cache()
-		local updated = mapper.to_tasks_list({ values = { result } })[1]
+		local updated = mapper.to_tasks_list({ values = { result } }, pr.author.id)[1]
 		if not updated then
 			on_done(nil, "Bitbucket did not return the updated task")
 			return
 		end
-		updated.author_roles = task.author_roles
 		on_done(updated, nil)
 	end, { action = "Edit PR task", task_id = task.id })
 end
 
+---@param pr PullRequest
 ---@param task PullsComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_task(task, on_done)
-	local url = tostring(task.url or "")
-	if url == "" then
-		on_done(false, "Missing task URL")
-		return nil
-	end
-
+function M.delete_task(pr, task, on_done)
+	local url = endpoint(pr) .. "/" .. tostring(task.id)
 	return service.request("DELETE", url, nil, nil, function(_, err)
 		if not err then
 			service.clear_cache()

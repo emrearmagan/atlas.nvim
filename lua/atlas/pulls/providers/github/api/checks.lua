@@ -408,7 +408,7 @@ function M.fetch(pr, opts, on_done)
 			table.insert(checks, stack)
 		end
 
-		cli.set_mem(cache_key, checks, cli.cache_ttl())
+		cli.set_mem(cache_key, checks)
 		on_done(checks, nil)
 	end)
 end

@@ -76,10 +76,7 @@
 ---@field id string
 ---@field name string
 ---@field icon AtlasIconStyle|nil
----@field to_status_id string|nil
 ---@field to_status_name string|nil
----@field to_status_category string|nil
----@field to_status_color string|nil
 
 --------------------------------------------------------------------------------
 -- Comment

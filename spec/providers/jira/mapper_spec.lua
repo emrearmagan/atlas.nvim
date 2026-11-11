@@ -21,9 +21,10 @@ end
 
 describe("Jira issue mapping", function()
 	it("maps Jira fields directly onto the provider issue", function()
-		local issue = mapper.to_issue(issue_raw())
+		local issue = mapper.to_issue(issue_raw(), nil, "https://jira.example")
 
 		assert.equal("10042", issue.id)
+		assert.equal("https://jira.example/browse/" .. issue.key, issue.url)
 		assert.equal("KAN", issue.project.key)
 		assert.equal("High", issue.priority)
 		assert.same({ icon = "", hl_group = "AtlasLogInfo" }, issue.type.icon)

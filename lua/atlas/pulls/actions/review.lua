@@ -380,7 +380,7 @@ M.edit_comment = {
 				if comment.is_task then
 					local desired = vim.tbl_extend("force", {}, comment, { body = text })
 					desired.body_display = nil
-					update(desired, callback)
+					update(context.pr, desired, callback)
 				else
 					update(context.pr, comment, text, callback)
 				end
@@ -491,11 +491,7 @@ M.delete_comment = {
 			notify.success(comment.is_task and "Task deleted" or "Comment deleted", { timeout = 1200 })
 			on_done({ changed_pr = review_changed == true }, nil)
 		end
-		if comment.is_task then
-			remove(comment, callback)
-		else
-			remove(context.pr, comment, callback)
-		end
+		remove(context.pr, comment, callback)
 		return true
 	end,
 }
@@ -529,7 +525,7 @@ M.toggle_task = {
 			desired.state = "RESOLVED"
 		end
 		notify.loading(is_resolved and "Reopening task..." or "Resolving task...")
-		update(desired, function(updated, err)
+		update(context.pr, desired, function(updated, err)
 			if err then
 				notify.error(tostring(err))
 				on_done(nil, tostring(err))

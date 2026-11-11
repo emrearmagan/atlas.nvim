@@ -18,7 +18,6 @@ local request_scope = require("atlas.core.requests")
 ---@field on_update fun(pr: PullRequest, result: PullsActionResult|nil)|nil
 ---@field back fun()|nil
 ---@field requests AtlasRequestScope
----@field spinner_timer uv.uv_timer_t|nil
 local M = {
 	current_pr = nil,
 	current_details = nil,
@@ -35,7 +34,6 @@ local M = {
 	provider = nil,
 	on_update = nil,
 	requests = request_scope.new(),
-	spinner_timer = nil,
 }
 
 ---@param key string|nil
@@ -66,7 +64,6 @@ function M.reset()
 	M.on_update = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
-	M.spinner_timer = nil
 end
 
 return M

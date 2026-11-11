@@ -90,30 +90,15 @@ end
 ---@param fallback string|nil
 ---@return string owner, string repo, string full_name
 function M.repository(raw, fallback)
-	raw = json.safe_table(raw)
-	local full_name = json.safe_str(raw.nameWithOwner) or json.safe_str(raw.full_name) or ""
-	local name = json.safe_str(raw.name) or ""
-	if full_name == "" then
-		local owner = json.safe_str(json.safe_table(raw.owner).login) or ""
-		if owner ~= "" and name ~= "" then
-			full_name = owner .. "/" .. name
-		end
-	end
-	if full_name == "" then
-		full_name = tostring(fallback or "")
-	end
+	local full_name = json.safe_str(json.safe_table(raw).nameWithOwner) or tostring(fallback or "")
 	local owner, repo = full_name:match("^(.*)/([^/]+)$")
-	return owner or "", name ~= "" and name or repo or full_name, full_name
+	return owner or "", repo or full_name, full_name
 end
 
 ---@param value any
 ---@return table
 function M.connection_nodes(value)
-	value = json.safe_table(value)
-	if json.nilify(value.nodes) ~= nil then
-		return json.safe_table(value.nodes)
-	end
-	return value
+	return json.safe_table(json.safe_table(value).nodes)
 end
 
 ---@param raw any

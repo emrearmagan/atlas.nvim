@@ -117,7 +117,6 @@ return {
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,
-			fetch_description = pullrequests_api.fetch_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,

@@ -257,3 +257,43 @@ describe("GitLab comment author roles", function()
 		assert.same({ "Author" }, comment.author_roles)
 	end)
 end)
+
+describe("GitLab merge request activity", function()
+	local alice = { id = "gid://gitlab/User/1", name = "Alice", username = "alice" }
+	local bob = { id = "gid://gitlab/User/2", name = "Bob", username = "bob" }
+
+	local function inline(author, created_at, line)
+		return {
+			author = author,
+			createdAt = created_at,
+			position = { positionType = "text", newPath = "a.lua", newLine = line },
+		}
+	end
+
+	it("maps system notes and squashes inline threads in date order", function()
+		local activities = mapper.to_activities({
+			inline(alice, "2024-01-03", 2),
+			{ system = true, body = "approved this merge request", author = alice, createdAt = "2024-01-01" },
+			inline(alice, "2024-01-02", 1),
+			inline(bob, "2024-01-04", 5),
+		})
+
+		assert.same({
+			{ kind = "approval", actor = { name = "Alice", id = "1", username = "alice" }, date = "2024-01-01" },
+			{
+				kind = "comment",
+				actor = { name = "Alice", id = "1", username = "alice" },
+				date = "2024-01-03",
+				label = "started 2 review threads",
+				inline_thread = true,
+			},
+			{
+				kind = "comment",
+				actor = { name = "Bob", id = "2", username = "bob" },
+				date = "2024-01-04",
+				label = "started a review thread on a.lua:5",
+				inline_thread = true,
+			},
+		}, activities)
+	end)
+end)
