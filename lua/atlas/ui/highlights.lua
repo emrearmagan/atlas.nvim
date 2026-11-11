@@ -4,6 +4,7 @@ local M = {}
 -- Neovim groups so light and dark backgrounds stay readable, without taking
 -- over attributes like italic. Provider brand hues are the only fixed colors.
 local BRAND = {
+	azure = "#00AEEF",
 	gitlab = "#fc6d26",
 	bitbucket = "#2684ff",
 	jira = "#2684ff",
@@ -248,6 +249,7 @@ local function styles()
 		AtlasTextWarning = { fg = warn, bold = true },
 
 		-- Provider badges
+		AtlasAzureTheme = chip_style(BRAND.azure),
 		AtlasGitHubTheme = { bg = line, fg = text, bold = true },
 		AtlasGitLabTheme = chip_style(BRAND.gitlab),
 		AtlasBitbucketTheme = chip_style(BRAND.bitbucket),

@@ -1,5 +1,6 @@
 local config = require("atlas.config")
 local url = require("atlas.providers.url")
+local azure = require("atlas.providers.azure")
 local jira = require("atlas.providers.jira")
 local github = require("atlas.providers.github")
 local bitbucket = require("atlas.providers.bitbucket")
@@ -7,8 +8,8 @@ local gitlab = require("atlas.providers.gitlab")
 
 local M = {}
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasPullsProviderId "azure"|"bitbucket"|"github"|"gitlab"
+---@alias AtlasIssuesProviderId "azure"|"jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"|"pipeline"
@@ -155,5 +156,6 @@ add(jira)
 add(github)
 add(bitbucket)
 add(gitlab)
+add(azure)
 
 return M

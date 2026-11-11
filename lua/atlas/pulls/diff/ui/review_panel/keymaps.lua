@@ -117,6 +117,13 @@ function M.setup(state, callbacks)
 	end)
 
 	if state.session.source.kind == "pr" then
+		local pr = state.session.source.pr
+		---@cast pr PullRequest
+		local provider = providers.load(pr.provider, "pulls")
+		---@cast provider PullsProvider
+		local reviews = provider.capabilities.reviews
+		local pending_reviews = reviews and reviews.submit_review ~= nil
+
 		add(items, "ui.open_actions", 0, function()
 			callbacks.on_action("open_actions", {})
 		end)
@@ -126,9 +133,11 @@ function M.setup(state, callbacks)
 		add(items, "pulls.review.request_changes", 61, function()
 			callbacks.on_action("request_changes", {})
 		end)
-		add(items, "pulls.review.submit_review", 62, function()
-			callbacks.on_action("submit_review", {})
-		end)
+		if pending_reviews then
+			add(items, "pulls.review.submit_review", 62, function()
+				callbacks.on_action("submit_review", {})
+			end)
+		end
 
 		local function reply(pending)
 			local entry = current(state)
@@ -138,9 +147,11 @@ function M.setup(state, callbacks)
 				dispatch("add_comment", entry, pending)
 			end
 		end
-		add(items, "pulls.review.add_comment", 30, function()
-			reply(true)
-		end)
+		if pending_reviews then
+			add(items, "pulls.review.add_comment", 30, function()
+				reply(true)
+			end)
+		end
 		add(items, "pulls.review.submit_comment", 31, function()
 			reply(false)
 		end)
@@ -151,10 +162,6 @@ function M.setup(state, callbacks)
 			end
 		end)
 
-		local pr = state.session.source.pr
-		---@cast pr PullRequest
-		local provider = providers.load(pr.provider, "pulls")
-		---@cast provider PullsProvider
 		local comments = provider.capabilities.comments
 		if comments and comments.reactions then
 			add(items, "ui.comments.react", 37, function()
