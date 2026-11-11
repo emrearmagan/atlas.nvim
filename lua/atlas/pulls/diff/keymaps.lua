@@ -1,5 +1,6 @@
 local resolver = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
+local providers = require("atlas.providers")
 
 local M = {}
 
@@ -95,6 +96,10 @@ end
 function M.setup(viewer)
 	local session = viewer.session
 	local staging = session.source.kind == "worktree" and not session.source.base
+	local pr = session.source.pr
+	local provider = pr and providers.load(pr.provider, "pulls")
+	local reviews = provider and provider.capabilities.reviews
+	local pending_reviews = reviews and reviews.submit_review ~= nil
 
 	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", 20, function()
@@ -141,9 +146,11 @@ function M.setup(viewer)
 		add(review_items, "pulls.review.request_changes", 61, function()
 			viewer:run_action("request_changes")
 		end)
-		add(review_items, "pulls.review.submit_review", 62, function()
-			viewer:run_action("submit_review")
-		end)
+		if pending_reviews then
+			add(review_items, "pulls.review.submit_review", 62, function()
+				viewer:run_action("submit_review")
+			end)
+		end
 		add(review_items, "pulls.review.prev_comment", 90, function()
 			viewer:navigate_annotation(-1, "comment")
 		end)
@@ -201,9 +208,11 @@ function M.setup(viewer)
 	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
 	if session.source.kind == "pr" then
-		add(explorer_review_items, "pulls.review.add_comment", 30, function()
-			viewer:add_comment(true)
-		end)
+		if pending_reviews then
+			add(explorer_review_items, "pulls.review.add_comment", 30, function()
+				viewer:add_comment(true)
+			end)
+		end
 		add(explorer_review_items, "pulls.review.submit_comment", 31, function()
 			viewer:add_comment(false)
 		end)
@@ -219,15 +228,19 @@ function M.setup(viewer)
 		viewer:show_details()
 	end)
 	if session.source.kind == "pr" then
-		add(diff_review_items, "pulls.review.add_comment", 30, function()
-			viewer:add_comment(true)
-		end, { "n", "x" })
+		if pending_reviews then
+			add(diff_review_items, "pulls.review.add_comment", 30, function()
+				viewer:add_comment(true)
+			end, { "n", "x" })
+		end
 		add(diff_review_items, "pulls.review.submit_comment", 31, function()
 			viewer:add_comment(false)
 		end, { "n", "x" })
-		add(diff_review_items, "pulls.review.add_suggestion", 32, function()
-			viewer:add_comment(true, true)
-		end, { "n", "x" })
+		if pending_reviews then
+			add(diff_review_items, "pulls.review.add_suggestion", 32, function()
+				viewer:add_comment(true, true)
+			end, { "n", "x" })
+		end
 		add(diff_review_items, "pulls.review.submit_suggestion", 33, function()
 			viewer:add_comment(false, true)
 		end, { "n", "x" })

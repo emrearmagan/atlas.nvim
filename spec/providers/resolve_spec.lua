@@ -8,12 +8,14 @@ describe("providers.resolve", function()
 		original_options = config.options
 		config.options = {
 			providers = {
+				azure = { base_url = "https://dev.azure.com/acme", token = "token" },
 				github = { hostname = "github.com" },
 				gitlab = { base_url = "https://gitlab.example.com", token = "token" },
 				bitbucket = { user = "user", token = "token" },
 				jira = { base_url = "https://jira.example.com", token = "token" },
 			},
 			pulls = {
+				azure = {},
 				github = {},
 				gitlab = {},
 				bitbucket = {},
@@ -303,6 +305,66 @@ describe("providers.resolve", function()
 			local target, err = providers.resolve("https://jira.other.example.com/browse/ATLAS-123")
 			assert.is_nil(target)
 			assert.are.equal("Unsupported Atlas URL", err)
+		end)
+	end)
+
+	describe("Azure DevOps", function()
+		it("resolves a pull request", function()
+			local target = assert(providers.resolve("https://dev.azure.com/acme/platform/_git/api/pullrequest/17"))
+			assert.are.equal("pr", target.entity)
+			assert.are.equal("platform/api", target.project_path)
+			assert.are.equal("platform/api", target.repo_full_name)
+			assert.are.equal(17, target.id)
+			assert.are.equal(17, target.number)
+			assert.are.equal("https://dev.azure.com/acme/platform/_git/api", target.repository_url)
+		end)
+
+		it("keeps encoded repository names", function()
+			local target = assert(providers.resolve("https://dev.azure.com/acme/platform/_git/sdk%252Fcore"))
+			assert.are.equal("sdk%2Fcore", target.repo)
+			assert.are.equal("https://dev.azure.com/acme/platform/_git/sdk%252Fcore", target.url)
+		end)
+
+		it("resolves Git remotes as the repository", function()
+			local cases = {
+				{
+					"https://acme@dev.azure.com/acme/Team%20Project/_git/api%20service",
+					"Team Project/api service",
+					"https://dev.azure.com/acme/Team%20Project/_git/api%20service",
+				},
+				{
+					"git@ssh.dev.azure.com:v3/acme/Platform/api",
+					"Platform/api",
+					"https://dev.azure.com/acme/Platform/_git/api",
+				},
+				{
+					"ssh://git@ssh.dev.azure.com/v3/acme/Platform/api",
+					"Platform/api",
+					"https://dev.azure.com/acme/Platform/_git/api",
+				},
+			}
+			for _, case in ipairs(cases) do
+				local target = assert(providers.resolve(case[1]))
+				assert.are.equal("azure", target.provider)
+				assert.are.equal("repo", target.entity)
+				assert.are.equal(case[2], target.repo_full_name)
+				assert.are.equal(case[3], target.url)
+				assert.are.equal(case[3], target.repository_url)
+			end
+		end)
+
+		it("resolves repository pages", function()
+			local base = "https://dev.azure.com/acme/platform/_git/api"
+			assert.are.equal("pulls", assert(providers.resolve(base .. "/pullrequests")).page)
+			assert.are.equal("branches", assert(providers.resolve(base .. "/branches")).page)
+			assert.are.equal("tags", assert(providers.resolve(base .. "/tags")).page)
+			assert.is_nil(providers.resolve(base .. "/commits"))
+		end)
+
+		it("rejects other organizations", function()
+			local target, err = providers.resolve("https://dev.azure.com/other/platform/_git/api/pullrequest/17")
+			assert.is_nil(target)
+			assert.are.equal("Azure DevOps URL organization does not match providers.azure.base_url", err)
 		end)
 	end)
 end)
