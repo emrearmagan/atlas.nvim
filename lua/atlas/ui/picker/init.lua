@@ -141,7 +141,7 @@ function M.select_with_preview(opts)
 	})
 end
 
----@param opts { title: string, items: any[], selected: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, size: AtlasPickerSize|nil, on_done: (fun(selected: any[])) }
+---@param opts { title: string, items: any[], selected: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem|nil, preview_wo: table<string, any>|nil, size: AtlasPickerSize|nil, on_done: (fun(selected: any[])) }
 function M.multi_select(opts)
 	local available = {}
 	for _, item in ipairs(opts.items) do
@@ -153,6 +153,8 @@ function M.multi_select(opts)
 		items = opts.items,
 		format_item = opts.format_item,
 		key = opts.key,
+		preview_item = opts.preview_item,
+		preview_wo = opts.preview_wo,
 		multi = true,
 		selected = opts.selected,
 		size = opts.size,

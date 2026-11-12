@@ -7,6 +7,8 @@ local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local providers = require("atlas.providers")
 local reactions = require("atlas.ui.shared.reactions")
 local request_scope = require("atlas.core.requests")
@@ -41,6 +43,7 @@ local M = {}
 ---| "open_actions"
 ---| "refresh_review"
 ---| "edit_files"
+---| "apply_suggestions"
 
 ---@class AtlasDiffActionContext
 ---@field session AtlasDiffSessionInternal
@@ -556,7 +559,48 @@ M.edit_files = {
 	run = function(context)
 		local viewer = context.viewer
 		---@cast viewer -nil
-		require("atlas.pulls.diff.edit").toggle(viewer)
+		require("atlas.pulls.diff.edit").start(viewer)
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.apply_suggestions = {
+	id = "apply_suggestions",
+	label = "Apply suggestions",
+	icon = icons.get("edit", "actions"),
+	is_available = function(context)
+		if not M.edit_files.is_available(context) then
+			return false, "Pull request is not open"
+		end
+		return #suggestions.list(context.session) > 0, "No suggestions to apply"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		local range = context.session.range
+		picker.multi_select({
+			title = "Apply suggestions",
+			items = suggestions.list(context.session),
+			selected = {},
+			key = function(suggestion)
+				return tostring(suggestion.comment.id)
+			end,
+			format_item = function(suggestion)
+				return picker_format.file(suggestion.path, suggestion.first)
+			end,
+			preview_wo = { wrap = false },
+			preview_item = function(suggestion, done, width)
+				return diff.read(range.root, range.head_revision, suggestion.path, function(content, err)
+					done(content and suggestions.preview(suggestion, content, width) or { lines = { err } })
+				end)
+			end,
+			on_done = function(selected)
+				if #selected > 0 then
+					require("atlas.pulls.diff.edit").start(viewer, selected)
+				end
+			end,
+		})
 		return true
 	end,
 }
@@ -591,6 +635,9 @@ M.open_actions = {
 		add("request_changes")
 		if action_runner.is_available(M.edit_files, context) then
 			items[#items + 1] = M.edit_files
+		end
+		if action_runner.is_available(M.apply_suggestions, context) then
+			items[#items + 1] = M.apply_suggestions
 		end
 
 		items[#items + 1] = M.toggle_detail_panel

@@ -16,6 +16,7 @@ local M = {}
 ---@field pr PullRequest
 ---@field review AtlasDiffViewer
 ---@field repo_root string
+---@field message string|nil
 
 -- Edit sessions by the path of their worktree.
 ---@type table<string, AtlasDiffEdit>
@@ -100,7 +101,8 @@ function M.load(root, base, on_done)
 end
 
 ---@param review AtlasDiffViewer
-local function start(review)
+---@param suggestions AtlasDiffSuggestion[]|nil Applied to the worktree before it opens.
+function M.start(review, suggestions)
 	local session = review.session
 	local source = session.source
 	if source.kind ~= "pr" then
@@ -114,6 +116,9 @@ local function start(review)
 	-- An edit only ends on discard or push, so reopen an existing one with its changes.
 	for root, edit in pairs(edits) do
 		if edit.pr.repo_full_name == source.pr.repo_full_name and edit.pr.id == source.pr.id then
+			if suggestions then
+				notify.warn("Commit or discard your edits first")
+			end
 			edit.review = review
 			diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
 			return
@@ -124,10 +129,18 @@ local function start(review)
 	session.requests.run(function(done)
 		return diff_worktree.prepare(session.range, source.pr, config.options.pulls.diff.lsp, done)
 	end, function(root)
-		if root then
-			edits[edit_key(root)] = { pr = source.pr, review = review, repo_root = session.range.root }
-			diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
+		if not root then
+			return
 		end
+
+		local edit = { pr = source.pr, review = review, repo_root = session.range.root }
+		if suggestions then
+			require("atlas.pulls.diff.suggestions").apply(root, suggestions)
+			edit.message = #suggestions == 1 and "Update " .. vim.fs.basename(suggestions[1].path)
+				or "Apply suggestions from code review"
+		end
+		edits[edit_key(root)] = edit
+		diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
 	end)
 end
 
@@ -233,7 +246,9 @@ local function open_commit(viewer, changes)
 			"# Lines starting with '#' will be ignored.",
 		})
 	end
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.list_extend({ "", "" }, footer(changes)))
+	local initial = vim.split(edit.message or "", "\n", { plain = true })
+	initial[#initial + 1] = ""
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.list_extend(initial, footer(changes)))
 	vim.api.nvim_win_set_cursor(win, { 1, 0 })
 
 	-- Files can change while this is open, so list what would be committed now.
@@ -258,6 +273,22 @@ local function open_commit(viewer, changes)
 		end,
 	})
 
+	local function read_message()
+		return vim.trim(table.concat(
+			vim.tbl_filter(function(line)
+				return line:sub(1, 1) ~= "#"
+			end, vim.api.nvim_buf_get_lines(buf, 0, -1, false)),
+			"\n"
+		))
+	end
+
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		buffer = buf,
+		callback = function()
+			edit.message = read_message()
+		end,
+	})
+
 	local function close()
 		if vim.api.nvim_win_is_valid(win) then
 			vim.api.nvim_win_close(win, true)
@@ -270,12 +301,7 @@ local function open_commit(viewer, changes)
 			return
 		end
 
-		local message = vim.trim(table.concat(
-			vim.tbl_filter(function(line)
-				return line:sub(1, 1) ~= "#"
-			end, vim.api.nvim_buf_get_lines(buf, 0, -1, false)),
-			"\n"
-		))
+		local message = read_message()
 		if message == "" then
 			notify.warn("Commit message cannot be empty")
 			return
@@ -307,7 +333,7 @@ local function open_commit(viewer, changes)
 end
 
 ---@param viewer AtlasDiffViewer
-local function commit(viewer)
+function M.commit(viewer)
 	local root = viewer.session.range.root
 	save(root)
 	load_changes(root, function(changes)
@@ -332,16 +358,6 @@ function M.close(viewer)
 		end
 		stop(viewer, false)
 	end)
-end
-
----@param viewer AtlasDiffViewer
-function M.toggle(viewer)
-	local source = viewer.session.source
-	if source.kind == "worktree" and source.edit then
-		commit(viewer)
-	else
-		start(viewer)
-	end
 end
 
 return M

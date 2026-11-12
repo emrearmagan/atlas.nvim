@@ -135,7 +135,12 @@ function M.setup(viewer)
 	end)
 	if session.source.kind == "pr" or editing then
 		add(shared_items, "pulls.review.view.toggle_edit", 48, function()
-			require("atlas.pulls.diff.edit").toggle(viewer)
+			local edit = require("atlas.pulls.diff.edit")
+			if editing then
+				edit.commit(viewer)
+			else
+				edit.start(viewer)
+			end
 		end, nil, editing and "Commit and push" or nil)
 	end
 
