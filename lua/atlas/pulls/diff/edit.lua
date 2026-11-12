@@ -111,6 +111,15 @@ local function start(review)
 		return
 	end
 
+	-- An edit only ends on discard or push, so reopen an existing one with its changes.
+	for root, edit in pairs(edits) do
+		if edit.pr.repo_full_name == source.pr.repo_full_name and edit.pr.id == source.pr.id then
+			edit.review = review
+			diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
+			return
+		end
+	end
+
 	notify.info("Preparing a worktree to edit in...")
 	session.requests.run(function(done)
 		return diff_worktree.prepare(session.range, source.pr, config.options.pulls.diff.lsp, done)
@@ -129,6 +138,11 @@ local function stop(viewer, reload)
 	local root = viewer.session.range.root
 	edits[edit_key(root)] = nil
 	viewer:close("user_close")
+
+	-- discard() keeps buffers with unsaved changes, but ending an edit is on purpose, so remove those too.
+	for _, buf in ipairs(unsaved_buffers(root)) do
+		vim.bo[buf].modified = false
+	end
 	diff_worktree.discard(edit.repo_root, root)
 	if not edit.review.session.closed then
 		vim.api.nvim_set_current_tabpage(edit.review.renderer.tabpage)
@@ -138,12 +152,49 @@ local function stop(viewer, reload)
 	end
 end
 
+---@param root string
+---@param pr PullRequest
+---@param message string
+---@param on_done fun(ok: boolean)
+local function push(root, pr, message, on_done)
+	local url = config.options.pulls.git_transport == "ssh" and pr.source.ssh_url or pr.source.https_url
+	local steps = {
+		{ "add", "-A" },
+		{ "commit", "-m", message },
+		{ "push", (url and url ~= "") and url or "origin", "HEAD:refs/heads/" .. pr.source.branch },
+	}
+
+	local function run(index)
+		local args = steps[index]
+		if not args then
+			on_done(true)
+			return
+		end
+		git.run(args, { cwd = root, text = true }, function(result)
+			if result.code ~= 0 then
+				notify.error(string.format("git %s failed\n\n%s", args[1], vim.trim(result.stderr)))
+				-- Undo the commit so a retry can commit again.
+				if args[1] == "push" then
+					git.run({ "reset", "--soft", "HEAD~1" }, { cwd = root }, function()
+						on_done(false)
+					end)
+					return
+				end
+				on_done(false)
+				return
+			end
+			run(index + 1)
+		end)
+	end
+	run(1)
+end
+
 ---@param viewer AtlasDiffViewer
 ---@param changes string[] `git status --porcelain` lines
 local function open_commit(viewer, changes)
-	local pr = edit_of(viewer).pr
+	local edit = edit_of(viewer)
 	local root = viewer.session.range.root
-	local branch = pr.source.branch
+	local branch = edit.pr.source.branch
 
 	local buf = vim.api.nvim_create_buf(false, false)
 	vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. "_COMMIT_EDITMSG")
@@ -169,7 +220,7 @@ local function open_commit(viewer, changes)
 	---@param list string[]
 	local function footer(list)
 		local lines = {
-			string.format("# Commit and push to %s (%s #%s)", branch, pr.repo_full_name, pr.id),
+			string.format("# Commit and push to %s (%s #%s)", branch, edit.pr.repo_full_name, edit.pr.id),
 			"#",
 			"# Changes:",
 		}
@@ -213,7 +264,12 @@ local function open_commit(viewer, changes)
 		end
 	end
 
+	local submitting = false
 	local function submit()
+		if submitting then
+			return
+		end
+
 		local message = vim.trim(table.concat(
 			vim.tbl_filter(function(line)
 				return line:sub(1, 1) ~= "#"
@@ -226,36 +282,17 @@ local function open_commit(viewer, changes)
 		end
 		vim.cmd("stopinsert")
 		save(root)
+		submitting = true
 
-		local url = config.options.pulls.git_transport == "ssh" and pr.source.ssh_url or pr.source.https_url
-		local steps = {
-			{ "add", "-A" },
-			{ "commit", "-m", message },
-			{ "push", (url and url ~= "") and url or "origin", "HEAD:refs/heads/" .. branch },
-		}
 		notify.info("Pushing to " .. branch .. "...")
-
-		local function run(index)
-			local args = steps[index]
-			if not args then
+		push(root, edit.pr, message, function(ok)
+			submitting = false
+			if ok then
 				close()
 				notify.info("Pushed to " .. branch)
 				stop(viewer, true)
-				return
 			end
-			git.run(args, { cwd = root, text = true }, function(result)
-				if result.code ~= 0 then
-					notify.error(string.format("git %s failed\n\n%s", args[1], vim.trim(result.stderr)))
-					-- Undo the commit so a retry can commit again.
-					if args[1] == "push" then
-						git.run({ "reset", "--soft", "HEAD~1" }, { cwd = root }, function() end)
-					end
-					return
-				end
-				run(index + 1)
-			end)
-		end
-		run(1)
+		end)
 	end
 
 	for action, mapping in pairs({
@@ -270,7 +307,7 @@ local function open_commit(viewer, changes)
 end
 
 ---@param viewer AtlasDiffViewer
-local function finish(viewer)
+local function commit(viewer)
 	local root = viewer.session.range.root
 	save(root)
 	load_changes(root, function(changes)
@@ -299,8 +336,9 @@ end
 
 ---@param viewer AtlasDiffViewer
 function M.toggle(viewer)
-	if viewer.session.source.kind == "worktree" then
-		finish(viewer)
+	local source = viewer.session.source
+	if source.kind == "worktree" and source.edit then
+		commit(viewer)
 	else
 		start(viewer)
 	end
