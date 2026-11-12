@@ -97,6 +97,7 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
 - Edit the pull request's files in a separate worktree, then commit and push them to its branch.
+- Apply review suggestions, one from the comment popup or several at once from the actions menu.
 
 > [!NOTE]
 > **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v3.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) are also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
