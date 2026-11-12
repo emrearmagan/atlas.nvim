@@ -10,6 +10,7 @@ local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
 local reactions = require("atlas.ui.shared.reactions")
 local request_scope = require("atlas.core.requests")
+local suggestions = require("atlas.pulls.diff.suggestions")
 
 local M = {}
 
@@ -122,11 +123,7 @@ local function comment_draft(context, provider)
 
 	if context.suggestion then
 		local lines = vim.list_slice(selection.source_lines, selection.first, selection.last)
-		local fence = "suggestion"
-		if provider == "gitlab" then
-			fence = string.format("suggestion:-%d+0", #lines - 1)
-		end
-		draft.initial_text = string.format("\n```%s\n%s\n```", fence, table.concat(lines, "\n"))
+		draft.initial_text = "\n" .. suggestions.format(lines, provider)
 		draft.kind = "suggestion"
 	end
 

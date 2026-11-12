@@ -280,13 +280,12 @@ describe("Markdown parsing", function()
 			{ "json,title=demo", "json", "json" },
 			{ "c++ linenos", "c++", "c++" },
 			{ "{r}", "lua", "" },
-			{ "custom", "lua", "custom" },
+			{ "suggestion", "lua", "suggestion" },
 			{ "", "lua", "" },
 		}) do
 			local block = markdown.parse("```" .. case[1] .. "\nsource\n```", {
 				language = "lua",
 				file_path = "source.py",
-				language_aliases = { custom = "lua" },
 			})
 			assert.equal(case[2], received.language)
 			assert.equal("source.py", received.file_path)

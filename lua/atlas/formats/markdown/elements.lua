@@ -278,11 +278,12 @@ function M.block.code(lines, index, opts)
 		body[1] = ""
 	end
 
-	local code_language = opts.language_aliases and opts.language_aliases[language] or language
+	-- A suggestion is usually code of the commented file, so use its language.
+	local code_language = language ~= "suggestion" and language ~= "" and language or opts.language
 
 	local preview = code_preview.render({
 		lines = body,
-		language = code_language ~= "" and code_language or opts.language,
+		language = code_language,
 		file_path = opts.file_path,
 		show_line_numbers = false,
 		width = opts.width,

@@ -153,8 +153,6 @@ local function comment_item(comment, opts, is_root)
 		item.content = text
 		item.markdown = not is_deleted
 		item.file_path = comment.inline and comment.inline.path
-		item.language_aliases = comment.inline
-			and { suggestion = vim.filetype.match({ filename = comment.inline.path }) }
 		item.meta.is_deleted = is_deleted
 		if not is_deleted then
 			item.reactions = comment.reactions

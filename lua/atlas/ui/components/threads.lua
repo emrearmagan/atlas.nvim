@@ -22,7 +22,6 @@ local reactions = require("atlas.ui.shared.reactions")
 ---@field markdown boolean|nil
 ---@field language string|nil
 ---@field file_path string|nil
----@field language_aliases table<string, string>|nil
 ---@field reactions AtlasReaction[]|nil
 ---@field footer_items AtlasThreadFooterItem[]|nil
 ---@field children AtlasThreadItem[]|nil Nested replies
@@ -257,7 +256,6 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 				width = content_width,
 				language = item.language,
 				file_path = item.file_path,
-				language_aliases = item.language_aliases,
 			})
 		or { lines = utils.sanitize_lines(item.content) }
 
