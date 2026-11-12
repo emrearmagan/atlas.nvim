@@ -1,10 +1,6 @@
 local diff_hunks = require("atlas.ui.components.diff_hunks")
-local diff_parser = require("atlas.core.git.diff_parser")
+local git_diff = require("atlas.core.git.diff")
 local notify = require("atlas.core.notify")
-
--- Use vim.diff on Neovim < 0.12.
----@diagnostic disable-next-line: deprecated
-local vim_diff = vim.text and vim.text.diff or vim.diff
 
 local M = {}
 
@@ -116,9 +112,8 @@ end
 ---@return AtlasPickerPreview
 function M.preview(suggestion, content, width)
 	local new = replace(vim.split(content, "\n", { plain = true }), suggestion)
-	local patch = vim_diff(content, table.concat(new, "\n"), { ctxlen = 3 })
-	---@cast patch string
-	local file = { path = suggestion.path, status = "modified", hunks = { diff_parser.parse_hunk(patch) } }
+	local hunks = git_diff.hunk_lines(content, table.concat(new, "\n"))
+	local file = { path = suggestion.path, status = "modified", hunks = hunks }
 	local lines, highlights = diff_hunks.hunks({ file }, { max_width = width, show_file_header = false })
 	return { title = suggestion.path, lines = lines, highlights = highlights }
 end

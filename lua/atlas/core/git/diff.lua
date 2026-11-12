@@ -495,4 +495,14 @@ function M.compute(old, new)
 	return named(hunks), named(split_hunks)
 end
 
+---@param old string
+---@param new string
+---@return DiffHunkLines[]
+function M.hunk_lines(old, new)
+	local patch = vim_diff(old, new, { ctxlen = 3, algorithm = "histogram" })
+	---@cast patch string
+	local file = diff_parser.parse(patch)[1]
+	return file and file.hunks or {}
+end
+
 return M

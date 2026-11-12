@@ -157,7 +157,7 @@ function M.setup(renderer, viewer, groups)
 		bind_panel(buf, panels)
 	end
 	bind_panel(explorer.buf, explorer_items)
-	help.register("Explorer", help_items, { buffer = explorer.buf, index = 1 })
+	help.register("General", help_items, { buffer = explorer.buf, index = 2 })
 
 	-- The registry preserves both owners through CodeDiff's asynchronous keymap setup.
 	lifecycle.begin_keymap_scope(renderer.tabpage, "atlas_navigation")
@@ -179,7 +179,7 @@ function M.setup(renderer, viewer, groups)
 	lifecycle.begin_keymap_scope(renderer.tabpage, "atlas_review")
 	for _, pane in pairs({ renderer.left, renderer.right }) do
 		if pane.win then
-			register(renderer.tabpage, pane.buf, { { name = "View", items = help_items, index = 1 } })
+			register(renderer.tabpage, pane.buf, { { name = "General", items = help_items, index = 2 } })
 			register(renderer.tabpage, pane.buf, groups)
 		end
 	end
