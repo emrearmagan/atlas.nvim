@@ -20,6 +20,7 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@class AtlasDiffWorktreeSource
 ---@field kind "worktree"
 ---@field base string|nil Nil splits the changes into staged and unstaged files.
+---@field edit boolean|nil Edit mode for a pull request, see `atlas.pulls.diff.edit`.
 
 ---@alias AtlasDiffSource AtlasDiffPullRequestSource|AtlasDiffRefsSource|AtlasDiffWorktreeSource
 
@@ -132,6 +133,9 @@ end
 ---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function load_files(source, root, base, head, on_done)
+	if source.kind == "worktree" and source.edit then
+		return require("atlas.pulls.diff.edit").load(root, base, on_done)
+	end
 	if source.kind == "worktree" and not source.base then
 		return diff.load_status(root, base, on_done)
 	end

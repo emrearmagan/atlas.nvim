@@ -28,6 +28,7 @@ local shared_actions = {
 	"pulls.review.view.toggle_review_panel",
 	"pulls.review.view.toggle_detail_panel",
 	"pulls.review.view.toggle_comments",
+	"pulls.review.view.toggle_edit",
 	"pulls.review.explorer.toggle_commits",
 	"pulls.review.explorer.next_unreviewed_file",
 	"pulls.review.explorer.prev_unreviewed_file",
@@ -96,6 +97,7 @@ end
 function M.setup(viewer)
 	local session = viewer.session
 	local staging = session.source.kind == "worktree" and not session.source.base
+	local editing = session.source.kind == "worktree" and session.source.edit == true
 	local pr = session.source.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	local reviews = provider and provider.capabilities.reviews
@@ -131,6 +133,11 @@ function M.setup(viewer)
 	add(shared_items, "pulls.review.next_commit", 47, function()
 		viewer:step_commit(1)
 	end)
+	if session.source.kind == "pr" or editing then
+		add(shared_items, "pulls.review.view.toggle_edit", 48, function()
+			require("atlas.pulls.diff.edit").toggle(viewer)
+		end, nil, editing and "Commit and push" or nil)
+	end
 
 	local review_items = {}
 	if session.source.kind == "pr" then
@@ -193,7 +200,12 @@ function M.setup(viewer)
 	end
 	add(shared_items, "ui.help", 100, help.toggle)
 	add(shared_items, "ui.close", 101, function()
-		if not help.is_open() then
+		if help.is_open() then
+			return
+		end
+		if editing then
+			require("atlas.pulls.diff.edit").close(viewer)
+		else
 			viewer:close("user_close")
 		end
 	end)

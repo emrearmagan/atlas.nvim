@@ -75,6 +75,10 @@ local function start_loading(message, context, on_done)
 	local options = vim.deepcopy(config.options.pulls.diff)
 	---@cast options AtlasPullsDiffConfig
 	options.open_cmd = config.diff_command()
+	-- Edit mode compares its two sections with different bases, which Diffview can't show so fall back to AtlasDiff.
+	if context.edit and options.open_cmd == "DiffviewOpen" then
+		options.open_cmd = "AtlasDiff"
+	end
 	context.command = options.open_cmd
 
 	local label = context.kind == "pr" and string.format("%s #%s", context.repo, context.pr_id)
@@ -239,7 +243,7 @@ function M.open_range(opts, on_done)
 end
 
 -- Accepts a revision to compare with the working tree and an optional repository path.
----@param opts { base?: string, root?: string }
+---@param opts { base?: string, root?: string, edit?: boolean }
 ---@param on_done (fun(err: string|nil))|nil
 function M.open_worktree(opts, on_done)
 	local cwd = opts.root or git.default_cwd()
@@ -248,6 +252,7 @@ function M.open_worktree(opts, on_done)
 		kind = "worktree",
 		root = cwd,
 		base = ref,
+		edit = opts.edit,
 	}, on_done)
 
 	requests.run(function(done)
@@ -266,7 +271,7 @@ function M.open_worktree(opts, on_done)
 				return
 			end
 
-			on_prepared(root, base, nil, { kind = "worktree", base = opts.base })
+			on_prepared(root, base, nil, { kind = "worktree", base = opts.base, edit = opts.edit })
 		end)
 	end)
 end
@@ -281,7 +286,7 @@ function M.reopen(session)
 		return
 	end
 	if source.kind == "worktree" then
-		M.open_worktree({ base = source.base, root = root })
+		M.open_worktree({ base = source.base, root = root, edit = source.edit })
 		return
 	end
 

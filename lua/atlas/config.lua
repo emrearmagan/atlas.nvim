@@ -347,6 +347,7 @@ local defaults = {
 					toggle_review_panel = "gR",
 					toggle_detail_panel = "gD",
 					toggle_comments = "gH",
+					toggle_edit = "gE",
 				},
 				explorer = {
 					toggle_commits = "gC",

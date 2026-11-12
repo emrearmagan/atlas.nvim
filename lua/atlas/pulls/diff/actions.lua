@@ -39,6 +39,7 @@ local M = {}
 ---| "copy_url"
 ---| "open_actions"
 ---| "refresh_review"
+---| "edit_files"
 
 ---@class AtlasDiffActionContext
 ---@field session AtlasDiffSessionInternal
@@ -547,6 +548,23 @@ M.open_in_browser = {
 }
 
 ---@type AtlasDiffAction
+M.edit_files = {
+	id = "edit_files",
+	label = "Edit files",
+	icon = icons.get("edit", "actions"),
+	is_available = function(context)
+		local pr = context.session.source.pr
+		return pr ~= nil and (pr.state == "open" or pr.state == "draft"), "Pull request is not open"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		require("atlas.pulls.diff.edit").toggle(viewer)
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
 M.open_actions = {
 	id = "open_actions",
 	label = "Review actions",
@@ -574,6 +592,9 @@ M.open_actions = {
 		add("discard_review")
 		add("approve")
 		add("request_changes")
+		if action_runner.is_available(M.edit_files, context) then
+			items[#items + 1] = M.edit_files
+		end
 
 		items[#items + 1] = M.toggle_detail_panel
 		items[#items + 1] = M.toggle_review_panel

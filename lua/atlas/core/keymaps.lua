@@ -62,6 +62,7 @@ local config = require("atlas.config")
 ---@field toggle_review_panel? AtlasKeymapValue
 ---@field toggle_detail_panel? AtlasKeymapValue
 ---@field toggle_comments? AtlasKeymapValue
+---@field toggle_edit? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field toggle_commits? AtlasKeymapValue
@@ -251,6 +252,7 @@ local config = require("atlas.config")
 ---| "pulls.review.view.toggle_review_panel"
 ---| "pulls.review.view.toggle_detail_panel"
 ---| "pulls.review.view.toggle_comments"
+---| "pulls.review.view.toggle_edit"
 ---| "pulls.review.explorer.toggle_commits"
 ---| "pulls.review.explorer.next_unreviewed_file"
 ---| "pulls.review.explorer.prev_unreviewed_file"
@@ -416,6 +418,7 @@ local descriptions = {
 				toggle_review_panel = { desc = "Toggle review panel", label = "review panel" },
 				toggle_detail_panel = { desc = "Toggle PR details", label = "details" },
 				toggle_comments = { desc = "Toggle comment display", label = "comments" },
+				toggle_edit = { desc = "Edit the pull request", label = "edit" },
 			},
 			explorer = {
 				toggle_commits = { desc = "Toggle commits", label = "commits" },
