@@ -44,6 +44,7 @@ local M = {}
 ---| "refresh_review"
 ---| "edit_files"
 ---| "apply_suggestions"
+---| "apply_suggestion"
 
 ---@class AtlasDiffActionContext
 ---@field session AtlasDiffSessionInternal
@@ -601,6 +602,28 @@ M.apply_suggestions = {
 				end
 			end,
 		})
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.apply_suggestion = {
+	id = "apply_suggestion",
+	label = "Apply suggestion",
+	is_available = function(context)
+		if not M.edit_files.is_available(context) then
+			return false, "Pull request is not open"
+		end
+		return context.comment ~= nil and suggestions.parse(context.comment) ~= nil, "No suggestion to apply"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		if context.on_submit then
+			context.on_submit()
+		end
+		local suggestion = assert(suggestions.parse(assert(context.comment)))
+		require("atlas.pulls.diff.edit").start(viewer, { suggestion })
 		return true
 	end,
 }

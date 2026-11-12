@@ -30,10 +30,11 @@ end
 
 ---@param comment PullsComment
 ---@return AtlasDiffSuggestion|nil
-local function parse(comment)
+function M.parse(comment)
 	local inline = comment.inline
+	local open = not comment.deleted and not comment.outdated and comment.state == nil
 	local range, code = comment.body:gsub("\r\n", "\n"):match("```suggestion(%S*)[ \t]*\n(.-)```")
-	if not inline or not inline.to or not range then
+	if not open or not inline or not inline.to or not range then
 		return nil
 	end
 
@@ -57,8 +58,7 @@ end
 function M.list(session)
 	local suggestions = {}
 	for _, comment in ipairs(session.review and session.review.comments or {}) do
-		local open = not comment.deleted and not comment.outdated and comment.state == nil
-		local suggestion = open and parse(comment)
+		local suggestion = M.parse(comment)
 		if suggestion then
 			suggestions[#suggestions + 1] = suggestion
 		end

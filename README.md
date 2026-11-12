@@ -1017,6 +1017,8 @@ keymaps = {
       reply = "c",
       edit = "e",
       react = "gr",
+      toggle_resolved = "x",
+      apply_suggestion = "ga",
       upvote = "gu", -- GitHub discussions only.
     },
     toggle_panel = "p",
@@ -1091,7 +1093,6 @@ keymaps = {
       submit_review = "<leader>gs",
       add_task = "<leader>t",
       comment_templates = "gT",
-      toggle_resolved = "x",
       next_comment = "]c",
       prev_comment = "[c",
       next_unresolved = "]x",

@@ -42,7 +42,7 @@ M.action_ids = {
 		"pulls.review.add_suggestion",
 		"pulls.review.submit_suggestion",
 		"pulls.review.add_note",
-		"pulls.review.toggle_resolved",
+		"ui.comments.toggle_resolved",
 	}, shared_actions),
 	explorer = vim.list_extend({ "ui.copy_url" }, shared_actions),
 }
@@ -268,7 +268,7 @@ function M.setup(viewer)
 		end, { "n", "x" })
 	end
 	if session.source.kind == "pr" then
-		add(diff_review_items, "pulls.review.toggle_resolved", 40, function()
+		add(diff_review_items, "ui.comments.toggle_resolved", 40, function()
 			viewer:run_annotation_action("toggle_resolved")
 		end)
 		add(diff_review_items, "ui.delete", 41, function()
@@ -308,7 +308,7 @@ function M.hints(viewer, buf)
 	if vim.bo[buf].filetype == "atlas-ui.review-thread" then
 		return {
 			"ui.comments.reply",
-			"pulls.review.toggle_resolved",
+			"ui.comments.toggle_resolved",
 			"ui.close",
 		}
 	elseif buf == viewer.commits.buf then

@@ -149,7 +149,7 @@ function M.setup(buf, refresh)
 		)
 	end
 	if has_tasks then
-		local toggle_task = from_action("pulls.review.toggle_resolved", {
+		local toggle_task = from_action("ui.comments.toggle_resolved", {
 			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()

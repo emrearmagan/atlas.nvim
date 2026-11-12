@@ -201,7 +201,7 @@ function M.setup(state, callbacks)
 		end
 	end)
 
-	add(items, "pulls.review.toggle_resolved", 40, function()
+	add(items, "ui.comments.toggle_resolved", 40, function()
 		local entry = current(state)
 		if not entry then
 			return
