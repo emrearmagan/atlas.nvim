@@ -5,6 +5,9 @@ local fzf_utils = require("fzf-lua.utils")
 local M = {}
 local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
+local utils = require("atlas.ui.shared.utils")
+
+local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@param handle { cancel: fun() }|nil
 local function cancel(handle)
@@ -157,6 +160,11 @@ function M.open(request)
 					local buf = self:get_tmp_buffer()
 					vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Loading..." })
 					self:set_preview_buf(buf)
+					local preview_win = self.win.preview_winid
+					for option, value in pairs(request.preview_wo) do
+						vim.wo[preview_win][option] = value
+					end
+
 					preview_handle = request.preview_item(item, function(preview)
 						vim.schedule(function()
 							if
@@ -167,19 +175,15 @@ function M.open(request)
 							then
 								return
 							end
-							local preview_win = self.win.preview_winid
-							local result = picker.format_preview(preview.lines, preview_win)
 							vim.bo[buf].modifiable = true
-							vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+							vim.api.nvim_buf_set_lines(buf, 0, -1, false, preview.lines)
 							vim.bo[buf].modifiable = false
-							vim.bo[buf].filetype = "atlas-markdown"
+							vim.bo[buf].filetype = "atlas-ui.picker-preview"
 							vim.bo[buf].syntax = "OFF"
-							vim.wo[preview_win].wrap = true
-							vim.wo[preview_win].linebreak = true
-							picker.highlight_preview(buf, result.highlights)
+							utils.apply_spans(buf, preview_namespace, preview.highlights or {})
 							self.win:update_preview_title(preview.title or request.title)
 						end)
-					end)
+					end, picker.preview_width(preview_win))
 				end
 
 				return previewer

@@ -5,6 +5,7 @@ local keymaps = require("atlas.core.keymaps")
 local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local storage = require("atlas.core.storage")
 local templates_root = vim.fs.joinpath(storage.root(), "issues", "templates")
 
@@ -120,12 +121,12 @@ local function pick(title, templates, on_select)
 		format_item = function(template)
 			return template.name
 		end,
-		preview_item = function(template, done)
+		preview_item = function(template, done, width)
 			local content, read_err = read(template.name)
-			done({
+			done(picker_format.markdown({
 				title = template.name,
 				lines = vim.split(read_err or (content ~= "" and content or "Empty template"), "\n", { plain = true }),
-			})
+			}, width))
 		end,
 		on_select = on_select,
 	})

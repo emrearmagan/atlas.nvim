@@ -1,19 +1,18 @@
 local M = {}
 
 local config = require("atlas.config")
-local markdown = require("atlas.formats.markdown")
-local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@alias AtlasPickerName "auto"|"default"|"snacks"|"fzf-lua"
----@alias AtlasPickerSize "compact"|"preview"|{ width: number, height: number }
+---@alias AtlasPickerSize { width: number, height: number }
 
 ---@class AtlasPickerPreview
 ---@field lines string[]
 ---@field title string|nil
+---@field highlights AtlasUIHighlight[]|nil
 
 ---@alias AtlasPickerChunk { [1]: string, [2]: string|nil }
 ---@alias AtlasPickerFormatItem fun(item: any): string, string|AtlasPickerChunk[]|nil
----@alias AtlasPickerPreviewItem fun(item: any, done: fun(preview: AtlasPickerPreview)): { cancel: fun() }|nil
+---@alias AtlasPickerPreviewItem fun(item: any, done: fun(preview: AtlasPickerPreview), width: integer): { cancel: fun() }|nil
 ---@alias AtlasPickerFetch fun(query: string, done: fun(items: any[]|nil, err: string|nil)): { cancel: fun() }|nil
 
 ---@class AtlasPickerRequest
@@ -22,11 +21,12 @@ local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 ---@field format_item AtlasPickerFormatItem
 ---@field key fun(item: any): string
 ---@field preview_item AtlasPickerPreviewItem|nil
+---@field preview_wo table<string, any>|nil
 ---@field fetch AtlasPickerFetch|nil
 ---@field multi boolean
 ---@field selected any[]
 ---@field initial_index integer|nil
----@field size { width: number, height: number }
+---@field size AtlasPickerSize
 ---@field fetch_on_open boolean|nil
 ---@field debounce_ms integer|nil
 ---@field on_done fun(value: any|any[])
@@ -43,15 +43,6 @@ local sizes = {
 	preview = { width = 0.7, height = 0.7 },
 }
 
----@param size AtlasPickerSize
----@return { width: number, height: number }
-local function resolve_size(size)
-	if type(size) == "string" then
-		return sizes[size]
-	end
-	return size
-end
-
 ---@param request AtlasPickerRequest
 ---@param item any
 ---@return string, AtlasPickerChunk[]
@@ -64,24 +55,10 @@ function M.format_item(request, item)
 	return text, { { text, formatting } }
 end
 
----@param lines string[]
 ---@param win integer
----@return { lines: string[], highlights: AtlasMarkdownHighlight[] }
-function M.format_preview(lines, win)
-	local width = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
-	return markdown.parse(table.concat(lines, "\n"), { width = width })
-end
-
----@param buf integer
----@param highlights AtlasMarkdownHighlight[]
-function M.highlight_preview(buf, highlights)
-	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
-	for _, span in ipairs(highlights) do
-		vim.api.nvim_buf_set_extmark(buf, preview_namespace, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+---@return integer
+function M.preview_width(win)
+	return vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
 end
 
 ---@param name string
@@ -104,6 +81,18 @@ end
 
 ---@param request AtlasPickerRequest
 local function open_backend(request)
+	request.size = request.size or (request.preview_item and sizes.preview or sizes.compact)
+	request.preview_wo = vim.tbl_extend("force", {
+		wrap = true,
+		linebreak = true,
+		number = false,
+		relativenumber = false,
+		cursorline = false,
+		signcolumn = "no",
+		foldcolumn = "0",
+		statuscolumn = "",
+		list = false,
+	}, request.preview_wo or {})
 	current_picker().open(request)
 end
 
@@ -124,7 +113,7 @@ function M.select(opts)
 		multi = false,
 		selected = {},
 		initial_index = opts.initial_index,
-		size = resolve_size(opts.size or "compact"),
+		size = opts.size,
 		on_done = opts.on_select,
 		on_cancel = function()
 			opts.on_select(nil)
@@ -132,7 +121,7 @@ function M.select(opts)
 	})
 end
 
----@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem, size: AtlasPickerSize|nil, on_select: (fun(item: any|nil)) }
+---@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem, preview_wo: table<string, any>|nil, initial_index: integer|nil, size: AtlasPickerSize|nil, on_select: (fun(item: any|nil)) }
 function M.select_with_preview(opts)
 	open_backend({
 		title = opts.title,
@@ -140,9 +129,11 @@ function M.select_with_preview(opts)
 		format_item = opts.format_item,
 		key = opts.key,
 		preview_item = opts.preview_item,
+		preview_wo = opts.preview_wo,
 		multi = false,
 		selected = {},
-		size = resolve_size(opts.size or "preview"),
+		initial_index = opts.initial_index,
+		size = opts.size,
 		on_done = opts.on_select,
 		on_cancel = function()
 			opts.on_select(nil)
@@ -164,7 +155,7 @@ function M.multi_select(opts)
 		key = opts.key,
 		multi = true,
 		selected = opts.selected,
-		size = resolve_size(opts.size or "compact"),
+		size = opts.size,
 		on_done = function(selected)
 			local selected_keys = {}
 			for _, item in ipairs(selected) do
@@ -193,6 +184,7 @@ end
 --- size: AtlasPickerSize|nil,
 --- format_item: AtlasPickerFormatItem,
 --- preview_item: AtlasPickerPreviewItem|nil,
+--- preview_wo: table<string, any>|nil,
 --- fetch: AtlasPickerFetch,
 --- on_select: (fun(item: any)),
 --- on_cancel: (fun())|nil,
@@ -206,10 +198,11 @@ function M.search(opts)
 			return tostring(item.id)
 		end,
 		preview_item = opts.preview_item,
+		preview_wo = opts.preview_wo,
 		fetch = opts.fetch,
 		multi = false,
 		selected = {},
-		size = resolve_size(opts.size or (opts.preview_item and "preview" or "compact")),
+		size = opts.size,
 		fetch_on_open = opts.fetch_on_open,
 		debounce_ms = opts.debounce_ms == nil and 250 or opts.debounce_ms,
 		on_done = opts.on_select,

@@ -8,6 +8,7 @@
 local actions = require("atlas.pulls.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.providers.gitlab.users")
@@ -237,39 +238,6 @@ local function select_project(opts)
 	})
 end
 
----@param pr PullRequest
----@param details GitLabPullRequestDetails
----@return string[]
-local function search_preview(pr, details)
-	local reviewers = vim.tbl_map(function(user)
-		return "@" .. user.username
-	end, pr.reviewers or {})
-	local assignees = vim.tbl_map(function(user)
-		return "@" .. user.username
-	end, details.assignees)
-	local labels = vim.tbl_map(function(label)
-		return label.name
-	end, details.labels)
-	local lines = {
-		"**Status:** " .. pr.state,
-		"**Author:** @" .. pr.author.username,
-		string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
-	}
-	if #reviewers > 0 then
-		table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
-	end
-	if #assignees > 0 then
-		table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
-	end
-	if #labels > 0 then
-		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-	end
-	vim.list_extend(lines, { "", "## Description", "" })
-	local description = vim.trim(details.description)
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return lines
-end
-
 ---@param project string
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
@@ -280,19 +248,14 @@ local function search_merge_requests(project, ctx, done)
 		format_item = function(item)
 			return item.label
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local pr = item.value
 			return pullrequests_api.fetch_pullrequest(pr, nil, function(details, err)
 				if err or details == nil then
 					preview_done({ title = pr_label(pr), lines = { err or "Failed to load merge request" } })
 					return
 				end
-				---@cast details GitLabPullRequestDetails
-
-				preview_done({
-					title = string.format("%s - %s", pr_label(pr), pr.title),
-					lines = search_preview(pr, details),
-				})
+				preview_done(picker_format.pullrequest(pr, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)

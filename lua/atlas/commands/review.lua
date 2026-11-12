@@ -3,8 +3,8 @@ local diff = require("atlas.pulls.diff")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local providers = require("atlas.providers")
-local ui_utils = require("atlas.ui.shared.utils")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -13,30 +13,6 @@ local requests = request_scope.new()
 
 local function no_repository()
 	notify.error("No supported Git repository found", { vim_notify = true })
-end
-
----@param pr PullRequest
----@param details PullRequestDetails|nil
----@return AtlasPickerPreview
-local function format_preview(pr, details)
-	---@cast pr GitHubPullRequest
-	local author = pr.author.username ~= "" and "@" .. pr.author.username or pr.author.name
-	local status = pr.state .. "   updated " .. ui_utils.relative_time(pr.updated_on)
-	if pr.lines_added ~= nil and pr.lines_removed ~= nil then
-		status = status .. string.format("   +%d -%d", pr.lines_added, pr.lines_removed)
-	end
-	local description = ui_utils.strip_markup(details and details.description or "")
-	local lines = {
-		author,
-		pr.source.branch .. " → " .. pr.destination.branch,
-		status,
-		"",
-	}
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return {
-		title = "#" .. tostring(pr.id),
-		lines = lines,
-	}
 end
 
 ---@param pr PullRequest|nil
@@ -102,7 +78,7 @@ local function open_repository(repository, branch)
 			format_item = function(pr)
 				return string.format("#%s %s", tostring(pr.id), pr.title)
 			end,
-			preview_item = function(pr, done)
+			preview_item = function(pr, done, width)
 				return provider.capabilities.core.fetch_pullrequest(
 					pr,
 					{ force_refresh = false },
@@ -111,7 +87,7 @@ local function open_repository(repository, branch)
 							done({ title = "#" .. tostring(pr.id), lines = { err } })
 							return
 						end
-						done(format_preview(pr, details))
+						done(picker_format.pullrequest(pr, details, width))
 					end
 				)
 			end,

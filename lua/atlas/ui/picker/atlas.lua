@@ -5,9 +5,11 @@ local keymaps = require("atlas.core.keymaps")
 local picker = require("atlas.ui.picker")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
+local utils = require("atlas.ui.shared.utils")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas.picker")
+local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@param handle { cancel: fun() }|nil
 local function cancel(handle)
@@ -117,11 +119,12 @@ function M.open(request)
 	vim.api.nvim_set_option_value("signcolumn", "yes:1", { win = main_win })
 	if preview_win then
 		configure_window(preview_win, main_win)
-		vim.bo[preview_buf].filetype = "atlas-markdown"
+		vim.bo[preview_buf].filetype = "atlas-ui.picker-preview"
 		vim.bo[preview_buf].syntax = "OFF"
 		vim.bo[preview_buf].modifiable = false
-		vim.wo[preview_win].wrap = true
-		vim.wo[preview_win].linebreak = true
+		for option, value in pairs(request.preview_wo) do
+			vim.wo[preview_win][option] = value
+		end
 	end
 
 	local all_items = request.items
@@ -135,7 +138,6 @@ function M.open(request)
 		err = nil,
 		fetch_generation = 0,
 		preview_generation = 0,
-		preview_lines = {},
 		fetch = nil,
 		preview = nil,
 		spinner = nil,
@@ -192,13 +194,12 @@ function M.open(request)
 	end
 
 	---@param buf integer
-	---@param win integer
-	local function draw_preview(buf, win)
-		local result = picker.format_preview(state.preview_lines, win)
+	---@param preview AtlasPickerPreview
+	local function draw_preview(buf, preview)
 		vim.bo[buf].modifiable = true
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, preview.lines)
 		vim.bo[buf].modifiable = false
-		picker.highlight_preview(buf, result.highlights)
+		utils.apply_spans(buf, preview_namespace, preview.highlights or {})
 	end
 
 	local function render_preview()
@@ -209,8 +210,7 @@ function M.open(request)
 		state.preview_generation = state.preview_generation + 1
 		local generation = state.preview_generation
 		local item = current_item()
-		state.preview_lines = item and { "Loading..." } or {}
-		draw_preview(preview_buf, preview_win)
+		draw_preview(preview_buf, { lines = item and { "Loading..." } or {} })
 		if not item then
 			return
 		end
@@ -219,16 +219,12 @@ function M.open(request)
 				if state.closed or generation ~= state.preview_generation then
 					return
 				end
-				state.preview_lines = value.lines
-				draw_preview(preview_buf, preview_win)
+				draw_preview(preview_buf, value)
 				if preview_win and vim.api.nvim_win_is_valid(preview_win) then
-					vim.api.nvim_set_option_value("number", false, { win = preview_win })
-					vim.api.nvim_set_option_value("relativenumber", false, { win = preview_win })
-					vim.api.nvim_set_option_value("list", false, { win = preview_win })
 					vim.api.nvim_win_set_config(preview_win, { title = " " .. (value.title or request.title) .. " " })
 				end
 			end)
-		end)
+		end, picker.preview_width(preview_win))
 	end
 
 	local function append_items(rows, highlights)
@@ -466,10 +462,7 @@ function M.open(request)
 			if not state.closed then
 				picker_layout = layout()
 				resize(picker_layout)
-				render(false)
-				if preview_buf and preview_win then
-					draw_preview(preview_buf, preview_win)
-				end
+				render()
 			end
 		end,
 	})
