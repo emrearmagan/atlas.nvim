@@ -40,6 +40,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       viewerSubscription body
+      viewerCanEnableAutoMerge viewerCanDisableAutoMerge
       reactionGroups { content viewerHasReacted reactors(first: 10) { totalCount nodes { ... on User { login name } ... on Bot { login } } } }
       labels(first: 100) { nodes { name color } }
       assignees(first: 10) { nodes { id login name } }
@@ -58,6 +59,7 @@ fragment PullRequestFields on PullRequest {
   headRefName baseRefName headRefOid baseRefOid
   headRepository { nameWithOwner }
   totalCommentsCount
+  autoMergeRequest { mergeMethod }
   repository { name nameWithOwner url sshUrl }
 %s
 %s
@@ -918,6 +920,42 @@ function M.update_labels(slug, number, diff, on_done)
 		added = #adds,
 		removed = #removes,
 	})
+end
+
+---@param pr PullRequest
+---@param opts PullsMergeOpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.enable_auto_merge(pr, opts, on_done)
+	local args = { "pr", "merge", tostring(pr.id), "--auto", "--repo", pr.repo_full_name, "--" .. opts.method }
+	if opts.delete_source_branch then
+		table.insert(args, "--delete-branch")
+	end
+	if opts.subject ~= nil then
+		vim.list_extend(args, { "--subject", opts.subject })
+	end
+	if opts.body ~= nil then
+		vim.list_extend(args, { "--body", opts.body })
+	end
+	return cli.gh(args, function(_, err)
+		if not err then
+			invalidate_details(pr.repo_full_name, pr.id)
+		end
+		on_done(not err, err)
+	end, { action = "Enable auto-merge", repo = pr.repo_full_name, number = pr.id })
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.disable_auto_merge(pr, on_done)
+	local args = { "pr", "merge", tostring(pr.id), "--disable-auto", "--repo", pr.repo_full_name }
+	return cli.gh(args, function(_, err)
+		if not err then
+			invalidate_details(pr.repo_full_name, pr.id)
+		end
+		on_done(not err, err)
+	end, { action = "Disable auto-merge", repo = pr.repo_full_name, number = pr.id })
 end
 
 return M
