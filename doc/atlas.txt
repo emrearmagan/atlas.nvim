@@ -722,7 +722,7 @@ issue search expression.
         -- key   = "S",      -- default
         -- label = "Search", -- default
         items = {
-          ["Bugs"]            = "is:issue is:open label:bug",
+          ["Bugs"]            = "is:issue is:open type:Bug",
           ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
         },
       },
@@ -963,7 +963,7 @@ These `User` events fire after setup or cleanup completes:
         reviewers  = "gr", -- Pull requests only.
         base       = "gb", -- Pull requests only.
         draft      = "gD", -- Pull requests only.
-        issue_type = "gt", -- Jira and Azure DevOps only.
+        issue_type = "gt", -- Jira, Azure DevOps and GitHub only.
         fields     = "gf", -- Jira only.
         templates  = "gT",
         delete_template = "<C-d>",

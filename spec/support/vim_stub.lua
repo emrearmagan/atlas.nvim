@@ -52,6 +52,7 @@ _G.vim = {
 	-- Sentinel used by the Neovim C layer for JSON null / GraphQL null values.
 	NIL = {},
 	o = { background = "dark" },
+	g = {},
 	deepcopy = deepcopy,
 	inspect = json_encode,
 

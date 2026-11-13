@@ -7,8 +7,9 @@ local json = require("atlas.core.json")
 
 local ISSUE_FIELDS_GQL = [[
 fragment IssueFields on Issue {
-  id number title state isPinned
+  id number title state isPinned viewerCanType
   createdAt updatedAt closedAt url
+  issueType { id name color description }
   repository { nameWithOwner }
   author { login ... on User { name } }
   assignees(first: 1) { nodes { login name } }
@@ -46,6 +47,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
       reactionGroups { content viewerHasReacted reactors(first: 10) { totalCount nodes { ... on User { login name } ... on Bot { login } } } }
       assignees(first: 100) { nodes { login name } }
       labels(first: 100) { nodes { name color } }
+      issueType { id name color description }
       milestone {
         number title progressPercentage
         openIssues: issues(states: OPEN) { totalCount }
@@ -83,7 +85,7 @@ function M.search_issues(search, on_done, opts)
 		on_done({ items = {} }, "Missing search query")
 		return nil
 	end
-	local cache_key = string.format("github_issues:search:v7:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("github_issues:search:v8:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -561,6 +563,83 @@ function M.list_milestones(slug, on_done)
 	})
 end
 
+local ISSUE_TYPES_GQL = [[
+query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    issueTypes(first: 50) { nodes { id name color description isEnabled } }
+  }
+}
+]]
+
+---@param slug string
+---@param on_done fun(types: IssueType[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.list_issue_types(slug, on_done)
+	local owner, repo = slug:match("^([^/]+)/(.+)$")
+	if owner == nil or repo == nil then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(ISSUE_TYPES_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch issue types")
+			return
+		end
+
+		local repository = json.safe_table(json.safe_table(result.data).repository)
+		local types = {}
+		for _, raw in ipairs(json.safe_table(json.safe_table(repository.issueTypes).nodes)) do
+			local issue_type = raw.isEnabled ~= false and normalizer.to_issue_type(raw) or nil
+			if issue_type then
+				table.insert(types, issue_type)
+			end
+		end
+		on_done(types, nil)
+	end, {
+		action = "Fetch repo issue types",
+		slug = slug,
+	})
+end
+
+---@param key string
+---@param name string|nil
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_issue_type(key, name, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(false, "Invalid issue key")
+		return nil
+	end
+
+	local args = { "issue", "edit", tostring(number), "--repo", slug }
+	vim.list_extend(args, name and { "--type", name } or { "--remove-type" })
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		cache.invalidate(key)
+		on_done(true, nil)
+	end, {
+		action = "Update issue type",
+		key = key,
+		issue_type = name,
+	})
+end
+
 ---@class GitHubCreateIssueOpts
 ---@field repo_slug string
 ---@field title string
@@ -568,6 +647,7 @@ end
 ---@field labels string[]|nil
 ---@field assignees string[]|nil
 ---@field milestone string|nil
+---@field issue_type string|nil
 
 ---@param opts GitHubCreateIssueOpts
 ---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
@@ -603,6 +683,11 @@ function M.create_issue(opts, on_done)
 		table.insert(args, opts.milestone)
 	end
 
+	if opts.issue_type then
+		table.insert(args, "--type")
+		table.insert(args, opts.issue_type)
+	end
+
 	return cli.gh(args, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -626,11 +711,12 @@ function M.create_issue(opts, on_done)
 		labels = opts.labels,
 		assignees = opts.assignees,
 		milestone = opts.milestone,
+		issue_type = opts.issue_type,
 	})
 end
 
 ---@param key string
----@param opts { title?: string, body?: string, labels?: string[], assignees?: string[], milestone?: integer|false }
+---@param opts { title?: string, body?: string, labels?: string[], assignees?: string[], milestone?: integer|false, issue_type?: string|false }
 ---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_issue(key, opts, on_done)
@@ -653,6 +739,11 @@ function M.update_issue(key, opts, on_done)
 	end
 	if opts.milestone ~= nil then
 		vim.list_extend(args, { "-F", "milestone=" .. (opts.milestone == false and "null" or opts.milestone) })
+	end
+	if opts.issue_type == false then
+		vim.list_extend(args, { "-F", "type=null" })
+	elseif opts.issue_type ~= nil then
+		vim.list_extend(args, { "-f", "type=" .. opts.issue_type })
 	end
 	for _, field in ipairs({ "labels", "assignees" }) do
 		local values = opts[field]

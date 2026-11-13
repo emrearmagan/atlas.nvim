@@ -54,7 +54,7 @@ M.github = {
 			status = utils.status_value(issue, opts),
 			created = ui_utils.relative_time(issue.created_at),
 			updated = ui_utils.relative_time(issue.updated_at),
-			_meta = issue.repo_full_name or meta_text(issue, { issue.type and issue.type.name or "" }),
+			_meta = meta_text(issue, { issue.repo_full_name, issue.type and issue.type.name or "" }),
 		}
 	end,
 	highlights = function(row, column, context, opts)

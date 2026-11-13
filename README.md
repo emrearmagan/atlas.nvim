@@ -295,6 +295,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - Use Conventional Comments templates or define your own.
 - Save issue descriptions as templates and reuse them when creating issues.
 - Close or reopen GitHub/GitLab issues and change Jira workflow states.
+- Set GitHub issue types like Task, Bug or Feature.
 - Jump between linked issues and pull requests and back, or browse related issues and sub-issues.
 - See a GitHub PR's position in its stack (e.g. `2/5`) and step through the stack with `]s` / `[s`.
 - Read GitHub and GitLab notifications, open them in Atlas, and mark them as read or done.
@@ -862,7 +863,7 @@ issues = {
       key   = "S",      -- default
       label = "Search", -- default
       items = {
-        ["Bugs"]            = "is:issue is:open label:bug",
+        ["Bugs"]            = "is:issue is:open type:Bug",
         ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
       },
     },
@@ -1067,7 +1068,7 @@ keymaps = {
     reviewers = "gr", -- Pull requests only.
     base = "gb", -- Pull requests only.
     draft = "gD", -- Pull requests only.
-    issue_type = "gt", -- Jira and Azure DevOps only.
+    issue_type = "gt", -- Jira, Azure DevOps and GitHub only.
     fields = "gf", -- Jira only.
     templates = "gT",
     delete_template = "<C-d>",

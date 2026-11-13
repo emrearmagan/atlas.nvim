@@ -16,6 +16,7 @@ local presentation = require("atlas.issues.ui.presentation")
 ---@field labels string[]
 ---@field assignees string[]
 ---@field milestone integer|false
+---@field issue_type string|false
 
 ---@class GitHubIssueEditorState
 ---@field repo_slug string
@@ -25,9 +26,10 @@ local presentation = require("atlas.issues.ui.presentation")
 ---@field assignees AtlasUser[]
 ---@field reporter AtlasUser|nil
 ---@field milestone GitHubIssueMilestone|nil
+---@field issue_type IssueType|nil
 ---@field initial GitHubIssueEditorValues
 ---@field requests AtlasRequestScope
----@field loading { labels?: boolean, assignees?: boolean, reporter?: boolean, milestone?: boolean }
+---@field loading { labels?: boolean, assignees?: boolean, reporter?: boolean, milestone?: boolean, issue_type?: boolean }
 ---@field submitting boolean
 
 ---@param items table[]
@@ -53,6 +55,7 @@ local function values(state, editor)
 		labels = sorted_names(state.labels, "name"),
 		assignees = sorted_names(state.assignees, "username"),
 		milestone = state.milestone and state.milestone.number or false,
+		issue_type = state.issue_type and state.issue_type.name or false,
 	}
 end
 
@@ -247,6 +250,72 @@ local function select_milestone(state, editor)
 end
 
 ---@param state GitHubIssueEditorState
+---@param editor AtlasForm
+local function select_issue_type(state, editor)
+	if state.submitting or state.loading.issue_type then
+		return
+	end
+
+	local statusline = editor.statusline
+	if state.issue and not state.issue.can_set_type then
+		statusline:notify("error", "You cannot change the type of this issue")
+		return
+	end
+
+	state.loading.issue_type = true
+	statusline:notify("loading", "Loading issue types...")
+	form.render_meta(editor)
+
+	state.requests.run(function(done)
+		return issues.list_issue_types(state.repo_slug, done)
+	end, function(items, err)
+		state.loading.issue_type = nil
+		form.render_meta(editor)
+		if state.submitting then
+			return
+		end
+
+		if err or not items then
+			statusline:notify("error", err or "Unable to load issue types")
+			return
+		end
+		if #items == 0 then
+			statusline:notify("error", "No issue types available")
+			return
+		end
+
+		update_loading_notice(state, editor)
+
+		local initial_index = 1
+		for index, item in ipairs(items) do
+			if state.issue_type and item.name == state.issue_type.name then
+				initial_index = index + 1
+			end
+		end
+
+		local none = { name = "None" }
+		picker.select({
+			title = "Issue type",
+			items = vim.list_extend({ none }, items),
+			initial_index = initial_index,
+			format_item = function(item)
+				if item == none then
+					return item.name, "AtlasTextMuted"
+				end
+				local icon = item.icon.icon .. " "
+				return icon .. item.name, { { icon, item.icon.hl_group }, { item.name } }
+			end,
+			on_select = function(selected)
+				if selected and not editor.closed and not state.submitting then
+					state.issue_type = selected ~= none and selected or nil
+					form.render_meta(editor)
+				end
+			end,
+		})
+	end)
+end
+
+---@param state GitHubIssueEditorState
 ---@return AtlasFormMetaRow[]
 local function render_meta(state)
 	local labels = { key = "Labels:", value = "None", hl = "AtlasTextMuted", loading = state.loading.labels }
@@ -288,6 +357,7 @@ local function render_meta(state)
 		end
 	end
 
+	local issue_type = state.issue_type
 	local reporter = state.reporter and state.reporter.username
 	return {
 		{
@@ -297,10 +367,10 @@ local function render_meta(state)
 				hl = highlights.dynamic_for(state.repo_slug:lower()),
 			},
 			{
-				key = "Milestone:",
-				value = state.milestone and state.milestone.title or "None",
-				loading = state.loading.milestone,
-				hl = state.milestone and "Normal" or "AtlasTextMuted",
+				key = "Type:",
+				value = issue_type and (issue_type.icon.icon .. " " .. issue_type.name) or "None",
+				loading = state.loading.issue_type,
+				hl = issue_type and issue_type.icon.hl_group or "AtlasTextMuted",
 			},
 		},
 		{
@@ -310,6 +380,14 @@ local function render_meta(state)
 				value = prefix .. (reporter and "@" .. reporter or "Unknown"),
 				hl = presentation.person_hl(reporter),
 				loading = state.loading.reporter,
+			},
+		},
+		{
+			{
+				key = "Milestone:",
+				value = state.milestone and state.milestone.title or "None",
+				loading = state.loading.milestone,
+				hl = state.milestone and "Normal" or "AtlasTextMuted",
 			},
 		},
 		{ labels },
@@ -378,6 +456,10 @@ local function submit(state, editor)
 	end
 
 	if state.issue then
+		-- GitHub rejects disabled types, so an unchanged one must not be sent again.
+		if current.issue_type == state.initial.issue_type then
+			current.issue_type = nil
+		end
 		issues.update_issue(state.issue.key, current, done)
 		return
 	end
@@ -389,6 +471,7 @@ local function submit(state, editor)
 		labels = current.labels,
 		assignees = current.assignees,
 		milestone = state.milestone and state.milestone.title,
+		issue_type = state.issue_type and state.issue_type.name,
 	}, done)
 end
 
@@ -417,6 +500,7 @@ local function open_editor(repo_slug, issue, details, on_done)
 	local labels = details and details.labels or {}
 	local assignees = details and details.assignees or {}
 	local milestone = details and details.milestone
+	local issue_type = details and details.type
 
 	---@type GitHubIssueEditorState
 	local state = {
@@ -427,12 +511,14 @@ local function open_editor(repo_slug, issue, details, on_done)
 		assignees = assignees,
 		reporter = issue and issue.reporter,
 		milestone = milestone,
+		issue_type = issue_type,
 		initial = {
 			title = vim.trim(details and details.title or ""),
 			body = details and details.description or "",
 			labels = sorted_names(labels, "name"),
 			assignees = sorted_names(assignees, "username"),
 			milestone = milestone and milestone.number or false,
+			issue_type = issue_type and issue_type.name or false,
 		},
 		requests = requests.new(),
 		loading = {},
@@ -481,6 +567,12 @@ local function open_editor(repo_slug, issue, details, on_done)
 				keymap = "editor.milestone",
 				action = function(editor)
 					select_milestone(state, editor)
+				end,
+			},
+			{
+				keymap = "editor.issue_type",
+				action = function(editor)
+					select_issue_type(state, editor)
 				end,
 			},
 		},
