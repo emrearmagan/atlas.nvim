@@ -50,7 +50,7 @@ function M.draw_signs(ns, buf, lookup)
 	end
 end
 
--- Dim sign on lines that other commits change. Comments and notes on those lines are hidden here.
+-- Dim sign on lines that other commits or your edits change. Comments and notes on those lines are hidden here.
 ---@param ns integer
 ---@param buf integer
 ---@param session AtlasDiffSessionInternal

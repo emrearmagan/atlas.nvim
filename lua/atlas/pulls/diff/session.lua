@@ -36,7 +36,8 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@class AtlasDiffSessionInternal: AtlasDiffSession
 --- This is the range that was initially opened like a pr or branch. It mainly just used to determine if the user is viewing a single commit or the full range and come back here
 ---@field full_range AtlasDiffRange
---- What the commits before (base) and after (head) the shown ones changed. nil while all commits are shown.
+--- What the commits before (base) and after (head) the shown ones changed, or your edits (head) in edit mode.
+--- nil while all commits are shown.
 --- THis is used to find where comments and notes are in the shown commits.
 ---@field hunks { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> }|nil
 ---@field worktree_root string|nil
@@ -130,7 +131,7 @@ end
 ---@param root string
 ---@param base string
 ---@param head string|nil
----@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[], hunks?: { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> } }|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function load_files(source, root, base, head, on_done)
 	if source.kind == "worktree" and source.edit then
@@ -193,6 +194,7 @@ function Session.new(source, root, base, head, opts, on_done)
 			session.full_range = result.range
 			session.range = result.range
 			session.files = result.files
+			session.hunks = result.hunks
 			if not opts.lsp or not head or #result.files == 0 then
 				done(true)
 				return
@@ -362,6 +364,7 @@ function Session:reload_files(on_done)
 		end
 
 		self.files = loaded.files
+		self.hunks = loaded.hunks
 		on_done()
 	end)
 end
@@ -476,7 +479,8 @@ function Session:pr_range(path, side, start_line, end_line)
 	return start_line and first, last
 end
 
--- Lines in the shown commits that other commits change. Empty while all commits are shown.
+-- Lines in the shown commits that other commits change, or the lines you edited in edit mode.
+-- Empty while all commits are shown.
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return integer[]

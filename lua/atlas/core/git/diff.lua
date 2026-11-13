@@ -89,11 +89,11 @@ end
 --   }
 ---@param root string
 ---@param base string
----@param head string
+---@param head string|nil Nil compares against the working tree
 ---@param on_done fun(hunks: table<string, DiffHunk[]>|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.hunks(root, base, head, on_done)
-	return run(root, {
+	local args = {
 		"-c",
 		"core.quotePath=false",
 		"diff",
@@ -105,9 +105,13 @@ function M.hunks(root, base, head, on_done)
 		"--no-ext-diff",
 		"--no-textconv",
 		base,
-		head,
-		"--",
-	}, function(output, err)
+	}
+	if head then
+		args[#args + 1] = head
+	end
+	args[#args + 1] = "--"
+
+	return run(root, args, function(output, err)
 		if not output then
 			on_done(nil, err)
 			return

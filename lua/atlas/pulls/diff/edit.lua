@@ -13,6 +13,7 @@ local M = {}
 
 ---@class AtlasDiffEditFile: AtlasDiffFile
 ---@field edited boolean|nil Compared with HEAD, so it only shows your edits.
+---@field changed boolean|nil A pull request file that also has edits.
 
 ---@class AtlasDiffEdit
 ---@field pr PullRequest
@@ -74,7 +75,7 @@ end
 -- The pull request's files against its base, plus your edits against HEAD in their own section.
 ---@param root string
 ---@param base string
----@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[], hunks: { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> } }|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.load(root, base, on_done)
 	local requests = request_scope.new()
@@ -85,6 +86,9 @@ function M.load(root, base, on_done)
 		edited = function(done)
 			return git_diff.load(root, "HEAD", nil, done)
 		end,
+		hunks = function(done)
+			return git_diff.hunks(root, "HEAD", nil, done)
+		end,
 	}, function(values, errors)
 		local _, err = next(errors)
 		if err then
@@ -93,12 +97,18 @@ function M.load(root, base, on_done)
 		end
 
 		local files = values.files.files
+		local edited = {}
 		for _, file in ipairs(values.edited.files) do
 			---@cast file AtlasDiffEditFile
 			file.edited = true
-			files[#files + 1] = file
+			edited[file.path] = true
 		end
-		on_done({ range = values.files.range, files = files }, nil)
+		for _, file in ipairs(files) do
+			---@cast file AtlasDiffEditFile
+			file.changed = edited[file.path]
+		end
+		vim.list_extend(files, values.edited.files)
+		on_done({ range = values.files.range, files = files, hunks = { base = {}, head = values.hunks } }, nil)
 	end)
 	return { cancel = requests.cancel }
 end

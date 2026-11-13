@@ -189,7 +189,7 @@ local function build_rows(state)
 	end
 	if #sections.edited > 0 then
 		rows[#rows + 1] = { label = "" }
-		append_section("edited", "Edited")
+		append_section("edited", "Changes")
 	end
 	if state.reviewed_files then
 		rows[#rows + 1] = { label = "" }
@@ -245,9 +245,13 @@ local function file_chunks(state, file, prefix, available)
 		remaining = remaining - vim.fn.strdisplaywidth(chunk[1])
 	end
 
-	local outdated = state.outdated_files and state.outdated_files[file.path]
-	local label_hl = outdated and "AtlasLogWarn" or "Normal"
-	local mark = outdated and " ~" or ""
+	local marked = state.outdated_files and state.outdated_files[file.path]
+	if state.editing then
+		---@cast file AtlasDiffEditFile
+		marked = file.changed
+	end
+	local label_hl = marked and "AtlasLogWarn" or "Normal"
+	local mark = marked and " ~" or ""
 	remaining = remaining - #mark
 
 	local label = vim.fn.strtrans(name)
@@ -257,7 +261,7 @@ local function file_chunks(state, file, prefix, available)
 
 	label = utils.truncate(label, math.max(1, remaining - suffix_width - 1))
 	chunks[#chunks + 1] = { label, label_hl }
-	if outdated then
+	if marked then
 		chunks[#chunks + 1] = { mark, label_hl }
 	end
 	remaining = remaining - vim.fn.strdisplaywidth(label)
