@@ -10,7 +10,7 @@ local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 ---@field files AtlasDiffFile[] All files in navigation order, including collapsed descendants.
 ---@field source AtlasDiffFile[]
 ---@field options AtlasPullsDiffExplorerConfig
----@field rows { file?: AtlasDiffFile, path?: string, section?: string, header?: boolean, label?: string, prefix?: string }[]
+---@field rows { file?: AtlasDiffFile, files?: AtlasDiffFile[], path?: string, section?: string, header?: boolean, label?: string, prefix?: string }[]
 ---@field collapsed table<string, table<string, boolean>>
 ---@field flatten_dirs boolean
 ---@field reviewed_files table<string, boolean>|nil
@@ -32,6 +32,7 @@ local statuses = {
 	renamed = { "R", "DiagnosticInfo" },
 	copied = { "C", "DiagnosticInfo" },
 	type_changed = { "T", "DiagnosticWarn" },
+	conflicted = { "!", "DiagnosticError" },
 }
 
 ---@param files AtlasDiffFile[]
@@ -96,10 +97,23 @@ local function tree(files)
 end
 
 ---@param state AtlasDiffExplorer
+---@param file AtlasDiffFile
+---@return "files"|"staged"|"reviewed"
+local function section_of(state, file)
+	if file.staged then
+		return "staged"
+	end
+	if state.reviewed_files and state.reviewed_files[file.path] then
+		return "reviewed"
+	end
+	return "files"
+end
+
+---@param state AtlasDiffExplorer
 local function build_rows(state)
-	local sections = { files = {}, reviewed = {} }
+	local sections = { files = {}, staged = {}, reviewed = {} }
 	for _, file in ipairs(state.source) do
-		local section = state.reviewed_files and state.reviewed_files[file.path] and sections.reviewed or sections.files
+		local section = sections[section_of(state, file)]
 		section[#section + 1] = file
 	end
 
@@ -149,7 +163,8 @@ local function build_rows(state)
 
 	local function append_section(section, title)
 		local files = sections[section]
-		rows[#rows + 1] = { header = true, section = section, label = " " .. title .. " (" .. #files .. ")" }
+		rows[#rows + 1] =
+			{ header = true, section = section, files = files, label = " " .. title .. " (" .. #files .. ")" }
 		if state.options.grouped then
 			visit(tree(files), section, "", true)
 		else
@@ -160,6 +175,10 @@ local function build_rows(state)
 	append_section("files", "Files")
 	if #state.source == 0 then
 		rows[#rows + 1] = { label = " No changed files" }
+	end
+	if #sections.staged > 0 then
+		rows[#rows + 1] = { label = "" }
+		append_section("staged", "Staged")
 	end
 	if state.reviewed_files then
 		rows[#rows + 1] = { label = "" }
@@ -262,22 +281,28 @@ local function row_chunks(state, row, available)
 	end
 
 	local chunks = { { row.label, row.header and "AtlasLogInfo" or "AtlasTextMuted" } }
-	if row.header and row.section == "files" then
+	if row.header then
 		local additions, deletions = 0, 0
-		for _, file in ipairs(state.source) do
+		for _, file in ipairs(row.files) do
 			additions = additions + (file.additions or 0)
 			deletions = deletions + (file.deletions or 0)
 		end
 
-		local added, removed = "+" .. additions, "-" .. deletions
-		local padding = available - #row.label - #added - #removed - 2
-		if padding > 0 then
-			vim.list_extend(chunks, {
-				{ string.rep(" ", padding), "Normal" },
-				{ added, "AtlasTextPositive" },
-				{ " ", "Normal" },
-				{ removed, "AtlasLogError" },
-			})
+		local stats = {}
+		if additions > 0 then
+			stats[#stats + 1] = { "+" .. additions .. " ", "AtlasTextPositive" }
+		end
+		if deletions > 0 then
+			stats[#stats + 1] = { "-" .. deletions .. " ", "AtlasLogError" }
+		end
+
+		local padding = available - #row.label
+		for _, part in ipairs(stats) do
+			padding = padding - #part[1]
+		end
+		if #stats > 0 and padding > 0 then
+			chunks[#chunks + 1] = { string.rep(" ", padding), "Normal" }
+			vim.list_extend(chunks, stats)
 		end
 	end
 
@@ -349,7 +374,7 @@ end
 
 ---@param file AtlasDiffFile
 local function expand_parents(state, file)
-	local section = state.reviewed_files and state.reviewed_files[file.path] and "reviewed" or "files"
+	local section = section_of(state, file)
 	for parent in pairs(state.collapsed[section]) do
 		if file.path:sub(1, #parent) == parent then
 			state.collapsed[section][parent] = nil
@@ -486,8 +511,7 @@ function Explorer:files_under_cursor()
 
 	local prefix = row.path or ""
 	return vim.tbl_filter(function(file)
-		local section = self.reviewed_files and self.reviewed_files[file.path] and "reviewed" or "files"
-		return section == row.section and file.path:sub(1, #prefix) == prefix
+		return section_of(self, file) == row.section and file.path:sub(1, #prefix) == prefix
 	end, self.source)
 end
 
@@ -514,7 +538,7 @@ function Explorer:set_all_folders_collapsed(collapsed)
 	end
 
 	local before = self.rows[current_row(self)]
-	self.collapsed = { files = {}, reviewed = {} }
+	self.collapsed = { files = {}, staged = {}, reviewed = {} }
 	if collapsed then
 		local path = before and (before.path or before.file and before.file.path)
 		local rows = build_rows(self)
@@ -632,7 +656,7 @@ function Explorer.new(opts)
 		files = source,
 		options = vim.deepcopy(options),
 		rows = {},
-		collapsed = { files = {}, reviewed = {} },
+		collapsed = { files = {}, staged = {}, reviewed = {} },
 		flatten_dirs = true,
 		reviewed_files = opts.review_context and opts.review_context.reviewed_files,
 		outdated_files = opts.review_context and opts.review_context.outdated_files,

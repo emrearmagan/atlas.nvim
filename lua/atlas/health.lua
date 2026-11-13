@@ -218,10 +218,12 @@ local function check_codediff_keymaps()
 				for _, key in ipairs(keys) do
 					local normalized = vim.api.nvim_replace_termcodes(key, true, true, true)
 					for _, atlas_action in ipairs(atlas_keys[normalized] or {}) do
-						local help_override = atlas_action.action == "ui.help"
-							and group == "view"
-							and action == "show_help"
-						if not help_override then
+						local replaced = group == "view"
+							and (
+								atlas_action.action == "ui.help" and action == "show_help"
+								or atlas_action.action == "ui.close" and action == "quit"
+							)
+						if not replaced then
 							local message = string.format(
 								"CodeDiff: Atlas %s overlaps %s.%s (%s)",
 								atlas_action.label,

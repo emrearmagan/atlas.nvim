@@ -826,9 +826,10 @@ https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/ui/highlights.lua
         that pull request directly. `.` opens the current branch's pull
         request.
 
-:Atlas diff <base...head>
+:Atlas diff [ref|base...head]
         Open a Git range with the configured diff viewer
-        (`pulls.diff.open_cmd`).
+        (`pulls.diff.open_cmd`). A single ref compares it with your working
+        tree, no argument shows your uncommitted changes.
 
 :Atlas pipelines [target|.]
         Open pipelines by branch name, PR URL or number (`123`, `#123`, or
@@ -1031,6 +1032,7 @@ These `User` events fire after setup or cleanup completes:
             toggle_explorer = "<leader>b",
             focus_explorer = "<leader>e",
             open_file = "gf",
+            discard_changes = "X",
             toggle_view_mode = "i",
             next_hunk = "]h",
             prev_hunk = "[h",

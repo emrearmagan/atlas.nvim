@@ -13,8 +13,15 @@ function M.layout(viewer)
 
 	local function title()
 		local pr = session.source.pr
-		return pr and string.format("#%s %s", pr.id, pr.title)
-			or string.format("%s...%s", session.range.base_revision:sub(1, 8), session.range.head_revision:sub(1, 8))
+		if pr then
+			return string.format("#%s %s", pr.id, pr.title)
+		end
+
+		local base, head = session.range.base_revision:sub(1, 8), session.range.head_revision
+		if not head then
+			return base .. "..working tree"
+		end
+		return string.format("%s...%s", base, head:sub(1, 8))
 	end
 
 	local function progress()
@@ -65,12 +72,8 @@ function M.layout(viewer)
 	end
 
 	local function lsp()
-		local client = vim.lsp.get_clients({ bufnr = viewer.renderer.right.buf })[1]
-		if client then
-			return {
-				text = string.format("%s %s", icons.get("lsp"), client.name),
-				hl_group = "AtlasFooterInfo",
-			}
+		if #vim.lsp.get_clients({ bufnr = viewer.renderer.right.buf }) > 0 then
+			return { text = icons.get("lsp"), hl_group = "AtlasFooterInfo" }
 		end
 	end
 

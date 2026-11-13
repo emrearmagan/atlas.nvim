@@ -290,7 +290,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 
 ### Other features
 
-- Compare branches or commits with `:Atlas diff main...HEAD`.
+- Compare branches or commits with `:Atlas diff main...HEAD`, or review, stage and edit your uncommitted changes with `:Atlas diff`.
 - Search with GitHub queries or Jira JQL, with query completion.
 - Use Conventional Comments templates or define your own.
 - Save issue descriptions as templates and reuse them when creating issues.
@@ -973,7 +973,7 @@ See [all highlight groups](https://github.com/emrearmagan/atlas.nvim/blob/main/l
 - `:Atlas pulls [provider|.]` - Open a pull-request provider dashboard; `.` uses the current repository's provider
 - `:Atlas issues [provider|.]` - Open an issue provider dashboard; `.` uses the current repository's provider
 - `:Atlas review [pull-request-url|number|.]` - Review a pull request with the configured diff viewer; without an argument, pick one from the current repository; `.` reviews the current branch's pull request
-- `:Atlas diff <base...head>` - Open a Git range with the configured diff viewer
+- `:Atlas diff [ref|base...head]` - Open a Git range with the configured diff viewer; a single ref compares it with your working tree, no argument shows your uncommitted changes
 - `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create pr` - Create a pull request from the current branch
 - `:Atlas create issue [provider|.]` - Create an issue; `.` uses the current repository's provider
@@ -1127,6 +1127,7 @@ keymaps = {
         toggle_explorer = "<leader>b",
         focus_explorer = "<leader>e",
         open_file = "gf",
+        discard_changes = "X",
         toggle_view_mode = "i",
         next_hunk = "]h",
         prev_hunk = "[h",

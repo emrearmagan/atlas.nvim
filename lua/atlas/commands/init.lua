@@ -192,17 +192,13 @@ M.register({
 
 M.register({
 	name = "diff",
-	usage = "diff <base...head>",
-	description = "Open a Git range diff",
+	usage = "diff [ref|base...head]",
+	description = "Open a Git range diff, or compare a ref with the working tree",
 	complete = function(arglead, args)
 		return require("atlas.commands.diff").complete(arglead, args)
 	end,
 	run = function(args)
-		local value = vim.trim(table.concat(args, " "))
-		if value == "" then
-			return false
-		end
-		require("atlas.commands.diff").open(value)
+		require("atlas.commands.diff").open(vim.trim(table.concat(args, " ")))
 	end,
 })
 

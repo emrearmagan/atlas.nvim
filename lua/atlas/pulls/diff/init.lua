@@ -79,6 +79,7 @@ local function start_loading(message, context, on_done)
 
 	local label = context.kind == "pr" and string.format("%s #%s", context.repo, context.pr_id)
 		or context.kind == "commit" and context.commit:sub(1, 8)
+		or context.kind == "worktree" and string.format("%s..working tree", context.base)
 		or string.format("%s...%s", context.base, context.head)
 	local view = loading.open(message, requests.cancel, label)
 
@@ -101,7 +102,7 @@ local function start_loading(message, context, on_done)
 
 	---@param root string
 	---@param base string
-	---@param head string
+	---@param head string|nil
 	---@param source AtlasDiffSource
 	local function on_prepared(root, base, head, source)
 		context.root = root
@@ -237,6 +238,39 @@ function M.open_range(opts, on_done)
 	end)
 end
 
+-- Accepts a revision to compare with the working tree and an optional repository path.
+---@param opts { base?: string, root?: string }
+---@param on_done (fun(err: string|nil))|nil
+function M.open_worktree(opts, on_done)
+	local cwd = opts.root or git.default_cwd()
+	local ref = opts.base or "HEAD"
+	local _, requests, fail, on_prepared = start_loading("Preparing diff...", {
+		kind = "worktree",
+		root = cwd,
+		base = ref,
+	}, on_done)
+
+	requests.run(function(done)
+		return git.repo_root(cwd, done)
+	end, function(root, err)
+		if not root then
+			fail("Unable to open diff", err)
+			return
+		end
+
+		requests.run(function(done)
+			return resolve_commit(root, ref, done)
+		end, function(base, base_err)
+			if not base then
+				fail("Unable to resolve commit: " .. ref, base_err)
+				return
+			end
+
+			on_prepared(root, base, nil, { kind = "worktree", base = opts.base })
+		end)
+	end)
+end
+
 ---@param session AtlasDiffSession
 function M.reopen(session)
 	local source = session.source
@@ -244,6 +278,10 @@ function M.reopen(session)
 	if source.kind == "pr" then
 		local pr = source.pr
 		M.open_pr({ provider = pr.provider, repo_full_name = pr.repo_full_name, id = pr.id, root = root })
+		return
+	end
+	if source.kind == "worktree" then
+		M.open_worktree({ base = source.base, root = root })
 		return
 	end
 
