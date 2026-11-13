@@ -1011,7 +1011,7 @@ local function setup(viewer)
 		review_context = session.review_context,
 		review_data = session.review,
 		notes = session.notes and session.notes.items,
-		editing = session.source.kind == "worktree" and session.source.edit,
+		editing = session.source.kind == "worktree" and session.source.edit ~= nil,
 		on_select = function(file, focus)
 			select_file(viewer, file, focus)
 		end,

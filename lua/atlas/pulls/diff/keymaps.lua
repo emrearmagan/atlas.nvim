@@ -84,7 +84,7 @@ end
 function M.setup(viewer)
 	local session = viewer.session
 	local staging = session.source.kind == "worktree" and not session.source.base
-	local editing = session.source.kind == "worktree" and session.source.edit == true
+	local editing = session.source.kind == "worktree" and session.source.edit ~= nil
 	local pr = session.source.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	local reviews = provider and provider.capabilities.reviews

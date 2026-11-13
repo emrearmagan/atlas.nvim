@@ -133,7 +133,7 @@ function M.start(review, suggestions)
 				notify.warn("Commit or discard your edits first")
 			end
 			edit.review = review
-			diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
+			diff.open_worktree({ root = root, base = session.range.base_revision, edit = session })
 			return
 		end
 	end
@@ -153,7 +153,7 @@ function M.start(review, suggestions)
 				or "Apply suggestions from code review"
 		end
 		edits[edit_key(root)] = edit
-		diff.open_worktree({ root = root, base = session.range.base_revision, edit = true })
+		diff.open_worktree({ root = root, base = session.range.base_revision, edit = session })
 	end)
 end
 
