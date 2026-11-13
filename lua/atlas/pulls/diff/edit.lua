@@ -1,10 +1,12 @@
 local config = require("atlas.config")
+local console = require("atlas.ui.console")
 local diff = require("atlas.pulls.diff")
 local diff_worktree = require("atlas.pulls.diff.worktree")
 local git = require("atlas.core.git")
 local git_diff = require("atlas.core.git.diff")
 local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
+local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -17,6 +19,7 @@ local M = {}
 ---@field review AtlasDiffViewer
 ---@field repo_root string
 ---@field message string|nil
+---@field pushing boolean|nil
 
 -- Edit sessions by the path of their worktree.
 ---@type table<string, AtlasDiffEdit>
@@ -144,6 +147,36 @@ function M.start(review, suggestions)
 	end)
 end
 
+-- The provider updates the pull request a moment after a push, so a reload right away can miss the commit.
+---@param pr PullRequest
+---@param head string
+---@param on_done fun()
+local function wait_for_head(pr, head, on_done)
+	local provider = providers.load(pr.provider, "pulls")
+	---@cast provider PullsProvider
+	local ref = { provider = pr.provider, repo_full_name = pr.repo_full_name, id = pr.id }
+	local output = console.start("Waiting for the pull request to show " .. head:sub(1, 7))
+	console.open(false, 300)
+
+	local function check(attempt)
+		provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, function(pulls)
+			local current = pulls and pulls[1]
+			local found = current ~= nil and current.source.commit_hash == head
+			output:write(string.format("Attempt %d/5: %s\r\n", attempt, found and "found" or "not yet"))
+			if found or attempt == 5 then
+				output:close()
+				on_done()
+				return
+			end
+
+			vim.defer_fn(function()
+				check(attempt + 1)
+			end, 1000)
+		end)
+	end
+	check(1)
+end
+
 ---@param viewer AtlasDiffViewer
 ---@param reload boolean
 local function stop(viewer, reload)
@@ -168,7 +201,7 @@ end
 ---@param root string
 ---@param pr PullRequest
 ---@param message string
----@param on_done fun(ok: boolean)
+---@param on_done fun(head: string|nil) The pushed commit, or nil when a step failed.
 local function push(root, pr, message, on_done)
 	local url = config.options.pulls.git_transport == "ssh" and pr.source.ssh_url or pr.source.https_url
 	local steps = {
@@ -180,20 +213,22 @@ local function push(root, pr, message, on_done)
 	local function run(index)
 		local args = steps[index]
 		if not args then
-			on_done(true)
+			git.run({ "rev-parse", "HEAD" }, { cwd = root, text = true }, function(result)
+				on_done(vim.trim(result.stdout))
+			end)
 			return
 		end
-		git.run(args, { cwd = root, text = true }, function(result)
+		git.run(args, { cwd = root, text = true, console = true }, function(result)
 			if result.code ~= 0 then
 				notify.error(string.format("git %s failed\n\n%s", args[1], vim.trim(result.stderr)))
 				-- Undo the commit so a retry can commit again.
 				if args[1] == "push" then
 					git.run({ "reset", "--soft", "HEAD~1" }, { cwd = root }, function()
-						on_done(false)
+						on_done(nil)
 					end)
 					return
 				end
-				on_done(false)
+				on_done(nil)
 				return
 			end
 			run(index + 1)
@@ -295,12 +330,7 @@ local function open_commit(viewer, changes)
 		end
 	end
 
-	local submitting = false
 	local function submit()
-		if submitting then
-			return
-		end
-
 		local message = read_message()
 		if message == "" then
 			notify.warn("Commit message cannot be empty")
@@ -308,16 +338,22 @@ local function open_commit(viewer, changes)
 		end
 		vim.cmd("stopinsert")
 		save(root)
-		submitting = true
+		close()
+		edit.pushing = true
 
+		console.clear()
 		notify.info("Pushing to " .. branch .. "...")
-		push(root, edit.pr, message, function(ok)
-			submitting = false
-			if ok then
-				close()
-				notify.info("Pushed to " .. branch)
-				stop(viewer, true)
+		push(root, edit.pr, message, function(head)
+			if not head then
+				edit.pushing = false
+				return
 			end
+
+			notify.info("Pushed to " .. branch)
+			wait_for_head(edit.pr, head, function()
+				edit.pushing = false
+				stop(viewer, true)
+			end)
 		end)
 	end
 
@@ -334,6 +370,11 @@ end
 
 ---@param viewer AtlasDiffViewer
 function M.commit(viewer)
+	if edit_of(viewer).pushing then
+		notify.info("Still pushing...")
+		return
+	end
+
 	local root = viewer.session.range.root
 	save(root)
 	load_changes(root, function(changes)
@@ -347,6 +388,11 @@ end
 
 ---@param viewer AtlasDiffViewer
 function M.close(viewer)
+	if edit_of(viewer).pushing then
+		notify.info("Still pushing...")
+		return
+	end
+
 	local root = viewer.session.range.root
 	local unsaved = #unsaved_buffers(root) > 0
 	load_changes(root, function(changes)

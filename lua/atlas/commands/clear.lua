@@ -24,7 +24,7 @@ function M.run(target)
 	if target == "cache" then
 		confirm("Delete Atlas caches and cloned repositories? [y/N]: ", function()
 			clear_caches()
-			notify.info("Atlas caches cleared", { vim_notify = true })
+			notify.info("Caches cleared", { vim_notify = true })
 		end)
 		return
 	end
@@ -80,7 +80,7 @@ function M.run(target)
 		if notes_ui then
 			notes_ui.refresh()
 		end
-		notify.info("Atlas data cleared", { vim_notify = true })
+		notify.info("Data cleared", { vim_notify = true })
 	end)
 end
 

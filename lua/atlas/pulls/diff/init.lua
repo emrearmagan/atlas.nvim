@@ -1,5 +1,6 @@
 local checkout = require("atlas.core.git.checkout")
 local config = require("atlas.config")
+local console = require("atlas.ui.console")
 local diff_session = require("atlas.pulls.diff.session")
 local git = require("atlas.core.git")
 local loading = require("atlas.ui.loading")
@@ -71,6 +72,7 @@ local function prepare_commits(root, base, head, requests, on_prepared, fail)
 end
 
 local function start_loading(message, context, on_done)
+	console.clear()
 	local requests = request_scope.new()
 	local options = vim.deepcopy(config.options.pulls.diff)
 	---@cast options AtlasPullsDiffConfig

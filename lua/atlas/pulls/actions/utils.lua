@@ -80,6 +80,7 @@ local function custom_action(item)
 							return
 						end
 						if not output then
+							console.clear()
 							output = console.start(item.label, repo_path)
 							console.open()
 						end

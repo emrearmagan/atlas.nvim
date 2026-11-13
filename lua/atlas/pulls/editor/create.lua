@@ -1,5 +1,6 @@
 local M = {}
 
+local console = require("atlas.ui.console")
 local create_remotes = require("atlas.pulls.create.remotes")
 local description = require("atlas.pulls.create.description")
 local form = require("atlas.ui.form")
@@ -319,6 +320,7 @@ local function submit(state, editor)
 	end
 
 	editor.statusline:notify("loading", "Pushing " .. state.head .. " to " .. state.head_remote .. "...")
+	console.clear()
 	state.requests.run(function(callback)
 		return git.push_branch(state.repo_root, state.head, state.head_remote, callback)
 	end, function(ok, err)
