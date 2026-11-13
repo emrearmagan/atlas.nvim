@@ -113,6 +113,30 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
+---@param callback fun(details: GitHubPullRequestDetails)
+local function resolve_details(ctx, done, callback)
+	if ctx.details then
+		local details = ctx.details
+		---@cast details GitHubPullRequestDetails
+		callback(details)
+		return
+	end
+
+	local pr = assert(ctx.pr)
+	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load pull request details")
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		---@cast details GitHubPullRequestDetails
+		callback(details)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
 	local pr = assert(ctx.pr)
 
@@ -188,20 +212,7 @@ local function edit_assignees(ctx, done)
 	end
 
 	notify.loading("Loading assignees...")
-	if ctx.details then
-		local details = ctx.details
-		---@cast details GitHubPullRequestDetails
-		open_picker(details.assignees)
-		return
-	end
-	pullrequests.fetch_pullrequest(pr, nil, function(details, err)
-		if err or details == nil then
-			local message = tostring(err or "Failed to load pull request")
-			notify.error("Failed to load assignees: " .. message)
-			done(nil, message)
-			return
-		end
-		---@cast details GitHubPullRequestDetails
+	resolve_details(ctx, done, function(details)
 		open_picker(details.assignees)
 	end)
 end
@@ -275,20 +286,8 @@ local function edit_labels(ctx, done)
 	end
 
 	notify.loading("Loading labels...")
-	if ctx.details then
-		local details = ctx.details
-		---@cast details GitHubPullRequestDetails
+	resolve_details(ctx, done, function(details)
 		open_picker(details)
-		return
-	end
-	pullrequests.fetch_pullrequest(pr, nil, function(current, current_err)
-		if current_err or current == nil then
-			notify.error(current_err or "Failed to load PR labels")
-			done(nil, current_err or "Failed to load PR labels")
-			return
-		end
-		---@cast current GitHubPullRequestDetails
-		open_picker(current)
 	end)
 end
 
@@ -483,10 +482,9 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local pr = assert(ctx.pr)
-	---@cast pr GitHubPullRequest
-	---@param details PullRequestDetails
-	local function update(details)
+	resolve_details(ctx, done, function(details)
+		local pr = assert(ctx.pr)
+		---@cast pr GitHubPullRequest
 		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
 		pullrequests.set_subscription(pr, details.is_subscribed ~= true, function(subscribed, err)
 			if err then
@@ -502,44 +500,6 @@ local function toggle_subscription(ctx, done)
 			end
 			done({ changed_pr = true }, nil)
 		end)
-	end
-
-	if ctx.details then
-		update(ctx.details)
-		return
-	end
-	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load pull request details")
-			notify.error(message)
-			done(nil, message)
-			return
-		end
-		update(details)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
----@param callback fun(details: GitHubPullRequestDetails)
-local function resolve_details(ctx, done, callback)
-	if ctx.details then
-		local details = ctx.details
-		---@cast details GitHubPullRequestDetails
-		callback(details)
-		return
-	end
-
-	local pr = assert(ctx.pr)
-	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load pull request details")
-			notify.error(message)
-			done(nil, message)
-			return
-		end
-		---@cast details GitHubPullRequestDetails
-		callback(details)
 	end)
 end
 
