@@ -928,9 +928,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.enable_auto_merge(pr, opts, on_done)
 	local args = { "pr", "merge", tostring(pr.id), "--auto", "--repo", pr.repo_full_name, "--" .. opts.method }
-	if opts.delete_source_branch then
-		table.insert(args, "--delete-branch")
-	end
 	if opts.subject ~= nil then
 		vim.list_extend(args, { "--subject", opts.subject })
 	end

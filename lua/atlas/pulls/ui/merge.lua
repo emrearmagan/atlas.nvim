@@ -19,6 +19,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.pulls.merge")
 ---@field hints table<string, "method"|"delete_source_branch">
 ---@field submit_label string|nil
 ---@field submitting_label string
+---@field hidden_options table<string, boolean>
 
 ---@param pr PullRequest
 ---@return PullsMergeOpts
@@ -272,7 +273,8 @@ local function setup_keymaps(state)
 		{ action = "ui.close", mode = "n", callback = cancel },
 	}) do
 		local keymap = keymaps.resolve(binding.action)
-		if keymap then
+		local hidden = state.hidden_options[binding.option]
+		if keymap and not hidden then
 			binding.keys = keymap.key
 			binding.desc = binding.desc or keymap.desc
 			bindings[#bindings + 1] = binding
@@ -313,20 +315,23 @@ end
 ---@class PullsMergeBufferOpts
 ---@field submit_label string|nil
 ---@field submitting_label string|nil
+---@field hidden_options table<string, boolean>|nil
 
 ---@param pr PullRequest
 ---@param callbacks { on_submit: fun(options: PullsMergeOpts, completed: fun(ok: boolean)), on_cancel: fun() }
 ---@param opts PullsMergeBufferOpts|nil
 ---@return integer buf, integer win
 function M.open(pr, callbacks, opts)
+	opts = opts or {}
 	local state = {
 		pr = pr,
 		callbacks = callbacks,
 		options = defaults(pr),
 		drafts = { merge = pr.title },
 		status = "editing",
-		submit_label = opts and opts.submit_label,
-		submitting_label = opts and opts.submitting_label or "merging...",
+		submit_label = opts.submit_label,
+		submitting_label = opts.submitting_label or "merging...",
+		hidden_options = opts.hidden_options or {},
 	}
 	local win = setup_buffer(state)
 	setup_keymaps(state)

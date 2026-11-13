@@ -571,7 +571,13 @@ local function enable_auto_merge(pr, details, done)
 	merge_buffer.open(pr, {
 		on_cancel = on_cancel,
 		on_submit = on_submit,
-	}, { submit_label = "Enable auto-merge", submitting_label = "enabling auto-merge..." })
+	}, {
+		submit_label = "Enable auto-merge",
+		submitting_label = "enabling auto-merge...",
+		-- GitHub's auto-merge has no per-PR branch deletion; it follows the repo's
+		-- "Automatically delete head branches" setting.
+		hidden_options = { delete_source_branch = true },
+	})
 end
 
 ---@param pr GitHubPullRequest
