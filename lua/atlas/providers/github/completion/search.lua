@@ -4,8 +4,16 @@
 
 local M = {}
 
+local cli = require("atlas.providers.github.client")
 local prompt = require("atlas.ui.prompt")
 local utils = require("atlas.core.utils")
+
+local DEFAULT_ISSUE_TYPES = { "Task", "Bug", "Feature" }
+
+---@type string|nil
+local local_slug = nil
+---@type table<string, boolean>
+local pending = {}
 
 ---@type string[]
 local QUALIFIERS = {
@@ -50,7 +58,6 @@ local QUALIFIERS = {
 ---@type table<string, string[]>
 local VALUES = {
 	["is"] = { "pr", "issue", "open", "closed", "merged", "queued", "draft", "locked", "public", "private", "archived" },
-	["type"] = { "pr", "issue" },
 	["state"] = { "open", "closed" },
 	["in"] = { "title", "body", "comments" },
 	["no"] = { "label", "milestone", "assignee", "project" },
@@ -98,6 +105,56 @@ local function matches(items, prefix, qualifier)
 	return results
 end
 
+---@param slug string
+---@return string
+local function issue_types_key(slug)
+	return "github_search:issue_types:" .. slug:lower()
+end
+
+---@param slug string
+local function prefetch_issue_types(slug)
+	local key = issue_types_key(slug)
+	local _, ok = cli.get_mem(key)
+	if ok or pending[key] then
+		return
+	end
+	pending[key] = true
+	require("atlas.issues.providers.github.api.issues").list_issue_types(slug, function(types)
+		pending[key] = nil
+		if types then
+			cli.set_mem(
+				key,
+				vim.tbl_map(function(item)
+					return item.name
+				end, types)
+			)
+		end
+	end)
+end
+
+---@param query string
+---@return string[]
+local function type_values(query)
+	local slug = local_slug
+	for repo in query:gmatch("repo:([%w%-%._]+/[%w%-%._]+)") do
+		slug = repo
+	end
+
+	local names = DEFAULT_ISSUE_TYPES
+	if slug then
+		local cached, ok = cli.get_mem(issue_types_key(slug))
+		if ok then
+			names = cached
+		else
+			prefetch_issue_types(slug)
+		end
+	end
+
+	return vim.tbl_map(function(name)
+		return name:find("%s") and ('"' .. name .. '"') or name
+	end, names)
+end
+
 ---@param _arglead string
 ---@param cmdline string
 ---@param cursorpos integer
@@ -116,7 +173,8 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	if partial:find(":") then
 		local qualifier, value_prefix = partial:match("^([%w%-]+):(.*)$")
 		if qualifier ~= nil then
-			return matches(VALUES[qualifier:lower()] or {}, lower_trim(value_prefix), qualifier)
+			local values = qualifier:lower() == "type" and type_values(query) or VALUES[qualifier:lower()]
+			return matches(values or {}, lower_trim(value_prefix), qualifier)
 		end
 	end
 
@@ -126,6 +184,13 @@ end
 ---@param default string
 ---@param on_submit fun(query: string)
 function M.edit(default, on_submit)
+	require("atlas.core.git").local_repository(nil, function(info)
+		local_slug = info and info.provider == "github" and info.repo_full_name or nil
+		if local_slug then
+			prefetch_issue_types(local_slug)
+		end
+	end)
+	type_values(default or "")
 	prompt.open({
 		name = "AtlasGitHubSearch",
 		prompt = "GitHub search: ",
