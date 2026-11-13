@@ -160,7 +160,13 @@ local function submit(state)
 		subject = subject,
 		body = table.concat(lines, "\n"),
 	}
-	local prompt = string.format("%s %s #%s?", labels[options.method], state.pr.repo_full_name, state.pr.id)
+	local target = string.format("%s #%s", state.pr.repo_full_name, state.pr.id)
+	local prompt = ""
+	if state.submit_label then
+		prompt = string.format("%s (%s) for %s?", state.submit_label, labels[options.method], target)
+	else
+		prompt = string.format("%s %s?", labels[options.method], target)
+	end
 	if vim.fn.confirm(prompt, "&Yes\n&No", 2) ~= 1 then
 		return
 	end
