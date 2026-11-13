@@ -96,7 +96,7 @@ end
 ---Parse Markdown into display lines, highlights and link/image targets.
 ---Width affects tables, rules, code blocks and quotes/callouts. The UI wraps ordinary text.
 ---@param source string
----@param opts? { width?: integer, hl?: table<string, string>, language?: string, file_path?: string, language_aliases?: table<string, string> }
+---@param opts? { width?: integer, hl?: table<string, string>, language?: string, file_path?: string }
 ---@return { lines: string[], highlights: AtlasMarkdownHighlight[], targets: AtlasMarkdownTarget[] }
 function M.parse(source, opts)
 	opts = opts or {}
@@ -136,7 +136,7 @@ end
 
 ---Render Markdown with wrapping and horizontal padding within the given width.
 ---@param source string
----@param opts { width: integer, padding?: integer, hl?: table<string, string>, language?: string, file_path?: string, language_aliases?: table<string, string> }
+---@param opts { width: integer, padding?: integer, hl?: table<string, string>, language?: string, file_path?: string }
 ---@return { lines: string[], highlights: AtlasMarkdownHighlight[] }
 function M.render(source, opts)
 	local padding = math.max(0, opts.padding or 0)

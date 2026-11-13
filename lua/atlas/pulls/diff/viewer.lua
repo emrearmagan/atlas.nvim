@@ -1,5 +1,6 @@
 local events = require("atlas.core.events")
 local git = require("atlas.core.git")
+local git_diff = require("atlas.core.git.diff")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local actions = require("atlas.pulls.diff.actions")
@@ -12,6 +13,7 @@ local explorer = require("atlas.pulls.diff.ui.explorer")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local winbar = require("atlas.pulls.diff.ui.winbar")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local statusline = require("atlas.ui.statusline")
 
 -- Those are the only supported renderer for now. Other commands will simply just open the diff with no built-in stuff.
@@ -411,8 +413,18 @@ local function reloaded_file(viewer, file)
 	if not file then
 		return nil
 	end
+	local source = viewer.session.source
+	local editing = source.kind == "worktree" and source.edit
 	return vim.iter(viewer.session.files):find(function(item)
-		return item.path == file.path and item.staged == file.staged
+		if item.path ~= file.path or item.staged ~= file.staged then
+			return false
+		end
+		if editing then
+			---@cast item AtlasDiffEditFile
+			---@cast file AtlasDiffEditFile
+			return item.edited == file.edited
+		end
+		return true
 	end)
 end
 
@@ -495,12 +507,32 @@ function Viewer:discard_changes()
 end
 
 function Viewer:find_file()
-	picker.select({
-		title = "Changed files",
+	local root = self.session.range.root
+	picker.select_with_preview({
+		title = "Find file",
 		items = self.explorer.files,
 		initial_index = self.explorer:current_index(),
-		format_item = function(file)
+		key = function(file)
 			return file.path
+		end,
+		format_item = function(file)
+			return picker_format.file(file.path)
+		end,
+		preview_wo = { wrap = false },
+		preview_item = function(file, done)
+			if file.binary then
+				done({ lines = { "Binary file" } })
+				return
+			end
+
+			local blob = file.status == "deleted" and file.old_blob or file.new_blob
+			return git_diff.read_blob(root, blob, file.path, function(content, err)
+				if not content then
+					done({ lines = { err } })
+					return
+				end
+				done(picker_format.code(vim.split(content, "\n", { plain = true }), file.path))
+			end)
 		end,
 		on_select = function(file)
 			if file then
@@ -979,6 +1011,7 @@ local function setup(viewer)
 		review_context = session.review_context,
 		review_data = session.review,
 		notes = session.notes and session.notes.items,
+		editing = session.source.kind == "worktree" and session.source.edit ~= nil,
 		on_select = function(file, focus)
 			select_file(viewer, file, focus)
 		end,

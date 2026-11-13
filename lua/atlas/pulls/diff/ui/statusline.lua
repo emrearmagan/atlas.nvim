@@ -128,7 +128,13 @@ function M.layout(viewer)
 		return components.hints(ctx.buf, diff_keymaps.hints(viewer, ctx.buf))
 	end
 
-	return { title, progress, hints, "%=", lsp, comments, notes, pending, components.help }
+	local function editing()
+		if session.source.kind == "worktree" and session.source.edit then
+			return { text = "Editing", hl_group = "AtlasFooterWarning" }
+		end
+	end
+
+	return { title, editing, progress, hints, "%=", lsp, comments, notes, pending, components.help }
 end
 
 return M

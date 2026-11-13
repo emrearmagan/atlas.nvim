@@ -3,6 +3,9 @@ local Snacks = require("snacks")
 local M = {}
 local picker_ui = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
+local utils = require("atlas.ui.shared.utils")
+
+local preview_namespace = vim.api.nvim_create_namespace("atlas.picker.preview")
 
 ---@param request AtlasPickerRequest
 ---@param item any
@@ -195,6 +198,7 @@ function M.open(request)
 			preview_generation = preview_generation + 1
 			local generation = preview_generation
 			ctx.preview:reset()
+			ctx.preview:wo(request.preview_wo)
 			ctx.preview:set_lines({ "Loading..." })
 			preview_handle = request.preview_item(ctx.item.item, function(preview)
 				vim.schedule(function()
@@ -202,16 +206,15 @@ function M.open(request)
 						return
 					end
 					ctx.preview:reset()
+					ctx.preview:wo(request.preview_wo)
 					ctx.preview:set_title(preview.title or request.title)
 					ctx.picker:update_titles()
-					local result = picker_ui.format_preview(preview.lines, ctx.win)
-					ctx.preview:set_lines(result.lines)
-					vim.bo[ctx.buf].filetype = "atlas-markdown"
+					ctx.preview:set_lines(preview.lines)
+					vim.bo[ctx.buf].filetype = "atlas-ui.picker-preview"
 					vim.bo[ctx.buf].syntax = "OFF"
-					ctx.preview:wo({ wrap = true, linebreak = true })
-					picker_ui.highlight_preview(ctx.buf, result.highlights)
+					utils.apply_spans(ctx.buf, preview_namespace, preview.highlights or {})
 				end)
-			end)
+			end, picker_ui.preview_width(ctx.win))
 		end
 	end
 

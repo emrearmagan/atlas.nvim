@@ -52,7 +52,7 @@ function ReviewPanel:render()
 		edit = key_label("ui.comments.edit"),
 		delete = key_label("ui.delete"),
 		react = can_react and key_label("ui.comments.react") or nil,
-		toggle_resolved = key_label("pulls.review.toggle_resolved"),
+		toggle_resolved = key_label("ui.comments.toggle_resolved"),
 	}, expanded)
 
 	local filter_key = key_label("pulls.review.panel.cycle_filter")

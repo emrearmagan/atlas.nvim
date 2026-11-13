@@ -6,6 +6,7 @@ local diff = require("atlas.pulls.diff")
 local pipelines = require("atlas.pulls.pipelines")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local help = require("atlas.ui.popups.help")
 local info = require("atlas.ui.popups.info")
 local keymaps = require("atlas.ui.repository.pages.branches.keymaps")
@@ -222,8 +223,8 @@ local function search(state)
 		format_item = function(branch)
 			return branch.name
 		end,
-		preview_item = function(branch, done)
-			done(renderer.preview(branch))
+		preview_item = function(branch, done, width)
+			done(picker_format.markdown(renderer.preview(branch), width))
 		end,
 		fetch = function(query, done)
 			return state.requests.run(function(finish)

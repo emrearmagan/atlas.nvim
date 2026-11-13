@@ -43,6 +43,8 @@ local config = require("atlas.config")
 ---@field reply? AtlasKeymapValue
 ---@field edit? AtlasKeymapValue
 ---@field react? AtlasKeymapValue
+---@field toggle_resolved? AtlasKeymapValue
+---@field apply_suggestion? AtlasKeymapValue
 ---@field upvote? AtlasKeymapValue
 
 ---@class AtlasUINotificationKeymaps
@@ -62,6 +64,7 @@ local config = require("atlas.config")
 ---@field toggle_review_panel? AtlasKeymapValue
 ---@field toggle_detail_panel? AtlasKeymapValue
 ---@field toggle_comments? AtlasKeymapValue
+---@field toggle_edit? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field toggle_commits? AtlasKeymapValue
@@ -102,7 +105,6 @@ local config = require("atlas.config")
 ---@field submit_suggestion? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
 ---@field note_type? AtlasKeymapValue
----@field toggle_resolved? AtlasKeymapValue
 ---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
@@ -205,6 +207,8 @@ local config = require("atlas.config")
 ---| "ui.comments.reply"
 ---| "ui.comments.edit"
 ---| "ui.comments.react"
+---| "ui.comments.toggle_resolved"
+---| "ui.comments.apply_suggestion"
 ---| "ui.comments.upvote"
 ---| "ui.toggle_panel"
 ---| "ui.cycle_layout"
@@ -251,6 +255,7 @@ local config = require("atlas.config")
 ---| "pulls.review.view.toggle_review_panel"
 ---| "pulls.review.view.toggle_detail_panel"
 ---| "pulls.review.view.toggle_comments"
+---| "pulls.review.view.toggle_edit"
 ---| "pulls.review.explorer.toggle_commits"
 ---| "pulls.review.explorer.next_unreviewed_file"
 ---| "pulls.review.explorer.prev_unreviewed_file"
@@ -283,7 +288,6 @@ local config = require("atlas.config")
 ---| "pulls.review.submit_suggestion"
 ---| "pulls.review.add_note"
 ---| "pulls.review.note_type"
----| "pulls.review.toggle_resolved"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -335,6 +339,8 @@ local descriptions = {
 			reply = { desc = "Reply to comment", label = "reply" },
 			edit = { desc = "Edit comment", label = "edit" },
 			react = { desc = "Add reaction", label = "react" },
+			toggle_resolved = { desc = "Toggle resolved", label = "resolve" },
+			apply_suggestion = { desc = "Apply suggestion", label = "apply" },
 			upvote = { desc = "Toggle upvote", label = "upvote" },
 		},
 		toggle_panel = { desc = "Toggle detail panel", label = "panel" },
@@ -405,7 +411,6 @@ local descriptions = {
 			submit_suggestion = { desc = "Post suggestion", label = "suggestion" },
 			add_note = { desc = "Add note", label = "note" },
 			note_type = { desc = "Cycle note type", label = "type" },
-			toggle_resolved = { desc = "Toggle resolved", label = "resolve" },
 			approve = { desc = "Approve", label = "approve" },
 			request_changes = { desc = "Request changes", label = "request changes" },
 			submit_review = { desc = "Submit review", label = "submit review" },
@@ -416,6 +421,7 @@ local descriptions = {
 				toggle_review_panel = { desc = "Toggle review panel", label = "review panel" },
 				toggle_detail_panel = { desc = "Toggle PR details", label = "details" },
 				toggle_comments = { desc = "Toggle comment display", label = "comments" },
+				toggle_edit = { desc = "Edit the pull request", label = "edit" },
 			},
 			explorer = {
 				toggle_commits = { desc = "Toggle commits", label = "commits" },

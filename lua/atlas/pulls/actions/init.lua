@@ -1,4 +1,5 @@
 local action_runner = require("atlas.core.actions")
+local console = require("atlas.ui.console")
 local diff = require("atlas.pulls.diff")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
@@ -383,6 +384,7 @@ M.checkout = {
 		---@param selected PullRequest
 		local function checkout(selected)
 			notify.loading(string.format("Checking out PR #%s", tostring(selected.id)))
+			console.clear()
 			git_checkout.checkout_pr(selected, function(_, err)
 				vim.schedule(function()
 					if err then

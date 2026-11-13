@@ -9,6 +9,7 @@ local actions = require("atlas.issues.actions")
 local utils = require("atlas.issues.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
@@ -334,14 +335,14 @@ local function search_issues(project, ctx, done)
 		format_item = function(item)
 			return item.label
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local issue = item.value
 			return issues_api.fetch_issue(issue, nil, function(details, err)
 				if err or details == nil then
 					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				preview_done(utils.issue_preview(issue, details))
+				preview_done(picker_format.issue(issue, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)

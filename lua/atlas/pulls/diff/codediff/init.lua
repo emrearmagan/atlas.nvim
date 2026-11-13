@@ -140,6 +140,12 @@ local function revisions(session, file)
 	if file.staged then
 		return range.base_revision, ":0"
 	end
+	if session.source.kind == "worktree" and session.source.edit then
+		---@cast file AtlasDiffEditFile
+		if file.edited then
+			return "HEAD", "WORKING"
+		end
+	end
 	if session.source.kind == "worktree" and not session.source.base then
 		return ":0", "WORKING"
 	end

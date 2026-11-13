@@ -5,6 +5,7 @@ local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local providers = require("atlas.providers")
 local review_actions = require("atlas.pulls.actions.review")
 local statusline = require("atlas.ui.statusline")
+local suggestions = require("atlas.pulls.diff.suggestions")
 local thread_ui = require("atlas.pulls.ui.components.comment_threads")
 local utils = require("atlas.ui.shared.utils")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -49,7 +50,8 @@ function M.draw_signs(ns, buf, lookup)
 	end
 end
 
--- Dim sign on lines that other commits change. Comments and notes on those lines are hidden here.
+-- Dim sign on lines that other commits or your edits change. Comments and notes on lines other commits change are
+-- hidden here.
 ---@param ns integer
 ---@param buf integer
 ---@param session AtlasDiffSessionInternal
@@ -514,7 +516,8 @@ function M.open(owner, pr, path, items, on_action)
 		edit = "ui.comments.edit",
 		delete = "ui.delete",
 		react = can_react and "ui.comments.react" or nil,
-		toggle_resolved = "pulls.review.toggle_resolved",
+		toggle_resolved = "ui.comments.toggle_resolved",
+		apply_suggestion = "ui.comments.apply_suggestion",
 	}
 	local keys, labels = {}, {}
 	for name, action_id in pairs(action_ids) do
@@ -534,14 +537,18 @@ function M.open(owner, pr, path, items, on_action)
 
 		local content, spans, entries
 		if item.thread then
+			local action_keys = vim.deepcopy(labels)
+			if not suggestions.parse(item.thread.comment) then
+				action_keys.apply_suggestion = nil
+			end
 			content, spans, entries = thread_ui.render({ item.thread }, width, {
-				padding_x = 2,
-				action_keys = labels,
+				padding_x = 1,
+				action_keys = action_keys,
 				location = comment_location,
 			})
 		else
 			content, spans, entries = note_renderer.render_cards({ item.note }, math.max(6, width), {
-				padding_x = 2,
+				padding_x = 1,
 				action_keys = labels,
 				outdated = { [item.note.id] = item.outdated },
 				location = note_location,
@@ -664,6 +671,7 @@ function M.open(owner, pr, path, items, on_action)
 	map(keys.delete, action("delete_comment"))
 	map(keys.react, action("react"))
 	map(keys.toggle_resolved, action("toggle_resolved"))
+	map(keys.apply_suggestion, action("apply_suggestion"))
 end
 
 return M

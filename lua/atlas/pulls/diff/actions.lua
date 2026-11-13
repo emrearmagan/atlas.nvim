@@ -7,9 +7,12 @@ local icons = require("atlas.ui.shared.icons")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local providers = require("atlas.providers")
 local reactions = require("atlas.ui.shared.reactions")
 local request_scope = require("atlas.core.requests")
+local suggestions = require("atlas.pulls.diff.suggestions")
 
 local M = {}
 
@@ -39,6 +42,9 @@ local M = {}
 ---| "copy_url"
 ---| "open_actions"
 ---| "refresh_review"
+---| "edit_files"
+---| "apply_suggestions"
+---| "apply_suggestion"
 
 ---@class AtlasDiffActionContext
 ---@field session AtlasDiffSessionInternal
@@ -121,11 +127,7 @@ local function comment_draft(context, provider)
 
 	if context.suggestion then
 		local lines = vim.list_slice(selection.source_lines, selection.first, selection.last)
-		local fence = "suggestion"
-		if provider == "gitlab" then
-			fence = string.format("suggestion:-%d+0", #lines - 1)
-		end
-		draft.initial_text = string.format("\n```%s\n%s\n```", fence, table.concat(lines, "\n"))
+		draft.initial_text = "\n" .. suggestions.format(lines, provider)
 		draft.kind = "suggestion"
 	end
 
@@ -547,6 +549,86 @@ M.open_in_browser = {
 }
 
 ---@type AtlasDiffAction
+M.edit_files = {
+	id = "edit_files",
+	label = "Edit files",
+	icon = icons.get("edit", "actions"),
+	is_available = function(context)
+		local pr = context.session.source.pr
+		return pr ~= nil and (pr.state == "open" or pr.state == "draft"), "Pull request is not open"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		require("atlas.pulls.diff.edit").start(viewer)
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.apply_suggestions = {
+	id = "apply_suggestions",
+	label = "Apply suggestions",
+	icon = icons.get("edit", "actions"),
+	is_available = function(context)
+		if not M.edit_files.is_available(context) then
+			return false, "Pull request is not open"
+		end
+		return #suggestions.list(context.session) > 0, "No suggestions to apply"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		local range = context.session.range
+		picker.multi_select({
+			title = "Apply suggestions",
+			items = suggestions.list(context.session),
+			selected = {},
+			key = function(suggestion)
+				return tostring(suggestion.comment.id)
+			end,
+			format_item = function(suggestion)
+				return picker_format.file(suggestion.path, suggestion.first)
+			end,
+			preview_wo = { wrap = false },
+			preview_item = function(suggestion, done, width)
+				return diff.read(range.root, range.head_revision, suggestion.path, function(content, err)
+					done(content and suggestions.preview(suggestion, content, width) or { lines = { err } })
+				end)
+			end,
+			on_done = function(selected)
+				if #selected > 0 then
+					require("atlas.pulls.diff.edit").start(viewer, selected)
+				end
+			end,
+		})
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
+M.apply_suggestion = {
+	id = "apply_suggestion",
+	label = "Apply suggestion",
+	is_available = function(context)
+		if not M.edit_files.is_available(context) then
+			return false, "Pull request is not open"
+		end
+		return context.comment ~= nil and suggestions.parse(context.comment) ~= nil, "No suggestion to apply"
+	end,
+	run = function(context)
+		local viewer = context.viewer
+		---@cast viewer -nil
+		if context.on_submit then
+			context.on_submit()
+		end
+		local suggestion = assert(suggestions.parse(assert(context.comment)))
+		require("atlas.pulls.diff.edit").start(viewer, { suggestion })
+		return true
+	end,
+}
+
+---@type AtlasDiffAction
 M.open_actions = {
 	id = "open_actions",
 	label = "Review actions",
@@ -574,6 +656,12 @@ M.open_actions = {
 		add("discard_review")
 		add("approve")
 		add("request_changes")
+		if action_runner.is_available(M.edit_files, context) then
+			items[#items + 1] = M.edit_files
+		end
+		if action_runner.is_available(M.apply_suggestions, context) then
+			items[#items + 1] = M.apply_suggestions
+		end
 
 		items[#items + 1] = M.toggle_detail_panel
 		items[#items + 1] = M.toggle_review_panel

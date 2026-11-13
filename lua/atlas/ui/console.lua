@@ -68,7 +68,7 @@ local function show(output, focus)
 		})
 	end
 
-	output.win = vim.api.nvim_open_win(output.buf, focus, {
+	local win = vim.api.nvim_open_win(output.buf, focus, {
 		relative = "editor",
 		anchor = "SW",
 		width = vim.o.columns,
@@ -79,14 +79,21 @@ local function show(output, focus)
 		border = { "", "─", "", "", "", "", "", "" },
 		title = " Atlas Console ",
 	})
-	vim.wo[output.win].winbar = ""
-	vim.wo[output.win].wrap = false
+	output.win = win
+	vim.wo[win].winbar = ""
+	vim.wo[win].wrap = false
 
 	if not output.channel then
 		output.channel = vim.api.nvim_open_term(output.buf, {})
 		vim.bo[output.buf].modifiable = false
 		vim.api.nvim_chan_send(output.channel, table.concat(output.chunks))
 	end
+
+	vim.schedule(function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)), 0 })
+		end
+	end)
 end
 
 ---@param chunk string
@@ -99,6 +106,12 @@ function Output:write(chunk)
 		if self.channel then
 			vim.api.nvim_chan_send(self.channel, chunk)
 		end
+	end)
+end
+
+function Output:close()
+	vim.schedule(function()
+		hide(self)
 	end)
 end
 
@@ -118,44 +131,58 @@ function Output:finish(code)
 	end)
 end
 
----@param title string
----@param cwd string|nil
----@return AtlasConsoleOutput
-function M.start(title, cwd)
-	if latest then
-		local previous = latest
+function M.clear()
+	---@type AtlasConsoleOutput
+	local output = setmetatable({
+		chunks = {},
+		finished = true,
+		dismissed = false,
+	}, Output)
+
+	local previous = latest
+	if previous then
 		vim.schedule(function()
+			local visible = previous.win and vim.api.nvim_win_is_valid(previous.win)
 			hide(previous)
 			if previous.buf then
 				vim.api.nvim_buf_delete(previous.buf, { force = true })
 			end
 			previous.chunks = {}
+			if visible then
+				show(output, false)
+			end
 		end)
 	end
 
-	---@type AtlasConsoleOutput
-	local output = setmetatable({
-		chunks = { "> " .. title .. "\r\n", cwd and cwd .. "\r\n\r\n" or "" },
-		finished = false,
-		dismissed = false,
-	}, Output)
 	latest = output
+end
+
+---@param title string
+---@param cwd string|nil
+---@return AtlasConsoleOutput
+function M.start(title, cwd)
+	if not latest then
+		M.clear()
+	end
+	local output = assert(latest)
+	local separator = #output.chunks > 0 and "\r\n" or ""
+	output.finished = false
+	output:write(separator .. "> " .. title .. "\r\n" .. (cwd and cwd .. "\r\n\r\n" or ""))
 	return output
 end
 
 ---@param focus boolean|nil
 ---@param delay_ms integer|nil
 function M.open(focus, delay_ms)
-	local output = latest
+	if not latest then
+		M.clear()
+	end
+	local output = assert(latest)
 	local function open()
-		if output then
-			if delay_ms and (output.finished or output.dismissed) then
-				return
-			end
-			show(output, focus ~= false)
-		else
-			require("atlas.core.notify").info("No command output", { vim_notify = true })
+		if delay_ms and (output.finished or output.dismissed) then
+			return
 		end
+		show(output, focus ~= false)
 	end
 	if delay_ms then
 		vim.defer_fn(open, delay_ms)

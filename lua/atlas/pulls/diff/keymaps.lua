@@ -28,6 +28,7 @@ local shared_actions = {
 	"pulls.review.view.toggle_review_panel",
 	"pulls.review.view.toggle_detail_panel",
 	"pulls.review.view.toggle_comments",
+	"pulls.review.view.toggle_edit",
 	"pulls.review.explorer.toggle_commits",
 	"pulls.review.explorer.next_unreviewed_file",
 	"pulls.review.explorer.prev_unreviewed_file",
@@ -41,7 +42,7 @@ M.action_ids = {
 		"pulls.review.add_suggestion",
 		"pulls.review.submit_suggestion",
 		"pulls.review.add_note",
-		"pulls.review.toggle_resolved",
+		"ui.comments.toggle_resolved",
 	}, shared_actions),
 	explorer = vim.list_extend({ "ui.copy_url" }, shared_actions),
 }
@@ -79,38 +80,34 @@ local function register(buf, groups)
 	end
 end
 
----@param name string
----@param items AtlasHelpKeyItem[]
----@param review_items AtlasHelpKeyItem[]
----@param custom_items AtlasHelpKeyItem[]
----@return AtlasDiffKeymapGroup[]
-local function groups(name, items, review_items, custom_items)
-	return {
-		{ name = name, items = items, index = 1 },
-		{ name = "Review", items = review_items, index = 2 },
-		{ name = "Custom", items = custom_items, index = 3 },
-	}
-end
-
 ---@param viewer AtlasDiffViewer
 function M.setup(viewer)
 	local session = viewer.session
 	local staging = session.source.kind == "worktree" and not session.source.base
+	local editing = session.source.kind == "worktree" and session.source.edit ~= nil
 	local pr = session.source.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	local reviews = provider and provider.capabilities.reviews
 	local pending_reviews = reviews and reviews.submit_review ~= nil
 
-	local shared_items = {}
-	add(shared_items, "pulls.review.explorer.prev_unreviewed_file", 20, function()
+	local navigation_items = {}
+	add(navigation_items, "pulls.review.explorer.prev_unreviewed_file", 20, function()
 		viewer:navigate_file(-1, true)
 	end)
-	add(shared_items, "pulls.review.explorer.next_unreviewed_file", 21, function()
+	add(navigation_items, "pulls.review.explorer.next_unreviewed_file", 21, function()
 		viewer:navigate_file(1, true)
 	end)
-	add(shared_items, "pulls.review.explorer.find_file", 30, function()
+	add(navigation_items, "pulls.review.explorer.find_file", 30, function()
 		viewer:find_file()
 	end)
+	add(navigation_items, "pulls.review.prev_commit", 46, function()
+		viewer:step_commit(-1)
+	end)
+	add(navigation_items, "pulls.review.next_commit", 47, function()
+		viewer:step_commit(1)
+	end)
+
+	local shared_items = {}
 	add(shared_items, "pulls.review.explorer.toggle_commits", 42, function()
 		viewer:toggle_commits()
 	end)
@@ -125,14 +122,20 @@ function M.setup(viewer)
 	add(shared_items, "pulls.review.view.toggle_comments", 45, function()
 		viewer:toggle_comments()
 	end)
-	add(shared_items, "pulls.review.prev_commit", 46, function()
-		viewer:step_commit(-1)
-	end)
-	add(shared_items, "pulls.review.next_commit", 47, function()
-		viewer:step_commit(1)
-	end)
+
+	local edit_items = {}
+	if editing then
+		add(edit_items, "pulls.review.view.toggle_edit", 1, function()
+			require("atlas.pulls.diff.edit").commit(viewer)
+		end, nil, "Commit and push")
+	elseif session.source.kind == "pr" then
+		add(shared_items, "pulls.review.view.toggle_edit", 48, function()
+			require("atlas.pulls.diff.edit").start(viewer)
+		end)
+	end
 
 	local review_items = {}
+	local comment_items = {}
 	if session.source.kind == "pr" then
 		add(review_items, "ui.open_actions", 1, function()
 			viewer:run_action("open_actions")
@@ -151,16 +154,16 @@ function M.setup(viewer)
 				viewer:run_action("submit_review")
 			end)
 		end
-		add(review_items, "pulls.review.prev_comment", 90, function()
+		add(comment_items, "pulls.review.prev_comment", 90, function()
 			viewer:navigate_annotation(-1, "comment")
 		end)
-		add(review_items, "pulls.review.next_comment", 91, function()
+		add(comment_items, "pulls.review.next_comment", 91, function()
 			viewer:navigate_annotation(1, "comment")
 		end)
-		add(review_items, "pulls.review.prev_unresolved", 94, function()
+		add(comment_items, "pulls.review.prev_unresolved", 94, function()
 			viewer:navigate_annotation(-1, "unresolved")
 		end)
-		add(review_items, "pulls.review.next_unresolved", 95, function()
+		add(comment_items, "pulls.review.next_unresolved", 95, function()
 			viewer:navigate_annotation(1, "unresolved")
 		end)
 	end
@@ -170,10 +173,10 @@ function M.setup(viewer)
 		end, nil, "Toggle staged")
 	end
 	if session.notes then
-		add(review_items, "pulls.review.prev_note", 92, function()
+		add(comment_items, "pulls.review.prev_note", 92, function()
 			viewer:navigate_annotation(-1, "note")
 		end)
-		add(review_items, "pulls.review.next_note", 93, function()
+		add(comment_items, "pulls.review.next_note", 93, function()
 			viewer:navigate_annotation(1, "note")
 		end)
 	end
@@ -193,7 +196,12 @@ function M.setup(viewer)
 	end
 	add(shared_items, "ui.help", 100, help.toggle)
 	add(shared_items, "ui.close", 101, function()
-		if not help.is_open() then
+		if help.is_open() then
+			return
+		end
+		if editing then
+			require("atlas.pulls.diff.edit").close(viewer)
+		else
 			viewer:close("user_close")
 		end
 	end)
@@ -205,56 +213,58 @@ function M.setup(viewer)
 		end)
 	end
 
-	-- File comments use the explorer selection; diff comments use the selected lines.
 	local explorer_review_items = vim.list_extend({}, review_items)
-	if session.source.kind == "pr" then
-		if pending_reviews then
-			add(explorer_review_items, "pulls.review.add_comment", 30, function()
-				viewer:add_comment(true)
-			end)
-		end
-		add(explorer_review_items, "pulls.review.submit_comment", 31, function()
-			viewer:add_comment(false)
-		end)
-	end
 	if staging then
 		add(explorer_review_items, "pulls.review.atlas.discard_changes", 3, function()
 			viewer:discard_changes()
 		end)
 	end
 
-	local diff_review_items = vim.list_extend({}, review_items)
-	add(diff_review_items, "pulls.review.show_details", 35, function()
+	-- File comments use the explorer selection; diff comments use the selected lines.
+	local explorer_comment_items = vim.list_extend({}, comment_items)
+	if session.source.kind == "pr" then
+		if pending_reviews then
+			add(explorer_comment_items, "pulls.review.add_comment", 30, function()
+				viewer:add_comment(true)
+			end)
+		end
+		add(explorer_comment_items, "pulls.review.submit_comment", 31, function()
+			viewer:add_comment(false)
+		end)
+	end
+
+	local diff_comment_items = vim.list_extend({}, comment_items)
+	add(diff_comment_items, "pulls.review.show_details", 35, function()
 		viewer:show_details()
 	end)
 	if session.source.kind == "pr" then
 		if pending_reviews then
-			add(diff_review_items, "pulls.review.add_comment", 30, function()
+			add(diff_comment_items, "pulls.review.add_comment", 30, function()
 				viewer:add_comment(true)
 			end, { "n", "x" })
 		end
-		add(diff_review_items, "pulls.review.submit_comment", 31, function()
+		add(diff_comment_items, "pulls.review.submit_comment", 31, function()
 			viewer:add_comment(false)
 		end, { "n", "x" })
 		if pending_reviews then
-			add(diff_review_items, "pulls.review.add_suggestion", 32, function()
+			add(diff_comment_items, "pulls.review.add_suggestion", 32, function()
 				viewer:add_comment(true, true)
 			end, { "n", "x" })
 		end
-		add(diff_review_items, "pulls.review.submit_suggestion", 33, function()
+		add(diff_comment_items, "pulls.review.submit_suggestion", 33, function()
 			viewer:add_comment(false, true)
 		end, { "n", "x" })
 	end
 	if session.notes then
-		add(diff_review_items, "pulls.review.add_note", 34, function()
+		add(diff_comment_items, "pulls.review.add_note", 34, function()
 			viewer:add_note()
 		end, { "n", "x" })
 	end
 	if session.source.kind == "pr" then
-		add(diff_review_items, "pulls.review.toggle_resolved", 40, function()
+		add(diff_comment_items, "ui.comments.toggle_resolved", 40, function()
 			viewer:run_annotation_action("toggle_resolved")
 		end)
-		add(diff_review_items, "ui.delete", 41, function()
+		add(diff_comment_items, "ui.delete", 41, function()
 			viewer:run_annotation_action("delete_comment")
 		end)
 	end
@@ -279,9 +289,25 @@ function M.setup(viewer)
 				return viewer:run_custom(callback)
 			end)
 		or {}
-	viewer.renderer:setup_keymaps(viewer, groups("View", shared_items, diff_review_items, custom_items))
-	register(viewer.explorer.buf, groups("Explorer", explorer_items, explorer_review_items, custom_items))
-	register(viewer.commits.buf, groups("Commits", commits_items, review_items, custom_items))
+
+	---@param items AtlasHelpKeyItem[]
+	---@param review AtlasHelpKeyItem[]
+	---@param comments AtlasHelpKeyItem[]
+	---@return AtlasDiffKeymapGroup[]
+	local function groups(items, review, comments)
+		return {
+			{ name = "Edit", items = edit_items, index = 0 },
+			{ name = "Navigation", items = navigation_items, index = 1 },
+			{ name = "General", items = items, index = 2 },
+			{ name = "Review", items = review, index = 3 },
+			{ name = "Comments", items = comments, index = 4 },
+			{ name = "Custom", items = custom_items, index = 5 },
+		}
+	end
+
+	viewer.renderer:setup_keymaps(viewer, groups(shared_items, review_items, diff_comment_items))
+	register(viewer.explorer.buf, groups(explorer_items, explorer_review_items, explorer_comment_items))
+	register(viewer.commits.buf, groups(commits_items, review_items, comment_items))
 end
 
 ---@param viewer AtlasDiffViewer
@@ -291,7 +317,7 @@ function M.hints(viewer, buf)
 	if vim.bo[buf].filetype == "atlas-ui.review-thread" then
 		return {
 			"ui.comments.reply",
-			"pulls.review.toggle_resolved",
+			"ui.comments.toggle_resolved",
 			"ui.close",
 		}
 	elseif buf == viewer.commits.buf then

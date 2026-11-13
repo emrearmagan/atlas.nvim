@@ -153,8 +153,6 @@ local function comment_item(comment, opts, is_root)
 		item.content = text
 		item.markdown = not is_deleted
 		item.file_path = comment.inline and comment.inline.path
-		item.language_aliases = comment.inline
-			and { suggestion = vim.filetype.match({ filename = comment.inline.path }) }
 		item.meta.is_deleted = is_deleted
 		if not is_deleted then
 			item.reactions = comment.reactions
@@ -178,9 +176,9 @@ local function comment_item(comment, opts, is_root)
 				hl_group = "AtlasTextMuted",
 			})
 		end
-		if not comment.is_task and opts.action_keys.react and not is_deleted then
+		if opts.action_keys.apply_suggestion and not is_deleted then
 			table.insert(footer_items, {
-				text = opts.action_keys.react .. " react",
+				text = opts.action_keys.apply_suggestion .. " apply",
 				hl_group = "AtlasTextMuted",
 			})
 		end
@@ -189,6 +187,12 @@ local function comment_item(comment, opts, is_root)
 			local label = is_resolved and "reopen" or (comment.is_task and "complete" or "resolve")
 			table.insert(footer_items, {
 				text = toggle_key .. " " .. label,
+				hl_group = "AtlasTextMuted",
+			})
+		end
+		if not comment.is_task and opts.action_keys.react and not is_deleted then
+			table.insert(footer_items, {
+				text = opts.action_keys.react .. " react",
 				hl_group = "AtlasTextMuted",
 			})
 		end
@@ -326,6 +330,7 @@ end
 ---@field edit? string
 ---@field delete? string
 ---@field toggle_resolved? string
+---@field apply_suggestion? string
 
 ---@class AtlasCommentThreadRenderOptions
 ---@field expanded? fun(root: PullsComment): boolean

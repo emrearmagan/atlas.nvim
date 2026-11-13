@@ -129,7 +129,7 @@ function M.setup(buf, refresh)
 	end
 	utils.insert_if(
 		items,
-		from_action("pulls.review.toggle_resolved", {
+		from_action("ui.comments.toggle_resolved", {
 			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -229,7 +229,7 @@ function M.teardown(buf)
 	utils.insert_if(items, remove_item("pulls.review.add_task"))
 	utils.insert_if(items, remove_item("ui.delete"))
 	utils.insert_if(items, remove_item("ui.comments.react"))
-	utils.insert_if(items, remove_item("pulls.review.toggle_resolved"))
+	utils.insert_if(items, remove_item("ui.comments.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
 	utils.insert_if(items, remove_item("pulls.review.atlas.next_hunk"))

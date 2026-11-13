@@ -20,6 +20,8 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@class AtlasDiffWorktreeSource
 ---@field kind "worktree"
 ---@field base string|nil Nil splits the changes into staged and unstaged files.
+---@field edit AtlasDiffSession|nil The review this edits, see `atlas.pulls.diff.edit`.
+---@field pr PullRequest|nil The pull request in edit mode.
 
 ---@alias AtlasDiffSource AtlasDiffPullRequestSource|AtlasDiffRefsSource|AtlasDiffWorktreeSource
 
@@ -35,7 +37,8 @@ local reviewed_store = require("atlas.pulls.reviewed")
 ---@class AtlasDiffSessionInternal: AtlasDiffSession
 --- This is the range that was initially opened like a pr or branch. It mainly just used to determine if the user is viewing a single commit or the full range and come back here
 ---@field full_range AtlasDiffRange
---- What the commits before (base) and after (head) the shown ones changed. nil while all commits are shown.
+--- What the commits before (base) and after (head) the shown ones changed, or your edits (head) in edit mode.
+--- nil while all commits are shown.
 --- THis is used to find where comments and notes are in the shown commits.
 ---@field hunks { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> }|nil
 ---@field worktree_root string|nil
@@ -129,9 +132,12 @@ end
 ---@param root string
 ---@param base string
 ---@param head string|nil
----@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[], hunks?: { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> } }|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function load_files(source, root, base, head, on_done)
+	if source.kind == "worktree" and source.edit then
+		return require("atlas.pulls.diff.edit").load(root, base, on_done)
+	end
 	if source.kind == "worktree" and not source.base then
 		return diff.load_status(root, base, on_done)
 	end
@@ -154,6 +160,7 @@ function Session.new(source, root, base, head, opts, on_done)
 		closed = false,
 	}, Session)
 	local pr = source.kind == "pr" and source.pr or nil
+	local edited_review = source.kind == "worktree" and source.edit or nil
 	local starts = {}
 
 	if pr then
@@ -169,6 +176,13 @@ function Session.new(source, root, base, head, opts, on_done)
 		end
 		if capabilities.users then
 			starts.current_user = capabilities.users.fetch_user
+		end
+	elseif edited_review then
+		starts.review = function(done)
+			done(edited_review.review)
+		end
+		starts.current_user = function(done)
+			done(edited_review.current_user)
 		end
 	end
 
@@ -189,6 +203,7 @@ function Session.new(source, root, base, head, opts, on_done)
 			session.full_range = result.range
 			session.range = result.range
 			session.files = result.files
+			session.hunks = result.hunks
 			if not opts.lsp or not head or #result.files == 0 then
 				done(true)
 				return
@@ -358,6 +373,7 @@ function Session:reload_files(on_done)
 		end
 
 		self.files = loaded.files
+		self.hunks = loaded.hunks
 		on_done()
 	end)
 end
@@ -435,8 +451,8 @@ function Session:shown_commits()
 end
 
 -- Comments and notes are stored on PR lines. When only some commits are shown, this finds where
--- those lines are in them, or nil if another commit changed them. With all commits shown you
--- just get the same lines back.
+-- those lines are in them, or nil if another commit changed them. In edit mode they follow your
+-- edits instead. With all commits shown you just get the same lines back.
 ---@param path string
 ---@param side "LEFT"|"RIGHT" LEFT lines are at the PR base, RIGHT lines at the PR head.
 ---@param start_line integer|nil nil for a single line.
@@ -448,8 +464,13 @@ function Session:map_range(path, side, start_line, end_line)
 		return start_line, end_line
 	end
 
-	local hunks = side == "LEFT" and self.hunks.base or self.hunks.head
-	local first, last = diff.map_range(hunks[path] or {}, "LEFT", start_line or end_line, end_line)
+	local hunks = (side == "LEFT" and self.hunks.base or self.hunks.head)[path] or {}
+	if self.source.kind == "worktree" and self.source.edit then
+		-- Keep comments on edited lines instead of hiding them
+		return start_line and diff.map_line(hunks, "LEFT", start_line), (diff.map_line(hunks, "LEFT", end_line))
+	end
+
+	local first, last = diff.map_range(hunks, "LEFT", start_line or end_line, end_line)
 	return start_line and first, last
 end
 
@@ -472,7 +493,8 @@ function Session:pr_range(path, side, start_line, end_line)
 	return start_line and first, last
 end
 
--- Lines in the shown commits that other commits change. Empty while all commits are shown.
+-- Lines in the shown commits that other commits change, or the lines you edited in edit mode.
+-- Empty while all commits are shown.
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return integer[]

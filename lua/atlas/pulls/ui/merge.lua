@@ -216,7 +216,7 @@ local function setup_buffer(state)
 	vim.bo[state.buf].swapfile = false
 	vim.bo[state.buf].modeline = false
 	vim.bo[state.buf].filetype = "gitcommit"
-	vim.cmd("botright " .. math.max(14, math.floor(vim.o.lines * 0.5)) .. "split")
+	vim.cmd("botright " .. math.max(14, math.floor(vim.o.lines * 0.35)) .. "split")
 	local win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(win, state.buf)
 	for key, value in pairs({
