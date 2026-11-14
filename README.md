@@ -28,10 +28,12 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Azure D
   - [GitHub](#github)
   - [GitLab](#gitlab)
   - [Bitbucket](#bitbucket)
+  - [Azure DevOps](#azure)
 - [Issues](#issues)
   - [GitHub](#github-issues)
   - [GitLab](#gitlab-issues)
   - [Jira](#jira)
+  - [Azure DevOps](#azure-issues)
 - [Commands](#commands)
 
 ## Installation
@@ -661,6 +663,8 @@ pulls = {
 <details>
 <summary><strong>Azure DevOps</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/azure/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasAzurePullsConfig
@@ -931,6 +935,8 @@ issues = {
 Uses the shared `providers.azure` authentication. Views use flat [WIQL queries](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops).
 
 Azure supports both HTML and Markdown for work-item [descriptions](https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/) and [comments](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat). [Pandoc](https://pandoc.org) is needed to view and edit HTML as Markdown. Saving converted content switches it to Markdown permanently.
+
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/azure/config.lua)
 
 ```lua
 issues = {
