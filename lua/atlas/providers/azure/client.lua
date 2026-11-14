@@ -10,6 +10,12 @@ local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
 local utils = require("atlas.core.utils")
 
+-- https://learn.microsoft.com/en-us/azure/devops/cli/entra-tokens?view=azure-devops
+local AZURE_DEVOPS_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798"
+
+---@type { token: string|nil, expires_on: integer, waiting: fun(authorization: string|nil, err: string|nil)[]|nil }
+local az = { token = nil, expires_on = 0, waiting = nil }
+
 local function azure_config()
 	return config.provider_options("azure") or {}
 end
@@ -95,6 +101,64 @@ function M.build_query(params)
 	return "?" .. table.concat(parts, "&")
 end
 
+---@param authorization string|nil
+---@param err string|nil
+local function resolve_waiting(authorization, err)
+	local waiting = az.waiting or {}
+	az.waiting = nil
+	for _, callback in ipairs(waiting) do
+		callback(authorization, err)
+	end
+end
+
+---@param on_done fun(authorization: string|nil, err: string|nil)
+local function authorization(on_done)
+	local token = azure_config().token
+	if token and token ~= "" then
+		on_done("Basic " .. vim.base64.encode(":" .. token))
+		return
+	end
+
+	if az.token and os.time() < az.expires_on - 300 then
+		on_done("Bearer " .. az.token)
+		return
+	end
+
+	if az.waiting then
+		table.insert(az.waiting, on_done)
+		return
+	end
+
+	if vim.fn.executable("az") ~= 1 then
+		on_done(nil, "Set providers.azure.token or install the Azure CLI and run `az login`")
+		return
+	end
+
+	az.waiting = { on_done }
+	local command = { "az", "account", "get-access-token", "--resource", AZURE_DEVOPS_RESOURCE, "--output", "json" }
+	vim.system(
+		command,
+		{ text = true },
+		vim.schedule_wrap(function(result)
+			local ok, decoded = pcall(vim.json.decode, result.stdout or "")
+			if result.code ~= 0 or not ok or not decoded.accessToken then
+				resolve_waiting(nil, "Azure CLI: " .. vim.trim(result.stderr or ""))
+				return
+			end
+
+			az.token = decoded.accessToken
+			az.expires_on = tonumber(decoded.expires_on) or 0
+			logger.loginfo("Fetched Azure CLI token", { expires_at = os.date("%Y-%m-%d %H:%M:%S", az.expires_on) })
+			-- TODO: remove me
+			require("atlas.core.notify").info(
+				"Azure CLI token refreshed, expires at " .. os.date("%H:%M", az.expires_on),
+				{ vim_notify = true }
+			)
+			resolve_waiting("Bearer " .. az.token, nil)
+		end)
+	)
+end
+
 ---@param method string
 ---@param endpoint string
 ---@param data? table
@@ -103,12 +167,12 @@ end
 ---@param api_version? string
 ---@param content_type? string
 ---@param response_headers? boolean
----@return { job_id: integer, cancel: fun() }|nil
+---@return { cancel: fun() }|nil
 function M.request(method, endpoint, data, on_done, ctx, api_version, content_type, response_headers)
 	local cfg = azure_config()
-	if not cfg.base_url or cfg.base_url == "" or not cfg.token or cfg.token == "" then
-		local err = "Missing Azure DevOps credentials in config"
-		logger.logerror("Azure DevOps auth missing", { error = err })
+	if not cfg.base_url or cfg.base_url == "" then
+		local err = "Missing providers.azure.base_url in config"
+		logger.logerror("Azure DevOps config missing", { error = err })
 		on_done(nil, err)
 		return nil
 	end
@@ -117,19 +181,20 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 	local separator = endpoint:find("?", 1, true) and "&" or "?"
 	endpoint = endpoint .. separator .. "api-version=" .. (api_version or "7.1")
 
-	local headers = {
-		Authorization = "Basic " .. vim.base64.encode(":" .. cfg.token),
-		["Content-Type"] = content_type or "application/json",
-		["Content-Length"] = (method == "POST" or method == "PUT") and payload == nil and "0" or nil,
-		Accept = "application/json",
-	}
 	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
 	local message = log.action or "Azure DevOps request"
 	log.action = nil
 	logger.loginfo(message, log)
 
-	return http.curl_request(method, M.base_url() .. endpoint, headers, payload, function(result, err, _, headers_out)
+	---@param result any
+	---@param err string|nil
+	---@param status integer|nil
+	---@param headers_out table<string, string>|nil
+	local function finish(result, err, status, headers_out)
 		if err then
+			if status == 401 then
+				az.token = nil
+			end
 			if type(result) == "table" and type(result.message) == "string" and result.message ~= "" then
 				err = result.message
 			end
@@ -141,7 +206,31 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 			M.clear_cache()
 		end
 		on_done(result, nil, headers_out)
-	end, { response_headers = response_headers })
+	end
+
+	local scope = request_scope.new()
+	scope.run(authorization, function(auth, auth_err)
+		if not auth then
+			finish(nil, auth_err)
+			return
+		end
+
+		-- X-TFS-FedAuthRedirect is not documented, but based on https://github.com/Azure/azure-sdk-for-go/pull/23485
+		-- it makes Azure DevOps return a 401 for a rejected token instead of a redirect to the sign-in page.
+		local headers = {
+			Authorization = auth,
+			["Content-Type"] = content_type or "application/json",
+			["Content-Length"] = (method == "POST" or method == "PUT") and payload == nil and "0" or nil,
+			Accept = "application/json",
+			["X-TFS-FedAuthRedirect"] = "Suppress",
+		}
+		scope.run(function(done)
+			return http.curl_request(method, M.base_url() .. endpoint, headers, payload, done, {
+				response_headers = response_headers,
+			})
+		end, finish)
+	end)
+	return scope
 end
 
 ---Fetch every page of a list endpoint that pages with continuation tokens.
@@ -153,6 +242,7 @@ end
 function M.fetch_all(endpoint, params, ctx, on_done)
 	local scope = request_scope.new()
 	local values = {}
+
 	---@param continuation_token string|nil
 	local function fetch_page(continuation_token)
 		local query = M.build_query(vim.tbl_extend("force", params, {
@@ -175,6 +265,7 @@ function M.fetch_all(endpoint, params, ctx, on_done)
 			on_done(values, nil)
 		end)
 	end
+
 	fetch_page(nil)
 	return scope
 end
