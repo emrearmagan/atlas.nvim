@@ -11,7 +11,7 @@ local M = {
 ---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
 	local cache_key = "gitlab:current_user"
-	local cached, ok = service.get_cache(cache_key)
+	local cached, ok = service.get_persistent_cache(cache_key)
 	if ok then
 		on_done(mapper.to_user(cached), nil)
 		return nil
@@ -23,7 +23,7 @@ function M.fetch_user(on_done)
 			return
 		end
 		if result then
-			service.set_cache(cache_key, result)
+			service.set_persistent_cache(cache_key, result)
 		end
 		on_done(mapper.to_user(result), nil)
 	end, { action = "Fetch current user" })

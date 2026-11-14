@@ -1,4 +1,58 @@
--- WIQL syntax: https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax
+-- Example:
+--   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasAzureConfig
+--       azure = {
+--         base_url = "https://dev.azure.com/your-organization",
+--         token = vim.env.AZURE_DEVOPS_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
+--     issues = {
+--       ---@type AtlasAzureIssuesConfig
+--       azure = {
+--         views = {
+--           {
+--             name = "Assigned",
+--             key = "1",
+--             project = "YourProject",
+--             -- current_repo = true, -- Use the project of the local repository instead of project.
+--             search = [[
+--               SELECT [System.Id] FROM WorkItems
+--               WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me
+--               ORDER BY [System.ChangedDate] DESC
+--             ]],
+--           },
+--           {
+--             name = "Created",
+--             key = "2",
+--             project = "YourProject",
+--             search = [[
+--               SELECT [System.Id] FROM WorkItems
+--               WHERE [System.TeamProject] = @project AND [System.CreatedBy] = @Me
+--               ORDER BY [System.ChangedDate] DESC
+--             ]],
+--           },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Bugs"] = {
+--               project = "YourProject",
+--               search = [[
+--                 SELECT [System.Id] FROM WorkItems
+--                 WHERE [System.TeamProject] = @project AND [System.WorkItemType] = 'Bug'
+--               ]],
+--             },
+--           },
+--         },
+--       },
+--     },
+--   })
+--
+-- `search` is a flat WIQL query:
+-- https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax
 
 ---@class AtlasAzureIssuesViewConfig : IssuesViewConfig
 ---@field project string|nil Azure DevOps project name.

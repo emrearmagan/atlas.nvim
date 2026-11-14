@@ -1,0 +1,50 @@
+name: Label issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply issue labels
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { title, body } = context.payload.issue;
+            const cleanTitle = title.replace(/https?:\/\/\S+/gi, "");
+            const text = `${cleanTitle}\n${body || ""}`.replace(/https?:\/\/\S+/gi, "");
+            const providers = {
+              github: ["github"],
+              gitlab: ["gitlab"],
+              bitbucket: ["bitbucket"],
+              azure: ["azure"],
+              jira: ["jira"],
+              gitea: ["gitea"],
+              forgejo: ["forgejo"],
+            };
+            const areas = {
+              pipelines: ["pipelines", "pipeline job", "pipeline jobs", "pipeline steps", "job log", "job logs"],
+              ci: ["ci workflow", "ci workflows", "make check", "busted", "stylua", "selene"],
+              diff: ["diff", "diffs", "atlasdiff", "codediff", "diffview"],
+              ui: ["ui", "layout", "keymaps", "shortcuts", "scrolling"],
+            };
+
+            const matchLabels = (keywords, text) => Object.entries(keywords)
+              .filter(([, words]) => new RegExp(`\\b(?:${words.join("|")})\\b`, "i").test(text))
+              .map(([label]) => label);
+            const titleProviders = matchLabels(providers, cleanTitle);
+            const labels = [
+              ...(titleProviders.length ? titleProviders : matchLabels(providers, text)),
+              ...matchLabels(areas, text),
+            ];
+
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.issue.number,
+              labels: ["needs-review", ...labels],
+            });

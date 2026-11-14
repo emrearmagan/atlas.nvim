@@ -70,7 +70,7 @@ function M.fetch_conversation(issue, opts, on_done)
 
 	local cache_key = string.format("github_issues:conversation:%s#%d", slug, number)
 	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -121,7 +121,7 @@ function M.fetch_conversation(issue, opts, on_done)
 			end
 		end
 
-		cli.set_mem(cache_key, conversation)
+		cli.set_cache(cache_key, conversation)
 		on_done(conversation, nil)
 	end, {
 		action = "Fetch issue conversation timeline",

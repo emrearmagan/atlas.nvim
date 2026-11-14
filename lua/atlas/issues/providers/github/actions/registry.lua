@@ -3,6 +3,7 @@
 ---| "close"
 ---| "reopen"
 ---| "labels"
+---| "issue_type"
 ---| "open_repo"
 
 local actions = require("atlas.issues.actions")
@@ -295,6 +296,94 @@ local function labels(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
+---@return boolean, string|nil
+local function issue_type_available(ctx)
+	local ok, err = repository_available(ctx)
+	if not ok then
+		return ok, err
+	end
+	local issue = assert(ctx.issue)
+	---@cast issue GitHubIssue
+	return issue.can_set_type, "You cannot change the type of this issue"
+end
+
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function issue_type(ctx, done)
+	local issue = assert(ctx.issue)
+	---@cast issue GitHubIssue
+	local key = issue.key
+	local current = issue.type
+
+	notify.loading("Loading issue types...")
+	issues_api.list_issue_types(issue.repo_full_name, function(types, err)
+		if err or types == nil then
+			local message = err or "Failed to load issue types"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		notify.clear()
+
+		if #types == 0 then
+			local message = "No issue types available"
+			notify.warn(message)
+			done(nil, message)
+			return
+		end
+
+		local none = { name = "None" }
+		local items = vim.list_extend(current and { none } or {}, types)
+		local initial_index = 1
+		for index, item in ipairs(items) do
+			if current and item.id == current.id then
+				initial_index = index
+			end
+		end
+
+		picker.select({
+			title = string.format("Issue type for %s", key),
+			items = items,
+			initial_index = initial_index,
+			format_item = function(item)
+				if item == none then
+					return item.name, "AtlasTextMuted"
+				end
+				local icon = item.icon.icon .. " "
+				local chunks = { { icon, item.icon.hl_group }, { item.name } }
+				local text = icon .. item.name
+				if item.description then
+					local description = "  " .. item.description
+					table.insert(chunks, { description, "AtlasTextMuted" })
+					text = text .. description
+				end
+				return text, chunks
+			end,
+			on_select = function(selected)
+				local name = selected ~= none and selected and selected.name or nil
+				if selected == nil or (current and current.name or nil) == name then
+					done(nil, nil)
+					return
+				end
+
+				notify.loading(string.format("Updating issue type on %s...", key))
+				issues_api.set_issue_type(key, name, function(ok, set_err)
+					if not ok then
+						notify.error(set_err or "Failed")
+						done(nil, set_err or "Failed")
+						return
+					end
+					local msg = name and string.format("Set %s to %s", key, name)
+						or string.format("Removed issue type from %s", key)
+					notify.success(msg, { timeout = 1200 })
+					done({ issue_key = key }, nil)
+				end)
+			end,
+		})
+	end)
+end
+
+---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(ctx, done)
 	return create_issue_slug(ctx, function(slug, slug_err)
@@ -571,6 +660,13 @@ register({
 	icon = icons.get("label", "actions"),
 	is_available = repository_available,
 	run = labels,
+})
+register({
+	id = "issue_type",
+	label = "Edit Issue Type",
+	icon = icons.get("issue_type", "actions"),
+	is_available = issue_type_available,
+	run = issue_type,
 })
 register({ id = "search", label = "Search Issues", icon = icons.get("search", "actions"), run = search })
 register({

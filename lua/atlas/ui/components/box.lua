@@ -91,6 +91,7 @@ function M.render(groups, opts)
 				start_col = col_shift + span.start_col,
 				end_col = col_shift + span.end_col,
 				hl_group = span.hl_group,
+				url = span.url,
 			})
 		end
 		local target_map = opts.line_map or line_map

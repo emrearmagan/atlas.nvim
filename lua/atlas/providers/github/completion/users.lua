@@ -68,7 +68,7 @@ return {
 
 		local scope = repository .. (number and "#" .. number or "")
 		local key = "github:completion:users:" .. scope .. ":" .. query
-		local cached, found = client.get_mem(key)
+		local cached, found = client.get_cache(key)
 		if found then
 			done(cached, nil)
 			return
@@ -112,7 +112,7 @@ return {
 			end
 			vim.list_extend(candidates, data.mentionableUsers.nodes)
 			local items = completion_items(candidates)
-			client.set_mem(key, items)
+			client.set_cache(key, items)
 			done(items, nil)
 		end, { action = "Complete mentionable users", repo = repository })
 	end,

@@ -240,6 +240,7 @@ function M.to_pull_request(raw)
 	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
 	local rollup = json.nilify(raw.statusCheckRollup) or json.safe_table(first_commit.commit).statusCheckRollup
 	local check_status = json.safe_str(json.safe_table(rollup).state)
+	local auto_merge = json.nilify(raw.autoMergeRequest)
 
 	return {
 		id = number,
@@ -278,6 +279,7 @@ function M.to_pull_request(raw)
 		head_repository = json.safe_str(json.safe_table(raw.headRepository).nameWithOwner),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
+		auto_merge_method = auto_merge and json.safe_str(auto_merge.mergeMethod) or nil,
 		lines_added = tonumber(raw.additions) or 0,
 		lines_removed = tonumber(raw.deletions) or 0,
 	}
@@ -293,6 +295,8 @@ function M.to_pull_request_details(raw)
 		assignees = pull_assignees(raw),
 		labels = pull_labels(raw),
 		stack = pull_stack(raw.stackEntry, true),
+		can_enable_auto_merge = raw.viewerCanEnableAutoMerge == true,
+		can_disable_auto_merge = raw.viewerCanDisableAutoMerge == true,
 	}
 	local subscription = tostring(raw.viewerSubscription or "")
 	if subscription ~= "" then

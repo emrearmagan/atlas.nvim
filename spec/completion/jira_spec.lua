@@ -51,10 +51,10 @@ describe("Jira completion", function()
 			is_server = function()
 				return server
 			end,
-			get_memory_cache = function(key)
+			get_cache = function(key)
 				return cache[key]
 			end,
-			set_memory_cache = function(key, value)
+			set_cache = function(key, value)
 				cache[key] = value
 			end,
 			request = function(method, endpoint, data, done)

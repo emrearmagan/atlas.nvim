@@ -6,9 +6,6 @@ on:
       - main
       - dev
   pull_request:
-    branches:
-      - main
-      - dev
     types:
       - opened
       - synchronize
@@ -21,8 +18,6 @@ permissions:
 jobs:
   run-tests:
     runs-on: ubuntu-latest
-    env:
-      LUA_PATH: "lua/?.lua;lua/?/init.lua;;"
     steps:
       - name: Validate main PR source
         if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
@@ -44,29 +39,37 @@ jobs:
           esac
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Run Busted
-        uses: lunarmodules/busted@v2
+      - name: Set up Lua
+        uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.4"
+      - name: Set up LuaRocks
+        uses: leafo/gh-actions-luarocks@v6
+      - name: Install Busted
+        run: luarocks install busted 2.3.0
+      - name: Run tests
+        run: make test
 
   stylua:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Check formatting
-        uses: JohnnyMorganz/stylua-action@v5
+      - name: Install StyLua
+        uses: taiki-e/install-action@v2
         with:
-          token: ${{ github.token }}
-          version: v2.5.2
-          args: --check lua spec
+          tool: stylua@2.5.2
+      - name: Check formatting
+        run: make lint-stylua
 
   selene:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Check Lua
-        uses: NTBBloodbath/selene-action@v1.0.0
+      - name: Install Selene
+        uses: taiki-e/install-action@v2
         with:
-          token: ${{ github.token }}
-          version: 0.31.0
-          args: lua spec
+          tool: selene@0.31.0
+      - name: Check Lua
+        run: make lint-selene

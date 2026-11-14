@@ -88,7 +88,6 @@ local function create_thread(pr, body, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		on_done(mapper.to_comment(result.comments[1], result, pr), nil)
 	end, { action = "Add pull request comment", repo = pr.repo_full_name, id = pr.id })
 end
@@ -117,7 +116,6 @@ function M.add_comment(pr, content, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			service.clear_cache()
 			local comment = mapper.to_comment(result, { id = parent.thread_id }, pr)
 			comment.inline = parent.inline
 			comment.file = parent.file
@@ -174,7 +172,6 @@ function M.edit_comment(pr, comment, content, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local updated = mapper.to_comment(result, { id = comment.thread_id }, pr)
 		on_done(vim.tbl_extend("force", {}, comment, updated), nil)
 	end, { action = "Edit pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
@@ -186,9 +183,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment, on_done)
 	return service.request("DELETE", comment_endpoint(pr, comment), nil, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, { action = "Delete pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
@@ -200,9 +194,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.add_reaction(pr, comment, _key, on_done)
 	return service.request("POST", comment_endpoint(pr, comment) .. "/likes", nil, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, { action = "Like pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
@@ -214,9 +205,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.remove_reaction(pr, comment, _key, on_done)
 	return service.request("DELETE", comment_endpoint(pr, comment) .. "/likes", nil, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, { action = "Unlike pull request comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
@@ -229,9 +217,6 @@ end
 function M.set_thread_resolved(pr, root, resolved, on_done)
 	local endpoint = pullrequest_endpoint(pr) .. "/threads/" .. root.thread_id
 	return service.request("PATCH", endpoint, { status = resolved and "fixed" or "active" }, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, {
 		action = resolved and "Resolve pull request thread" or "Reopen pull request thread",

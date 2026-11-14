@@ -68,6 +68,32 @@ describe("GitHub issue mapping", function()
 		assert.equal("owner/repo#43", details.sub_issues[1].key)
 		assert.equal(43, details.sub_issues[1].number)
 	end)
+
+	it("maps the issue type with a colorscheme highlight for its color", function()
+		local raw = vim.tbl_extend("force", issue_raw(), {
+			viewerCanType = true,
+			issueType = { id = "IT_1", name = "Bug", color = "RED", description = "An unexpected problem" },
+		})
+
+		local issue = assert(issue_mapper.to_issue(raw))
+		local details = assert(issue_mapper.to_issue_details(raw))
+
+		assert.equal("Bug", issue.type.name)
+		assert.equal("An unexpected problem", issue.type.description)
+		assert.equal("AtlasIssueTypeRed", issue.icon.hl_group)
+		assert.is_true(issue.can_set_type)
+		assert.same(issue.type, details.type)
+	end)
+
+	it("leaves the type empty and falls back to muted for unknown colors", function()
+		local issue = assert(issue_mapper.to_issue(vim.tbl_extend("force", issue_raw(), { issueType = vim.NIL })))
+		local custom = assert(issue_mapper.to_issue_type({ id = "IT_2", name = "Spike", color = "TEAL" }))
+
+		assert.is_nil(issue.type)
+		assert.is_nil(issue.icon)
+		assert.is_false(issue.can_set_type)
+		assert.equal("AtlasTextMuted", custom.icon.hl_group)
+	end)
 end)
 
 describe("normalize_pr author.name", function()
@@ -263,5 +289,47 @@ describe("GitHub pull request stacks", function()
 
 		assert.is_nil(normalizer.to_pull_request(raw).stack)
 		assert.is_nil(normalizer.to_pull_request_details(raw).stack)
+	end)
+end)
+
+describe("GitHub auto-merge", function()
+	it("maps the auto-merge method onto the pull request", function()
+		local raw = base_raw()
+		raw.autoMergeRequest = { mergeMethod = "SQUASH" }
+
+		assert.equal("SQUASH", normalizer.to_pull_request(raw).auto_merge_method)
+	end)
+
+	it("leaves the auto-merge method nil when auto-merge is off", function()
+		for _, case in ipairs({
+			{ label = "missing" },
+			{ label = "vim.NIL", value = vim.NIL },
+		}) do
+			local raw = base_raw()
+			raw.autoMergeRequest = case.value
+
+			assert.are.equal(nil, normalizer.to_pull_request(raw).auto_merge_method, case.label)
+		end
+	end)
+
+	it("maps the viewer's auto-merge permissions onto pull request details", function()
+		local raw = base_raw()
+		raw.viewerCanEnableAutoMerge = true
+		raw.viewerCanDisableAutoMerge = false
+
+		local details = normalizer.to_pull_request_details(raw)
+
+		assert.is_true(details.can_enable_auto_merge)
+		assert.is_false(details.can_disable_auto_merge)
+	end)
+
+	it("treats missing auto-merge permissions as false", function()
+		local raw = base_raw()
+		raw.viewerCanEnableAutoMerge = vim.NIL
+
+		local details = normalizer.to_pull_request_details(raw)
+
+		assert.is_false(details.can_enable_auto_merge)
+		assert.is_false(details.can_disable_auto_merge)
 	end)
 end)

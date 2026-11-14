@@ -3,6 +3,17 @@ local M = {}
 local json = require("atlas.core.json")
 local github_mapper = require("atlas.providers.github.mapper")
 
+local ISSUE_TYPE_COLORS = {
+	GRAY = "AtlasIssueTypeGray",
+	BLUE = "AtlasIssueTypeBlue",
+	GREEN = "AtlasIssueTypeGreen",
+	YELLOW = "AtlasIssueTypeYellow",
+	ORANGE = "AtlasIssueTypeOrange",
+	RED = "AtlasIssueTypeRed",
+	PINK = "AtlasIssueTypePink",
+	PURPLE = "AtlasIssueTypePurple",
+}
+
 M.to_user = github_mapper.to_user
 
 ---@param raw_users table[]|nil
@@ -48,6 +59,31 @@ local function milestone(raw)
 		progress_percentage = tonumber(raw.progressPercentage),
 		open_issues = tonumber((raw.openIssues or {}).totalCount),
 		closed_issues = tonumber((raw.closedIssues or {}).totalCount),
+	}
+end
+
+---@param raw any Decoded API value.
+---@return IssueType|nil
+function M.to_issue_type(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local id = json.safe_str(raw.id)
+	local name = json.safe_str(raw.name)
+	if id == nil or name == nil then
+		return nil
+	end
+	local color = json.safe_str(raw.color)
+	return {
+		id = id,
+		name = name,
+		icon = {
+			icon = require("atlas.ui.shared.icons").get("issue"),
+			hl_group = ISSUE_TYPE_COLORS[color and color:upper() or ""] or "AtlasTextMuted",
+		},
+		description = json.safe_str(raw.description),
+		subtask = false,
 	}
 end
 
@@ -99,6 +135,7 @@ function M.to_issue(raw, fallback_slug)
 	local updated_at = json.safe_str(raw.updatedAt) or ""
 	local closed_at = json.safe_str(raw.closedAt)
 	local comment_count = tonumber(json.safe_table(raw.comments).totalCount) or 0
+	local issue_type = M.to_issue_type(raw.issueType)
 
 	---@type GitHubIssue
 	local issue = {
@@ -108,7 +145,8 @@ function M.to_issue(raw, fallback_slug)
 		title = ref.title or "",
 		status = status_name,
 		status_id = status_id,
-		type = nil,
+		type = issue_type,
+		icon = issue_type and issue_type.icon,
 		assignee = M.to_users(issue_assignees)[1],
 		reporter = author,
 		story_points = nil,
@@ -120,6 +158,7 @@ function M.to_issue(raw, fallback_slug)
 		closed_at = closed_at,
 		comment_count = comment_count,
 		is_pinned = raw.isPinned == true,
+		can_set_type = raw.viewerCanType == true,
 		node_id = json.safe_str(raw.id),
 	}
 	return issue
@@ -142,6 +181,7 @@ function M.to_issue_details(raw, fallback_slug)
 		assignees = M.to_users(github_mapper.connection_nodes(raw.assignees)),
 		labels = labels(github_mapper.connection_nodes(raw.labels)),
 		milestone = milestone(raw.milestone),
+		type = M.to_issue_type(raw.issueType),
 		is_subscribed = json.safe_str(raw.viewerSubscription) == "SUBSCRIBED",
 		sub_issues = {},
 	}

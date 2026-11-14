@@ -160,7 +160,7 @@ function M.fetch_review_comments(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:review-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -214,7 +214,7 @@ function M.fetch_review_comments(pr, opts, on_done)
 			local comment = mapper.to_draft_comment(draft)
 			table.insert(result, inherit_thread_context(comment, roots[comment.thread_id]))
 		end
-		service.set_memory_cache(cache_key, result)
+		service.set_cache(cache_key, result)
 		on_done(result, nil)
 	end)
 	return requests
@@ -228,7 +228,7 @@ function M.fetch_review_threads(pr, opts, on_done)
 	local path, iid = project_iid(pr)
 	local cache_key = string.format("gitlab_pulls:review-threads:%s!%d", path, iid)
 	if not (opts and opts.force_refresh) then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -310,18 +310,10 @@ function M.fetch_review_threads(pr, opts, on_done)
 			local comment = mapper.to_draft_comment(draft)
 			table.insert(comments, inherit_thread_context(comment, roots[comment.thread_id]))
 		end
-		service.set_memory_cache(cache_key, comments)
+		service.set_cache(cache_key, comments)
 		on_done(comments, nil)
 	end)
 	return requests
-end
-
----@param path string
----@param iid integer
-function M.invalidate_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
 end
 
 ---@param path string
@@ -340,7 +332,6 @@ local function mutate(path, iid, query, variables, mutation, ctx, on_done)
 			on_done(nil, err or tostring(errors[1]))
 			return
 		end
-		M.invalidate_caches(path, iid)
 		on_done(payload, nil)
 	end, vim.tbl_extend("force", { project_path = path, iid = iid }, ctx))
 end
@@ -359,7 +350,7 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -432,7 +423,7 @@ function M.fetch_conversation_comments(pr, opts, on_done)
 				comments = comments,
 				activities = mapper.to_activities(activity_notes),
 			}
-			service.set_memory_cache(cache_key, conversation)
+			service.set_cache(cache_key, conversation)
 			on_done(conversation, nil)
 		end)
 	end
@@ -512,7 +503,6 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				on_done(nil, err)
 				return
 			end
-			M.invalidate_caches(path, iid)
 			if pending then
 				on_done(mapper.to_draft_comment(result), nil)
 				return
@@ -600,7 +590,6 @@ function M.add_comment(pr, content, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			M.invalidate_caches(path, iid)
 			on_done(inherit_thread_context(mapper.to_draft_comment(result), parent), nil)
 		end, {
 			action = "Add MR draft comment",
@@ -651,7 +640,6 @@ function M.edit_comment(pr, comment, content, on_done)
 				on_done(nil, err)
 				return
 			end
-			M.invalidate_caches(path, iid)
 			on_done(vim.tbl_extend("force", comment, { body = tostring(result.note or content) }), nil)
 		end, {
 			action = "Edit MR draft comment",
@@ -692,9 +680,6 @@ function M.delete_comment(pr, comment, on_done)
 	end
 	if comment.pending then
 		return service.request("DELETE", draft_endpoint(path, iid, comment), nil, function(_, err)
-			if not err then
-				M.invalidate_caches(path, iid)
-			end
 			on_done(err == nil, err)
 		end, {
 			action = "Delete MR draft comment",
@@ -732,42 +717,22 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 	end)
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param comment PullsComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(pr, comment, key, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-	return gitlab_reactions.add(comment, key, function(ok, err)
-		if ok then
-			M.invalidate_caches(path, iid)
-		end
-		on_done(ok, err)
-	end)
+function M.add_reaction(_pr, comment, key, on_done)
+	return gitlab_reactions.add(comment, key, on_done)
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param comment PullsComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.remove_reaction(pr, comment, key, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-	return gitlab_reactions.remove(comment, key, function(ok, err)
-		if ok then
-			M.invalidate_caches(path, iid)
-		end
-		on_done(ok, err)
-	end)
+function M.remove_reaction(_pr, comment, key, on_done)
+	return gitlab_reactions.remove(comment, key, on_done)
 end
 
 return M

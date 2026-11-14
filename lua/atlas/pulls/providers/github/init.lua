@@ -12,6 +12,7 @@
 ---@field head_repository string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
+---@field auto_merge_method string|nil
 ---@field lines_added number
 ---@field lines_removed number
 ---@field stack GitHubPullStack|nil
@@ -20,6 +21,8 @@
 ---@field assignees AtlasUser[]
 ---@field labels PullsLabel[]
 ---@field stack GitHubPullStack|nil
+---@field can_enable_auto_merge boolean
+---@field can_disable_auto_merge boolean
 
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")

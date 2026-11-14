@@ -12,7 +12,7 @@ return {
 		end
 
 		local cache_key = "jira:completion:issues:" .. project
-		local cached = service.get_memory_cache(cache_key)
+		local cached = service.get_cache(cache_key)
 		if cached then
 			done(cached, nil)
 			return
@@ -48,7 +48,7 @@ return {
 					detail = item.fields.summary,
 				}
 			end
-			service.set_memory_cache(cache_key, items)
+			service.set_cache(cache_key, items)
 			done(items, nil)
 		end, { action = "Complete issues", project = project })
 	end,
