@@ -2,7 +2,7 @@ local M = {}
 
 local elements = require("atlas.formats.markdown.elements")
 local html = require("atlas.formats.markdown.html")
-local parse_table = require("atlas.formats.markdown.table")
+local markdown_table = require("atlas.formats.markdown.table")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
 local utils = require("atlas.ui.shared.utils")
 
@@ -14,11 +14,11 @@ local utils = require("atlas.ui.shared.utils")
 local block_handlers = {
 	elements.block.code,
 	html.block.comment,
-	html.block.anchor,
-	html.block.paragraph,
-	html.block.details,
+	html.block.heading,
 	html.block.summary,
-	parse_table,
+	html.block.table,
+	html.block.tags,
+	markdown_table.parse,
 	elements.block.callout,
 	elements.block.heading,
 	elements.block.rule,
@@ -114,19 +114,25 @@ function M.parse(source, opts)
 		return result
 	end
 
+	lines = html.split_blocks(lines)
+
 	local index = 1
 
 	while index <= #lines do
-		for _, parse in ipairs(block_handlers) do
-			local rows, next_index = parse(lines, index, opts)
-			if rows then
-				for _, row in ipairs(rows) do
-					append_row(result, row, opts)
-				end
+		if not lines[index]:find("%S") and result.lines[#result.lines] == "" then
+			index = index + 1
+		else
+			for _, parse in ipairs(block_handlers) do
+				local rows, next_index = parse(lines, index, opts)
+				if rows then
+					for _, row in ipairs(rows) do
+						append_row(result, row, opts)
+					end
 
-				---@cast next_index integer
-				index = next_index
-				break
+					---@cast next_index integer
+					index = next_index
+					break
+				end
 			end
 		end
 	end
