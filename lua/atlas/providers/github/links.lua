@@ -122,14 +122,12 @@ end
 ---@param done fun(links: AtlasLink[]|nil, err: string|nil)
 function M.fetch(kind, entity, opts, done)
 	opts = opts or {}
-	local slug, number = entity.repo_full_name, kind == "pr" and entity.id or entity.number
-	if kind == "issue" and entity.key then
-		local key_slug, key_number = entity.key:match("^(.-)#(%d+)$")
-		slug, number = key_slug or slug, key_number or number
-	end
+	local reference = kind == "pr" and (tostring(entity.repo_full_name) .. "#" .. tostring(entity.id))
+		or tostring(entity.key)
+	local slug, number_text = reference:match("^(.-)#(%d+)$")
 	local owner, repo = tostring(slug or ""):match("^([^/]+)/([^/]+)$")
-	number = tonumber(number)
-	if not owner or not repo or not number or number < 1 or number % 1 ~= 0 then
+	local number = tonumber(number_text)
+	if not owner or not repo or not number or number < 1 then
 		done(nil, "Missing or invalid GitHub issue/pull request reference")
 		return nil
 	end
