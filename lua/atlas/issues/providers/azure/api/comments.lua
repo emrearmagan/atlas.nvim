@@ -163,7 +163,6 @@ function M.add_comment(issue, text, _opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			service.clear_cache()
 			on_done(to_comment(result, issue), nil)
 		end,
 		{ action = "Add work item comment", issue_key = issue.key },
@@ -186,7 +185,6 @@ function M.edit_comment(issue, comment, text, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local updated = to_comment(result, issue)
 		updated.reactions = comment.reactions
 		on_done(updated, nil)
@@ -205,7 +203,6 @@ function M.delete_comment(issue, comment, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Delete work item comment", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.4")
 end
@@ -223,7 +220,6 @@ function M.add_reaction(issue, comment, key, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Add work item comment reaction", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.1")
 end
@@ -241,7 +237,6 @@ function M.remove_reaction(issue, comment, key, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, {
 		action = "Remove work item comment reaction",

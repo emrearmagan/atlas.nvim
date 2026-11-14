@@ -211,7 +211,6 @@ function M.update(issue, fields, on_done, opts)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Update work item", issue_key = issue.key }, nil, "application/json-patch+json")
 end
@@ -225,7 +224,6 @@ function M.delete(issue, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Delete work item", issue_key = issue.key })
 end
@@ -247,7 +245,6 @@ function M.create(project, item_type, fields, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		on_done(mapper.to_issue(result), nil)
 	end, { action = "Create work item", project = project }, nil, "application/json-patch+json")
 end

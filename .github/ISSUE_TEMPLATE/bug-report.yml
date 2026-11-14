@@ -1,8 +1,10 @@
 name: Bug report
 description: Report a reproducible problem with Atlas.nvim
 title: "[Bug]: "
+type: Bug
 labels:
   - bug
+  - needs-review
 body:
   - type: markdown
     attributes:

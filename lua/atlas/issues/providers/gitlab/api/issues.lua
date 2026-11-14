@@ -96,13 +96,6 @@ query(
 }
 ]]
 
----@param path string
----@param iid integer
-local function invalidate_issue(path, iid)
-	service.delete_memory_cache(string.format("gitlab:issue-details:%s#%d", path, iid))
-	service.clear_cache(LIST_CACHE_PREFIX)
-end
-
 ---@param view AtlasGitLabIssuesSearchConfig
 ---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string, iids?: integer[] }
 ---@param on_done fun(page: IssuesPage, err: string|nil)
@@ -152,7 +145,7 @@ function M.list_issues(view, opts, on_done)
 		end
 		local cache_key = LIST_CACHE_PREFIX .. query .. vim.inspect(variables)
 		if not opts.force_refresh then
-			local cached, ok = service.get_cache(cache_key)
+			local cached, ok = service.get_persistent_cache(cache_key)
 			if ok then
 				done(cached, nil)
 				return nil
@@ -178,7 +171,7 @@ function M.list_issues(view, opts, on_done)
 				items = normalizer.to_issues_list(items.nodes),
 				next_cursor = items.pageInfo.hasNextPage and items.pageInfo.endCursor or nil,
 			}
-			service.set_cache(cache_key, page)
+			service.set_persistent_cache(cache_key, page)
 			done(page, nil)
 		end, { action = "List issues", project = view.project, scope = scope })
 	end
@@ -276,7 +269,7 @@ function M.fetch_issue(ref, opts, on_done)
 
 	local cache_key = string.format("gitlab:issue-details:%s#%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -294,7 +287,7 @@ function M.fetch_issue(ref, opts, on_done)
 		local details =
 			normalizer.to_issue_details(json.safe_table(project).issue, json.safe_table(work_items)[1], viewer)
 		if details then
-			service.set_memory_cache(cache_key, details)
+			service.set_cache(cache_key, details)
 			on_done(details, nil)
 			return
 		end
@@ -386,7 +379,6 @@ function M.set_state(key, state_event, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -425,7 +417,6 @@ function M.update_labels(key, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Update labels",
@@ -497,7 +488,6 @@ function M.set_assignee_ids(key, ids, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Set assignees",
@@ -549,7 +539,6 @@ function M.create_issue(opts, on_done)
 			on_done(nil, "GitLab returned an invalid issue")
 			return
 		end
-		service.clear_cache(LIST_CACHE_PREFIX)
 		on_done({
 			key = issue.key,
 			iid = issue.iid,
@@ -587,7 +576,6 @@ function M.update_issue(key, fields, on_done)
 			return
 		end
 
-		invalidate_issue(path, iid)
 		on_done({ key = key, iid = iid, url = json.safe_str(json.safe_table(result).web_url) }, nil)
 	end, {
 		action = "Update issue",

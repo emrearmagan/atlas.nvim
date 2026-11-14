@@ -306,7 +306,6 @@ local function update_pullrequest(pr, fields, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Update pull request", repo = pr.repo_full_name, id = pr.id })
 end
@@ -363,7 +362,6 @@ function M.merge(pr, opts, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Merge pull request", repo = pr.repo_full_name, id = pr.id })
 end
@@ -383,7 +381,6 @@ function M.decline(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Decline pull request", repo = pr.repo_full_name, id = pr.id })
 end
@@ -494,7 +491,6 @@ function M.create_pr(opts, on_done)
 			return
 		end
 
-		service.clear_cache()
 		---@cast result table
 		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {

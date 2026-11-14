@@ -193,13 +193,6 @@ local function reviewers_cache_key(pr)
 	return string.format("github:reviewers:%s:%s", pr.repo_full_name, tostring(pr.id))
 end
 
----@param pr PullRequest
-local function clear_review_caches(pr)
-	cli.delete_mem(review_details_cache_key(pr))
-	cli.delete_mem(reviewers_cache_key(pr))
-	cli.delete_mem(string.format("github:merge-checks:%s:%s", pr.repo_full_name, tostring(pr.id)))
-end
-
 ---@param review PullsReview|nil
 ---@param node table|nil
 function M.update(review, node)
@@ -363,7 +356,6 @@ local function finish(pr, review, event, body, on_done)
 	local function done(ok, err)
 		if ok then
 			M.update(review, nil)
-			clear_review_caches(pr)
 		end
 		on_done(ok, err)
 	end
@@ -445,7 +437,6 @@ function M.discard(pr, review, on_done)
 			return
 		end
 		M.update(review, nil)
-		clear_review_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Discard review",
@@ -505,7 +496,6 @@ function M.edit_review(pr, review_id, body, on_done)
 			on_done(false, err)
 			return
 		end
-		clear_review_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Edit review",
@@ -604,7 +594,7 @@ local function fetch_review_details(pr, opts, on_done)
 
 	local cache_key = review_details_cache_key(pr)
 	if not (opts or {}).force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -634,7 +624,7 @@ local function fetch_review_details(pr, opts, on_done)
 			on_done(nil, "Missing pull request review history")
 			return
 		end
-		cli.set_mem(cache_key, details)
+		cli.set_cache(cache_key, details)
 		on_done(details, nil)
 	end, {
 		action = "Fetch PR review history",
@@ -658,7 +648,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 
 	local cache_key = reviewers_cache_key(pr)
 	if not (opts or {}).force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -707,7 +697,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 			reviewRequests = pull_request.reviewRequests,
 			reviewRequestEvents = pull_request.reviewRequestEvents,
 		}) or {}
-		cli.set_mem(cache_key, reviewers)
+		cli.set_cache(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end, {
 		action = "Fetch PR reviewers",
@@ -883,9 +873,6 @@ function M.set_files_reviewed(pr, paths, reviewed, on_done)
 	})
 
 	return cli.gh(args, function(_, err)
-		if err == nil then
-			cli.delete_mem(string.format("github:review-context:%s:%s", pr.repo_full_name, tostring(pr.id)))
-		end
 		on_done(err == nil, err)
 	end, {
 		action = reviewed and "Mark files reviewed" or "Mark files unreviewed",
@@ -1059,7 +1046,7 @@ function M.fetch_context(pr, opts, on_done)
 	local cache_key = string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id))
 	opts = opts or {}
 	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -1118,7 +1105,7 @@ function M.fetch_context(pr, opts, on_done)
 			end
 		end
 		local context = { reviewed_files = reviewed_files, outdated_files = outdated_files }
-		cli.set_mem(cache_key, context)
+		cli.set_cache(cache_key, context)
 		on_done(context, nil)
 	end, { action = "Fetch PR reviewed files", repo = repo_slug, number = pr.id })
 end

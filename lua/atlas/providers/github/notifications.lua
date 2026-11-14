@@ -84,7 +84,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch(opts, on_done)
 	if not (opts and opts.force_refresh) then
-		local cached, ok = client.get_mem("github:notifications")
+		local cached, ok = client.get_cache("github:notifications")
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -107,7 +107,7 @@ function M.fetch(opts, on_done)
 			table.insert(notifications, normalize(raw))
 		end
 
-		client.set_mem("github:notifications", notifications, 60)
+		client.set_cache("github:notifications", notifications, 60)
 		on_done(notifications, nil)
 	end, {
 		action = "Fetch notifications",
@@ -123,7 +123,6 @@ function M.mark_read(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
-		client.delete_mem("github:notifications")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification read",
@@ -140,7 +139,6 @@ function M.mark_done(thread_id, on_done)
 			on_done(false, err)
 			return
 		end
-		client.delete_mem("github:notifications")
 		on_done(true, nil)
 	end, {
 		action = "Mark notification done",

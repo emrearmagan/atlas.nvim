@@ -39,7 +39,6 @@ describe("Azure work items", function()
 				return nil, false
 			end,
 			set_cache = function() end,
-			clear_cache = function() end,
 			request = function(method, endpoint, payload, done)
 				calls[#calls + 1] = { method = method, endpoint = endpoint, payload = payload }
 				done({}, nil)

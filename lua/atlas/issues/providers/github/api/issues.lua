@@ -1,7 +1,6 @@
 local M = {}
 
 local cli = require("atlas.providers.github.client")
-local cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 local json = require("atlas.core.json")
 
@@ -87,7 +86,7 @@ function M.search_issues(search, on_done, opts)
 	end
 	local cache_key = string.format("github_issues:search:v8:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
 	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_persistent_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -120,7 +119,7 @@ function M.search_issues(search, on_done, opts)
 			next_cursor = search_result.pageInfo.hasNextPage and search_result.pageInfo.endCursor or nil,
 			total_pages = math.max(1, math.ceil(math.min(search_result.issueCount, 1000) / opts.pagelen)),
 		}
-		cli.set_cache(cache_key, page)
+		cli.set_persistent_cache(cache_key, page)
 		on_done(page, nil)
 	end, {
 		action = "GraphQL issues search",
@@ -145,7 +144,7 @@ function M.fetch_issue(ref, opts, on_done)
 	local cache_key =
 		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -180,7 +179,7 @@ function M.fetch_issue(ref, opts, on_done)
 		local repository = json.nilify(result.data.repository)
 		local details = normalizer.to_issue_details(repository and repository.issue, slug)
 		if details then
-			cli.set_mem(cache_key, details)
+			cli.set_cache(cache_key, details)
 		end
 		on_done(details, nil)
 	end, {
@@ -344,7 +343,6 @@ function M.set_subscription(issue, subscribed, on_done)
 				on_done(nil, err)
 				return
 			end
-			cache.invalidate(issue.key)
 			on_done(subscribed, nil)
 		end,
 		{
@@ -371,7 +369,6 @@ function M.set_state(key, state, on_done)
 			on_done(false, err)
 			return
 		end
-		cache.invalidate(key)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -417,7 +414,6 @@ local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done, ctx)
 			on_done(false, err)
 			return
 		end
-		cache.invalidate(key)
 		on_done(true, nil)
 	end, ctx)
 end
@@ -763,7 +759,6 @@ function M.update_issue(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		cache.invalidate(key)
 		on_done({ number = number, url = result.html_url }, nil)
 	end, { action = "Update issue", key = key })
 end

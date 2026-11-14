@@ -1,6 +1,5 @@
 local M = {}
 
-local cache = require("atlas.issues.providers.github.api.cache")
 local cli = require("atlas.providers.github.client")
 local github_reactions = require("atlas.providers.github.reactions")
 local json = require("atlas.core.json")
@@ -60,7 +59,6 @@ function M.add(issue, body, _opts, on_done)
 			on_done(nil, "GitHub did not return the created comment")
 			return
 		end
-		cache.invalidate(issue.key)
 		on_done(comment, nil)
 	end, {
 		action = "Add issue comment",
@@ -101,7 +99,6 @@ function M.edit(issue, comment, body, on_done)
 			on_done(nil, "GitHub did not return the updated comment")
 			return
 		end
-		cache.invalidate(issue.key)
 		updated.reactions = comment.reactions
 		on_done(updated, nil)
 	end, {
@@ -124,7 +121,6 @@ function M.delete(issue, comment, on_done)
 				on_done(false, err)
 				return
 			end
-			cache.invalidate(issue.key)
 			on_done(true, nil)
 		end,
 		{
@@ -135,32 +131,22 @@ function M.delete(issue, comment, on_done)
 	)
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param comment IssueComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(issue, comment, key, on_done)
-	return github_reactions.add(comment, key, function(ok, err)
-		if ok then
-			cache.invalidate(issue.key)
-		end
-		on_done(ok, err)
-	end)
+function M.add_reaction(_issue, comment, key, on_done)
+	return github_reactions.add(comment, key, on_done)
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param comment IssueComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.remove_reaction(issue, comment, key, on_done)
-	return github_reactions.remove(comment, key, function(ok, err)
-		if ok then
-			cache.invalidate(issue.key)
-		end
-		on_done(ok, err)
-	end)
+function M.remove_reaction(_issue, comment, key, on_done)
+	return github_reactions.remove(comment, key, on_done)
 end
 
 return M

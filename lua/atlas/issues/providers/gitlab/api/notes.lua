@@ -84,7 +84,7 @@ local function fetch_discussions(issue, opts, on_done)
 
 	local cache_key = discussions_cache_key(issue)
 	if opts.force_refresh ~= true then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -111,7 +111,7 @@ local function fetch_discussions(issue, opts, on_done)
 			discussions = json.safe_table(json.safe_table(discussions).nodes),
 			viewer = viewer,
 		}
-		service.set_memory_cache(cache_key, result)
+		service.set_cache(cache_key, result)
 		on_done(result, nil)
 	end, {
 		action = "Fetch discussions (GQL)",
@@ -176,7 +176,6 @@ local function mutate(issue, query, variables, mutation, ctx, on_done)
 			on_done(nil, err or tostring(errors[1]))
 			return
 		end
-		service.delete_memory_cache(discussions_cache_key(issue))
 		on_done(payload.note, nil)
 	end, vim.tbl_extend("force", { key = issue.key }, ctx))
 end
@@ -241,32 +240,22 @@ function M.delete_comment(issue, comment, on_done)
 	end)
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param comment IssueComment
 ---@param name string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(issue, comment, name, on_done)
-	return gitlab_reactions.add(comment, name, function(ok, err)
-		if ok then
-			service.delete_memory_cache(discussions_cache_key(issue))
-		end
-		on_done(ok, err)
-	end)
+function M.add_reaction(_issue, comment, name, on_done)
+	return gitlab_reactions.add(comment, name, on_done)
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param comment IssueComment
 ---@param name string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.remove_reaction(issue, comment, name, on_done)
-	return gitlab_reactions.remove(comment, name, function(ok, err)
-		if ok then
-			service.delete_memory_cache(discussions_cache_key(issue))
-		end
-		on_done(ok, err)
-	end)
+function M.remove_reaction(_issue, comment, name, on_done)
+	return gitlab_reactions.remove(comment, name, on_done)
 end
 
 return M

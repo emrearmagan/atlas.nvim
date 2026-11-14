@@ -30,7 +30,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	local cache_key = "jira:panel:comments:" .. issue_key
 
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done({ comments = cached, activities = {} }, nil)
 			return nil
@@ -46,7 +46,7 @@ function M.fetch_conversation(issue, opts, on_done)
 		end
 
 		local comments = map_comments(result, issue)
-		service.set_memory_cache(cache_key, comments)
+		service.set_cache(cache_key, comments)
 		on_done({ comments = comments, activities = {} }, nil)
 	end, {
 		action = "Fetch comments",
@@ -82,7 +82,6 @@ local function write_comment(issue, comment, comment_id, parent_id, callback)
 			return
 		end
 
-		service.clear_memory_cache()
 		local comments = map_comments({ comments = { result } }, issue)
 		callback(comments[1], nil)
 	end, {
@@ -125,7 +124,6 @@ function M.delete_comment(issue, comment, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_memory_cache()
 		on_done(true, nil)
 	end, {
 		action = "Delete comment",

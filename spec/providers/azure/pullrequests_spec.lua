@@ -30,7 +30,6 @@ describe("Azure pull request API logic", function()
 			build_query = require(modules[1]).build_query,
 			get_cache = function() end,
 			set_cache = function() end,
-			clear_cache = function() end,
 		}
 		package.loaded[modules[1]] = client
 	end)

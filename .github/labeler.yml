@@ -1,0 +1,43 @@
+github:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/github.lua", "lua/**/github/**"]
+
+gitlab:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/gitlab.lua", "lua/**/gitlab/**"]
+
+bitbucket:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/bitbucket.lua", "lua/**/bitbucket/**"]
+
+azure:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/azure.lua", "lua/**/azure/**"]
+
+jira:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/jira.lua", "lua/**/jira/**"]
+
+gitea:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/gitea.lua", "lua/**/gitea/**"]
+
+forgejo:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/forgejo.lua", "lua/**/forgejo/**"]
+
+pipelines:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/pipelines/**"]
+
+diff:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/diff/**"]
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file: ["lua/**/ui/**"]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/workflows/**", ".github/actions/**", ".github/labeler.yml", "Makefile"]

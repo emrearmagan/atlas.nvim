@@ -10,7 +10,7 @@ local mapper = require("atlas.providers.github.mapper")
 ---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
 	local cache_key = "github:current_user"
-	local cached, ok = client.get_cache(cache_key)
+	local cached, ok = client.get_persistent_cache(cache_key)
 	if ok then
 		on_done(mapper.to_user(cached), nil)
 		return nil
@@ -21,7 +21,7 @@ function M.fetch_user(on_done)
 			on_done(nil, err or "Failed to fetch user")
 			return
 		end
-		client.set_cache(cache_key, result)
+		client.set_persistent_cache(cache_key, result)
 		on_done(mapper.to_user(result), nil)
 	end, { action = "Fetch current user" })
 end

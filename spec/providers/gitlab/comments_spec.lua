@@ -33,7 +33,7 @@ describe("GitLab merge request comments", function()
 			url_encode = function(value)
 				return (value:gsub("/", "%%2F"))
 			end,
-			set_memory_cache = function(_, value)
+			set_cache = function(_, value)
 				cached = value
 			end,
 		}

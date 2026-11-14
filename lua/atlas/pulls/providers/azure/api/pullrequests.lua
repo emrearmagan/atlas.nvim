@@ -277,7 +277,6 @@ function M.create_pr(opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			service.clear_cache()
 			local pr = mapper.to_pull_request(result)
 			on_done({ id = pr.id, url = pr.link.html, message = "PR created" }, nil)
 		end)
@@ -398,7 +397,6 @@ local function update_reviewers(pr, selected, original, on_done)
 	end
 	local scope = request_scope.new()
 	scope.all(starts, function(_, errors)
-		service.clear_cache()
 		local _, err = next(errors)
 		on_done(err == nil, err)
 	end)
@@ -447,7 +445,6 @@ function M.update_labels(pr, selected, original, on_done)
 	end
 	local scope = request_scope.new()
 	scope.all(starts, function(_, errors)
-		service.clear_cache()
 		local _, err = next(errors)
 		on_done(err == nil, err)
 	end)
@@ -464,7 +461,6 @@ local function update_pullrequest(pr, fields, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Update pull request", repo = pr.repo_full_name, id = pr.id })
 end

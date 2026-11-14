@@ -59,6 +59,11 @@ local function github_rows(pr)
 		add(rows, "Build", value, hl_group)
 	end
 
+	if pr.auto_merge_method then
+		local icon, hl_group = icons.get("auto_merge", "actions")
+		add(rows, "Auto-merge", icon .. " " .. pr.auto_merge_method:lower(), hl_group)
+	end
+
 	if pr.lines_added ~= nil or pr.lines_removed ~= nil then
 		add(rows, "Changes", string.format("+%d / -%d", pr.lines_added or 0, pr.lines_removed or 0))
 	end

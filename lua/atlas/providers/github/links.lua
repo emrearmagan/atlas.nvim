@@ -134,7 +134,7 @@ local function fetch(kind, entity, opts, done)
 	end
 	local cache_key = string.format("github:links:%s:%s:%d", kind, slug, number)
 	if not opts.force_refresh then
-		local cached, ok = client.get_mem(cache_key)
+		local cached, ok = client.get_cache(cache_key)
 		if ok then
 			done(cached, nil)
 			return nil
@@ -172,7 +172,7 @@ local function fetch(kind, entity, opts, done)
 			)
 		end
 		if #messages == 0 then
-			client.set_mem(cache_key, links)
+			client.set_cache(cache_key, links)
 		end
 		done(links, #messages > 0 and table.concat(messages, "; ") or nil)
 	end, { action = "Fetch GitHub links", repository = slug, number = number })

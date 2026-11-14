@@ -19,8 +19,8 @@ describe("GitLab linked items", function()
 			base_url = function()
 				return "https://gitlab.example.com/gitlab"
 			end,
-			get_memory_cache = function() end,
-			set_memory_cache = function() end,
+			get_cache = function() end,
+			set_cache = function() end,
 			graphql = function(query, variables, done)
 				assert.same("group/repo", variables.path)
 				if query:find("namespace(fullPath:", 1, true) then

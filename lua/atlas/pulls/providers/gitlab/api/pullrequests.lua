@@ -168,7 +168,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		local query, variables = list_query(root, connection, path, filters)
 		local cache_key = "gitlab_pulls:merge_requests:gql:" .. query .. vim.inspect(variables)
 		if not opts.force_refresh then
-			local cached, ok = service.get_cache(cache_key)
+			local cached, ok = service.get_persistent_cache(cache_key)
 			if ok then
 				done(cached, nil)
 				return nil
@@ -190,7 +190,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 				items = mapper.to_pull_requests(items.nodes),
 				next_cursor = items.pageInfo.hasNextPage and { [state] = items.pageInfo.endCursor } or nil,
 			}
-			service.set_cache(cache_key, page)
+			service.set_persistent_cache(cache_key, page)
 			done(page, nil)
 		end, { action = "List MRs", project = view.project, group = view.group, scope = scope_name, state = state })
 	end
@@ -311,7 +311,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 			table.sort(iids)
 			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(iids, ","))
 			if not opts.force_refresh then
-				local cached, ok = service.get_memory_cache(cache_key)
+				local cached, ok = service.get_cache(cache_key)
 				if ok then
 					done(cached, nil)
 					return nil
@@ -329,7 +329,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 					return
 				end
 				local pulls = mapper.to_pull_requests(nodes)
-				service.set_memory_cache(cache_key, pulls)
+				service.set_cache(cache_key, pulls)
 				done(pulls, nil)
 			end, {
 				action = "Fetch MR summaries",
@@ -367,7 +367,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:details:%s!%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -386,7 +386,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 			on_done(nil, "Merge request not found")
 			return
 		end
-		service.set_memory_cache(cache_key, details)
+		service.set_cache(cache_key, details)
 		on_done(details, nil)
 	end, {
 		action = "Fetch MR details",
@@ -399,18 +399,6 @@ end
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
 	return pr.repo_full_name, tonumber(pr.id)
-end
-
----@param pr PullRequest
-local function invalidate_detail_caches(pr)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		return
-	end
-	service.delete_memory_cache(string.format("gitlab_pulls:details:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:review_metadata:%s!%d", path, iid))
-	service.clear_cache("gitlab_pulls:merge_requests:gql:")
 end
 
 ---@param pr PullRequest
@@ -429,7 +417,6 @@ local function update(pr, payload, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_detail_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Update MR",
@@ -636,7 +623,6 @@ function M.merge(pr, opts, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_detail_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Merge MR",
@@ -706,7 +692,6 @@ function M.create_pr(opts, on_done)
 				return
 			end
 			local iid = tonumber(mr.id)
-			service.clear_cache("gitlab_pulls:merge_requests:gql:")
 			on_done({
 				id = iid,
 				url = mr.link.html,

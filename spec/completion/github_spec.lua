@@ -31,10 +31,10 @@ describe("GitHub completion", function()
 		}
 		local cache = {}
 		package.loaded["atlas.providers.github.client"] = {
-			get_mem = function(key)
+			get_cache = function(key)
 				return cache[key], cache[key] ~= nil
 			end,
-			set_mem = function(key, value)
+			set_cache = function(key, value)
 				cache[key] = value
 			end,
 			gh = function(args, done)
