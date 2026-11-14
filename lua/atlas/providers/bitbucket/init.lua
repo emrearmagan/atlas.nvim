@@ -22,5 +22,9 @@ return {
 		-- notifications = nil,
 		users = users,
 		completion = require("atlas.providers.bitbucket.completion"),
+		fetch_links = function(_, pr, _, on_done)
+			local jira = require("atlas.providers.jira.links")
+			on_done(jira.resolve(pr.title, pr.source and pr.source.branch), nil)
+		end,
 	},
 }

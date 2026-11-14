@@ -21,7 +21,7 @@ describe("Bitbucket pull request search", function()
 		local _, states = query.query(view)
 		view._states = states
 
-		local parsed = assert(query.parse(query.for_repo("acme", "core", view.search)))
+		local parsed = assert(query.parse(query.for_repo("acme/core", view.search)))
 		assert.same({ "merged" }, states)
 		assert.equal('state = "MERGED"', query.filter(parsed, view._states))
 

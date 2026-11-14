@@ -21,7 +21,6 @@ local config = require("atlas.config")
 local github_mapper = require("atlas.providers.github.mapper")
 local git = require("atlas.core.git")
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local links_api = require("atlas.providers.github.links")
 local request_scope = require("atlas.core.requests")
 local timeline_api = require("atlas.issues.providers.github.api.timeline")
 local ui_detail = require("atlas.issues.providers.github.ui.detail")
@@ -119,8 +118,8 @@ end
 ---@param target AtlasTarget
 ---@return IssueRef|nil
 local function issue_ref(target)
-	if target.owner and target.repo and target.number then
-		return { key = string.format("%s/%s#%d", target.owner, target.repo, target.number) }
+	if target.repo_full_name and target.id then
+		return { key = string.format("%s#%s", target.repo_full_name, target.id) }
 	end
 end
 
@@ -133,7 +132,6 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
-			fetch_links = links_api.fetch_issue,
 		},
 		comments = {
 			-- fetch_activity = nil,

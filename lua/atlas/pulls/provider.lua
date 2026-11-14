@@ -24,8 +24,10 @@
 ---@field repository_view fun(repository: AtlasTarget, branch: string|nil): AtlasPullsViewConfig
 ---@field resolve_search fun(view: AtlasPullsViewConfig): string, PullsStateFilter[]
 ---@field capabilities PullsProviderCapabilities
+---@field shared AtlasProviderCapabilities
 
----@class PullsProviderCapabilities : AtlasProviderCapabilities
+---@class PullsProviderCapabilities
+---@field actions AtlasAction[]|nil
 ---@field core PullsCoreCapability
 ---@field write PullsWriteCapability|nil
 ---@field comments PullsCommentsCapability|nil
@@ -44,7 +46,6 @@
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(page: PullsPage, err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: PullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_links (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field merge fun(pr: PullRequest, opts: PullsMergeOpts, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_reviewers fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil

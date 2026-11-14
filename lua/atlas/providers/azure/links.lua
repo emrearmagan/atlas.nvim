@@ -17,16 +17,16 @@ local relationships = {
 
 ---@param item Issue
 ---@param relationship AtlasRelationship
----@return AtlasRelatedItem
+---@return AtlasLink
 local function issue_link(item, relationship)
-	return { kind = "issue", url = item.url, key = item.key, title = item.title, relationship = relationship }
+	return { url = item.url, key = item.key, title = item.title, relationship = relationship }
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
+---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
 ---@return AtlasRequestScope|nil
-function M.fetch_issue(issue, opts, on_done)
+local function fetch_issue(issue, opts, on_done)
 	opts = opts or {}
 	local cache_key = "links:issue:" .. issue.key
 	if not opts.force_refresh then
@@ -67,7 +67,6 @@ function M.fetch_issue(issue, opts, on_done)
 				end
 			elseif relation.rel == "Hyperlink" then
 				table.insert(hyperlinks, {
-					kind = "external",
 					url = relation.url,
 					key = relation.url,
 					title = json.safe_str(attributes.comment),
@@ -105,7 +104,6 @@ function M.fetch_issue(issue, opts, on_done)
 			for index = 1, #pulls do
 				local pr = pulls_mapper.to_pull_request(values[index])
 				table.insert(links, {
-					kind = "pr",
 					url = pr.link.html,
 					key = tostring(pr.id),
 					title = pr.title,
@@ -123,9 +121,9 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
+---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
 ---@return AtlasRequestScope|nil
-function M.fetch_pullrequest(pr, opts, on_done)
+local function fetch_pullrequest(pr, opts, on_done)
 	---@cast pr AzurePullRequest
 	opts = opts or {}
 	local cache_key = "links:pr:" .. pr.repository_id .. ":" .. pr.id
@@ -179,6 +177,19 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		end)
 	end)
 	return scope
+end
+
+---@param kind "pr"|"issue"
+---@param entity PullRequest|Issue
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
+---@return AtlasRequestScope|nil
+function M.fetch(kind, entity, opts, on_done)
+	if kind == "pr" then
+		return fetch_pullrequest(entity --[[@as PullRequest]], opts, on_done)
+	end
+
+	return fetch_issue(entity --[[@as Issue]], opts, on_done)
 end
 
 return M

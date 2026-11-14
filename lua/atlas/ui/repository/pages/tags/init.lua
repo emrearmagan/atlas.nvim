@@ -292,7 +292,7 @@ function M.open(opts)
 		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		provider = opts.provider,
-		repository = assert(opts.provider.capabilities.repository),
+		repository = assert(opts.provider.shared.repository),
 		tags = "loading",
 		page = 1,
 		cursors = {},

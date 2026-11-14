@@ -123,7 +123,7 @@ local function change_branch(state)
 		return
 	end
 
-	local repository = state.provider.capabilities.repository
+	local repository = state.provider.shared.repository
 	if not repository then
 		notify.info("Branches are not available for this repository")
 		return

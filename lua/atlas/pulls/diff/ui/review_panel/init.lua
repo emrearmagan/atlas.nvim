@@ -2,6 +2,7 @@ local keymap_resolver = require("atlas.core.keymaps")
 local keymaps = require("atlas.pulls.diff.ui.review_panel.keymaps")
 local providers = require("atlas.providers")
 local renderer = require("atlas.pulls.diff.ui.review_panel.renderer")
+local utils = require("atlas.ui.shared.utils")
 
 ---@class AtlasDiffReviewPanel
 ---@field session AtlasDiffSession
@@ -65,14 +66,7 @@ function ReviewPanel:render()
 	vim.bo[self.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
 	vim.bo[self.buf].modifiable = false
-	vim.api.nvim_buf_clear_namespace(self.buf, namespace, 0, -1)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(self.buf, namespace, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-			url = span.url,
-		})
-	end
+	utils.apply_spans(self.buf, namespace, spans)
 end
 
 ---@param session AtlasDiffSession

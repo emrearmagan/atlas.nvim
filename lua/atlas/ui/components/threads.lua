@@ -520,13 +520,11 @@ function M.render_comments(items, width, opts)
 		span(spans, #lines - 1, #padding, #lines[#lines], "AtlasBorder")
 
 		for _, highlight in ipairs(source_spans) do
-			spans[#spans + 1] = {
+			spans[#spans + 1] = vim.tbl_extend("force", highlight, {
 				line = offset + highlight.line,
 				start_col = content_offset + highlight.start_col,
 				end_col = content_offset + highlight.end_col,
-				hl_group = highlight.hl_group,
-				url = highlight.url,
-			}
+			})
 		end
 	end
 

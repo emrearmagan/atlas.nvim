@@ -331,7 +331,8 @@ local function search_issues(project, ctx, done)
 		title = project and "Search " .. project.key .. " Issues" or "Search Issues",
 		debounce_ms = 200,
 		format_item = function(item)
-			return tostring(item.label or "")
+			local title = item.value.title .. " - "
+			return title .. item.value.key, { { title }, { item.value.key, "AtlasTextMuted" } }
 		end,
 		preview_item = function(item, preview_done, width)
 			local issue = item.value
@@ -352,11 +353,7 @@ local function search_issues(project, ctx, done)
 
 				local picker_items = {}
 				for _, issue in ipairs(items) do
-					table.insert(picker_items, {
-						id = tostring(issue.id or issue.key),
-						label = string.format("%s - %s", issue.key, issue.title),
-						value = issue,
-					})
+					table.insert(picker_items, { id = tostring(issue.id or issue.key), value = issue })
 				end
 
 				fetch_done(picker_items, nil)
@@ -364,7 +361,7 @@ local function search_issues(project, ctx, done)
 		end,
 		on_select = function(item)
 			local issue = item.value
-			require("atlas.issues.ui.detail").open_ref({ key = issue.key }, { provider = ctx.provider })
+			require("atlas.issues.ui.detail").open({ key = issue.key }, { provider = ctx.provider })
 			done(nil, nil)
 		end,
 		on_cancel = function()

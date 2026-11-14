@@ -3,6 +3,7 @@ local resolver = require("atlas.providers.github.resolve")
 local repositories = require("atlas.providers.github.repositories")
 local notifications = require("atlas.providers.github.notifications")
 local users = require("atlas.providers.github.users")
+local links = require("atlas.providers.github.links")
 
 ---@type AtlasProvider
 return {
@@ -27,5 +28,6 @@ return {
 		repository = repositories,
 		notifications = notifications,
 		users = users,
+		fetch_links = links.fetch,
 	},
 }

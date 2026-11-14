@@ -42,7 +42,7 @@ local function repository_view(repository, branch)
 	return {
 		name = "Search",
 		layout = "compact",
-		search = search_query.for_repo(repository.workspace, repository.repo, filter),
+		search = search_query.for_repo(assert(repository.repo_full_name), filter),
 	}
 end
 
@@ -56,8 +56,8 @@ local function resolve_view(view, on_done)
 	end
 	return git.local_repository(vim.fn.getcwd(), function(target)
 		local resolved = vim.tbl_extend("force", {}, view)
-		if target and target.provider == "bitbucket" and target.workspace and target.repo then
-			resolved.search = search_query.for_repo(target.workspace, target.repo, view.search)
+		if target and target.provider == "bitbucket" and target.repo_full_name then
+			resolved.search = search_query.for_repo(target.repo_full_name, view.search)
 		end
 		on_done(resolved)
 	end)
@@ -115,7 +115,6 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			-- fetch_links = nil,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
 			fetch_merge_checks = checks_api.fetch,
 			merge = pullrequests_api.merge,

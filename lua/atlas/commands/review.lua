@@ -11,10 +11,6 @@ local M = {}
 
 local requests = request_scope.new()
 
-local function no_repository()
-	notify.error("No supported Git repository found", { vim_notify = true })
-end
-
 ---@param pr PullRequest|nil
 local function open_diff(pr)
 	if not pr then
@@ -30,12 +26,12 @@ end
 ---@param repository AtlasTarget|nil
 ---@param branch string|nil
 local function open_repository(repository, branch)
-	if not repository then
-		no_repository()
-		return
-	end
-	if not providers.domain(repository.provider, "pulls") or not config.provider_options(repository.provider) then
-		no_repository()
+	if
+		not repository
+		or not providers.domain(repository.provider, "pulls")
+		or not config.provider_options(repository.provider)
+	then
+		notify.error("No supported Git repository found", { vim_notify = true })
 		return
 	end
 
@@ -76,7 +72,9 @@ local function open_repository(repository, branch)
 				return tostring(pr.id)
 			end,
 			format_item = function(pr)
-				return string.format("#%s %s", tostring(pr.id), pr.title)
+				local title = pr.title .. " - "
+				local id = "#" .. tostring(pr.id)
+				return title .. id, { { title }, { id, "AtlasTextMuted" } }
 			end,
 			preview_item = function(pr, done, width)
 				return provider.capabilities.core.fetch_pullrequest(
@@ -130,6 +128,12 @@ function M.open(target)
 			notify.error(err or "Expected a pull request URL or number", { vim_notify = true })
 			return
 		end
+
+		if not config.provider_options(pr.provider) then
+			notify.error(providers[pr.provider].name .. " is not configured", { vim_notify = true })
+			return
+		end
+
 		diff.open_pr(pr, function(open_err)
 			if open_err then
 				notify.error(open_err, { vim_notify = true })

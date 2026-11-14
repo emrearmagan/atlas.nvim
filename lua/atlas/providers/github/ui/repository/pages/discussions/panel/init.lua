@@ -57,18 +57,7 @@ local function render(panel)
 	vim.bo[panel.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(panel.buf, 0, -1, false, lines)
 	vim.bo[panel.buf].modifiable = false
-	vim.api.nvim_buf_clear_namespace(panel.buf, namespace, 0, -1)
-	for _, span in ipairs(spans) do
-		if span.line_hl_group then
-			vim.api.nvim_buf_set_extmark(panel.buf, namespace, span.line, 0, { line_hl_group = span.line_hl_group })
-		else
-			vim.api.nvim_buf_set_extmark(panel.buf, namespace, span.line, span.start_col, {
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
-	end
+	utils.apply_spans(panel.buf, namespace, spans)
 end
 
 ---@param panel GitHubDiscussionPanel

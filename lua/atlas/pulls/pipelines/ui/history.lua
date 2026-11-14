@@ -10,18 +10,22 @@ local M = {}
 ---@return string, AtlasPickerChunk[]
 local function format_run(pipeline)
 	local icon, hl = icons.get(pipeline.state, "status")
-	local parts = { pipeline_utils.display_name(pipeline) }
+	local chunks = { { icon, hl }, { "  " .. pipeline_utils.display_name(pipeline), "Normal" } }
+
 	if pipeline.commit then
-		parts[#parts + 1] = pipeline.commit:sub(1, 7)
+		chunks[#chunks + 1] = { "  " .. pipeline.commit:sub(1, 7), "AtlasTextMuted" }
 	end
 	if pipeline.started_at then
-		parts[#parts + 1] = utils.relative_time_text(pipeline.started_at)
+		chunks[#chunks + 1] = { "  " .. utils.relative_time_text(pipeline.started_at), "AtlasTextMuted" }
 	end
 	if pipeline.title then
-		parts[#parts + 1] = pipeline.title:gsub("[\r\n]+", " ")
+		chunks[#chunks + 1] = { "  " .. pipeline.title:gsub("[\r\n]+", " "), "Normal" }
 	end
-	local text = "  " .. table.concat(parts, "  ")
-	return icon .. text, { { icon, hl }, { text, "Normal" } }
+
+	local text = table.concat(vim.tbl_map(function(chunk)
+		return chunk[1]
+	end, chunks))
+	return text, chunks
 end
 
 ---@param runs PullsPipeline[]

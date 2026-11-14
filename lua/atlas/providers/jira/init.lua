@@ -1,6 +1,7 @@
 local url = require("atlas.providers.url")
 local resolver = require("atlas.providers.jira.resolve")
 local users = require("atlas.providers.jira.users")
+local links = require("atlas.providers.jira.links")
 
 ---@type AtlasProvider
 return {
@@ -24,5 +25,6 @@ return {
 		-- notifications = nil,
 		users = users,
 		completion = require("atlas.providers.jira.completion"),
+		fetch_links = links.fetch,
 	},
 }

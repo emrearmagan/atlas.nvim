@@ -81,7 +81,7 @@ local function select_base(state, editor)
 
 	local function fetch_page(cursor)
 		state.requests.run(function(done)
-			return state.provider.capabilities.repository.fetch_branches(state.pr.repo, { cursor = cursor }, done)
+			return state.provider.shared.repository.fetch_branches(state.pr.repo, { cursor = cursor }, done)
 		end, function(items, err, next_cursor)
 			if err then
 				state.loading = nil
@@ -433,7 +433,7 @@ local function open_editor(state)
 	local write = state.write
 	local form_keymaps = {}
 	if state.pr.state == "open" or state.pr.state == "draft" then
-		if state.provider.capabilities.repository and not is_stacked(state) then
+		if state.provider.shared.repository and not is_stacked(state) then
 			form_keymaps[#form_keymaps + 1] = {
 				keymap = "editor.base",
 				action = function(editor)

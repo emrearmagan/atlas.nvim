@@ -246,7 +246,8 @@ local function search_merge_requests(project, ctx, done)
 		title = "Search " .. project .. " Merge Requests",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title, ref = item.value.title .. " - ", pr_label(item.value)
+			return title .. ref, { { title }, { ref, "AtlasTextMuted" } }
 		end,
 		preview_item = function(item, preview_done, width)
 			local pr = item.value
@@ -278,11 +279,7 @@ local function search_merge_requests(project, ctx, done)
 				end
 				local items = {}
 				for _, pr in ipairs(page.items) do
-					table.insert(items, {
-						id = pr.repo_full_name .. "!" .. tostring(pr.id),
-						label = string.format("%s - %s", pr_label(pr), pr.title),
-						value = pr,
-					})
+					table.insert(items, { id = pr.repo_full_name .. "!" .. tostring(pr.id), value = pr })
 				end
 				fetch_done(items, nil)
 			end)

@@ -20,16 +20,10 @@ local M = {}
 ---@field entity AtlasEntity
 ---@field url string
 ---@field host string
----@field owner string|nil
----@field repo string|nil
----@field project_path string|nil
----@field workspace string|nil
----@field number integer|nil
----@field id string|number|nil
----@field repo_full_name string|nil
----@field repository_url string|nil
+---@field repo_full_name string|nil owner/repo, group/subgroup/repo (GitLab), workspace/repo (Bitbucket) or project/repo (Azure DevOps)
+---@field id string|number|nil Number of the pull request, issue or pipeline, or the Jira issue key
+---@field repository_url string|nil Clone URL
 ---@field page string|nil Repository browser page the URL points to
----@field issue_key string|nil
 
 ---@class AtlasProviderDomain
 ---@field module string
@@ -84,9 +78,7 @@ function M.load(id, domain)
 		return nil
 	end
 	local implementation = require(provider_domain.module)
-	for name, capability in pairs(provider.capabilities or {}) do
-		implementation.capabilities[name] = capability
-	end
+	implementation.shared = provider.capabilities or {}
 	implementation.id = id
 	implementation.name = provider.name
 	if provider_domain.icon ~= nil then
@@ -94,6 +86,13 @@ function M.load(id, domain)
 		implementation.hl_group = provider_domain.icon.hl_group
 	end
 	return implementation
+end
+
+---True for "#12", "!12" or "12": a number that can only be resolved against a repository.
+---@param value string
+---@return boolean
+function M.is_reference(value)
+	return vim.trim(value):match("^[#!]?%d+$") ~= nil
 end
 
 ---@param value string
@@ -123,7 +122,6 @@ function M.resolve(value, opts)
 			domain = domain,
 			entity = domain == "pulls" and "pr" or "issue",
 			id = id,
-			number = id,
 		})
 	end
 

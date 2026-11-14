@@ -35,7 +35,7 @@ end
 ---@param provider PullsProvider|IssuesProvider
 ---@return AtlasNotificationsCapability
 local function capability(provider)
-	return assert(provider.capabilities.notifications)
+	return assert(provider.shared.notifications)
 end
 
 local function cancel_active()
@@ -343,7 +343,7 @@ function M.open(provider, on_update)
 		notify.warn("No active provider")
 		return
 	end
-	if provider.capabilities.notifications == nil then
+	if provider.shared.notifications == nil then
 		notify.warn(string.format("%s does not support notifications", provider.name))
 		return
 	end

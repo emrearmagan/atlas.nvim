@@ -4,8 +4,6 @@ local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local highlights = require("atlas.ui.highlights")
-local picker = require("atlas.ui.picker")
-local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
 
 local requests = request_scope.new()
@@ -38,13 +36,14 @@ end
 local function configured_provider_ids(domain)
 	return vim.tbl_map(function(provider)
 		return provider.id
-	end, providers.configured(domain))
+	end, require("atlas.providers").configured(domain))
 end
 
 ---@param domain "pulls"|"issues"
 ---@param id string
 ---@return PullsProvider|IssuesProvider|nil
 local function load_provider(domain, id)
+	local providers = require("atlas.providers")
 	if providers.domain(id, domain) == nil then
 		notify.error(string.format("Unknown %s provider: %s", domain, id), { vim_notify = true })
 		return nil
@@ -98,11 +97,11 @@ function M.open(domain, provider_id, opts)
 	end
 
 	requests.run(function(done)
-		picker.select({
+		require("atlas.ui.picker").select({
 			title = "Select provider:",
 			items = ids,
 			format_item = function(id)
-				local provider = providers[id]
+				local provider = require("atlas.providers")[id]
 				return provider and provider.name or id
 			end,
 			on_select = done,

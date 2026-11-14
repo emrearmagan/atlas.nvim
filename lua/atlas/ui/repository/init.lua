@@ -250,7 +250,7 @@ end
 ---@param provider PullsProvider|IssuesProvider
 ---@param opts { page?: string, ctx?: table }|nil
 function M.open(repo_full_name, provider, opts)
-	local repository = provider.capabilities.repository
+	local repository = provider.shared.repository
 	local ui = provider.capabilities.ui and provider.capabilities.ui.repository
 	if not repository or not ui then
 		notify.error("Repository details are not available")

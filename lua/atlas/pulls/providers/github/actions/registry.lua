@@ -355,13 +355,14 @@ local function search_results(repo, ctx, done)
 		title = repo ~= "" and "Search " .. repo .. " Pull Requests" or "Search GitHub Pull Requests",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title = item.value.title .. " - "
+			return title .. item.id, { { title }, { item.id, "AtlasTextMuted" } }
 		end,
 		preview_item = function(item, preview_done, width)
 			local pr = item.value
 			return pullrequests.fetch_pullrequest(pr, nil, function(details, err)
 				if err or details == nil then
-					preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
+					preview_done({ title = item.id, lines = { err or "Failed to load pull request" } })
 					return
 				end
 				preview_done(picker_format.pullrequest(pr, details, width))
@@ -384,8 +385,7 @@ local function search_results(repo, ctx, done)
 				end
 				local items = {}
 				for _, pr in ipairs(page.items) do
-					local id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id))
-					table.insert(items, { id = id, label = id .. " - " .. pr.title, value = pr })
+					table.insert(items, { id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id)), value = pr })
 				end
 				fetch_done(items, nil)
 			end)

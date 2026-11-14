@@ -49,9 +49,6 @@ function M.resolve(value, parsed)
 		url = web_url,
 		repository_url = web_url .. ".git",
 		host = host,
-		workspace = workspace,
-		owner = workspace,
-		repo = repo,
 		repo_full_name = full_name,
 	}
 
@@ -65,8 +62,7 @@ function M.resolve(value, parsed)
 		end
 		target.entity = entity
 		target.url = value
-		target.number = assert(tonumber(number))
-		target.id = target.number
+		target.id = assert(tonumber(number))
 		return target
 	end
 

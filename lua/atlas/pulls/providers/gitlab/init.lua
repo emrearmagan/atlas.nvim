@@ -26,7 +26,6 @@ local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
 local git = require("atlas.core.git")
-local links_api = require("atlas.providers.gitlab.links")
 local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
@@ -97,7 +96,7 @@ local function repository_view(repository, branch)
 	return {
 		name = "Search",
 		layout = "compact",
-		project = repository.project_path,
+		project = repository.repo_full_name,
 		scope = "all",
 		source_branch = branch,
 	}
@@ -113,7 +112,6 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			fetch_links = links_api.fetch_pullrequest,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,

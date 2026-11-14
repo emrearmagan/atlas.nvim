@@ -333,7 +333,8 @@ local function search_issues(project, ctx, done)
 		title = project ~= "" and "Search " .. project .. " Issues" or "Search GitLab Issues",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title = item.value.title .. " - "
+			return title .. item.id, { { title }, { item.id, "AtlasTextMuted" } }
 		end,
 		preview_item = function(item, preview_done, width)
 			local issue = item.value
@@ -364,11 +365,7 @@ local function search_issues(project, ctx, done)
 				end
 				local items = {}
 				for _, issue in ipairs(page.items) do
-					table.insert(items, {
-						id = issue.key,
-						label = string.format("%s - %s", issue.key, issue.title),
-						value = issue,
-					})
+					table.insert(items, { id = issue.key, value = issue })
 				end
 				fetch_done(items, nil)
 			end)
