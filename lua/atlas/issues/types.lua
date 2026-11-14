@@ -76,10 +76,7 @@
 ---@field id string
 ---@field name string
 ---@field icon AtlasIconStyle|nil
----@field to_status_id string|nil
 ---@field to_status_name string|nil
----@field to_status_category string|nil
----@field to_status_color string|nil
 
 --------------------------------------------------------------------------------
 -- Comment
@@ -91,6 +88,7 @@
 ---@field author AtlasUser|nil
 ---@field author_roles string[]|nil
 ---@field body string
+---@field body_display string|nil
 ---@field created_at string
 ---@field parent_id string|number|nil
 ---@field thread_id string|nil

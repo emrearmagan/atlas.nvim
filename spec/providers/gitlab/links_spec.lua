@@ -163,7 +163,7 @@ describe("GitLab linked items", function()
 	end)
 
 	it("maps external tracker issue keys using the configured Jira instance", function()
-		jira_options.base_url = "https://example.atlassian.net/"
+		jira_options.base_url = "https://example.atlassian.net"
 		graphql_links = {
 			{ linkType = "MENTIONED", externalIssue = { reference = "PROJ-42", title = "Jira work" } },
 			{ linkType = "MENTIONED", externalIssue = { reference = "P-1", title = "Single-letter project" } },

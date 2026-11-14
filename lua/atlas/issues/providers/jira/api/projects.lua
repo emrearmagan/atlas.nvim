@@ -40,12 +40,8 @@ function M.get_statuses(project, callback)
 	end, { action = "Fetch project statuses", project = project })
 end
 
----@class JiraProjectGroup
----@field category table|nil
----@field projects JiraIssueProject[]
-
 ---@param opts { maxResults?: integer, total?: integer, status?: string, query?: string, action?: "view"|"browse"|"edit"|"create" }|nil
----@param callback fun(groups: JiraProjectGroup[]|nil, err: string|nil)
+---@param callback fun(projects: JiraIssueProject[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_projects(opts, callback)
 	opts = opts or {}
@@ -64,31 +60,6 @@ function M.get_projects(opts, callback)
 		if active_handle and active_handle.cancel then
 			active_handle.cancel()
 		end
-	end
-
-	local function build_groups(items)
-		---@type JiraProjectGroup[]
-		local groups = {}
-		local index_by_key = {}
-
-		for _, project in ipairs(items) do
-			local category = project.category
-			local category_key = "uncategorized"
-			if category ~= nil and category.id ~= "" then
-				category_key = category.id
-			end
-
-			local group_idx = index_by_key[category_key]
-			if group_idx == nil then
-				group_idx = #groups + 1
-				index_by_key[category_key] = group_idx
-				groups[group_idx] = { category = category, projects = {} }
-			end
-
-			table.insert(groups[group_idx].projects, project)
-		end
-
-		return groups
 	end
 
 	local function fetch_page(start_at)
@@ -142,7 +113,7 @@ function M.get_projects(opts, callback)
 
 			pages_loaded = pages_loaded + 1
 			if normalized.isLast == true or pages_loaded >= total_pages then
-				callback(build_groups(projects), nil)
+				callback(projects, nil)
 				return
 			end
 

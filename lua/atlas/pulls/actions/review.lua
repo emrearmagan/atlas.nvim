@@ -186,6 +186,13 @@ M.add_comment = {
 		local parent = context.comment
 		local add = assert(context.provider.capabilities.comments.add_comment)
 		local pending = opts.pending == true or (parent ~= nil and parent.pending == true)
+		local reviews = context.provider.capabilities.reviews
+		if pending and not (reviews and reviews.submit_review) then
+			local message = "Provider does not support pending review comments"
+			notify(context, "error", message)
+			on_done(nil, message)
+			return false
+		end
 		local suggestion = opts.kind == "suggestion"
 
 		local title = " Add Comment "
@@ -380,7 +387,7 @@ M.edit_comment = {
 				if comment.is_task then
 					local desired = vim.tbl_extend("force", {}, comment, { body = text })
 					desired.body_display = nil
-					update(desired, callback)
+					update(context.pr, desired, callback)
 				else
 					update(context.pr, comment, text, callback)
 				end
@@ -491,11 +498,7 @@ M.delete_comment = {
 			notify.success(comment.is_task and "Task deleted" or "Comment deleted", { timeout = 1200 })
 			on_done({ changed_pr = review_changed == true }, nil)
 		end
-		if comment.is_task then
-			remove(comment, callback)
-		else
-			remove(context.pr, comment, callback)
-		end
+		remove(context.pr, comment, callback)
 		return true
 	end,
 }
@@ -529,7 +532,7 @@ M.toggle_task = {
 			desired.state = "RESOLVED"
 		end
 		notify.loading(is_resolved and "Reopening task..." or "Resolving task...")
-		update(desired, function(updated, err)
+		update(context.pr, desired, function(updated, err)
 			if err then
 				notify.error(tostring(err))
 				on_done(nil, tostring(err))

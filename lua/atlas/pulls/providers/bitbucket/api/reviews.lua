@@ -120,19 +120,48 @@ local function fetch_thread_comments(pr, opts, on_done)
 	end, { action = "Fetch PR threads", repo = pr.repo_full_name, id = pr.id })
 end
 
+---@param all_comments PullsComment[]
+---@param task_items PullsComment[]
+---@param reviewers PullsReviewer[]
+---@param history PullsReviewHistoryEntry[]
+---@return PullsReviewData
+local function review_data(all_comments, task_items, reviewers, history)
+	local filtered_comments = {}
+	for _, comment in ipairs(all_comments) do
+		if comment.inline or comment.file then
+			table.insert(filtered_comments, comment)
+		end
+	end
+
+	local has_pending = false
+	for _, items in ipairs({ all_comments, task_items }) do
+		for _, item in ipairs(items) do
+			-- Bitbucket only exposes pending items to their author.
+			if item.pending then
+				has_pending = true
+				break
+			end
+		end
+	end
+
+	return {
+		review = { id = nil, commit_hash = nil, pending = has_pending },
+		comments = filtered_comments,
+		tasks = task_items,
+		reviewers = reviewers,
+		history = history,
+	}
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
-local function fetch_review(pr, opts, include_hunks, on_done)
+function M.fetch_review(pr, opts, on_done)
 	opts = opts or {}
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			if include_hunks then
-				return fetch_thread_comments(pr, opts, done)
-			end
 			return comments.fetch_comments(pr, opts, done)
 		end,
 		tasks = function(done)
@@ -150,30 +179,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 			on_done(nil, err)
 			return
 		end
-
-		local filtered_comments = {}
-		for _, comment in ipairs(values.comments) do
-			if comment.inline or comment.file then
-				table.insert(filtered_comments, comment)
-			end
-		end
-		local has_pending = false
-		for _, items in ipairs({ values.comments, values.tasks }) do
-			for _, item in ipairs(items) do
-				-- Bitbucket only exposes pending items to their author.
-				if item.pending then
-					has_pending = true
-					break
-				end
-			end
-		end
-		on_done({
-			review = { id = nil, commit_hash = nil, pending = has_pending },
-			comments = filtered_comments,
-			tasks = values.tasks,
-			reviewers = values.reviewers,
-			history = values.history,
-		}, nil)
+		on_done(review_data(values.comments, values.tasks, values.reviewers, values.history), nil)
 	end)
 	return requests
 end
@@ -182,16 +188,25 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.fetch_review(pr, opts, on_done)
-	return fetch_review(pr, opts, false, on_done)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }
 function M.fetch_threads(pr, opts, on_done)
-	return fetch_review(pr, opts, true, on_done)
+	opts = opts or {}
+	local requests = request_scope.new()
+	requests.all({
+		comments = function(done)
+			return fetch_thread_comments(pr, opts, done)
+		end,
+		tasks = function(done)
+			return tasks.fetch_tasks(pr, opts, done)
+		end,
+	}, function(values, errors)
+		local err = errors.comments or errors.tasks
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(review_data(values.comments, values.tasks, {}, {}), nil)
+	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -283,7 +298,7 @@ function M.discard_review(pr, _review, on_done)
 		end
 		requests.run(function(done)
 			if item.is_task then
-				return tasks.delete_task(item, done)
+				return tasks.delete_task(pr, item, done)
 			end
 			return comments.delete_comment(pr, item, done)
 		end, function(_, err)

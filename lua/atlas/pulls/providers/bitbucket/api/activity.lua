@@ -72,10 +72,10 @@ local function global_items(all_comments, all_tasks)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_activity(pr, _opts, on_done)
+local function fetch_activity(pr, opts, on_done)
 	---@cast pr BitbucketPullRequest
 	local activity_url = tostring(pr.links.activity or "")
 	if activity_url == "" then
@@ -84,13 +84,23 @@ local function fetch_activity(pr, _opts, on_done)
 	end
 	local sep = activity_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=50&fields=-values.comment,-values.pull_request", activity_url, sep)
+	local key = "bitbucket:pr:activity:" .. url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
 
 	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_activities_list(result), nil)
+		local activities = mapper.to_activities_list(result)
+		service.set_cache(key, activities)
+		on_done(activities, nil)
 	end, { action = "Fetch PR activity", repo = pr.repo_full_name, id = pr.id })
 end
 

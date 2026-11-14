@@ -6,7 +6,7 @@ describe("Jira issue references", function()
 
 	before_each(function()
 		original_options = config.options
-		config.options = { providers = { jira = { base_url = "https://jira.example/jira/", token = "token" } } }
+		config.options = { providers = { jira = { base_url = "https://jira.example/jira", token = "token" } } }
 	end)
 
 	after_each(function()

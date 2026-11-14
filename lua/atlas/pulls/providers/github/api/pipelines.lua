@@ -650,16 +650,8 @@ function M.fetch_history(context, on_done)
 	if is_branch then
 		fetch_runs(target, repo)
 	elseif pr then
-		scope.run(function(done)
-			return cli.gh({ "api", string.format("repos/%s/pulls/%s", repo, pr.id) }, done, request_context)
-		end, function(pull, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local head = pull.head
-			fetch_runs(head.ref, json.safe_str(json.safe_table(head.repo).full_name))
-		end)
+		---@cast pr GitHubPullRequest
+		fetch_runs(pr.source.branch, pr.head_repository)
 	else
 		---@cast target GitHubPipeline
 		if target.workflow_id then
@@ -761,11 +753,15 @@ function M.fetch_job_log(context, _pipeline, job, on_done)
 		return nil
 	end
 
+	if job.state == "INPROGRESS" or job.state == "QUEUED" or job.state == "PENDING" then
+		vim.schedule(function()
+			on_done(nil, "GitHub logs are available after the job finishes.")
+		end)
+		return nil
+	end
+
 	local endpoint = string.format("repos/%s/actions/jobs/%d/logs", repo_slug, job_id)
-	return cli.gh_text({ "api", "--include", "--allow-escape-sequences", endpoint }, function(raw, err, status)
-		if status == 404 and (job.state == "INPROGRESS" or job.state == "QUEUED" or job.state == "PENDING") then
-			err = "GitHub logs are available after the job finishes."
-		end
+	return cli.gh_text({ "api", "--allow-escape-sequences", endpoint }, function(raw, err)
 		on_done(raw and { raw = raw } or nil, err)
 	end, { action = "Fetch workflow job log", repo = repo_slug, job_id = job_id })
 end

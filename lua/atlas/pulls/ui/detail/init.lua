@@ -2,7 +2,6 @@ local M = {}
 
 local detail_window = require("atlas.pulls.ui.detail.window")
 local providers = require("atlas.providers")
-local pipelines = require("atlas.pulls.pipelines")
 local state = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.renderer")
 local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
@@ -10,6 +9,7 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local links = require("atlas.ui.links")
+local spinner = require("atlas.ui.components.spinner")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -36,21 +36,12 @@ end
 
 -- Loading spinner
 
-local function stop_spinner()
-	if state.spinner_timer ~= nil then
-		state.spinner_timer:stop()
-		state.spinner_timer:close()
-		state.spinner_timer = nil
-	end
-end
-
 local function is_loading()
 	if
 		state.pr_loading
 		or state.details_loading
 		or state.diffstat == "loading"
 		or state.merge_checks == "loading"
-		or state.pipelines == "loading"
 		or (state.links and state.links.loading)
 	then
 		return true
@@ -62,32 +53,21 @@ local function is_loading()
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
-local function start_spinner()
-	if state.spinner_timer ~= nil then
+local loading_spinner = spinner.create({ interval_ms = SPINNER_INTERVAL_MS })
+
+loading_spinner.on_tick = function()
+	if not detail_window.is_open() or not is_loading() then
+		loading_spinner:stop()
 		return
 	end
-	state.spinner_timer = vim.uv.new_timer()
-	if state.spinner_timer == nil then
-		return
-	end
-	state.spinner_timer:start(
-		SPINNER_INTERVAL_MS,
-		SPINNER_INTERVAL_MS,
-		vim.schedule_wrap(function()
-			if not detail_window.is_open() or not is_loading() then
-				stop_spinner()
-				return
-			end
-			render()
-		end)
-	)
+	render()
 end
 
 local function update_spinner()
 	if is_loading() then
-		start_spinner()
+		loading_spinner:start()
 	else
-		stop_spinner()
+		loading_spinner:stop()
 	end
 end
 
@@ -222,26 +202,9 @@ local function load_pr(pr, force_refresh)
 
 	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
-	local backend = pipelines.get(provider)
 	state.merge_checks = core.fetch_merge_checks and "loading" or nil
-	state.pipelines = backend and "loading" or nil
+	state.pipelines = nil
 	load_active_tab(pr, { force_refresh = force_refresh })
-
-	if backend then
-		state.requests.run(function(done)
-			return backend.fetch(
-				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
-				{ force_refresh = force_refresh },
-				done
-			)
-		end, function(items, err)
-			if not same_ref(state.current_pr, pr) then
-				return
-			end
-			state.pipelines = err or items or {}
-			tab_refresh()
-		end)
-	end
 
 	if core.fetch_merge_checks then
 		state.requests.run(function(done)
@@ -271,7 +234,7 @@ end
 
 local function clear_pr()
 	cancel_requests()
-	stop_spinner()
+	loading_spinner:stop()
 	reset_tabs()
 	pending_ref = nil
 	state.current_pr = nil
@@ -323,7 +286,7 @@ local function cleanup()
 	if buf and vim.api.nvim_buf_is_valid(buf) then
 		detail_keymaps.remove(buf)
 	end
-	stop_spinner()
+	loading_spinner:stop()
 	reset_tabs()
 	pending_ref = nil
 	state.reset()
@@ -555,6 +518,7 @@ end
 ---@param result PullsActionResult|nil
 function M.apply_action_result(pr, on_update, result)
 	if not result or not result.changed_pr then
+		render_if_open()
 		return
 	end
 	if on_update then

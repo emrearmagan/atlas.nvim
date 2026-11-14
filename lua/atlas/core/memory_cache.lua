@@ -7,7 +7,7 @@ local M = {}
 ---@type table<string, MemoryCacheEntry>
 local store = {}
 local order = {}
-local MAX_ITEMS = 20
+local MAX_ITEMS = 50
 
 ---@param key string
 local function remove_from_order(key)
@@ -60,7 +60,12 @@ end
 ---@return MemoryCacheEntry|nil
 function M.get(key)
 	prune_expired()
-	return store[key]
+	local entry = store[key]
+	if entry then
+		remove_from_order(key)
+		table.insert(order, key)
+	end
+	return entry
 end
 
 ---@param key string

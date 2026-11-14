@@ -116,7 +116,7 @@ local function to_link(record)
 	if not url and key and key:match("^[A-Z][A-Z0-9_]*%-%d+$") then
 		local jira = config.provider_options("jira") or {}
 		if jira.base_url and jira.base_url ~= "" then
-			url = jira.base_url:gsub("/+$", "") .. "/browse/" .. key
+			url = jira.base_url .. "/browse/" .. key
 		end
 	end
 	if not url or url == "" then

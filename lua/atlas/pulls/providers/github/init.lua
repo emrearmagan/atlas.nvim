@@ -9,6 +9,7 @@
 
 ---@class GitHubPullRequest : PullRequest
 ---@field node_id string|nil
+---@field head_repository string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
 ---@field lines_added number
@@ -120,7 +121,6 @@ return {
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,
-			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,

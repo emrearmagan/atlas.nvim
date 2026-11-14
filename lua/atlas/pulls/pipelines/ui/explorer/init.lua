@@ -215,7 +215,8 @@ end
 
 ---@param pane PullsPipelinesExplorer
 ---@param selection PullsPipelinesSelection|nil
-function M.refresh(pane, selection)
+---@param opts { force_refresh?: boolean }|nil
+function M.refresh(pane, selection, opts)
 	selection = selection or pane.selection
 	pane.selection = selection and selection.pipeline and selection or nil
 	begin_loading(pane)
@@ -234,7 +235,7 @@ function M.refresh(pane, selection)
 				done(pipeline and { pipeline } or nil, err)
 			end)
 		end
-		return backend.fetch(pane.context, { force_refresh = true }, done)
+		return backend.fetch(pane.context, { force_refresh = (opts or {}).force_refresh ~= false }, done)
 	end, function(pipelines, err)
 		finish_loading(pane, pipelines, err)
 	end)

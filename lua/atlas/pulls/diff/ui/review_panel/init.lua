@@ -41,8 +41,13 @@ function ReviewPanel:render()
 	---@cast provider PullsProvider|nil
 	local comments = provider and provider.capabilities.comments
 	local can_react = comments and comments.reactions ~= nil
+	local reviews = provider and provider.capabilities.reviews
+	local reply_action = "pulls.review.submit_comment"
+	if reviews and reviews.submit_review then
+		reply_action = "pulls.review.add_comment"
+	end
 	local lines, spans, line_map = renderer.render(self.session, self.filter, vim.api.nvim_win_get_width(self.win), {
-		reply = key_label("pulls.review.add_comment"),
+		reply = key_label(reply_action),
 		add_task = key_label("pulls.review.add_task"),
 		edit = key_label("ui.comments.edit"),
 		delete = key_label("ui.delete"),
