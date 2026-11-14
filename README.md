@@ -867,8 +867,9 @@ issues = {
       key   = "S",      -- default
       label = "Search", -- default
       items = {
-        ["Bugs"]            = "is:issue is:open type:Bug",
-        ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
+        ["Bugs"]              = "is:issue is:open type:Bug",
+        ["Good first issues"] = 'is:issue is:open label:"good first issue"',
+        ["Recently closed"]   = "is:issue is:closed author:@me sort:updated-desc",
       },
     },
   },
