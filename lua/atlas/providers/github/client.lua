@@ -28,6 +28,27 @@ local function cache_key(key)
 	return "github:" .. M.hostname() .. ":" .. key
 end
 
+---@param args string[]
+---@return boolean
+local function is_write(args)
+	if args[1] ~= "api" then
+		return not vim.tbl_contains(args, "--json")
+	end
+
+	local graphql, has_fields = false, false
+	for i, arg in ipairs(args) do
+		if arg == "-X" then
+			return args[i + 1] ~= "GET"
+		end
+		if arg:match("^query=%s*mutation") then
+			return true
+		end
+		graphql = graphql or arg == "graphql"
+		has_fields = has_fields or arg == "-f" or arg == "-F"
+	end
+	return has_fields and not graphql
+end
+
 ---@param store table
 ---@param key string
 ---@return any|nil, boolean
@@ -53,7 +74,8 @@ function M.is_enterprise_server()
 	return M.hostname() ~= DEFAULT_HOST
 end
 
-function M.cache_ttl()
+---@return number
+local function cache_ttl()
 	local options = config.provider_options("github") or {}
 	return tonumber(options.cache_ttl) or DEFAULT_CACHE_TTL
 end
@@ -61,37 +83,44 @@ end
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)
-	if M.cache_ttl() <= 0 then
-		return nil, false
-	end
-	return get_cached(cache, cache_key(key))
-end
-
-function M.set_cache(key, value, ttl)
-	if M.cache_ttl() <= 0 then
-		return
-	end
-	cache.set(cache_key(key), value, ttl or M.cache_ttl())
-end
-
----@param key string
----@return any|nil, boolean
-function M.get_mem(key)
-	if M.cache_ttl() <= 0 then
+	if cache_ttl() <= 0 then
 		return nil, false
 	end
 	return get_cached(memory, cache_key(key))
 end
 
-function M.set_mem(key, value, ttl)
-	if M.cache_ttl() <= 0 then
+---@param key string
+---@param value any
+---@param ttl number|nil
+function M.set_cache(key, value, ttl)
+	if cache_ttl() <= 0 then
 		return
 	end
-	memory.set(cache_key(key), value, ttl or M.cache_ttl())
+	memory.set(cache_key(key), value, ttl or cache_ttl())
 end
 
-function M.delete_mem(key)
-	memory.delete(cache_key(key))
+---@param key string
+---@return any|nil, boolean
+function M.get_persistent_cache(key)
+	if cache_ttl() <= 0 then
+		return nil, false
+	end
+	return get_cached(cache, cache_key(key))
+end
+
+---@param key string
+---@param value any
+---@param ttl number|nil
+function M.set_persistent_cache(key, value, ttl)
+	if cache_ttl() <= 0 then
+		return
+	end
+	cache.set(cache_key(key), value, ttl or cache_ttl())
+end
+
+function M.clear_cache()
+	memory.clear_prefix(cache_key(""))
+	cache.clear_prefix(cache_key(""))
 end
 
 ---@param args string[]
@@ -139,6 +168,9 @@ local function run(args, parse_json, callback, ctx)
 				)
 				callback(nil, err, status)
 				return
+			end
+			if is_write(args) then
+				M.clear_cache()
 			end
 
 			if parse_json then

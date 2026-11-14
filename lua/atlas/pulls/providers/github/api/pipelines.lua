@@ -550,7 +550,7 @@ function M.fetch(context, opts, on_done)
 	local selector = pr and ("pr:" .. tostring(pr.id)) or ("branch:" .. branch)
 	local cache_key = string.format("github:pipelines:%s:%s", context.repo_full_name, selector)
 	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -587,7 +587,7 @@ function M.fetch(context, opts, on_done)
 		end
 
 		local pipelines = map_pipelines(latest_checks(checks), metadata)
-		cli.set_mem(cache_key, pipelines)
+		cli.set_cache(cache_key, pipelines)
 		on_done(pipelines, nil)
 	end, {
 		action = pr and "Fetch PR pipelines" or "Fetch branch pipelines",
@@ -779,7 +779,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 
 	local cache_key = string.format("github:commit:statuses:%s:%s", commit.repo_full_name, commit.hash)
 	if not (opts or {}).force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			---@cast cached { status: string, url?: string }
 			on_done(cached.status, cached.url, nil)
@@ -811,7 +811,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 		local context = json.safe_table(json.safe_table(contexts.nodes)[1])
 		local status = COMMIT_STATUS_STATES[rollup.state] or "unknown"
 		local url = json.safe_str(context.url)
-		cli.set_mem(cache_key, { status = status, url = url })
+		cli.set_cache(cache_key, { status = status, url = url })
 		on_done(status, url, nil)
 	end, {
 		action = "Fetch commit status",

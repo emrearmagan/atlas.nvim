@@ -116,7 +116,7 @@ function M.fetch(issue, opts, on_done)
 	end
 	local cache_key = "jira:links:" .. service.base_url() .. ":" .. key
 	if not (opts or {}).force_refresh then
-		local cached, found = service.get_memory_cache(cache_key)
+		local cached, found = service.get_cache(cache_key)
 		if found then
 			on_done(cached, nil)
 			return nil
@@ -145,7 +145,7 @@ function M.fetch(issue, opts, on_done)
 			end
 		end
 		if #messages == 0 then
-			service.set_memory_cache(cache_key, links)
+			service.set_cache(cache_key, links)
 		end
 		local available = next(results) ~= nil
 		on_done(available and links or nil, #messages > 0 and table.concat(messages, "; ") or nil)

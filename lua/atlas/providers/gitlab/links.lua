@@ -141,7 +141,7 @@ end
 local function collect(path, iid, entity, opts, on_done)
 	local cache_key = string.format("gitlab:links:%s:%s:%s:%d", service.base_url(), entity, path, iid)
 	if not (opts and opts.force_refresh) then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -178,7 +178,7 @@ local function collect(path, iid, entity, opts, on_done)
 				table.insert(links, link)
 			end
 		end
-		service.set_memory_cache(cache_key, links)
+		service.set_cache(cache_key, links)
 		on_done(links, nil)
 	end, { action = "Fetch GitLab relationships", path = path, iid = iid })
 end

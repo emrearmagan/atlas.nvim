@@ -26,7 +26,7 @@ return {
 		end
 
 		local key = "gitlab:completion:pulls:" .. project
-		local cached, found = client.get_memory_cache(key)
+		local cached, found = client.get_cache(key)
 		if found then
 			done(cached, nil)
 			return
@@ -60,7 +60,7 @@ return {
 					detail = item.title,
 				}
 			end
-			client.set_memory_cache(key, items)
+			client.set_cache(key, items)
 			done(items, nil)
 		end, { action = "Complete merge requests", project_path = project })
 	end,

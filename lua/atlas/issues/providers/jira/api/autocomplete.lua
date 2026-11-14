@@ -94,7 +94,7 @@ end
 
 ---@return JiraJqlAutocompleteData|nil, boolean
 function M.get_cached_data()
-	local cached, ok = service.get_memory_cache(CACHE_KEY)
+	local cached, ok = service.get_cache(CACHE_KEY)
 	if not ok then
 		return nil, false
 	end
@@ -118,7 +118,7 @@ function M.get_data(on_done)
 		end
 
 		local normalized = normalize_payload(result)
-		service.set_memory_cache(CACHE_KEY, normalized)
+		service.set_cache(CACHE_KEY, normalized)
 		on_done(normalized, nil)
 	end, {
 		action = "Fetch jql autocomplete data",

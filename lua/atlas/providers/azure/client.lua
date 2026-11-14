@@ -78,7 +78,8 @@ function M.set_persistent_cache(key, value, ttl)
 end
 
 function M.clear_cache()
-	memory_cache.clear_prefix("azure:")
+	memory_cache.clear_prefix(cache_key(""))
+	cache.clear_prefix(cache_key(""))
 end
 
 M.url_encode = utils.url_encode
@@ -135,6 +136,9 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
+		end
+		if method ~= "GET" and not endpoint:find("/_apis/wit/wiql", 1, true) then
+			M.clear_cache()
 		end
 		on_done(result, nil, headers_out)
 	end, { response_headers = response_headers })

@@ -10,7 +10,7 @@ local json = require("atlas.core.json")
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_statuses(project, callback)
 	local cache_key = "jira:project-statuses:" .. project
-	local cached, ok = service.get_memory_cache(cache_key)
+	local cached, ok = service.get_cache(cache_key)
 	if ok then
 		callback(cached, nil)
 		return nil
@@ -35,7 +35,7 @@ function M.get_statuses(project, callback)
 				end
 			end
 		end
-		service.set_memory_cache(cache_key, statuses)
+		service.set_cache(cache_key, statuses)
 		callback(statuses, nil)
 	end, { action = "Fetch project statuses", project = project })
 end

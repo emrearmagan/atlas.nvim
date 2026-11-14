@@ -233,7 +233,6 @@ local function set_review_state(pr, action, body, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		if vim.trim(body) == "" then
 			on_done(true, nil)
 			return

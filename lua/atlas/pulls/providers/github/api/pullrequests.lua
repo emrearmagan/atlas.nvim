@@ -7,12 +7,6 @@ local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 
----@param repo string
----@param number integer|string
-local function invalidate_details(repo, number)
-	cli.delete_mem(string.format("github:pr:%s:%s", repo, tostring(number)))
-end
-
 local STACK_SUMMARY_FIELDS = [[
   stackEntry {
     position
@@ -152,7 +146,7 @@ function M.fetch_search(queries, opts, on_done)
 	)
 
 	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_persistent_cache(cache_key)
 		if ok then
 			---@cast cached PullsPage
 			on_done(cached, nil)
@@ -209,7 +203,7 @@ function M.fetch_search(queries, opts, on_done)
 			next_cursor = nil
 		end
 		local page = { items = pulls, next_cursor = next_cursor, total_pages = total_pages }
-		cli.set_cache(cache_key, page)
+		cli.set_persistent_cache(cache_key, page)
 		on_done(page, nil)
 	end, {
 		action = "Search PRs",
@@ -305,7 +299,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 	local cache_key = string.format("github:pr:%s:%s", repo_slug, tostring(number))
 
 	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -337,7 +331,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		end
 
 		local details = mapper.to_pull_request_details(pr_raw)
-		cli.set_mem(cache_key, details, cli.cache_ttl())
+		cli.set_cache(cache_key, details)
 		on_done(details, nil)
 	end, {
 		action = "Fetch PR details",
@@ -426,9 +420,6 @@ function M.update_assignees(pr, adds, removes, on_done)
 		table.insert(args, login)
 	end
 	return cli.gh(args, function(_, err)
-		if not err then
-			invalidate_details(pr.repo_full_name, pr.id)
-		end
 		on_done(not err, err)
 	end, {
 		action = "Update PR assignees",
@@ -468,7 +459,6 @@ function M.set_draft(pr, draft, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = draft and "Convert PR to draft" or "Mark PR ready for review",
@@ -497,7 +487,6 @@ function M.decline(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_details(repo_slug, pr.id)
 		on_done(true, nil)
 	end, {
 		action = "Decline PR",
@@ -653,11 +642,6 @@ function M.update_reviewers(pr, selected, original, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_details(repo_slug, pr.id)
-		cli.delete_mem(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
-		cli.delete_mem(string.format("github:review-details:%s:%s", repo_slug, tostring(pr.id)))
-		cli.delete_mem(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
-		cli.delete_mem(string.format("github:merge-checks:%s:%s", repo_slug, tostring(pr.id)))
 		on_done(true, nil)
 	end, {
 		action = "Update PR reviewers",
@@ -713,9 +697,6 @@ function M.update_pr(pr, opts, on_done)
 	if #args > 5 then
 		updates[#updates + 1] = function(done)
 			return cli.gh(args, function(_, err)
-				if not err then
-					invalidate_details(pr.repo_full_name, pr.id)
-				end
 				done(not err, err)
 			end, context)
 		end
@@ -743,9 +724,6 @@ function M.update_pr(pr, opts, on_done)
 		end
 		updates[#updates + 1] = function(done)
 			return cli.gh(fields, function(_, err)
-				if not err then
-					invalidate_details(pr.repo_full_name, pr.id)
-				end
 				done(not err, err)
 			end, context)
 		end
@@ -911,7 +889,6 @@ function M.update_labels(slug, number, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_details(slug, number)
 		on_done(true, nil)
 	end, {
 		action = "Update PR labels",
@@ -935,9 +912,6 @@ function M.enable_auto_merge(pr, opts, on_done)
 		vim.list_extend(args, { "--body", opts.body })
 	end
 	return cli.gh(args, function(_, err)
-		if not err then
-			invalidate_details(pr.repo_full_name, pr.id)
-		end
 		on_done(not err, err)
 	end, { action = "Enable auto-merge", repo = pr.repo_full_name, number = pr.id })
 end
@@ -948,9 +922,6 @@ end
 function M.disable_auto_merge(pr, on_done)
 	local args = { "pr", "merge", tostring(pr.id), "--disable-auto", "--repo", pr.repo_full_name }
 	return cli.gh(args, function(_, err)
-		if not err then
-			invalidate_details(pr.repo_full_name, pr.id)
-		end
 		on_done(not err, err)
 	end, { action = "Disable auto-merge", repo = pr.repo_full_name, number = pr.id })
 end

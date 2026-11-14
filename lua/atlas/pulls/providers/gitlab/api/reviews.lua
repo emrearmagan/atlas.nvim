@@ -63,24 +63,6 @@ local function metadata_cache_key(path, iid)
 	return string.format("gitlab_pulls:review_metadata:%s!%d", path, iid)
 end
 
----@param path string
----@param iid integer
-local function invalidate_review_caches(path, iid)
-	comments_api.invalidate_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
-	service.delete_memory_cache(metadata_cache_key(path, iid))
-	service.clear_cache("gitlab_pulls:merge_requests:gql:")
-end
-
----@param pr PullRequest
-local function invalidate_details_cache(pr)
-	local path, iid = project_iid(pr)
-	if path ~= "" and iid then
-		service.delete_memory_cache(string.format("gitlab_pulls:details:%s!%d", path, iid))
-		service.clear_cache("gitlab_pulls:merge_requests:gql:")
-	end
-end
-
 ---@param merge_request table
 ---@return PullsReviewer[]
 local function map_reviewers(merge_request)
@@ -136,7 +118,7 @@ local function fetch_metadata(pr, opts, on_done)
 
 	local cache_key = metadata_cache_key(path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -221,7 +203,7 @@ local function fetch_metadata(pr, opts, on_done)
 					head_sha = json.safe_str(refs.headSha),
 				},
 			}
-			service.set_memory_cache(cache_key, data)
+			service.set_cache(cache_key, data)
 			on_done(data, nil)
 		end)
 	end
@@ -338,7 +320,6 @@ function M.discard(pr, _review, on_done)
 	local function delete_next(drafts, index)
 		local draft = drafts[index]
 		if not draft then
-			invalidate_review_caches(path, iid)
 			on_done(true, nil)
 			return
 		end
@@ -402,7 +383,6 @@ local function publish(pr, reviewer_state, body, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_review_caches(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Publish MR review",
@@ -426,7 +406,6 @@ local function approve_pull_request(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		invalidate_details_cache(pr)
 		on_done(true, nil)
 	end, {
 		action = "Approve MR",
@@ -488,7 +467,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:reviewers:%s!%d", path, iid)
 	if opts.force_refresh ~= true then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -507,7 +486,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 			return
 		end
 		local reviewers = map_reviewers(merge_request)
-		service.set_memory_cache(cache_key, reviewers)
+		service.set_cache(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end, { action = "Fetch MR reviewers", project_path = path, iid = iid })
 end

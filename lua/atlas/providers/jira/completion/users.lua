@@ -33,7 +33,7 @@ return {
 			url_encode(scope)
 		)
 		local cache_key = "jira:completion:users:" .. scope .. ":" .. query
-		local cached = service.get_memory_cache(cache_key)
+		local cached = service.get_cache(cache_key)
 		if cached then
 			done(cached, nil)
 			return nil
@@ -63,7 +63,7 @@ return {
 				end
 			end
 
-			service.set_memory_cache(cache_key, items)
+			service.set_cache(cache_key, items)
 			done(items, nil)
 		end, { action = "Fetch mentionable users", issue_key = issue_key, project = context.project })
 	end,

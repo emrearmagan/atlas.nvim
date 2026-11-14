@@ -79,7 +79,6 @@ function M.add_task(pr, content, parent, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local task = mapper.to_tasks_list({ values = { result } }, pr.author.id)[1]
 		if not task then
 			on_done(nil, "Bitbucket did not return the created task")
@@ -104,7 +103,6 @@ function M.edit_task(pr, task, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local updated = mapper.to_tasks_list({ values = { result } }, pr.author.id)[1]
 		if not updated then
 			on_done(nil, "Bitbucket did not return the updated task")
@@ -121,9 +119,6 @@ end
 function M.delete_task(pr, task, on_done)
 	local url = endpoint(pr) .. "/" .. tostring(task.id)
 	return service.request("DELETE", url, nil, nil, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, { action = "Delete PR task", task_id = task.id })
 end

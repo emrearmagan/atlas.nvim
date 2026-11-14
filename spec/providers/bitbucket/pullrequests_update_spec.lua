@@ -7,7 +7,6 @@ local function stub_service(request)
 	package.preload["atlas.providers.bitbucket.client"] = function()
 		return {
 			request = request,
-			clear_cache = function() end,
 		}
 	end
 end
