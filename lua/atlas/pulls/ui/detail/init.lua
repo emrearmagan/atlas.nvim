@@ -139,9 +139,10 @@ local function load_links(pr, force_refresh)
 	if provider == nil then
 		return
 	end
+
 	local refresh = refresh_callback(pr)
 	state.requests.run(function(done)
-		return links.fetch(provider, pr, { force_refresh = force_refresh }, done)
+		return links.fetch(provider, pr, "pr", { force_refresh = force_refresh }, done)
 	end, function(items, err)
 		if state.links ~= current then
 			return

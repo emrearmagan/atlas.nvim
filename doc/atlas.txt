@@ -855,10 +855,8 @@ https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/ui/highlights.lua
         current repository's provider.
 
 :Atlas open [target|.]
-        Open a pull request or issue by provider URL, Jira key, or PR/issue
-        number (`123`, `#123`, or GitLab `!123`) in the current Git
-        repository. `.` opens the current branch's pull request. Without a
-        target, it prompts for one.
+        Open a provider URL, Jira key, or PR/issue number. `.` opens the
+        current branch's pull request.
 
 :Atlas browse [repository URL|.|page] [page]
         Open the repository browser. Use `.` for the current repository.

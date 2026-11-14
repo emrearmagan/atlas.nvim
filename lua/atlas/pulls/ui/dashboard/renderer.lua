@@ -87,7 +87,7 @@ local function render_header(lines, spans, width)
 			})
 		end
 	end
-	if state.provider and state.provider.capabilities.notifications then
+	if state.provider and state.provider.shared.notifications then
 		if #actions > 0 then
 			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		end

@@ -22,7 +22,6 @@ local checks_api = require("atlas.pulls.providers.azure.api.checks")
 local changes_api = require("atlas.pulls.providers.azure.api.changes")
 local activity_api = require("atlas.pulls.providers.azure.api.activity")
 local comments_api = require("atlas.pulls.providers.azure.api.comments")
-local links_api = require("atlas.providers.azure.links")
 
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
@@ -48,9 +47,11 @@ local function resolve_view(view, on_done)
 	end
 	return git.local_repository(vim.fn.getcwd(), function(target)
 		local resolved = vim.tbl_extend("force", {}, view)
-		if target and target.provider == "azure" and target.owner and target.repo then
-			resolved.project = target.owner
-			resolved.repository = target.repo
+		local full_name = target and target.provider == "azure" and target.repo_full_name or ""
+		local project, repo = full_name:match("^([^/]+)/(.+)$")
+		if project then
+			resolved.project = project
+			resolved.repository = repo
 			resolved.scope = view.scope or "all"
 		end
 		on_done(resolved)
@@ -81,11 +82,12 @@ end
 ---@param branch string|nil
 ---@return AtlasAzurePullsViewConfig
 local function repository_view(repository, branch)
+	local project, repo = assert(repository.repo_full_name):match("^([^/]+)/(.+)$")
 	return {
 		name = "Search",
 		layout = "compact",
-		project = repository.owner,
-		repository = repository.repo,
+		project = project,
+		repository = repo,
 		scope = "all",
 		extra_params = branch and { ["searchCriteria.sourceRefName"] = "refs/heads/" .. branch } or nil,
 	}
@@ -101,7 +103,6 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			fetch_links = links_api.fetch_pullrequest,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,

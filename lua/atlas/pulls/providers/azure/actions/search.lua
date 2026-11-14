@@ -1,6 +1,7 @@
 local M = {}
 
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local state = require("atlas.pulls.state")
 local query = require("atlas.providers.azure.query")
@@ -38,45 +39,6 @@ local function select_repository(title, on_select, done)
 	end)
 end
 
----@param pr PullRequest
----@return string
-local function pull_label(pr)
-	return string.format("#%s - %s", pr.id, pr.title)
-end
-
----@param pr PullRequest
----@param on_done fun(preview: AtlasPickerPreview)
----@return { cancel: fun() }|nil
-local function preview(pr, on_done)
-	return pullrequests.fetch_pullrequest(pr, nil, function(details, err)
-		if not details then
-			on_done({ title = pull_label(pr), lines = { err or "Failed to load pull request" } })
-			return
-		end
-		local lines = {
-			"**Status:** " .. pr.state,
-			"**Author:** " .. pr.author.name,
-			string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
-		}
-		local reviewers = vim.tbl_map(function(user)
-			return user.name
-		end, pr.reviewers or {})
-		local labels = vim.tbl_map(function(label)
-			return label.name
-		end, details.labels or {})
-		if #reviewers > 0 then
-			table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
-		end
-		if #labels > 0 then
-			table.insert(lines, "**Tags:** " .. table.concat(labels, ", "))
-		end
-		vim.list_extend(lines, { "", "## Description", "" })
-		local description = vim.trim(details.description)
-		vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-		on_done({ title = pull_label(pr), lines = lines })
-	end)
-end
-
 ---@param context AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 function M.search(context, done)
@@ -101,8 +63,24 @@ function M.search(context, done)
 				key = function(pr)
 					return tostring(pr.id)
 				end,
-				format_item = pull_label,
-				preview_item = preview,
+				format_item = function(pr)
+					local title = pr.title .. " - "
+					local id = "#" .. tostring(pr.id)
+					return title .. id, { { title }, { id, "AtlasTextMuted" } }
+				end,
+				preview_item = function(pr, preview_done, width)
+					return pullrequests.fetch_pullrequest(pr, nil, function(details, details_err)
+						if not details then
+							preview_done({
+								title = "#" .. tostring(pr.id),
+								lines = { details_err or "Failed to load pull request" },
+							})
+							return
+						end
+
+						preview_done(picker_format.pullrequest(pr, details, width))
+					end)
+				end,
 				on_select = function(pr)
 					if pr then
 						require("atlas.pulls.ui.detail").open(pr, { provider = context.provider })

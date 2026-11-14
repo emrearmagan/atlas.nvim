@@ -293,7 +293,7 @@ function M.format_mention(provider, user)
 		return nil
 	end
 
-	local sources = provider.capabilities.completion
+	local sources = provider.shared.completion
 	local users = sources and sources.users
 	if users and users.format_mention then
 		return users.format_mention(user)

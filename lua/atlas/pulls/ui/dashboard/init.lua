@@ -116,7 +116,7 @@ function M.init(provider, opts)
 
 	controller.switch_view(state.view)
 
-	if provider.capabilities.notifications then
+	if provider.shared.notifications then
 		notifications.refresh(provider, M.render)
 	end
 end

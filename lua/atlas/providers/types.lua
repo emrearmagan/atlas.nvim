@@ -23,7 +23,7 @@
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field users AtlasUsersCapability|nil
 ---@field completion table<string, AtlasCompletionSource>|nil
----@field actions AtlasAction[]|nil
+---@field fetch_links (fun(kind: "pr"|"issue", entity: PullRequest|Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasLink[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class AtlasAction
 ---@field id string
@@ -54,9 +54,8 @@
 ---| "linked"
 ---| string
 
----@class AtlasRelatedItem
----@field kind "issue"|"pr"|"external"
----@field url string Canonical web URL; never resolved relative to the current repository.
+---@class AtlasLink
+---@field url string
 ---@field key string|nil
 ---@field title string|nil
 ---@field relationship AtlasRelationship|nil

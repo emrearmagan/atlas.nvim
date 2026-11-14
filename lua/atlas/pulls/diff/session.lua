@@ -167,8 +167,8 @@ function Session.new(source, root, base, head, opts, on_done)
 				done(reviewed_store.read(pr))
 			end
 		end
-		if capabilities.users then
-			starts.current_user = capabilities.users.fetch_user
+		if provider.shared.users then
+			starts.current_user = provider.shared.users.fetch_user
 		end
 	end
 

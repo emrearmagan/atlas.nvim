@@ -6,7 +6,7 @@ local M = {
 	tab = {},
 }
 
----@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }|{ line: integer, line_hl_group: string }
+---@alias AtlasUIHighlight { line: integer, start_col?: integer, end_col?: integer, hl_group?: string, line_hl_group?: string, url?: string }
 
 -- Window
 
@@ -142,20 +142,14 @@ function M.append_block(lines, spans, block, padding)
 		table.insert(lines, prefix .. line)
 	end
 	for _, span in ipairs(block.highlights or {}) do
-		if span.line_hl_group ~= nil then
-			table.insert(spans, {
+		table.insert(
+			spans,
+			vim.tbl_extend("force", span, {
 				line = base + span.line,
-				line_hl_group = span.line_hl_group,
+				start_col = span.start_col and pad + span.start_col,
+				end_col = span.end_col and pad + span.end_col,
 			})
-		else
-			table.insert(spans, {
-				line = base + span.line,
-				start_col = pad + span.start_col,
-				end_col = pad + span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
+		)
 	end
 end
 
@@ -165,23 +159,18 @@ end
 function M.apply_spans(buf, ns, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	for _, span in ipairs(spans) do
-		if span.line_hl_group then
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
-				line_hl_group = span.line_hl_group,
-			})
-		else
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
-				end_row = span.line,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
+		vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col or 0, {
+			end_col = span.end_col,
+			hl_group = span.hl_group,
+			line_hl_group = span.line_hl_group,
+			url = span.url,
+			strict = false,
+		})
 	end
 end
 
 ---Wrap display content, preserving highlights and prefixing each resulting row.
----@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }[] }
+---@param content { lines: string[], highlights?: AtlasUIHighlight[] }
 ---@param width integer Content width, excluding the prefix.
 ---@param prefix string
 ---@return { lines: string[], highlights: AtlasUIHighlight[] }
@@ -214,13 +203,14 @@ function M.wrap_content(content, width, prefix)
 				local start_col = math.max(0, highlight.start_col - offset)
 				local end_col = math.min(highlight.end_col - offset, #row)
 				if end_col > start_col then
-					table.insert(spans, {
-						line = #lines - 1,
-						start_col = #prefix + start_col,
-						end_col = #prefix + end_col,
-						hl_group = highlight.hl_group,
-						url = highlight.url,
-					})
+					table.insert(
+						spans,
+						vim.tbl_extend("force", highlight, {
+							line = #lines - 1,
+							start_col = #prefix + start_col,
+							end_col = #prefix + end_col,
+						})
+					)
 				end
 			end
 		end

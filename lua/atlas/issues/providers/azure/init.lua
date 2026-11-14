@@ -15,7 +15,6 @@ local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local comments_api = require("atlas.issues.providers.azure.api.comments")
 local history_api = require("atlas.issues.providers.azure.api.history")
-local links_api = require("atlas.providers.azure.links")
 
 ---@return AtlasAzureIssuesViewConfig[]
 local function views()
@@ -46,8 +45,10 @@ local function resolve_view(view, on_done)
 	end
 	return git.local_repository(vim.fn.getcwd(), function(target)
 		local resolved = vim.tbl_extend("force", {}, view)
-		if target and target.provider == "azure" and target.owner then
-			resolved.project = target.owner
+		local full_name = target and target.provider == "azure" and target.repo_full_name or ""
+		local project = full_name:match("^[^/]+")
+		if project then
+			resolved.project = project
 		end
 		on_done(resolved)
 	end)
@@ -72,8 +73,8 @@ end
 ---@param target AtlasTarget
 ---@return IssueRef|nil
 local function issue_ref(target)
-	if target.number then
-		return { key = tostring(target.number) }
+	if target.id then
+		return { key = tostring(target.id) }
 	end
 end
 
@@ -85,7 +86,6 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
-			fetch_links = links_api.fetch_issue,
 		},
 		comments = {
 			fetch_activity = history_api.fetch,

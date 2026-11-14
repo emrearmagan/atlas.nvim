@@ -90,7 +90,7 @@ describe("Azure linked items", function()
 		responses["/project-id/_apis/git/pullrequests/17"] = { pullRequestId = 17, title = "Fix login" }
 
 		local result
-		api.fetch_issue({ key = "42" }, nil, function(links, err)
+		api.fetch("issue", { key = "42" }, nil, function(links, err)
 			assert.is_nil(err)
 			result = links
 		end)
@@ -107,9 +107,7 @@ describe("Azure linked items", function()
 				return link.key
 			end, result)
 		)
-		assert.equal("pr", result[4].kind)
 		assert.equal("Fix login", result[4].title)
-		assert.equal("external", result[5].kind)
 		assert.equal("Spec", result[5].title)
 	end)
 
@@ -118,7 +116,8 @@ describe("Azure linked items", function()
 		responses[endpoint] = { value = { { id = "5", url = "https://dev.azure.com/acme/_apis/wit/workItems/5" } } }
 
 		local result
-		api.fetch_pullrequest(
+		api.fetch(
+			"pr",
 			{ id = 17, project_id = "project-id", repository_id = "repo-id", repo_full_name = "Platform/api" },
 			nil,
 			function(links, err)
@@ -130,7 +129,6 @@ describe("Azure linked items", function()
 		assert.same({ endpoint }, endpoints)
 		assert.same({
 			{
-				kind = "issue",
 				url = "https://dev.azure.com/acme/Platform/_workitems/edit/5",
 				key = "5",
 				title = "Item 5",

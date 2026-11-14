@@ -48,11 +48,7 @@ function M.resolve(value, parsed)
 			entity = "issue",
 			url = value,
 			host = "dev.azure.com",
-			owner = project,
-			project_path = project,
 			id = tonumber(issue_number),
-			number = tonumber(issue_number),
-			issue_key = issue_number,
 		}
 	end
 
@@ -72,12 +68,8 @@ function M.resolve(value, parsed)
 		url = id and value or web_url,
 		repository_url = web_url,
 		host = "dev.azure.com",
-		owner = project,
-		repo = repo,
-		project_path = full_name,
 		repo_full_name = full_name,
 		id = id,
-		number = id,
 	}
 	if id then
 		return target
