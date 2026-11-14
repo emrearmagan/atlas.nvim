@@ -115,6 +115,7 @@ local SECTIONS = {
 		success = ICONS.success,
 		changes = ICONS.changes,
 		merge = ICONS.merged_pr,
+		auto_merge = { icon = "", hl_group = "AtlasTextPositive" },
 		edit = ICONS.edit,
 		close = ICONS.error,
 		reopen = { icon = "", hl_group = "AtlasTextMuted" },
