@@ -367,7 +367,7 @@ end
 function M.fetch(pr, opts, on_done)
 	local cache_key = string.format("github:merge-checks:%s:%s", pr.repo_full_name, tostring(pr.id))
 	if not (opts or {}).force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -408,7 +408,7 @@ function M.fetch(pr, opts, on_done)
 			table.insert(checks, stack)
 		end
 
-		cli.set_mem(cache_key, checks)
+		cli.set_cache(cache_key, checks)
 		on_done(checks, nil)
 	end)
 end

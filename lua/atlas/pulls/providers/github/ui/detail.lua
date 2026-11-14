@@ -7,6 +7,7 @@ local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local stack = require("atlas.pulls.providers.github.stack")
 local state = require("atlas.pulls.ui.detail.state")
+local icons = require("atlas.ui.shared.icons")
 
 -- Detail
 
@@ -39,6 +40,14 @@ function M.chips(pr, details, _loading)
 	local indicator = stack.indicator(pr.stack)
 	if indicator then
 		table.insert(chips, { label = indicator, hl = "AtlasRelatedChip" })
+	end
+
+	if pr.auto_merge_method then
+		local icon, hl = icons.get("auto_merge", "actions")
+		table.insert(chips, {
+			label = icon .. " Auto-merge (" .. pr.auto_merge_method:lower() .. ")",
+			hl = hl,
+		})
 	end
 
 	for _, lbl in ipairs(details and details.labels or {}) do

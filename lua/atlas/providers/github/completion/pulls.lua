@@ -25,7 +25,7 @@ return {
 		end
 
 		local key = "github:completion:pulls:" .. repository
-		local cached, found = client.get_mem(key)
+		local cached, found = client.get_cache(key)
 		if found then
 			done(cached, nil)
 			return
@@ -62,7 +62,7 @@ return {
 					detail = item.title,
 				}
 			end
-			client.set_mem(key, items)
+			client.set_cache(key, items)
 			done(items, nil)
 		end, { action = "Complete pull requests", repo = repository })
 	end,

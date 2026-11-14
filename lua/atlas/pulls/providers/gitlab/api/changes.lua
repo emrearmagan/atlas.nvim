@@ -35,7 +35,7 @@ function M.fetch_commits(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:commits:%s!%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -65,7 +65,7 @@ function M.fetch_commits(pr, opts, on_done)
 				html_url = json.safe_str(raw.web_url),
 			})
 		end
-		service.set_memory_cache(cache_key, commits)
+		service.set_cache(cache_key, commits)
 		on_done(commits, nil)
 	end, {
 		action = "Fetch MR commits",
@@ -90,7 +90,7 @@ function M.fetch_diffstat(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:diffstat:%s!%d", path, iid)
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -112,7 +112,7 @@ function M.fetch_diffstat(pr, opts, on_done)
 				lines_removed = tonumber(stat.deletions) or 0,
 			})
 		end
-		service.set_memory_cache(cache_key, entries)
+		service.set_cache(cache_key, entries)
 		on_done(entries, nil)
 	end, {
 		action = "Fetch MR diffstat",

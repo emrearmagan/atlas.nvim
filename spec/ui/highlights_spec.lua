@@ -113,6 +113,24 @@ describe("ui.highlights", function()
 		vim.o.background = original
 	end)
 
+	it("derives every GitHub issue type color from the colorscheme", function()
+		vim.g.terminal_color_5 = "#8839ef"
+		highlights.setup()
+		vim.g.terminal_color_5 = nil
+
+		assert.are.same({ fg = "#6c6f85", default = true }, set.AtlasIssueTypeGray)
+		assert.are.same({ fg = "#d20f39", default = true }, set.AtlasIssueTypeRed)
+		assert.are.same({ fg = "#d94f2b", default = true }, set.AtlasIssueTypeOrange)
+		assert.are.same({ fg = "#8839ef", default = true }, set.AtlasIssueTypePurple)
+		assert.are.same({ fg = "#ad2494", default = true }, set.AtlasIssueTypePink)
+	end)
+
+	it("uses the accent for purple without a terminal palette", function()
+		highlights.setup()
+
+		assert.are.same({ fg = "#1e66f5", default = true }, set.AtlasIssueTypePurple)
+	end)
+
 	it("maps identifiers to a stable palette", function()
 		assert.are.equal(highlights.dynamic_for("alice"), highlights.dynamic_for("alice"))
 		assert.is_truthy(highlights.dynamic_for("alice"):match("^AtlasDynColor%d%d$"))

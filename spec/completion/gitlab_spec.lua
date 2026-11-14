@@ -33,10 +33,10 @@ describe("GitLab completion", function()
 			end,
 		}
 		package.loaded["atlas.providers.gitlab.client"] = {
-			get_memory_cache = function(key)
+			get_cache = function(key)
 				return cache[key], cache[key] ~= nil
 			end,
-			set_memory_cache = function(key, value)
+			set_cache = function(key, value)
 				cache[key] = value
 			end,
 			graphql = function(query, variables, done)

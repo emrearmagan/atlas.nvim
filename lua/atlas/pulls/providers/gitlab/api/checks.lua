@@ -153,7 +153,7 @@ function M.fetch(pr, opts, on_done)
 
 	local cache_key = string.format("gitlab_pulls:merge-checks:%s!%d", path, iid)
 	if not (opts or {}).force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -182,7 +182,7 @@ function M.fetch(pr, opts, on_done)
 			has_conflicts = raw.has_conflicts == true,
 			head_pipeline_status = head_pipeline and json.safe_str(head_pipeline.status) or nil,
 		})
-		service.set_memory_cache(cache_key, checks)
+		service.set_cache(cache_key, checks)
 		on_done(checks, nil)
 	end, {
 		action = "Fetch MR merge state",

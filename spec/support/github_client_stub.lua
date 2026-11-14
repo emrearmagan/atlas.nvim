@@ -2,7 +2,7 @@ local M = {}
 
 local MODULE = "atlas.providers.github.client"
 
----@param handlers { gh: function|nil, api: function|nil, get_mem: function|nil, set_mem: function|nil, delete_mem: function|nil, hostname: function|nil } stubs for the client entry points
+---@param handlers { gh: function|nil, api: function|nil, get_cache: function|nil, set_cache: function|nil, hostname: function|nil } stubs for the client entry points
 function M.install(handlers)
 	handlers = handlers or {}
 	package.loaded[MODULE] = nil
@@ -13,9 +13,8 @@ function M.install(handlers)
 			end,
 			gh = handlers.gh or function() end,
 			api = handlers.api or function() end,
-			get_mem = handlers.get_mem or function() end,
-			set_mem = handlers.set_mem or function() end,
-			delete_mem = handlers.delete_mem or function() end,
+			get_cache = handlers.get_cache or function() end,
+			set_cache = handlers.set_cache or function() end,
 		}
 	end
 end

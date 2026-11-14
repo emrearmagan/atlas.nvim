@@ -64,18 +64,20 @@ local function cache_ttl()
 	return tonumber(provider_options().cache_ttl) or 300
 end
 
-function M.clear_memory_cache()
-	memory_cache.clear_prefix("jira:")
+---@param key string
+---@return string
+local function cache_key(key)
+	return "jira:" .. key
 end
 
 ---@param key string
 ---@return any|nil, boolean
-function M.get_memory_cache(key)
+function M.get_cache(key)
 	if cache_ttl() <= 0 then
 		return nil, false
 	end
 
-	local entry = memory_cache.get(key)
+	local entry = memory_cache.get(cache_key(key))
 	if not entry then
 		return nil, false
 	end
@@ -85,30 +87,40 @@ end
 
 ---@param key string
 ---@param value any
-function M.set_memory_cache(key, value)
+---@param ttl? number
+function M.set_cache(key, value, ttl)
 	if cache_ttl() <= 0 then
 		return
 	end
-	memory_cache.set(key, value, cache_ttl())
+	memory_cache.set(cache_key(key), value, ttl or cache_ttl())
 end
 
 ---@param key string
----@return any|nil
-function M.get_cache(key)
+---@return any|nil, boolean
+function M.get_persistent_cache(key)
 	if cache_ttl() <= 0 then
-		return nil
+		return nil, false
 	end
-	local entry = cache.get(key)
-	return entry and entry.value or nil
+	local entry = cache.get(cache_key(key))
+	if not entry or entry.value == nil then
+		return nil, false
+	end
+	return entry.value, true
 end
 
 ---@param key string
 ---@param value any
-function M.set_cache(key, value)
+---@param ttl? number
+function M.set_persistent_cache(key, value, ttl)
 	if cache_ttl() <= 0 then
 		return
 	end
-	cache.set(key, value, cache_ttl())
+	cache.set(cache_key(key), value, ttl or cache_ttl())
+end
+
+function M.clear_cache()
+	memory_cache.clear_prefix(cache_key(""))
+	cache.clear_prefix(cache_key(""))
 end
 
 ---@param method string
@@ -184,6 +196,9 @@ function M.request(method, endpoint, data, on_done, ctx)
 			return
 		end
 
+		if method ~= "GET" and not endpoint:match("^/search") and endpoint ~= "/issue/bulkfetch" then
+			M.clear_cache()
+		end
 		on_done(result, nil)
 	end)
 end

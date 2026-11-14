@@ -83,12 +83,18 @@ local function cache_ttl()
 end
 
 ---@param key string
+---@return string
+local function cache_key(key)
+	return "gitlab:" .. key
+end
+
+---@param key string
 ---@return any|nil, boolean
-function M.get_memory_cache(key)
+function M.get_cache(key)
 	if cache_ttl() <= 0 then
 		return nil, false
 	end
-	local entry = memory_cache.get(key)
+	local entry = memory_cache.get(cache_key(key))
 	if not entry then
 		return nil, false
 	end
@@ -98,25 +104,20 @@ end
 ---@param key string
 ---@param value any
 ---@param ttl? number
-function M.set_memory_cache(key, value, ttl)
+function M.set_cache(key, value, ttl)
 	if cache_ttl() <= 0 then
 		return
 	end
-	memory_cache.set(key, value, ttl or cache_ttl())
-end
-
----@param key string
-function M.delete_memory_cache(key)
-	memory_cache.delete(key)
+	memory_cache.set(cache_key(key), value, ttl or cache_ttl())
 end
 
 ---@param key string
 ---@return any|nil, boolean
-function M.get_cache(key)
+function M.get_persistent_cache(key)
 	if cache_ttl() <= 0 then
 		return nil, false
 	end
-	local entry = cache.get(key)
+	local entry = cache.get(cache_key(key))
 	if entry and entry.value ~= nil then
 		return entry.value, true
 	end
@@ -126,16 +127,16 @@ end
 ---@param key string
 ---@param value any
 ---@param ttl? number
-function M.set_cache(key, value, ttl)
+function M.set_persistent_cache(key, value, ttl)
 	if cache_ttl() <= 0 then
 		return
 	end
-	cache.set(key, value, ttl or cache_ttl())
+	cache.set(cache_key(key), value, ttl or cache_ttl())
 end
 
----@param prefix string
-function M.clear_cache(prefix)
-	cache.clear_prefix(prefix)
+function M.clear_cache()
+	memory_cache.clear_prefix(cache_key(""))
+	cache.clear_prefix(cache_key(""))
 end
 
 M.url_encode = utils.url_encode
@@ -194,6 +195,9 @@ function M.request(method, endpoint, data, on_done, ctx)
 				return
 			end
 
+			if method ~= "GET" then
+				M.clear_cache()
+			end
 			on_done(result, nil, status)
 		end
 	)
@@ -255,6 +259,9 @@ function M.graphql(query, variables, on_done, ctx)
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
+		end
+		if query:match("^%s*mutation") then
+			M.clear_cache()
 		end
 		on_done(type(result) == "table" and result.data or nil, nil)
 	end)

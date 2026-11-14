@@ -47,10 +47,10 @@ describe("Jira links API", function()
 			base_url = function()
 				return "https://jira.example/jira"
 			end,
-			get_memory_cache = function()
+			get_cache = function()
 				return nil, false
 			end,
-			set_memory_cache = function() end,
+			set_cache = function() end,
 			request = function(_, endpoint, _, done)
 				local source = endpoint:match("/dev%-status/[^/]+/issue/(%w+)")
 					or (endpoint:find("remotelink", 1, true) and "remote" or "issues")
