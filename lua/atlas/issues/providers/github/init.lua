@@ -3,6 +3,7 @@
 ---@field number integer
 ---@field node_id string|nil
 ---@field is_pinned boolean
+---@field can_set_type boolean
 
 ---@class GitHubIssueMilestone : IssueMilestone
 ---@field number integer|nil
@@ -12,6 +13,7 @@
 
 ---@class GitHubIssueDetails : IssueDetails
 ---@field milestone GitHubIssueMilestone|nil
+---@field type IssueType|nil
 ---@field sub_issues GitHubIssue[]
 
 local comments_api = require("atlas.issues.providers.github.api.comments")

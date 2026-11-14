@@ -122,6 +122,7 @@ local SECTIONS = {
 		review = ICONS.review,
 		user = ICONS.user,
 		label = ICONS.tag,
+		issue_type = { icon = ICONS.issue.icon, hl_group = "AtlasTextMuted" },
 		create = ICONS.issue,
 		search = ICONS.search,
 		notification = ICONS.bell,

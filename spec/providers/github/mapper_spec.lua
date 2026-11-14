@@ -68,6 +68,32 @@ describe("GitHub issue mapping", function()
 		assert.equal("owner/repo#43", details.sub_issues[1].key)
 		assert.equal(43, details.sub_issues[1].number)
 	end)
+
+	it("maps the issue type with a colorscheme highlight for its color", function()
+		local raw = vim.tbl_extend("force", issue_raw(), {
+			viewerCanType = true,
+			issueType = { id = "IT_1", name = "Bug", color = "RED", description = "An unexpected problem" },
+		})
+
+		local issue = assert(issue_mapper.to_issue(raw))
+		local details = assert(issue_mapper.to_issue_details(raw))
+
+		assert.equal("Bug", issue.type.name)
+		assert.equal("An unexpected problem", issue.type.description)
+		assert.equal("AtlasIssueTypeRed", issue.icon.hl_group)
+		assert.is_true(issue.can_set_type)
+		assert.same(issue.type, details.type)
+	end)
+
+	it("leaves the type empty and falls back to muted for unknown colors", function()
+		local issue = assert(issue_mapper.to_issue(vim.tbl_extend("force", issue_raw(), { issueType = vim.NIL })))
+		local custom = assert(issue_mapper.to_issue_type({ id = "IT_2", name = "Spike", color = "TEAL" }))
+
+		assert.is_nil(issue.type)
+		assert.is_nil(issue.icon)
+		assert.is_false(issue.can_set_type)
+		assert.equal("AtlasTextMuted", custom.icon.hl_group)
+	end)
 end)
 
 describe("normalize_pr author.name", function()
