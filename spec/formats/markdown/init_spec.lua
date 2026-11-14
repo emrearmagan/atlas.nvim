@@ -3,8 +3,8 @@ local code_preview = require("atlas.ui.components.code_preview")
 local emojis = require("atlas.ui.shared.emojis")
 local shared_icons = require("atlas.ui.shared.icons")
 
-local function span(line, start_col, end_col, hl_group)
-	return { line = line, start_col = start_col, end_col = end_col, hl_group = hl_group }
+local function span(line, start_col, end_col, hl_group, url)
+	return { line = line, start_col = start_col, end_col = end_col, hl_group = hl_group, url = url }
 end
 
 local function target(kind, url, line, start_col, end_col)
@@ -71,7 +71,7 @@ describe("Markdown parsing", function()
 			assert.are.same({
 				lines = { "é " .. case[2] .. "!" },
 				targets = case[4] and { target("link", case[4], 0, #"é ", #"é " + #case[2]) } or {},
-				highlights = { span(0, #"é ", #"é " + #case[2], case[3]) },
+				highlights = { span(0, #"é ", #"é " + #case[2], case[3], case[4]) },
 			}, markdown.parse("é " .. case[1] .. "!"))
 		end
 		assert.are.same({
@@ -318,7 +318,7 @@ describe("Markdown parsing", function()
 			assert.are.same({
 				lines = { "é 󰋩 " .. case[2] .. "!" },
 				targets = { target("image", case[3], 0, #"é ", #"é 󰋩 " + #case[2]) },
-				highlights = { span(0, #"é ", #"é 󰋩 " + #case[2], "AtlasMarkdownImage") },
+				highlights = { span(0, #"é ", #"é 󰋩 " + #case[2], "AtlasMarkdownImage", case[3]) },
 			}, markdown.parse("é " .. case[1] .. "!"))
 		end
 	end)
@@ -336,7 +336,7 @@ describe("Markdown parsing", function()
 		assert.are.same({
 			lines = { "  󰋩 GitHub", "after" },
 			targets = { target("image", url, 0, 2, #"  󰋩 GitHub") },
-			highlights = { span(0, 2, #"  󰋩 GitHub", "AtlasMarkdownImage") },
+			highlights = { span(0, 2, #"  󰋩 GitHub", "AtlasMarkdownImage", url) },
 		}, markdown.parse('<p align="center">\n  <img alt="GitHub" src="' .. url .. '">\n</p>\nafter'))
 	end)
 
@@ -372,7 +372,7 @@ describe("Markdown parsing", function()
 		assert.are.same({
 			lines = { "é 󰋩 CI!" },
 			targets = { target("link", url, 0, #"é ", #"é 󰋩 CI") },
-			highlights = { span(0, #"é ", #"é 󰋩 CI", "AtlasMarkdownLink") },
+			highlights = { span(0, #"é ", #"é 󰋩 CI", "AtlasMarkdownLink", url) },
 		}, markdown.parse(text))
 	end)
 

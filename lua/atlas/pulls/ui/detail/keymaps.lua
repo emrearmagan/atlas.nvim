@@ -82,6 +82,12 @@ local function open_current_line()
 		return false
 	end
 
+	local url = utils.url_at_cursor(win)
+	if url then
+		vim.ui.open(url)
+		return true
+	end
+
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
 	local entry = state.line_map[lnum]
 	local pr = state.current_pr

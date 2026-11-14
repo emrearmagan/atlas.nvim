@@ -6,7 +6,7 @@ local M = {
 	tab = {},
 }
 
----@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
+---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }|{ line: integer, line_hl_group: string }
 
 -- Window
 
@@ -153,6 +153,7 @@ function M.append_block(lines, spans, block, padding)
 				start_col = pad + span.start_col,
 				end_col = pad + span.end_col,
 				hl_group = span.hl_group,
+				url = span.url,
 			})
 		end
 	end
@@ -173,13 +174,14 @@ function M.apply_spans(buf, ns, spans)
 				end_row = span.line,
 				end_col = span.end_col,
 				hl_group = span.hl_group,
+				url = span.url,
 			})
 		end
 	end
 end
 
 ---Wrap display content, preserving highlights and prefixing each resulting row.
----@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string }[] }
+---@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }[] }
 ---@param width integer Content width, excluding the prefix.
 ---@param prefix string
 ---@return { lines: string[], highlights: AtlasUIHighlight[] }
@@ -217,6 +219,7 @@ function M.wrap_content(content, width, prefix)
 						start_col = #prefix + start_col,
 						end_col = #prefix + end_col,
 						hl_group = highlight.hl_group,
+						url = highlight.url,
 					})
 				end
 			end
@@ -224,6 +227,24 @@ function M.wrap_content(content, width, prefix)
 	end
 
 	return { lines = lines, highlights = spans }
+end
+
+---@param win integer
+---@return string|nil
+function M.url_at_cursor(win)
+	local row, col = unpack(vim.api.nvim_win_get_cursor(win))
+	local marks = vim.api.nvim_buf_get_extmarks(
+		vim.api.nvim_win_get_buf(win),
+		-1,
+		{ row - 1, col },
+		{ row - 1, col },
+		{ details = true, type = "highlight", overlap = true }
+	)
+	for _, mark in ipairs(marks) do
+		if mark[4] and mark[4].url then
+			return mark[4].url
+		end
+	end
 end
 
 ---Convert UTC date components to a Unix epoch without relying on the system timezone

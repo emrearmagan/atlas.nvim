@@ -58,6 +58,7 @@ local function render(state)
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 			line_hl_group = span.line_hl_group,
+			url = span.url,
 		})
 	end
 

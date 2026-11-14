@@ -80,6 +80,7 @@ function M.highlight_preview(buf, highlights)
 		vim.api.nvim_buf_set_extmark(buf, preview_namespace, span.line, span.start_col, {
 			end_col = span.end_col,
 			hl_group = span.hl_group,
+			url = span.url,
 		})
 	end
 end

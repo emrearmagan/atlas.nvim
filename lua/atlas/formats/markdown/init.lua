@@ -32,6 +32,7 @@ local block_handlers = {
 ---@field start_col integer Zero-based byte offset.
 ---@field end_col integer Exclusive byte offset.
 ---@field hl_group string
+---@field url? string
 
 ---@class AtlasMarkdownTarget
 ---@field type "link"|"image"
@@ -54,7 +55,7 @@ local function append_row(result, row, opts)
 		return opts.hl and opts.hl[style] or highlight_groups[style]
 	end
 
-	local function highlight(start_col, end_col, hl_group)
+	local function highlight(start_col, end_col, hl_group, url)
 		if not hl_group or end_col <= start_col then
 			return
 		end
@@ -64,6 +65,7 @@ local function append_row(result, row, opts)
 			start_col = start_col,
 			end_col = end_col,
 			hl_group = hl_group,
+			url = url,
 		}
 	end
 
@@ -73,7 +75,7 @@ local function append_row(result, row, opts)
 	for _, fragment in ipairs(row) do
 		local next_column = column + #fragment.text
 		highlight(column, next_column, group(fragment.background_style))
-		highlight(column, next_column, fragment.hl_group or group(fragment.style))
+		highlight(column, next_column, fragment.hl_group or group(fragment.style), fragment.url)
 
 		if fragment.url then
 			result.targets[#result.targets + 1] = {
