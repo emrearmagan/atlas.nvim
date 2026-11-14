@@ -21,9 +21,9 @@ local M = {}
 ---@field url string
 ---@field host string
 ---@field repo_full_name string|nil owner/repo, group/subgroup/repo (GitLab), workspace/repo (Bitbucket) or project/repo (Azure DevOps)
----@field id string|number|nil Number of the pull request, issue or pipeline, or the Jira issue key
+---@field id string|number|nil Number of the pull request, issue or pipeline, the Jira issue key, or the item on a page: discussion number or release tag
 ---@field repository_url string|nil Clone URL
----@field page string|nil Repository browser page the URL points to
+---@field page string|nil Repository browser page the URL points to, or "builds" for a pull request's pipelines
 
 ---@class AtlasProviderDomain
 ---@field module string

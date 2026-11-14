@@ -187,7 +187,7 @@ local function copy_url(state)
 	end
 end
 
----@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline, ctx: { id?: string } }
 function M.open(opts)
 	local provider = providers.load(opts.provider.id, "pulls")
 	---@cast provider PullsProvider|nil
@@ -200,7 +200,7 @@ function M.open(opts)
 		provider = provider,
 		backend = provider and pipelines.get(provider),
 		statusline = opts.statusline,
-		branch = opts.repo.default_branch,
+		branch = opts.ctx.id or opts.repo.default_branch,
 		runs = "loading",
 		line_map = {},
 		requests = requests.new(),

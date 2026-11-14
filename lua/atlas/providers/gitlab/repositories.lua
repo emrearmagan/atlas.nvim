@@ -285,7 +285,7 @@ function M.fetch_releases(repo, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts { id?: string }
+---@param opts { id?: string, tag?: string }
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
@@ -297,7 +297,8 @@ function M.fetch_release(repo, opts, on_done)
 		return nil
 	end
 
-	local release_path = opts.id and service.url_encode(opts.id) or "permalink/latest"
+	local ref = opts.id or opts.tag
+	local release_path = ref and service.url_encode(ref) or "permalink/latest"
 	local endpoint = string.format("/projects/%s/releases/%s", service.url_encode(path), release_path)
 	return service.request("GET", endpoint, nil, function(result, err, status)
 		if err then
