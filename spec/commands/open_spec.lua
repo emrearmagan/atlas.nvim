@@ -200,6 +200,24 @@ describe("commands.open", function()
 		assert.same({ "https://github.com/owner/repo", "releases" }, calls.browse)
 	end)
 
+	it("hands pull request checks to pipelines", function()
+		local checks = "https://github.com/owner/repo/pull/42/checks"
+		resolved[checks] = {
+			provider = "github",
+			domain = "pulls",
+			entity = "pr",
+			url = checks,
+			id = 42,
+			repo_full_name = "owner/repo",
+			page = "builds",
+		}
+
+		command.open(checks)
+
+		assert.are.equal(checks, calls.pipelines)
+		assert.are.equal(0, #calls.pull_detail)
+	end)
+
 	it("opens the pull request of the current branch for dot", function()
 		local pr = { id = 7, title = "Feature", state = "open" }
 		branch_pulls = { pr, { id = 8, title = "Old", state = "merged" } }

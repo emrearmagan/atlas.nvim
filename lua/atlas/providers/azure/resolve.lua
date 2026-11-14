@@ -80,6 +80,10 @@ function M.resolve(value, parsed)
 		branches = "branches",
 		tags = "tags",
 	})[(tail or ""):match("^/([^/]+)") or ""]
+	if target.page then
+		target.url = value
+	end
+
 	if not tail or tail == "" or target.page then
 		return target
 	end

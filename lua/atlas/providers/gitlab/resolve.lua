@@ -66,6 +66,10 @@ function M.resolve(value, parsed)
 		target.entity = entity
 		target.url = value
 		target.id = assert(tonumber(number))
+		if entity == "pr" and tail:match("^/pipelines") then
+			target.page = "builds"
+		end
+
 		return target
 	end
 
@@ -77,6 +81,13 @@ function M.resolve(value, parsed)
 		tags = "tags",
 		branches = "branches",
 	})[rest:match("^/([^/]+)") or ""]
+	if target.page then
+		target.url = value
+	end
+	if target.page == "releases" then
+		target.id = rest:match("^/releases/(.+)$")
+	end
+
 	if rest == "" or target.page then
 		return target
 	end

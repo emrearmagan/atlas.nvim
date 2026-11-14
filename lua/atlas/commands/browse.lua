@@ -141,7 +141,13 @@ local function open_repository(target, page, err)
 		notify.error("Repository page is not available: " .. page, { vim_notify = true })
 		return
 	end
-	repository.open(target.repo_full_name, provider, { page = page })
+
+	local ctx = {}
+	if target.entity == "repo" and page == target.page then
+		ctx.id = target.id
+	end
+
+	repository.open(target.repo_full_name, provider, { page = page, ctx = ctx })
 end
 
 ---@param value string|nil

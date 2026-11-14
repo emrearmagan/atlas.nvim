@@ -71,6 +71,10 @@ function M.resolve(value, parsed)
 		branches = "branches",
 		pipelines = "builds",
 	})[rest:match("^/([^/]+)") or ""]
+	if target.page then
+		target.url = value
+	end
+
 	if rest == "" or target.page then
 		return target
 	end

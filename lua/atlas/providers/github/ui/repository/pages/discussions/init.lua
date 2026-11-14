@@ -263,7 +263,7 @@ local function copy_url(state)
 	end
 end
 
----@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline, ctx: { number?: integer } }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline, ctx: { id?: integer } }
 function M.open(opts)
 	---@type RepositoryDiscussions
 	local state = {
@@ -306,8 +306,8 @@ function M.open(opts)
 	})
 
 	load(state)
-	if opts.ctx.number then
-		open_panel(state, opts.ctx.number)
+	if opts.ctx.id then
+		open_panel(state, opts.ctx.id)
 	end
 end
 
