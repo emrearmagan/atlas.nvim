@@ -366,6 +366,34 @@ describe("Markdown parsing", function()
 		has_group(result, "AtlasMarkdownStrong", 6)
 	end)
 
+	it("collapses blank lines left around hidden tags", function()
+		assert.same({ "a", "", "b" }, markdown.parse("a\n\n<dl>\n\n<dd>\n\n\nb").lines)
+	end)
+
+	it("renders single-line HTML reports as tables with links", function()
+		local result = markdown.parse(
+			"80% (8/10)<details><summary>Coverage &bull;</summary><table>"
+				.. "<tr><th>File</th><th>Missing</th></tr>"
+				.. '<tr><td colspan="2"><b>src</b></td></tr>'
+				.. '<tr><td>&nbsp; &nbsp;<a href="a.py">a.py</a></td><td><a href="a.py#L3-L4">3&ndash;4</a></td></tr>'
+				.. "</table></details>"
+		)
+		assert.same({
+			"80% (8/10)",
+			"▾ Coverage •",
+			"|---------|---------|",
+			"| File    | Missing |",
+			"|---------|---------|",
+			"| src     |         |",
+			"|    a.py | 3–4     |",
+			"|---------|---------|",
+		}, result.lines)
+		assert.same({
+			target("link", "a.py", 6, #"|    ", #"|    a.py"),
+			target("link", "a.py#L3-L4", 6, #"|    a.py | ", #"|    a.py | 3–4"),
+		}, result.targets)
+	end)
+
 	it("renders a linked image label and keeps the outer destination", function()
 		local url = "https://github.com/owner/repo/actions/workflows/ci.yml"
 		local text = "é [![CI](" .. url .. "/badge.svg)](" .. url .. ")!"
