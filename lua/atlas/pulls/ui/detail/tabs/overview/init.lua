@@ -618,7 +618,7 @@ end
 ---@return boolean|nil
 function M.on_enter(_pr, entry)
 	if entry.kind == "pipeline" and entry.url and entry.url ~= "" then
-		vim.ui.open(entry.url)
+		require("atlas.ui.links").open(entry.url)
 		return true
 	end
 end
