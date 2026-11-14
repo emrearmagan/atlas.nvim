@@ -13,7 +13,7 @@ local ROUTES = {
 	{ path = "/issues", page = "issues" },
 	{ path = "/pulls", page = "pulls" },
 	{ path = "/discussions", page = "discussions" },
-	{ path = "/actions", page = "builds" },
+	{ path = "/actions", page = "builds", query = "branch:([^&+%s]+)" },
 	{ path = "/releases", page = "releases" },
 	{ path = "/tags", page = "tags" },
 	{ path = "/branches", page = "branches" },
@@ -64,11 +64,16 @@ function M.resolve(value, parsed)
 				return nil, "Unsupported GitHub URL"
 			end
 
+			local id = captures[1]
+			if route.query and parsed.query then
+				id = parsed.query:match(route.query)
+			end
+
 			return vim.tbl_extend("force", target, {
 				domain = route.entity == "issue" and "issues" or "pulls",
 				entity = route.entity or "repo",
 				url = value,
-				id = route.entity and tonumber(captures[1]) or captures[1],
+				id = route.entity and tonumber(id) or id,
 				page = route.page,
 			})
 		end

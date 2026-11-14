@@ -63,6 +63,7 @@ describe("providers.resolve", function()
 			assert.are.equal(base .. "/pull/42", target.url)
 			assert.are.equal(base .. ".git", target.repository_url)
 			assert.are.equal(42, assert(providers.resolve(base .. "/pull/42/files")).id)
+			assert.are.equal(42, assert(providers.resolve(base .. "/pull/42?diff=split")).id)
 			assert.is_nil(target.page)
 		end)
 
@@ -107,6 +108,17 @@ describe("providers.resolve", function()
 			assert.are.equal("v1.0.0", assert(providers.resolve(base .. "/releases/tag/v1.0.0")).id)
 			assert.is_nil(assert(providers.resolve(base .. "/discussions")).id)
 			assert.is_nil(assert(providers.resolve(base .. "/releases")).id)
+		end)
+
+		it("keeps the branch of a workflow runs search", function()
+			local target = assert(providers.resolve(base .. "/actions?query=branch:feat/x"))
+			assert.are.equal("builds", target.page)
+			assert.are.equal("feat/x", target.id)
+			assert.are.equal(
+				"feat/x",
+				assert(providers.resolve(base .. "/actions?query=is%3Afailure+branch%3Afeat%2Fx")).id
+			)
+			assert.is_nil(assert(providers.resolve(base .. "/actions")).id)
 		end)
 
 		it("resolves Enterprise Server URLs on the active host only", function()

@@ -25,8 +25,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field keymaps table<string, AtlasHelpKeyItem[]>
 
 ---@class RepositoryReleasesCtx
----@field release_id string|nil
----@field id string|nil Release tag from a release URL
+---@field id string|nil
 
 local M = {
 	key = "releases",
@@ -294,7 +293,7 @@ function M.open(opts)
 		refresh = refresh,
 		search = search,
 	})
-	load(state, opts.ctx.release_id, opts.ctx.id)
+	load(state, nil, opts.ctx.id)
 end
 
 ---@param buf integer

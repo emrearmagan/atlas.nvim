@@ -12,8 +12,7 @@ local function popup_keys()
 		mark_read = resolver.resolve("ui.notifications.mark_read"),
 		mark_done = resolver.resolve("ui.notifications.mark_done"),
 		refresh = resolver.resolve("ui.refresh_view"),
-		open = resolver.resolve("ui.select"),
-		open_in_browser = resolver.resolve("ui.open_in_browser"),
+		open = resolver.resolve({ "ui.select", "ui.open_in_browser" }),
 		copy_url = resolver.resolve("ui.copy_url"),
 		close = resolver.resolve("ui.close"),
 	}
@@ -91,10 +90,7 @@ local function build_footer_text(provider)
 	local keys = popup_keys()
 	local items = {}
 	if keys.open then
-		table.insert(items, keys.open.key[1] .. " " .. keys.open.label)
-	end
-	if keys.open_in_browser then
-		table.insert(items, keys.open_in_browser.key[1] .. " " .. keys.open_in_browser.label)
+		table.insert(items, table.concat(keys.open.key, "/") .. " " .. keys.open.label)
 	end
 	if keys.copy_url then
 		table.insert(items, keys.copy_url.key[1] .. " " .. keys.copy_url.label)
@@ -170,20 +166,6 @@ local function load(provider, force_refresh)
 end
 
 ---@param notification AtlasNotification|nil
-local function open_in_browser(notification)
-	if notification == nil or not notification.url or notification.url == "" then
-		notify.warn("Notification has no URL")
-		return
-	end
-	local ok, err = pcall(vim.ui.open, notification.url)
-	if not ok then
-		notify.error(string.format("Failed to open URL: %s", tostring(err)))
-		return
-	end
-	notify.info("Opened in browser")
-end
-
----@param notification AtlasNotification|nil
 local function copy_url(notification)
 	if notification == nil or not notification.url or notification.url == "" then
 		notify.warn("Notification has no URL")
@@ -236,8 +218,10 @@ local function open(provider, notification, on_update)
 	end
 
 	M.close()
-	if not capability(provider).open(notification) then
-		open_in_browser(notification)
+	if notification.url and notification.url ~= "" then
+		require("atlas.ui.links").open(notification.url)
+	else
+		notify.warn("Notification has no URL")
 	end
 
 	mark_read(provider, notification, on_update, { quiet = true })
@@ -295,10 +279,6 @@ local function register_keymaps(target_buf, provider, on_update)
 
 	map(keys.open, function()
 		open(provider, notification_under_cursor(), on_update)
-	end)
-
-	map(keys.open_in_browser, function()
-		open_in_browser(notification_under_cursor())
 	end)
 
 	map(keys.copy_url, function()

@@ -3,10 +3,6 @@ local M = {}
 
 local client = require("atlas.providers.github.client")
 
----@class GitHubNotification : AtlasNotification
----@field repo string
----@field subject_url string
-
 local SUBJECT_KIND = {
 	PullRequest = "pr",
 	Issue = "issue",
@@ -18,14 +14,16 @@ local SUBJECT_KIND = {
 ---@param subject_type string
 ---@param subject_url string|nil
 ---@param repo string
+---@param title string
 ---@return string|nil
-local function web_url(subject_type, subject_url, repo)
+local function web_url(subject_type, subject_url, repo, title)
 	if repo == "" then
 		return nil
 	end
 	local base = string.format("https://%s/%s", client.hostname(), repo)
 	local number = subject_url and subject_url:match("/(%d+)$")
 	local sha = subject_url and subject_url:match("/commits/(%x+)$")
+	local branch = title:match(" for (%S+) branch$")
 	if subject_type == "PullRequest" and number then
 		return base .. "/pull/" .. number
 	elseif subject_type == "Issue" and number then
@@ -36,6 +34,8 @@ local function web_url(subject_type, subject_url, repo)
 		return base .. "/commit/" .. sha
 	elseif subject_type == "Release" then
 		return base .. "/releases"
+	elseif subject_type == "CheckSuite" and branch then
+		return base .. "/actions?query=branch:" .. branch
 	elseif subject_type == "CheckSuite" then
 		return base .. "/actions"
 	elseif subject_type == "RepositoryVulnerabilityAlert" or subject_type == "RepositoryDependabotAlertsThread" then
@@ -47,7 +47,7 @@ local function web_url(subject_type, subject_url, repo)
 end
 
 ---@param raw table
----@return GitHubNotification
+---@return AtlasNotification
 local function normalize(raw)
 	local subject = raw.subject or {}
 	local repo = tostring((raw.repository or {}).full_name or "")
@@ -73,9 +73,7 @@ local function normalize(raw)
 		timestamp = updated_at ~= "" and updated_at or nil,
 		kind = SUBJECT_KIND[subject_type],
 		unread = raw.unread == true,
-		url = web_url(subject_type, subject_url, repo),
-		repo = repo,
-		subject_url = subject_url or "",
+		url = web_url(subject_type, subject_url, repo, raw_title),
 	}
 end
 
@@ -118,7 +116,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.mark_read(thread_id, on_done)
-	return client.api("PATCH", "notifications/threads/" .. thread_id, nil, function(_, err)
+	return client.api("PATCH", "notifications/threads/" .. thread_id, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -134,7 +132,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.mark_done(thread_id, on_done)
-	return client.api("DELETE", "notifications/threads/" .. thread_id, nil, function(_, err)
+	return client.api("DELETE", "notifications/threads/" .. thread_id, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -144,48 +142,6 @@ function M.mark_done(thread_id, on_done)
 		action = "Mark notification done",
 		thread_id = thread_id,
 	})
-end
-
----@param notification AtlasNotification
----@return boolean
-function M.open(notification)
-	---@cast notification GitHubNotification
-	if notification.kind == "checks" then
-		local provider = require("atlas.providers").load("github", "pulls")
-		---@cast provider PullsProvider
-		local branch = notification.title:match(" for (%S+) branch$")
-		if branch == nil then
-			require("atlas.ui.repository").open(notification.repo, provider, { page = "builds" })
-		else
-			require("atlas.pulls.pipelines").open({
-				provider = "github",
-				repo_full_name = notification.repo,
-				target = branch,
-			}, provider)
-		end
-	elseif notification.kind == "release" then
-		local provider = require("atlas.providers").load("github", "pulls")
-		---@cast provider PullsProvider
-		require("atlas.ui.repository").open(notification.repo, provider, {
-			page = "releases",
-			ctx = { release_id = notification.subject_url:match("/releases/(%d+)$") },
-		})
-	elseif notification.kind == "discussion" then
-		local provider = require("atlas.providers").load("github", "pulls")
-		---@cast provider PullsProvider
-		require("atlas.ui.repository").open(notification.repo, provider, {
-			page = "discussions",
-			ctx = { id = notification.subject_url:match("/discussions/(%d+)$") },
-		})
-	elseif notification.kind == "pr" or notification.kind == "issue" then
-		if notification.url == nil then
-			return false
-		end
-		require("atlas.commands.open").open(notification.url)
-	else
-		return false
-	end
-	return true
 end
 
 return M
