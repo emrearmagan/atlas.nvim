@@ -153,6 +153,6 @@ describe("GitHub notifications", function()
 		})
 
 		assert.is_true(require(MODULE).open(notifications[1]))
-		assert.are.same({ repo = "octo/repo", opts = { page = "discussions", ctx = { id = 40 } } }, opened)
+		assert.are.same({ repo = "octo/repo", opts = { page = "discussions", ctx = { id = "40" } } }, opened)
 	end)
 end)

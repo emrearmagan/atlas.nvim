@@ -102,7 +102,7 @@ describe("providers.resolve", function()
 		end)
 
 		it("keeps the discussion or release a page points to", function()
-			assert.are.equal(40, assert(providers.resolve(base .. "/discussions/40")).id)
+			assert.are.equal("40", assert(providers.resolve(base .. "/discussions/40")).id)
 			assert.are.equal(base .. "/discussions/40", assert(providers.resolve(base .. "/discussions/40")).url)
 			assert.are.equal("v1.0.0", assert(providers.resolve(base .. "/releases/tag/v1.0.0")).id)
 			assert.is_nil(assert(providers.resolve(base .. "/discussions")).id)

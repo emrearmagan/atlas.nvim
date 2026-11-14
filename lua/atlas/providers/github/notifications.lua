@@ -175,7 +175,7 @@ function M.open(notification)
 		---@cast provider PullsProvider
 		require("atlas.ui.repository").open(notification.repo, provider, {
 			page = "discussions",
-			ctx = { id = tonumber(notification.subject_url:match("/discussions/(%d+)$")) },
+			ctx = { id = notification.subject_url:match("/discussions/(%d+)$") },
 		})
 	elseif notification.kind == "pr" or notification.kind == "issue" then
 		if notification.url == nil then
