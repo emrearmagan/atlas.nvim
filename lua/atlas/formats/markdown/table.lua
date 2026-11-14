@@ -135,6 +135,61 @@ local function layout_row(cells, column_widths, alignment, cell_padding, fill)
 	return rows
 end
 
+local M = {}
+
+---Lay out rows of inline Markdown cells as a bordered table.
+---@param cell_rows string[][]
+---@param alignment table<integer, "left"|"center"|"right">
+---@param opts { width?: integer }
+---@param header boolean
+function M.render(cell_rows, alignment, opts, header)
+	local column_count = 0
+	for _, row in ipairs(cell_rows) do
+		column_count = math.max(column_count, #row)
+	end
+
+	local column_widths, minimums = {}, {}
+	for column = 1, column_count do
+		column_widths[column] = 1
+		minimums[column] = 1
+	end
+
+	local rows = {}
+	for row_index, row in ipairs(cell_rows) do
+		rows[row_index] = {}
+		for column = 1, column_count do
+			local fragments = elements.parse_inline(row[column] or "")
+			rows[row_index][column] = fragments
+			local content = elements.join(fragments)
+			column_widths[column] = math.max(column_widths[column], vim.fn.strdisplaywidth(content))
+			for character in content:gmatch(".[\128-\191]*") do
+				minimums[column] = math.max(minimums[column], vim.fn.strdisplaywidth(character))
+			end
+		end
+	end
+
+	local cell_padding = fit_columns(column_widths, minimums, opts.width)
+	local rendered_rows = { divider(column_widths, cell_padding, borders.top) }
+	local body_start = header and 2 or 1
+	for row_index, cells in ipairs(rows) do
+		local fill
+		if header and row_index == 1 then
+			fill = "table_header"
+		elseif (row_index - body_start) % 2 == 1 then
+			fill = "table_row"
+		end
+
+		vim.list_extend(rendered_rows, layout_row(cells, column_widths, alignment, cell_padding, fill))
+
+		if header and row_index == 1 then
+			rendered_rows[#rendered_rows + 1] = divider(column_widths, cell_padding, borders.middle)
+		end
+	end
+
+	rendered_rows[#rendered_rows + 1] = divider(column_widths, cell_padding, borders.bottom)
+	return rendered_rows
+end
+
 --   | Name |
 --   | --- |
 --   | Ada |
@@ -144,7 +199,7 @@ end
 --   |------|
 --   | Ada  |
 --   |------|
-local function parse(lines, index, opts)
+function M.parse(lines, index, opts)
 	local header = split_cells(lines[index])
 	if not header or #header == 0 or not lines[index + 1] then
 		return
@@ -171,7 +226,6 @@ local function parse(lines, index, opts)
 	end
 
 	local cell_rows = { header }
-	local column_count = #header
 	index = index + 2
 
 	while index <= #lines do
@@ -181,47 +235,10 @@ local function parse(lines, index, opts)
 		end
 
 		cell_rows[#cell_rows + 1] = cells
-		column_count = math.max(column_count, #cells)
 		index = index + 1
 	end
 
-	local column_widths, minimums = {}, {}
-	for column = 1, column_count do
-		column_widths[column] = 1
-		minimums[column] = 1
-	end
-
-	for _, row in ipairs(cell_rows) do
-		for column = 1, column_count do
-			local fragments = elements.parse_inline(row[column] or "")
-			row[column] = fragments
-			local content = elements.join(fragments)
-			column_widths[column] = math.max(column_widths[column], vim.fn.strdisplaywidth(content))
-			for character in content:gmatch(".[\128-\191]*") do
-				minimums[column] = math.max(minimums[column], vim.fn.strdisplaywidth(character))
-			end
-		end
-	end
-
-	local cell_padding = fit_columns(column_widths, minimums, opts.width)
-	local rendered_rows = { divider(column_widths, cell_padding, borders.top) }
-	for row_index, cells in ipairs(cell_rows) do
-		local fill
-		if row_index == 1 then
-			fill = "table_header"
-		elseif row_index % 2 == 1 then
-			fill = "table_row"
-		end
-
-		vim.list_extend(rendered_rows, layout_row(cells, column_widths, alignment, cell_padding, fill))
-
-		if row_index == 1 then
-			rendered_rows[#rendered_rows + 1] = divider(column_widths, cell_padding, borders.middle)
-		end
-	end
-
-	rendered_rows[#rendered_rows + 1] = divider(column_widths, cell_padding, borders.bottom)
-	return rendered_rows, index
+	return M.render(cell_rows, alignment, opts, true), index
 end
 
-return parse
+return M
