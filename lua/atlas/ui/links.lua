@@ -88,6 +88,17 @@ local function preview(link, done, width)
 	end)
 end
 
+---@param url string
+---@param back fun()|nil
+function M.open(url, back)
+	local target = providers.resolve(url)
+	if target and config.provider_options(target.provider) then
+		open.open(url, { back = back })
+	else
+		vim.ui.open(url)
+	end
+end
+
 ---@param links AtlasLink[]
 ---@param back fun()|nil
 local function pick(links, back)
@@ -127,15 +138,8 @@ local function pick(links, back)
 			end, width)
 		end,
 		on_select = function(link)
-			if not link then
-				return
-			end
-
-			local target = providers.resolve(link.url)
-			if target and config.provider_options(target.provider) then
-				open.open(link.url, { back = back })
-			else
-				vim.ui.open(link.url)
+			if link then
+				M.open(link.url, back)
 			end
 		end,
 	})
