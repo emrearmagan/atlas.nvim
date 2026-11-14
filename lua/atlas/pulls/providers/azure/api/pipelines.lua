@@ -556,7 +556,6 @@ function M.cancel(context, pipeline, on_done)
 				on_done(false, err)
 				return
 			end
-			service.clear_cache()
 			on_done(true, nil)
 		end,
 		{ action = "Cancel build", pipeline_id = pipeline.id }
@@ -579,7 +578,6 @@ function M.update_stage(context, pipeline, stage, action, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Update build stage", pipeline_id = pipeline.id, stage = stage.ref_name })
 end

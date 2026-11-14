@@ -6,6 +6,7 @@
 ---| "labels"
 ---| "open_repo"
 ---| "toggle_subscription"
+---| "toggle_auto_merge"
 
 local actions = require("atlas.pulls.actions")
 local icons = require("atlas.ui.shared.icons")
@@ -15,6 +16,7 @@ local picker = require("atlas.ui.picker")
 local picker_format = require("atlas.ui.picker.format")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local users_api = require("atlas.providers.github.users")
+local merge_buffer = require("atlas.pulls.ui.merge")
 
 ---@param original table<string, boolean>
 ---@param selected table<string, boolean>
@@ -112,6 +114,30 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
+---@param callback fun(details: GitHubPullRequestDetails)
+local function resolve_details(ctx, done, callback)
+	if ctx.details then
+		local details = ctx.details
+		---@cast details GitHubPullRequestDetails
+		callback(details)
+		return
+	end
+
+	local pr = assert(ctx.pr)
+	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load pull request details")
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		---@cast details GitHubPullRequestDetails
+		callback(details)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
 	local pr = assert(ctx.pr)
 
@@ -187,20 +213,7 @@ local function edit_assignees(ctx, done)
 	end
 
 	notify.loading("Loading assignees...")
-	if ctx.details then
-		local details = ctx.details
-		---@cast details GitHubPullRequestDetails
-		open_picker(details.assignees)
-		return
-	end
-	pullrequests.fetch_pullrequest(pr, nil, function(details, err)
-		if err or details == nil then
-			local message = tostring(err or "Failed to load pull request")
-			notify.error("Failed to load assignees: " .. message)
-			done(nil, message)
-			return
-		end
-		---@cast details GitHubPullRequestDetails
+	resolve_details(ctx, done, function(details)
 		open_picker(details.assignees)
 	end)
 end
@@ -274,20 +287,8 @@ local function edit_labels(ctx, done)
 	end
 
 	notify.loading("Loading labels...")
-	if ctx.details then
-		local details = ctx.details
-		---@cast details GitHubPullRequestDetails
+	resolve_details(ctx, done, function(details)
 		open_picker(details)
-		return
-	end
-	pullrequests.fetch_pullrequest(pr, nil, function(current, current_err)
-		if current_err or current == nil then
-			notify.error(current_err or "Failed to load PR labels")
-			done(nil, current_err or "Failed to load PR labels")
-			return
-		end
-		---@cast current GitHubPullRequestDetails
-		open_picker(current)
 	end)
 end
 
@@ -453,10 +454,9 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local pr = assert(ctx.pr)
-	---@cast pr GitHubPullRequest
-	---@param details PullRequestDetails
-	local function update(details)
+	resolve_details(ctx, done, function(details)
+		local pr = assert(ctx.pr)
+		---@cast pr GitHubPullRequest
 		notify.loading(details.is_subscribed and "Unsubscribing..." or "Subscribing...")
 		pullrequests.set_subscription(pr, details.is_subscribed ~= true, function(subscribed, err)
 			if err then
@@ -472,20 +472,79 @@ local function toggle_subscription(ctx, done)
 			end
 			done({ changed_pr = true }, nil)
 		end)
+	end)
+end
+
+---@param pr GitHubPullRequest
+---@param details GitHubPullRequestDetails
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function enable_auto_merge(pr, details, done)
+	local on_cancel = function()
+		done({ changed_pr = false, message = "Auto-merge cancelled" }, nil)
 	end
 
-	if ctx.details then
-		update(ctx.details)
-		return
+	local on_submit = function(options, completed)
+		notify.loading("Enabling auto-merge...")
+		pullrequests.enable_auto_merge(pr, options, function(_, err)
+			if err then
+				notify.error("Enable auto-merge failed: " .. tostring(err))
+				completed(false)
+				return
+			end
+			details.can_enable_auto_merge = false
+			details.can_disable_auto_merge = true
+			pr.auto_merge_method = options.method:upper()
+			completed(true)
+			notify.success("Auto-merge enabled", { timeout = 1200 })
+			done({ changed_pr = true, message = "Auto-merge enabled" }, nil)
+		end)
 	end
-	pullrequests.fetch_pullrequest(pr, nil, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load pull request details")
-			notify.error(message)
-			done(nil, message)
+
+	merge_buffer.open(pr, {
+		on_cancel = on_cancel,
+		on_submit = on_submit,
+	}, {
+		submit_label = "Enable auto-merge",
+		submitting_label = "enabling auto-merge...",
+		-- GitHub's auto-merge has no per-PR branch deletion; it follows the repo's
+		-- "Automatically delete head branches" setting.
+		hidden_options = { delete_source_branch = true },
+	})
+end
+
+---@param pr GitHubPullRequest
+---@param details GitHubPullRequestDetails
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function disable_auto_merge(pr, details, done)
+	notify.loading("Disabling auto-merge...")
+	pullrequests.disable_auto_merge(pr, function(_, err)
+		if err then
+			notify.error("Disable auto-merge failed: " .. tostring(err))
+			done(nil, tostring(err))
 			return
 		end
-		update(details)
+		details.can_disable_auto_merge = false
+		details.can_enable_auto_merge = true
+		pr.auto_merge_method = nil
+		notify.success("Auto-merge disabled", { timeout = 1200 })
+		done({ changed_pr = true, message = "Auto-merge disabled" }, nil)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function toggle_auto_merge(ctx, done)
+	resolve_details(ctx, done, function(details)
+		local pr = assert(ctx.pr)
+		---@cast pr GitHubPullRequest
+		if details.can_disable_auto_merge then
+			disable_auto_merge(pr, details, done)
+		elseif details.can_enable_auto_merge then
+			enable_auto_merge(pr, details, done)
+		else
+			notify.warn("Auto-merge is not available for this PR")
+			done({ changed_pr = false, message = "Auto-merge not available" }, nil)
+		end
 	end)
 end
 
@@ -511,6 +570,14 @@ register({
 	icon = icons.get("merge", "actions"),
 	is_available = merge_available,
 	run = actions.merge.run,
+})
+
+register({
+	id = "toggle_auto_merge",
+	label = "Toggle auto-merge",
+	icon = icons.get("auto_merge", "actions"),
+	is_available = merge_available,
+	run = toggle_auto_merge,
 })
 
 register(actions.decline)

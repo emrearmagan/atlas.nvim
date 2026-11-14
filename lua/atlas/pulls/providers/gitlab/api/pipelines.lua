@@ -413,7 +413,7 @@ function M.fetch(context, opts, on_done)
 	local cache_key = pr and string.format("gitlab_pulls:pipelines:%s!%d", path, iid)
 		or string.format("gitlab_pulls:branch_pipelines:%s:%s", path, branch)
 	if not (opts or {}).force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -430,7 +430,7 @@ function M.fetch(context, opts, on_done)
 			return
 		end
 		local pipelines = pipeline and { pipeline } or {}
-		service.set_memory_cache(cache_key, pipelines)
+		service.set_cache(cache_key, pipelines)
 		on_done(pipelines, nil)
 	end
 
@@ -626,7 +626,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 	end
 	local cache_key = string.format("gitlab_pulls:commit_status:%s:%s", path, commit.hash)
 	if not (opts or {}).force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached.status, cached.url, nil)
 			return nil
@@ -646,7 +646,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 			url = url or web_url(item.target_url)
 		end
 		local status = pipeline_utils.aggregate_state(statuses):lower()
-		service.set_memory_cache(cache_key, { status = status, url = url })
+		service.set_cache(cache_key, { status = status, url = url })
 		on_done(status, url, nil)
 	end, { action = "Fetch commit status", project = path, commit_hash = commit.hash })
 end

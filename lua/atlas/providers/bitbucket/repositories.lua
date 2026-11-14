@@ -260,7 +260,6 @@ function M.delete_branch(repo, branch, on_done)
 			return
 		end
 
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Delete repository branch", repo = repo.full_name, branch = branch_name })
 end

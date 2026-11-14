@@ -165,6 +165,8 @@ local inline_handlers = {
 	M.inline.link,
 	M.inline.code,
 	html.inline.comment,
+	html.inline.tag,
+	html.inline.entity,
 	M.inline.emoji,
 	M.inline.emphasis,
 	M.inline.mention,
@@ -189,7 +191,7 @@ function M.parse_inline(text)
 		end
 
 		if not fragment then
-			local plain_text = remaining_text:match("^[^\\%[!`*_~<@:]+")
+			local plain_text = remaining_text:match("^[^\\%[!`*_~<@:&]+")
 			if not plain_text then
 				plain_text = remaining_text:sub(1, 1)
 			end

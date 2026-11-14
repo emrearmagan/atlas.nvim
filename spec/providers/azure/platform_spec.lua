@@ -28,7 +28,6 @@ describe("Azure repositories and builds", function()
 			build_query = client.build_query,
 			get_cache = function() end,
 			set_cache = function() end,
-			clear_cache = function() end,
 			request = function(method, endpoint, payload, done)
 				local request = { method = method, endpoint = endpoint, payload = payload, done = done }
 				requests[#requests + 1] = request

@@ -230,6 +230,7 @@ local function styles()
 	local warn = foreground("DiagnosticWarn") or foreground("Type")
 	local warn_icon = foreground("Special") or info
 	local err = foreground("DiagnosticError") or foreground("ErrorMsg")
+	local purple = normalize_color(vim.g.terminal_color_5) or accent
 	local page = background("Normal")
 
 	local error_line = { fg = foreground("DiagnosticVirtualTextError") or err }
@@ -264,6 +265,14 @@ local function styles()
 		AtlasIssueClosed = { fg = warn_icon, bold = true },
 		AtlasIssueOpenChip = chip_style(ok),
 		AtlasIssueClosedChip = chip_style(warn_icon),
+		AtlasIssueTypeGray = { fg = muted },
+		AtlasIssueTypeBlue = { fg = info },
+		AtlasIssueTypeGreen = { fg = ok },
+		AtlasIssueTypeYellow = { fg = warn },
+		AtlasIssueTypeOrange = { fg = err and warn and blend(err, warn, 0.5) or warn },
+		AtlasIssueTypeRed = { fg = err },
+		AtlasIssueTypePink = { fg = err and purple and blend(purple, err, 0.5) or purple },
+		AtlasIssueTypePurple = { fg = purple },
 		AtlasJiraKey = { fg = accent, bold = true },
 		AtlasJiraChipStoryPoints = chip_style(err),
 		AtlasJiraChipDueDate = { bg = line, fg = muted, bold = true },

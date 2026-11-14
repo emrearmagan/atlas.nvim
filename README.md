@@ -28,10 +28,12 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Azure D
   - [GitHub](#github)
   - [GitLab](#gitlab)
   - [Bitbucket](#bitbucket)
+  - [Azure DevOps](#azure)
 - [Issues](#issues)
   - [GitHub](#github-issues)
   - [GitLab](#gitlab-issues)
   - [Jira](#jira)
+  - [Azure DevOps](#azure-issues)
 - [Commands](#commands)
 
 ## Installation
@@ -297,6 +299,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - Use Conventional Comments templates or define your own.
 - Save issue descriptions as templates and reuse them when creating issues.
 - Close or reopen GitHub/GitLab issues and change Jira workflow states.
+- Set GitHub issue types like Task, Bug or Feature.
 - Jump between linked issues and pull requests and back, or browse related issues and sub-issues.
 - See a GitHub PR's position in its stack (e.g. `2/5`) and step through the stack with `]s` / `[s`.
 - Read GitHub and GitLab notifications, open them in Atlas, and mark them as read or done.
@@ -663,6 +666,8 @@ pulls = {
 <details>
 <summary><strong>Azure DevOps</strong></summary>
 
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/pulls/providers/azure/config.lua)
+
 ```lua
 pulls = {
   ---@type AtlasAzurePullsConfig
@@ -864,8 +869,9 @@ issues = {
       key   = "S",      -- default
       label = "Search", -- default
       items = {
-        ["Bugs"]            = "is:issue is:open label:bug",
-        ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
+        ["Bugs"]              = "is:issue is:open type:Bug",
+        ["Good first issues"] = 'is:issue is:open label:"good first issue"',
+        ["Recently closed"]   = "is:issue is:closed author:@me sort:updated-desc",
       },
     },
   },
@@ -933,6 +939,8 @@ issues = {
 Uses the shared `providers.azure` authentication. Views use flat [WIQL queries](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops).
 
 Azure supports both HTML and Markdown for work-item [descriptions](https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/) and [comments](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat). [Pandoc](https://pandoc.org) is needed to view and edit HTML as Markdown. Saving converted content switches it to Markdown permanently.
+
+[Full configuration](https://github.com/emrearmagan/atlas.nvim/blob/main/lua/atlas/issues/providers/azure/config.lua)
 
 ```lua
 issues = {
@@ -1071,7 +1079,7 @@ keymaps = {
     reviewers = "gr", -- Pull requests only.
     base = "gb", -- Pull requests only.
     draft = "gD", -- Pull requests only.
-    issue_type = "gt", -- Jira and Azure DevOps only.
+    issue_type = "gt", -- Jira, Azure DevOps and GitHub only.
     fields = "gf", -- Jira only.
     templates = "gT",
     delete_template = "<C-d>",

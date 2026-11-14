@@ -116,7 +116,6 @@ function M.add_comment(pr, content, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local comment = mapper.to_comment(result, pr.author.id)
 		if comment == nil then
 			on_done(nil, "Bitbucket did not return the created comment")
@@ -146,7 +145,6 @@ function M.edit_comment(pr, comment, content, on_done)
 			on_done(nil, err)
 			return
 		end
-		service.clear_cache()
 		local updated = mapper.to_comment(result, pr.author.id)
 		if updated == nil then
 			on_done(nil, "Bitbucket did not return the updated comment")
@@ -176,7 +174,6 @@ function M.delete_comment(pr, comment, on_done)
 			on_done(false, err)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, { action = "Delete PR comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
@@ -196,9 +193,6 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 
 	local url = string.format("%s/%s/resolve", comments_url, tostring(root.parent_id or root.id))
 	return service.request_text(resolved and "POST" or "DELETE", url, nil, nil, function(_, err)
-		if not err then
-			service.clear_cache()
-		end
 		on_done(err == nil, err)
 	end, {
 		action = resolved and "Resolve PR thread" or "Reopen PR thread",

@@ -175,7 +175,6 @@ local function set_vote(pr, vote, body, on_done)
 				on_done(false, err)
 				return
 			end
-			service.clear_cache()
 			if vim.trim(body) == "" then
 				on_done(true, nil)
 				return

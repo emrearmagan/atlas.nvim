@@ -13,7 +13,7 @@ local M = {
 function M.fetch_user(callback)
 	local jira = config.provider_options("jira") or {}
 	local cache_key = string.format("jira:user:me:v2:%s:%s", tostring(jira.base_url or ""), tostring(jira.email or ""))
-	local cached = service.get_cache(cache_key)
+	local cached = service.get_persistent_cache(cache_key)
 	if cached then
 		callback(cached, nil)
 		return nil
@@ -27,7 +27,7 @@ function M.fetch_user(callback)
 
 		local user = mapper.to_user(result)
 
-		service.set_cache(cache_key, user)
+		service.set_persistent_cache(cache_key, user)
 		callback(user, nil)
 	end, {
 		action = "Fetch current user",

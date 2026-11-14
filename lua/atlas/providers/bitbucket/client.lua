@@ -71,24 +71,25 @@ local function log_request(method, url, ctx)
 end
 
 ---@return number
-function M.cache_ttl()
+local function cache_ttl()
 	local bb = config.provider_options("bitbucket")
 	return tonumber(bb and bb.cache_ttl) or 300
 end
 
-function M.clear_cache()
-	memory_cache.clear_prefix("bitbucket:")
-	cache.clear_prefix("bitbucket:prs:")
+---@param key string
+---@return string
+local function cache_key(key)
+	return "bitbucket:" .. key
 end
 
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)
-	if M.cache_ttl() <= 0 then
+	if cache_ttl() <= 0 then
 		return nil, false
 	end
 
-	local entry = memory_cache.get(key)
+	local entry = memory_cache.get(cache_key(key))
 	if not entry then
 		return nil, false
 	end
@@ -100,20 +101,20 @@ end
 ---@param value any
 ---@param ttl number|nil
 function M.set_cache(key, value, ttl)
-	if M.cache_ttl() <= 0 then
+	if cache_ttl() <= 0 then
 		return
 	end
-	memory_cache.set(key, value, ttl or M.cache_ttl())
+	memory_cache.set(cache_key(key), value, ttl or cache_ttl())
 end
 
 ---@param key string
 ---@return any|nil, boolean
 function M.get_persistent_cache(key)
-	if M.cache_ttl() <= 0 then
+	if cache_ttl() <= 0 then
 		return nil, false
 	end
 
-	local entry = cache.get(key)
+	local entry = cache.get(cache_key(key))
 	if not entry or entry.value == nil then
 		return nil, false
 	end
@@ -124,10 +125,15 @@ end
 ---@param value any
 ---@param ttl number|nil
 function M.set_persistent_cache(key, value, ttl)
-	if M.cache_ttl() <= 0 then
+	if cache_ttl() <= 0 then
 		return
 	end
-	cache.set(key, value, ttl or M.cache_ttl())
+	cache.set(cache_key(key), value, ttl or cache_ttl())
+end
+
+function M.clear_cache()
+	memory_cache.clear_prefix(cache_key(""))
+	cache.clear_prefix(cache_key(""))
 end
 
 ---@param result table
@@ -189,6 +195,9 @@ function M.request(method, url, headers, body, callback, ctx)
 			return
 		end
 
+		if method ~= "GET" then
+			M.clear_cache()
+		end
 		callback(result, nil)
 	end)
 end
@@ -260,6 +269,9 @@ function M.request_text(method, url, headers, body, callback, ctx)
 			return
 		end
 
+		if method ~= "GET" then
+			M.clear_cache()
+		end
 		callback(text, nil, status)
 	end)
 end

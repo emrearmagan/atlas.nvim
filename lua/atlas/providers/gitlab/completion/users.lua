@@ -58,7 +58,7 @@ return {
 			target = target .. "#" .. issue_iid
 		end
 		local key = "gitlab:completion:users:" .. target .. ":" .. query
-		local cached, found = client.get_memory_cache(key)
+		local cached, found = client.get_cache(key)
 		if found then
 			done(cached, nil)
 			return
@@ -108,7 +108,7 @@ return {
 			local candidates = values.participants or {}
 			vim.list_extend(candidates, values.members)
 			local items = completion_items(candidates)
-			client.set_memory_cache(key, items)
+			client.set_cache(key, items)
 			done(items, nil)
 		end)
 		return scope

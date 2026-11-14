@@ -70,6 +70,7 @@ function ReviewPanel:render()
 		vim.api.nvim_buf_set_extmark(self.buf, namespace, span.line, span.start_col, {
 			end_col = span.end_col,
 			hl_group = span.hl_group,
+			url = span.url,
 		})
 	end
 end

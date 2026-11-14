@@ -55,9 +55,9 @@ function M.search_issues(jql, on_done, opts)
 	local cache_key = string.format("jira:search:v8:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if opts.force_refresh then
-		service.clear_memory_cache()
+		service.clear_cache()
 	else
-		local cached = service.get_cache(cache_key)
+		local cached = service.get_persistent_cache(cache_key)
 		if cached then
 			on_done(cached, nil)
 			return nil
@@ -101,7 +101,7 @@ function M.search_issues(jql, on_done, opts)
 		end
 
 		local page = { items = items, next_cursor = next_cursor, total_pages = total_pages }
-		service.set_cache(cache_key, page)
+		service.set_persistent_cache(cache_key, page)
 		on_done(page, nil)
 	end, {
 		action = "Search issues",
@@ -123,7 +123,7 @@ function M.issue_picker(project, query, on_done)
 	local project_key = project and project.key
 
 	local cache_key = string.format("jira:issue_picker:%s:%s", project_key or "all", q)
-	local cached_items, ok = service.get_memory_cache(cache_key)
+	local cached_items, ok = service.get_cache(cache_key)
 	if ok then
 		on_done(cached_items, nil)
 		return nil
@@ -158,7 +158,7 @@ function M.issue_picker(project, query, on_done)
 			end
 		end
 
-		service.set_memory_cache(cache_key, items)
+		service.set_cache(cache_key, items)
 		on_done(items, nil)
 	end, {
 		action = "Issue picker search",
@@ -179,7 +179,7 @@ function M.fetch_issue(ref, opts, callback)
 	opts = opts or {}
 	local cache_key = "jira:issue-details:" .. issue_key
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			callback(cached, nil)
 			return nil
@@ -198,7 +198,7 @@ function M.fetch_issue(ref, opts, callback)
 		end
 
 		local details = normalizer.to_issue_details(result, configured)
-		service.set_memory_cache(cache_key, details)
+		service.set_cache(cache_key, details)
 		callback(details, nil)
 	end, {
 		action = "Fetch issue",
@@ -221,9 +221,9 @@ function M.fetch_by_refs(refs, opts, on_done)
 	end, refs)
 	local cache_key = "jira:issues:" .. table.concat(keys, ",")
 	if opts.force_refresh then
-		service.clear_memory_cache()
+		service.clear_cache()
 	else
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -250,7 +250,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 		end
 
 		local items = normalizer.to_issues_list(result.issues or {}, story_points_field, service.base_url())
-		service.set_memory_cache(cache_key, items)
+		service.set_cache(cache_key, items)
 		on_done(items, nil)
 	end, {
 		action = "Fetch issues",
@@ -273,7 +273,7 @@ function M.fetch_activity(issue, opts, on_done)
 	local cache_key = "jira:panel:history:" .. issue_key
 
 	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -301,7 +301,7 @@ function M.fetch_activity(issue, opts, on_done)
 		end
 
 		local entries = normalizer.to_history(raw)
-		service.set_memory_cache(cache_key, entries)
+		service.set_cache(cache_key, entries)
 		on_done(entries, nil)
 	end, {
 		action = "Fetch issue history",
@@ -338,7 +338,6 @@ function M.create_issue(fields, callback)
 			return
 		end
 
-		service.clear_memory_cache()
 		callback({ key = result.key }, nil)
 	end, {
 		action = "Create issue",
@@ -360,9 +359,6 @@ function M.update_issue(issue_key, fields, callback)
 	local payload = { fields = fields }
 
 	return service.request("PUT", endpoint, payload, function(_, err)
-		if err == nil then
-			service.clear_memory_cache()
-		end
 		callback(err == nil, err)
 	end, {
 		action = "Update issue",

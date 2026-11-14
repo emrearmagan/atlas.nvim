@@ -200,7 +200,6 @@ function M.delete_branch(repo, branch, on_done)
 			on_done(false, json.safe_str(update.customMessage) or update.updateStatus)
 			return
 		end
-		service.clear_cache()
 		on_done(true, nil)
 	end, {
 		action = "Delete repository branch",

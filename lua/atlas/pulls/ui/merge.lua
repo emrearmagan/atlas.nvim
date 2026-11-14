@@ -17,6 +17,9 @@ local namespace = vim.api.nvim_create_namespace("atlas.pulls.merge")
 ---@field buf integer
 ---@field footer string[]
 ---@field hints table<string, "method"|"delete_source_branch">
+---@field submit_label string|nil
+---@field submitting_label string
+---@field hidden_options table<string, boolean>
 
 ---@param pr PullRequest
 ---@return PullsMergeOpts
@@ -86,7 +89,7 @@ local function render(state, message)
 		delete_source_branch = state.options.delete_source_branch and "Yes" or "No",
 	}
 	if state.status == "submitting" then
-		values.method = values.method .. " (merging...)"
+		values.method = values.method .. " (" .. state.submitting_label .. ")"
 	end
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	for row, line in ipairs(vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)) do
@@ -157,7 +160,13 @@ local function submit(state)
 		subject = subject,
 		body = table.concat(lines, "\n"),
 	}
-	local prompt = string.format("%s %s #%s?", labels[options.method], state.pr.repo_full_name, state.pr.id)
+	local target = string.format("%s #%s", state.pr.repo_full_name, state.pr.id)
+	local prompt = ""
+	if state.submit_label then
+		prompt = string.format("%s (%s) for %s?", state.submit_label, labels[options.method], target)
+	else
+		prompt = string.format("%s %s?", labels[options.method], target)
+	end
 	if vim.fn.confirm(prompt, "&Yes\n&No", 2) ~= 1 then
 		return
 	end
@@ -266,13 +275,14 @@ local function setup_keymaps(state)
 			label = "Delete source branch:",
 			option = "delete_source_branch",
 		},
-		{ action = "ui.submit", mode = { "n", "i" }, callback = submit },
+		{ action = "ui.submit", mode = { "n", "i" }, callback = submit, desc = state.submit_label },
 		{ action = "ui.close", mode = "n", callback = cancel },
 	}) do
 		local keymap = keymaps.resolve(binding.action)
-		if keymap then
+		local hidden = state.hidden_options[binding.option]
+		if keymap and not hidden then
 			binding.keys = keymap.key
-			binding.desc = keymap.desc
+			binding.desc = binding.desc or keymap.desc
 			bindings[#bindings + 1] = binding
 		end
 	end
@@ -308,16 +318,26 @@ local function setup_keymaps(state)
 	vim.list_extend(state.footer, { "#", "# Lines starting with '#' will be ignored." })
 end
 
+---@class PullsMergeBufferOpts
+---@field submit_label string|nil
+---@field submitting_label string|nil
+---@field hidden_options table<string, boolean>|nil
+
 ---@param pr PullRequest
 ---@param callbacks { on_submit: fun(options: PullsMergeOpts, completed: fun(ok: boolean)), on_cancel: fun() }
+---@param opts PullsMergeBufferOpts|nil
 ---@return integer buf, integer win
-function M.open(pr, callbacks)
+function M.open(pr, callbacks, opts)
+	opts = opts or {}
 	local state = {
 		pr = pr,
 		callbacks = callbacks,
 		options = defaults(pr),
 		drafts = { merge = pr.title },
 		status = "editing",
+		submit_label = opts.submit_label,
+		submitting_label = opts.submitting_label or "merging...",
+		hidden_options = opts.hidden_options or {},
 	}
 	local win = setup_buffer(state)
 	setup_keymaps(state)
