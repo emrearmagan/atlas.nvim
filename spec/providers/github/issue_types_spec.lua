@@ -1,6 +1,6 @@
 local github_client = require("spec.support.github_client_stub")
 
-local MODULES = { "atlas.issues.providers.github.api.issues", "atlas.issues.providers.github.api.cache" }
+local MODULES = { "atlas.issues.providers.github.api.issues" }
 
 local function fresh_module()
 	for _, name in ipairs(MODULES) do

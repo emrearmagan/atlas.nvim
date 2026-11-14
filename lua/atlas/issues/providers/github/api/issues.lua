@@ -627,7 +627,6 @@ function M.set_issue_type(key, name, on_done)
 			on_done(false, err)
 			return
 		end
-		cache.invalidate(key)
 		on_done(true, nil)
 	end, {
 		action = "Update issue type",
