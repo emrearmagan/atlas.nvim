@@ -97,6 +97,7 @@ local function render()
 			end_row = span.line,
 			end_col = span.end_col,
 			hl_group = span.hl_group,
+			url = span.url,
 		})
 	end
 	if selected and valid_window() then

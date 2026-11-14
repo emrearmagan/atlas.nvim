@@ -46,6 +46,7 @@ local function apply_spans(buf, spans)
 				end_row = span.line,
 				end_col = span.end_col,
 				hl_group = span.hl_group,
+				url = span.url,
 			})
 		end
 	end
