@@ -1,6 +1,5 @@
 name: Feature request
 description: Suggest an improvement or new capability for Atlas.nvim
-title: "[Feature]: "
 type: Feature
 labels:
   - enhancement
