@@ -527,6 +527,7 @@ function M.render_comments(items, width, opts)
 				start_col = content_offset + highlight.start_col,
 				end_col = content_offset + highlight.end_col,
 				hl_group = highlight.hl_group,
+				url = highlight.url,
 			}
 		end
 	end

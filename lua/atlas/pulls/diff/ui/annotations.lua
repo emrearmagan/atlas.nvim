@@ -565,6 +565,7 @@ function M.open(owner, pr, path, items, on_action)
 			end_col = highlight.end_col,
 			hl_group = highlight.hl_group,
 			line_hl_group = highlight.line_hl_group,
+			url = highlight.url,
 		})
 	end
 
