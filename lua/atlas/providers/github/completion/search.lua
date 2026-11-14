@@ -114,7 +114,7 @@ end
 ---@param slug string
 local function prefetch_issue_types(slug)
 	local key = issue_types_key(slug)
-	local _, ok = cli.get_mem(key)
+	local _, ok = cli.get_cache(key)
 	if ok or pending[key] then
 		return
 	end
@@ -122,7 +122,7 @@ local function prefetch_issue_types(slug)
 	require("atlas.issues.providers.github.api.issues").list_issue_types(slug, function(types)
 		pending[key] = nil
 		if types then
-			cli.set_mem(
+			cli.set_cache(
 				key,
 				vim.tbl_map(function(item)
 					return item.name
@@ -142,7 +142,7 @@ local function type_values(query)
 
 	local names = DEFAULT_ISSUE_TYPES
 	if slug then
-		local cached, ok = cli.get_mem(issue_types_key(slug))
+		local cached, ok = cli.get_cache(issue_types_key(slug))
 		if ok then
 			names = cached
 		else

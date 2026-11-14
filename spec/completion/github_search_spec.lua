@@ -18,10 +18,10 @@ describe("GitHub search completion", function()
 	local function open(local_repo, default)
 		local mem = {}
 		github_client.install({
-			get_mem = function(key)
+			get_cache = function(key)
 				return mem[key], mem[key] ~= nil
 			end,
-			set_mem = function(key, value)
+			set_cache = function(key, value)
 				mem[key] = value
 			end,
 		})
