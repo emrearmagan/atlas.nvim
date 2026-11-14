@@ -161,8 +161,8 @@ function M.open(request)
 					vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Loading..." })
 					self:set_preview_buf(buf)
 					local preview_win = self.win.preview_winid
-					for option, value in pairs(request.preview_wo) do
-						vim.wo[preview_win][option] = value
+					for option, option_value in pairs(request.preview_wo) do
+						vim.wo[preview_win][option] = option_value
 					end
 
 					preview_handle = request.preview_item(item, function(preview)
