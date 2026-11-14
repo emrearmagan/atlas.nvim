@@ -5,6 +5,7 @@ local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.notes.ui.renderer")
 local resolver = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
@@ -91,15 +92,7 @@ local function render()
 	vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
-	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col, {
-			end_row = span.line,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-			url = span.url,
-		})
-	end
+	utils.apply_spans(state.buf, namespace, spans)
 	if selected and valid_window() then
 		for line = 1, #lines do
 			local item = line_map[line]

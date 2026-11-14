@@ -33,8 +33,6 @@ function M.resolve(value, parsed)
 		url = web_url,
 		repository_url = web_url .. ".git",
 		host = parsed.host,
-		owner = owner,
-		repo = repo,
 		repo_full_name = full_name,
 	}
 
@@ -52,8 +50,7 @@ function M.resolve(value, parsed)
 		target.domain = entity == "issue" and "issues" or "pulls"
 		target.entity = entity
 		target.url = value
-		target.number = assert(tonumber(number))
-		target.id = entity ~= "issue" and target.number or nil
+		target.id = assert(tonumber(number))
 		return target
 	end
 

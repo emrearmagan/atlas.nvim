@@ -16,7 +16,10 @@ local M = {}
 ---@field background_hl_group string|nil Defaults to AtlasCodeBackground.
 
 -- Highlight original code before wrapping or adding line numbers and padding.
-local function syntax_highlights(lines, opts)
+---@param lines string[]
+---@param opts { language: string|nil, file_path: string|nil }
+---@return AtlasUIHighlight[]
+function M.syntax_highlights(lines, opts)
 	local filetype = opts.language
 	if filetype == nil and opts.file_path then
 		filetype = vim.filetype.match({ filename = opts.file_path })
@@ -73,7 +76,7 @@ function M.render(opts)
 	end
 
 	-- Keep the code visible if syntax highlighting fails.
-	local ok, syntax = pcall(syntax_highlights, opts.lines, opts)
+	local ok, syntax = pcall(M.syntax_highlights, opts.lines, opts)
 	local content = { lines = opts.lines, highlights = ok and syntax or {} }
 	if width then
 		content = utils.wrap_content(content, math.max(1, width - pad * 2), "")

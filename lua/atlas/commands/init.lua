@@ -128,10 +128,10 @@ M.register({
 
 M.register({
 	name = "open",
-	description = "Open a pull request or issue",
+	description = "Open a provider URL, key or number",
 	choices = function()
 		return {
-			{ args = {}, description = "Open a pull request or issue" },
+			{ args = {}, description = "Open a provider URL, key or number" },
 			{ args = { "." }, description = "Open the current branch's pull request" },
 		}
 	end,

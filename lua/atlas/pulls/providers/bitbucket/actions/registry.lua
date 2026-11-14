@@ -100,7 +100,7 @@ register({
 			local search_view = {
 				name = "Search",
 				layout = "compact",
-				search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
+				search = bitbucket_query.for_repo(repo.full_name),
 			}
 			notify.success(string.format("Search view -> %s", repo.full_name))
 			require("atlas").open("pulls", "bitbucket", { initial_view = search_view })

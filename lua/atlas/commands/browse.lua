@@ -29,7 +29,7 @@ local function browsable(page)
 		---@cast provider PullsProvider|nil
 		if
 			provider
-			and provider.capabilities.repository
+			and provider.shared.repository
 			and actions.is_available("browse_repositories", { provider = provider })
 			and (not page or vim.tbl_contains(page_names(provider), page))
 		then
@@ -106,7 +106,7 @@ function M.complete(arglead, args)
 		end
 		if target and target.entity == "repo" and config.provider_options(target.provider) then
 			local provider = providers.load(target.provider, target.domain)
-			if provider and provider.capabilities.repository then
+			if provider and provider.shared.repository then
 				options = page_names(provider)
 			end
 		end
@@ -131,7 +131,7 @@ local function open_repository(target, page, err)
 	end
 
 	local provider = providers.load(target.provider, target.domain)
-	if not provider or not provider.capabilities.repository then
+	if not provider or not provider.shared.repository then
 		notify.error("Repository browsing is not available for this provider", { vim_notify = true })
 		return
 	end

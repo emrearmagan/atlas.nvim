@@ -74,7 +74,7 @@ end
 ---@param provider IssuesProvider
 ---@param scope AtlasRequestScope
 local function fetch_current_user(provider, scope)
-	local users = provider.capabilities.users
+	local users = provider.shared.users
 	if state.current_user ~= nil or not users then
 		return
 	end

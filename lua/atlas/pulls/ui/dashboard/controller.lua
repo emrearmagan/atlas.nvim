@@ -193,7 +193,7 @@ local function get_current_user(scope, on_done)
 		on_done("no provider")
 		return
 	end
-	local users = provider.capabilities.users
+	local users = provider.shared.users
 	if not users then
 		on_done(nil)
 		return

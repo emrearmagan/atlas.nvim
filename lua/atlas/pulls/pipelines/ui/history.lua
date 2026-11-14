@@ -1,5 +1,6 @@
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -9,18 +10,22 @@ local M = {}
 ---@return string, AtlasPickerChunk[]
 local function format_run(pipeline)
 	local icon, hl = icons.get(pipeline.state, "status")
-	local parts = { pipeline_utils.display_name(pipeline) }
+	local chunks = { { icon, hl }, { "  " .. pipeline_utils.display_name(pipeline), "Normal" } }
+
 	if pipeline.commit then
-		parts[#parts + 1] = pipeline.commit:sub(1, 7)
+		chunks[#chunks + 1] = { "  " .. pipeline.commit:sub(1, 7), "AtlasTextMuted" }
 	end
 	if pipeline.started_at then
-		parts[#parts + 1] = utils.relative_time_text(pipeline.started_at)
+		chunks[#chunks + 1] = { "  " .. utils.relative_time_text(pipeline.started_at), "AtlasTextMuted" }
 	end
 	if pipeline.title then
-		parts[#parts + 1] = pipeline.title:gsub("[\r\n]+", " ")
+		chunks[#chunks + 1] = { "  " .. pipeline.title:gsub("[\r\n]+", " "), "Normal" }
 	end
-	local text = "  " .. table.concat(parts, "  ")
-	return icon .. text, { { icon, hl }, { text, "Normal" } }
+
+	local text = table.concat(vim.tbl_map(function(chunk)
+		return chunk[1]
+	end, chunks))
+	return text, chunks
 end
 
 ---@param runs PullsPipeline[]
@@ -57,7 +62,7 @@ function M.open(context, backend, on_select)
 				done(filter(runs, query), nil)
 			end)
 		end,
-		preview_item = function(run, done)
+		preview_item = function(run, done, width)
 			local lines = { pipeline_utils.display_name(run), pipeline_utils.state_label(run.state), "" }
 			if run.title then
 				vim.list_extend(lines, vim.split(run.title, "\n", { plain = true }))
@@ -72,7 +77,7 @@ function M.open(context, backend, on_select)
 					lines[#lines + 1] = field[1] .. ": " .. field[2]
 				end
 			end
-			done({ title = "Build", lines = lines })
+			done(picker_format.markdown({ title = "Build", lines = lines }, width))
 		end,
 		on_select = on_select,
 	})

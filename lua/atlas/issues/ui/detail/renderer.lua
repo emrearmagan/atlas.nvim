@@ -6,51 +6,11 @@ local header = require("atlas.issues.ui.detail.components.header")
 local chips = require("atlas.ui.components.chips")
 local tabs = require("atlas.ui.components.tabs")
 local state = require("atlas.issues.ui.detail.state")
-local links = require("atlas.ui.links")
 local icons = require("atlas.ui.shared.icons")
 
 local ns = vim.api.nvim_create_namespace("atlas.issues.provider_detail")
 
 local PADDING_X = 1
-
----@return IssuesDetailChip[]
-local function link_chips()
-	local counts = { issue = 0, pr = 0, external = 0 }
-	for _, link in ipairs(links.items(state.links and state.links.items or {})) do
-		counts[link.kind] = (counts[link.kind] or 0) + 1
-	end
-	local result = {}
-	for _, entry in ipairs({ { "issue", "issue" }, { "pr", "PR" }, { "external", "link" } }) do
-		local count = counts[entry[1]]
-		if count > 0 then
-			table.insert(result, {
-				label = icons.get("link") .. " " .. count .. " " .. entry[2] .. (count == 1 and "" or "s"),
-				hl = "AtlasRelatedChip",
-			})
-		end
-	end
-	return result
-end
-
----@param buf integer
----@param spans table[]
-local function apply_spans(buf, spans)
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans) do
-		if span.line ~= nil and span.line_hl_group ~= nil then
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
-				line_hl_group = span.line_hl_group,
-			})
-		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
-				end_row = span.line,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
-	end
-end
 
 function M.render()
 	local buf = state.buf
@@ -97,7 +57,14 @@ function M.render()
 				and provider_detail.chips
 				and provider_detail.chips(issue, details, state.details_loading)
 			or {}
-		vim.list_extend(extra_chips, link_chips())
+
+		local link_count = #(state.links and state.links.items or {})
+		if link_count > 0 then
+			table.insert(extra_chips, {
+				label = icons.get("link") .. " " .. link_count .. " link" .. (link_count == 1 and "" or "s"),
+				hl = "AtlasRelatedChip",
+			})
+		end
 
 		local header_lines, header_spans = header.render(issue, width, extra_fields)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
@@ -150,7 +117,7 @@ function M.render()
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	apply_spans(buf, spans)
+	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
 

@@ -560,14 +560,7 @@ function M.open(owner, pr, path, items, on_action)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.bo[buf].modifiable = false
 
-	for _, highlight in ipairs(highlights) do
-		vim.api.nvim_buf_set_extmark(buf, namespace, highlight.line, highlight.start_col or 0, {
-			end_col = highlight.end_col,
-			hl_group = highlight.hl_group,
-			line_hl_group = highlight.line_hl_group,
-			url = highlight.url,
-		})
-	end
+	utils.apply_spans(buf, namespace, highlights)
 
 	local first = items[1]
 	local same_line = true

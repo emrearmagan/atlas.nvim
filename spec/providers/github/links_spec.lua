@@ -4,7 +4,6 @@ local MODULE = "atlas.providers.github.links"
 
 local function subject(kind, slug, number)
 	return {
-		__typename = kind == "pr" and "PullRequest" or "Issue",
 		number = number,
 		title = "Linked " .. kind .. " " .. number,
 		url = "https://github.com/" .. slug .. (kind == "pr" and "/pull/" or "/issues/") .. number,
@@ -71,7 +70,7 @@ describe("GitHub related issues and pull requests", function()
 			}))
 		end
 		local links, err
-		require(MODULE).fetch_issue({ key = "owner/repo#1" }, nil, function(result, error)
+		require(MODULE).fetch("issue", { key = "owner/repo#1" }, nil, function(result, error)
 			links, err = result, error
 		end)
 		assert.is_nil(err)
@@ -79,7 +78,6 @@ describe("GitHub related issues and pull requests", function()
 		assert.equal("other/project#1", links[1].key)
 		assert.equal("parent", links[1].relationship)
 		assert.equal("sub-issue", links[2].relationship)
-		assert.equal("pr", links[3].kind)
 		assert.equal("closed by", links[3].relationship)
 		assert.equal("blocked by", links[4].relationship)
 		assert.equal("blocks", links[5].relationship)
@@ -98,7 +96,7 @@ describe("GitHub related issues and pull requests", function()
 			}))
 		end
 		local links
-		require(MODULE).fetch_pr({ repo_full_name = "owner/repo", id = "10" }, nil, function(result, err)
+		require(MODULE).fetch("pr", { repo_full_name = "owner/repo", id = "10" }, nil, function(result, err)
 			assert.is_nil(err)
 			links = result
 		end)

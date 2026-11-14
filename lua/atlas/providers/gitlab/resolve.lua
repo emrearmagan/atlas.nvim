@@ -28,11 +28,11 @@ function M.resolve(value, parsed)
 	if project_path == nil then
 		project_path, rest = path:sub(2), ""
 	end
-	local owner, repo = project_path:match("^(.+)/([^/]+)$")
-	if parsed.remote and (owner == nil or rest ~= "") then
+	local has_group = project_path:match("^.+/[^/]+$") ~= nil
+	if parsed.remote and (not has_group or rest ~= "") then
 		return nil, "Unsupported GitLab remote. Expected group/repository"
 	end
-	if owner == nil or project_path:match("^groups/") then
+	if not has_group or project_path:match("^groups/") then
 		return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"
 	end
 
@@ -45,9 +45,6 @@ function M.resolve(value, parsed)
 		url = web_url,
 		repository_url = web_url .. ".git",
 		host = parsed.host,
-		owner = owner,
-		repo = repo,
-		project_path = project_path,
 		repo_full_name = project_path,
 	}
 
@@ -68,8 +65,7 @@ function M.resolve(value, parsed)
 		target.domain = entity == "issue" and "issues" or "pulls"
 		target.entity = entity
 		target.url = value
-		target.number = assert(tonumber(number))
-		target.id = entity ~= "issue" and target.number or nil
+		target.id = assert(tonumber(number))
 		return target
 	end
 
