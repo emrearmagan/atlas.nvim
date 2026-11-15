@@ -10,6 +10,7 @@ local info_popup = require("atlas.ui.popups.info")
 local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
 local detail = require("atlas.pulls.ui.detail")
+local detail_state = require("atlas.pulls.ui.detail.state")
 
 local active_requests = requests.new()
 local pr_reload_requests = requests.new()
@@ -36,16 +37,22 @@ local function render_if_active()
 	require("atlas.pulls.ui.dashboard").render()
 end
 
+---@param left PullRequest|nil
+---@param right PullRequest
+---@return boolean
+local function same_pr(left, right)
+	return left ~= nil
+		and tostring(left.id) == tostring(right.id)
+		and tostring(left.repo_full_name) == tostring(right.repo_full_name)
+end
+
 ---@param updated PullRequest
 ---@return boolean
 local function replace_pr(updated)
 	local pulls = state.pulls
 	local replaced = false
 	for index, current in ipairs(pulls) do
-		if
-			tostring(current.id) == tostring(updated.id)
-			and tostring(current.repo_full_name) == tostring(updated.repo_full_name)
-		then
+		if same_pr(current, updated) then
 			pulls[index] = updated
 			replaced = true
 			break
@@ -438,9 +445,6 @@ function M.refresh_pr(pr)
 
 	notify.loading(string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
-	if detail.is_open() then
-		detail.refresh(pr)
-	end
 
 	pr_reload_requests.run(function(done)
 		return core.fetch_by_refs({ pr }, { force_refresh = true }, done)
@@ -454,6 +458,9 @@ function M.refresh_pr(pr)
 
 		replace_pr(fetched_pr)
 		end_pr_reload(repo_id, pr_id)
+		if detail.is_open() and same_pr(detail_state.current_pr, fetched_pr) then
+			detail.select(fetched_pr, { force_refresh = true })
+		end
 
 		notify.success(string.format("Reloaded PR #%s", tostring(pr_id)), { timeout = 1200 })
 	end)

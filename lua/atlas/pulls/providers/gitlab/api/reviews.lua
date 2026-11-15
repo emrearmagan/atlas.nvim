@@ -51,16 +51,9 @@ local HISTORY_STATES = {
 }
 
 ---@param pr PullRequest
----@return string project_path, integer|nil iid
+---@return string project_path, integer iid
 local function project_iid(pr)
-	return pr.repo_full_name, tonumber(pr.id)
-end
-
----@param path string
----@param iid integer
----@return string
-local function metadata_cache_key(path, iid)
-	return string.format("gitlab_pulls:review_metadata:%s!%d", path, iid)
+	return pr.repo_full_name, tonumber(pr.id) --[[@as integer]]
 end
 
 ---@param merge_request table
@@ -111,12 +104,7 @@ end
 local function fetch_metadata(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-
-	local cache_key = metadata_cache_key(path, iid)
+	local cache_key = string.format("gitlab_pulls:review_metadata:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -310,11 +298,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.discard(pr, _review, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-
 	local prefix = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
 	local requests = request_scope.new()
 	local function delete_next(drafts, index)
@@ -362,11 +345,6 @@ end
 ---@return { cancel: fun() }|nil
 local function publish(pr, reviewer_state, body, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-
 	local payload
 	if body and vim.trim(body) ~= "" then
 		payload = { note = body }
@@ -396,10 +374,6 @@ end
 ---@return { cancel: fun() }|nil
 local function approve_pull_request(pr, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d/approve", service.url_encode(path), iid)
 	return service.request("POST", endpoint, nil, function(_, err)
 		if err then
@@ -460,11 +434,6 @@ end
 function M.fetch_reviewers(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-
 	local cache_key = string.format("gitlab_pulls:reviewers:%s!%d", path, iid)
 	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(cache_key)

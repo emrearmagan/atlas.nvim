@@ -21,7 +21,7 @@ function M.fetch_workspaces(on_done)
 		return nil
 	end
 
-	return service.request("GET", "/user/workspaces", nil, nil, function(result, err)
+	return service.request("GET", "/user/workspaces", nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -63,7 +63,7 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 	local endpoint =
 		string.format("/repositories/%s?%ssort=-updated_on&pagelen=50", url_encode(workspace), query_prefix)
 
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

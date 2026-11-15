@@ -19,12 +19,7 @@ local issues_state = require("atlas.issues.state")
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue_key(ctx)
-	local issue = ctx.issue
-	if issue == nil then
-		return false
-	end
-	local key = tostring(issue.key or "")
-	return key ~= ""
+	return ctx.issue ~= nil
 end
 
 ---@type AtlasIssueAction[]
@@ -454,7 +449,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
-	local issue_key = tostring(issue.key or "")
+	local issue_key = issue.key
 
 	---@param details IssueDetails
 	local function update(details)

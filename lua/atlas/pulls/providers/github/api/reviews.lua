@@ -181,18 +181,6 @@ local function review_author(raw)
 	}
 end
 
----@param pr PullRequest
----@return string
-local function review_details_cache_key(pr)
-	return string.format("github:review-details:%s:%s", pr.repo_full_name, tostring(pr.id))
-end
-
----@param pr PullRequest
----@return string
-local function reviewers_cache_key(pr)
-	return string.format("github:reviewers:%s:%s", pr.repo_full_name, tostring(pr.id))
-end
-
 ---@param review PullsReview|nil
 ---@param node table|nil
 function M.update(review, node)
@@ -311,10 +299,6 @@ query($owner:String!,$name:String!,$number:Int!){
 ---@return { cancel: fun() }|nil
 local function find_pending(pr, on_done)
 	local owner, name = pr.repo.owner, pr.repo.repo_name
-	if owner == "" or name == "" then
-		on_done(nil, nil, "Missing repo")
-		return nil
-	end
 	return cli.gh({
 		"api",
 		"graphql",
@@ -364,12 +348,7 @@ local function finish(pr, review, event, body, on_done)
 		return submit_pending(pr, review.id, event, body, done)
 	end
 	if review and not review.pending then
-		local pull_request_id = pr.node_id or ""
-		if pull_request_id == "" then
-			done(false, "Missing pull request node id")
-			return nil
-		end
-		return create(pr, pull_request_id, event, body, done)
+		return create(pr, pr.node_id, event, body, done)
 	end
 
 	local requests = request_scope.new()
@@ -585,14 +564,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_review_details(pr, opts, on_done)
 	local owner, name = pr.repo.owner, pr.repo.repo_name
-	if owner == "" or name == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = review_details_cache_key(pr)
+	local cache_key = string.format("github:review-details:%s:%s", pr.repo_full_name, tostring(pr.id))
 	if not (opts or {}).force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -639,14 +611,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, opts, on_done)
 	local owner, name = pr.repo.owner, pr.repo.repo_name
-	if owner == "" or name == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = reviewers_cache_key(pr)
+	local cache_key = string.format("github:reviewers:%s:%s", pr.repo_full_name, tostring(pr.id))
 	if not (opts or {}).force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -713,13 +678,6 @@ end
 local function fetch_comments(pr, include_hunks, on_done)
 	---@cast pr GitHubPullRequest
 	local owner, name = pr.repo.owner, pr.repo.repo_name
-	if owner == "" or name == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
 	return cli.gh({
 		"api",
 		"graphql",
@@ -762,7 +720,6 @@ local function fetch_comments(pr, include_hunks, on_done)
 			return
 		end
 
-		pr.node_id = tostring(pull_request.id or "")
 		local comments = {}
 		for _, thread in ipairs(threads) do
 			local nodes = thread.comments and thread.comments.nodes or {}
@@ -849,11 +806,6 @@ end
 function M.set_files_reviewed(pr, paths, reviewed, on_done)
 	---@cast pr GitHubPullRequest
 	local pull_request_id = pr.node_id
-	if not pull_request_id then
-		on_done(false, "Missing pull request node id")
-		return nil
-	end
-
 	local mutation = reviewed and "markFileAsViewed" or "unmarkFileAsViewed"
 	local variables, fields = { "$pullRequestId:ID!" }, {}
 	local args = { "api", "graphql", "-f", "pullRequestId=" .. pull_request_id }
@@ -942,12 +894,7 @@ function M.create_pending(pr, review, commit_oid, on_done)
 		on_done(nil, "Submit the pending review first")
 		return nil
 	end
-	local pull_request_id = pr.node_id or ""
-	if pull_request_id == "" then
-		on_done(nil, "Missing pull request node id")
-		return nil
-	end
-	return create_pending(pr, pull_request_id, review, commit_oid, on_done)
+	return create_pending(pr, pr.node_id, review, commit_oid, on_done)
 end
 
 ---@param pr PullRequest
@@ -988,13 +935,8 @@ function M.with_pending(pr, review, commit_oid, use_review, on_done)
 		end)
 	end
 
-	local pull_request_id = pr.node_id or ""
 	if review and not review.pending then
-		if pull_request_id == "" then
-			on_done(nil, "Missing pull request node id")
-			return nil
-		end
-		create_review(pull_request_id)
+		create_review(pr.node_id)
 	else
 		requests.run(function(done)
 			return find_pending(pr, done)
@@ -1036,13 +978,6 @@ function M.fetch_context(pr, opts, on_done)
 	---@cast pr GitHubPullRequest
 	local repo_slug = pr.repo_full_name
 	local owner, repo = pr.repo.owner, pr.repo.repo_name
-	if owner == "" or repo == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
-
 	local cache_key = string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id))
 	opts = opts or {}
 	if not opts.force_refresh then
@@ -1095,7 +1030,6 @@ function M.fetch_context(pr, opts, on_done)
 			on_done(nil, "Failed to fetch reviewed files")
 			return
 		end
-		pr.node_id = tostring(pull_request.id or "")
 		-- Outdated files are compared from the commit of your last submitted review, if there is one.
 		local latest = json.safe_table(pull_request.viewerLatestReview)
 		local review_commit = json.safe_str(json.safe_table(latest.commit).oid)

@@ -12,8 +12,7 @@ local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 
 local PADDING_X = 1
 
----@param tab_items PullsDetailTab[]
-function M.render(tab_items)
+function M.render()
 	local buf = state.buf
 	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
@@ -100,8 +99,8 @@ function M.render(tab_items)
 		end
 
 		-- Tab bar
-		if #tab_items > 1 then
-			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
+		if #state.tabs > 1 then
+			local tab_lines, tab_spans = tabs.render(state.tabs, state.current_tab, width, {
 				inactive_hl = "AtlasTextMuted",
 				gap = " ",
 				padding_x = PADDING_X,

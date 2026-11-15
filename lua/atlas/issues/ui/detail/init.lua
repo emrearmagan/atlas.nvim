@@ -37,10 +37,6 @@ local function is_loading()
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
-local function render()
-	renderer.render()
-end
-
 local loading_spinner = spinner.create({ interval_ms = SPINNER_INTERVAL_MS })
 
 loading_spinner.on_tick = function()
@@ -48,7 +44,7 @@ loading_spinner.on_tick = function()
 		loading_spinner:stop()
 		return
 	end
-	render()
+	renderer.render()
 end
 
 local function update_spinner()
@@ -61,7 +57,7 @@ end
 
 local function render_if_open()
 	if detail_window.is_open() then
-		render()
+		renderer.render()
 	end
 end
 
@@ -194,7 +190,7 @@ local function show_issue(issue, force_refresh)
 	load_links(issue, force_refresh)
 	load_active_tab(issue, { force_refresh = force_refresh })
 	update_spinner()
-	render()
+	renderer.render()
 end
 
 ---@param provider IssuesProvider
@@ -247,7 +243,7 @@ function M.select(issue, opts)
 		and (state.details_loading or state.current_details)
 	then
 		state.current_issue = issue
-		render()
+		renderer.render()
 		return
 	end
 
@@ -268,7 +264,7 @@ function M.open(input, opts)
 		return
 	end
 
-	state.win, state.buf = detail_window.open(cleanup, render)
+	state.win, state.buf = detail_window.open(cleanup, renderer.render)
 	set_provider(provider)
 	state.on_update = opts.on_update
 	state.back = opts.back
@@ -285,7 +281,7 @@ function M.open(input, opts)
 		and same_ref(state.current_issue or pending_ref, ref)
 		and (state.issue_loading or state.details_loading or state.current_details)
 	then
-		render()
+		renderer.render()
 		return
 	end
 
@@ -294,7 +290,7 @@ function M.open(input, opts)
 	state.issue_loading = true
 	load_details(ref, force_refresh)
 	update_spinner()
-	render()
+	renderer.render()
 
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = force_refresh }, done)
@@ -310,7 +306,7 @@ function M.open(input, opts)
 			state.current_details = nil
 			state.issue_error = tostring(err or "Failed to load issue")
 			update_spinner()
-			render()
+			renderer.render()
 			notify.error(state.issue_error)
 			return
 		end
@@ -377,7 +373,7 @@ local function change_tab(step)
 		load_active_tab(issue)
 		update_spinner()
 	end
-	render()
+	renderer.render()
 	if state.win and vim.api.nvim_win_is_valid(state.win) then
 		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 	end

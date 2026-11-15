@@ -125,12 +125,8 @@ end
 ---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_jobs(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
-	if repo == "" then
-		on_done(nil, "Missing repo")
-		return nil
-	end
 
 	local fields = "values.uuid,values.name,values.state,values.started_on,values.duration_in_seconds,next"
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps?pagelen=100&fields=%s", repo, id, fields)
@@ -160,14 +156,10 @@ end
 ---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pipeline(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
 	if not id:match("^%d+$") then
 		on_done(pipeline, nil)
-		return nil
-	end
-	if repo == "" then
-		on_done(nil, "Missing repo")
 		return nil
 	end
 
@@ -175,7 +167,7 @@ function M.fetch_pipeline(context, pipeline, on_done)
 	local endpoint = string.format("/repositories/%s/pipelines/%s", repo, id)
 	scope.all({
 		details = function(done)
-			return service.request("GET", endpoint, nil, nil, done, {
+			return service.request("GET", endpoint, nil, done, {
 				action = "Fetch pipeline details",
 				repo = repo,
 				pipeline_id = id,
@@ -232,7 +224,7 @@ function M.fetch_history(context, on_done)
 			end
 		end
 		scope.run(function(done)
-			return service.request("GET", endpoint, nil, nil, done, request_context)
+			return service.request("GET", endpoint, nil, done, request_context)
 		end, function(page, err)
 			if err then
 				on_done(nil, err)
@@ -259,7 +251,7 @@ function M.fetch_history(context, on_done)
 	else
 		scope.run(function(done)
 			local endpoint = string.format("/repositories/%s/pipelines/%s", repo, target.id)
-			return service.request("GET", endpoint, nil, nil, done, request_context)
+			return service.request("GET", endpoint, nil, done, request_context)
 		end, function(result, err)
 			if err then
 				on_done(nil, err)
@@ -281,8 +273,8 @@ function M.fetch(context, opts, on_done)
 	if not pr then
 		local repo = context.repo_full_name
 		local branch = type(target) == "string" and target or nil
-		if repo == "" or not branch or branch == "" then
-			on_done(nil, "Missing pipeline repository or branch")
+		if not branch or branch == "" then
+			on_done(nil, "Missing pipeline branch")
 			return nil
 		end
 		local endpoint = string.format(
@@ -301,7 +293,7 @@ function M.fetch(context, opts, on_done)
 
 		local scope = requests.new()
 		scope.run(function(done)
-			return service.request("GET", endpoint, nil, nil, done, {
+			return service.request("GET", endpoint, nil, done, {
 				action = "Fetch branch pipeline",
 				repo = repo,
 				branch = branch,
@@ -395,9 +387,9 @@ end
 ---@param on_done fun(file: { path: string, content: string }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_config(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
-	if repo == "" or not id:match("^%d+$") then
+	if not id:match("^%d+$") then
 		on_done(nil, "No configuration file available for this pipeline")
 		return nil
 	end
@@ -405,7 +397,7 @@ function M.fetch_config(context, pipeline, on_done)
 	local scope = requests.new()
 	local endpoint = string.format("/repositories/%s/pipelines/%s", repo, id)
 	scope.run(function(done)
-		return service.request("GET", endpoint, nil, nil, done, {
+		return service.request("GET", endpoint, nil, done, {
 			action = "Fetch pipeline configuration",
 			repo = repo,
 			pipeline_id = id,
@@ -425,7 +417,7 @@ function M.fetch_config(context, pipeline, on_done)
 		local source =
 			string.format("/repositories/%s/src/%s/%s", repo, commit, path:gsub("[^/]+", encode_path_segment))
 		scope.run(function(done)
-			return service.request_text("GET", source, { Accept = "*/*" }, nil, done, {
+			return service.request_text("GET", source, { Accept = "*/*" }, done, {
 				action = "Fetch pipeline configuration file",
 				repo = repo,
 				pipeline_id = id,
@@ -447,16 +439,16 @@ end
 ---@param on_done fun(job: PullsPipelineJob|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job(context, pipeline, job, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
 	local job_id = job.id
-	if repo == "" or not id:match("^%d+$") or job_id == "" then
+	if not id:match("^%d+$") or job_id == "" then
 		on_done(nil, "Missing Bitbucket pipeline job identifier")
 		return nil
 	end
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps/%s", repo, id, encode_path_segment(job_id))
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -472,16 +464,16 @@ end
 ---@param on_done fun(log: PullsLog|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
 	local job_id = job.id
-	if repo == "" or not id:match("^%d+$") or job_id == "" then
+	if not id:match("^%d+$") or job_id == "" then
 		on_done(nil, "Missing Bitbucket pipeline job identifier")
 		return nil
 	end
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps/%s/log", repo, id, encode_path_segment(job_id))
-	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err, status)
+	return service.request_text("GET", endpoint, { Accept = "*/*" }, function(raw, err, status)
 		if status == 404 then
 			on_done({ raw = "" }, nil)
 			return
@@ -500,19 +492,19 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.run_pipeline(repo, branch, on_done)
-	if repo == "" or not branch or branch == "" then
-		on_done(false, repo == "" and "Missing repo" or "Missing source branch")
+	if not branch or branch == "" then
+		on_done(false, "Missing source branch")
 		return nil
 	end
 
-	local body = vim.json.encode({
+	local body = {
 		target = {
 			type = "pipeline_ref_target",
 			ref_type = "branch",
 			ref_name = branch,
 		},
-	})
-	return service.request("POST", string.format("/repositories/%s/pipelines/", repo), nil, body, function(_, err)
+	}
+	return service.request("POST", string.format("/repositories/%s/pipelines/", repo), body, function(_, err)
 		on_done(err == nil, err)
 	end, { action = "Run pipeline", repo = repo, branch = branch })
 end
@@ -522,15 +514,15 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.stop_pipeline(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
+	local repo = context.repo_full_name
 	local id = tostring(pipeline.id)
-	if repo == "" or not id:match("^%d+$") then
+	if not id:match("^%d+$") then
 		on_done(false, "Missing Bitbucket pipeline identifier")
 		return nil
 	end
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/stopPipeline", repo, id)
-	return service.request("POST", endpoint, nil, nil, function(_, err)
+	return service.request("POST", endpoint, nil, function(_, err)
 		on_done(err == nil, err)
 	end, { action = "Stop pipeline", repo = repo, pipeline_id = id })
 end

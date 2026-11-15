@@ -229,7 +229,7 @@ function M.fetch(pr, opts, on_done)
 	end
 
 	local endpoint = string.format("/repositories/%s/pullrequests/%s/mergeability/checks", pr.repo_full_name, pr.id)
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err)
 		if not result then
 			on_done(nil, err or "Failed to load merge checks")
 			return

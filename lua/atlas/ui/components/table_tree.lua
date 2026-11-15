@@ -1,10 +1,9 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
-local ui_utils = require("atlas.ui.utils")
 
-local display_width = ui_utils.text_width
-local pad_aligned = ui_utils.pad_aligned
+local display_width = utils.text_width
+local pad_aligned = utils.pad_aligned
 
 local function truncate(text, width, from_start)
 	return utils.truncate(tostring(text or ""), width, from_start)

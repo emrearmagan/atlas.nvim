@@ -87,12 +87,7 @@ local function render(state)
 	state.line_map = line_map
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.apply_spans(state.buf, namespace, spans)
 
 	vim.bo[state.buf].modifiable = false
 end

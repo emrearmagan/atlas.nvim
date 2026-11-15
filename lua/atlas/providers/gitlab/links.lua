@@ -180,21 +180,12 @@ end
 ---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
 function M.fetch(kind, entity, opts, on_done)
 	if kind == "pr" then
-		local path, iid = tostring(entity.repo_full_name or ""), tonumber(entity.id)
-		if path == "" or not iid then
-			on_done(nil, "Invalid GitLab merge request identifier")
-			return nil
-		end
-
-		return collect(path, iid, "merge_requests", opts, on_done)
+		---@cast entity PullRequest
+		return collect(entity.repo_full_name, tonumber(entity.id), "merge_requests", opts, on_done)
 	end
 
-	local path, iid = tostring(entity.key or ""):match("^(.-)#(%d+)$")
-	if not path or path == "" then
-		on_done(nil, "Invalid GitLab issue key")
-		return nil
-	end
-
+	---@cast entity Issue
+	local path, iid = entity.key:match("^(.-)#(%d+)$")
 	return collect(path, tonumber(iid), "issues", opts, on_done)
 end
 

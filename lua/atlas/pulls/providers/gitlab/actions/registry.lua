@@ -134,42 +134,23 @@ local function edit_assignees(ctx, done)
 				end,
 				title = string.format("Assignees for %s", pr_label(pr)),
 				on_done = function(selected)
-					local final_ids = {}
-					local final_set = {}
-					for _, it in ipairs(selected) do
-						local id = tonumber(it.id)
-						if id then
-							table.insert(final_ids, id)
-							final_set[id] = true
-						end
+					local selected_set = {}
+					for _, item in ipairs(selected) do
+						selected_set[tonumber(item.id)] = true
 					end
-
-					local changed = false
-					if #final_ids ~= #original then
-						changed = true
-					else
-						for id, _ in pairs(original_set) do
-							if not final_set[id] then
-								changed = true
-								break
-							end
-						end
-					end
-
-					if not changed then
+					if vim.deep_equal(selected_set, original_set) then
 						done({ changed_pr = false }, nil)
 						return
 					end
 
 					notify.loading(string.format("Updating assignees on %s...", pr_label(pr)))
-					pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
+					pullrequests_api.update_pr(pr, { assignees = selected }, function(ok, set_err)
 						if not ok then
 							notify.error(set_err or "Failed")
 							done(nil, set_err or "Failed")
 							return
 						end
-						local msg = string.format("%d assignee(s)", #final_ids)
-						notify.success(msg, { timeout = 1200 })
+						notify.success(string.format("%d assignee(s)", #selected), { timeout = 1200 })
 						done({ changed_pr = true }, nil)
 					end)
 				end,

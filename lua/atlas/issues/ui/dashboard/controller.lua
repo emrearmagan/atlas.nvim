@@ -10,6 +10,7 @@ local info_popup = require("atlas.ui.popups.info")
 local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
 local detail = require("atlas.issues.ui.detail")
+local detail_state = require("atlas.issues.ui.detail.state")
 
 local active_requests = requests.new()
 local issue_reload_requests = requests.new()
@@ -86,12 +87,6 @@ local function fetch_current_user(provider, scope)
 		state.current_user = user
 		render_if_active()
 	end)
-end
-
----@param view IssuesViewConfig
----@return boolean
-local function relationships_enabled(view)
-	return state.view_layout(view) == "plain" and config.options.issues.with_relationships == true
 end
 
 ---@param issues Issue[]
@@ -175,7 +170,7 @@ end
 ---@param scope AtlasRequestScope
 ---@param on_done fun(issues: Issue[], err: string|nil)
 local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
-	if not relationships_enabled(view) then
+	if state.view_layout(view) ~= "plain" or not config.options.issues.with_relationships then
 		on_done(issues, nil)
 		return
 	end
@@ -536,10 +531,6 @@ end
 local function refresh_issue(issue)
 	local issue_key = issue.key
 	local page_number = state.current_page
-	if issue_key == "" then
-		notify.warn("Issue key missing")
-		return
-	end
 	if state.reloading_issue_keys[issue_key] then
 		return
 	end
@@ -554,9 +545,6 @@ local function refresh_issue(issue)
 
 	---@type IssueRef
 	local ref = issue
-	if detail.is_open() then
-		detail.refresh(issue)
-	end
 	issue_reload_requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, done)
 	end, function(fetched_issues, err)
@@ -582,6 +570,10 @@ local function refresh_issue(issue)
 			update_current_page()
 		end
 		end_issue_reload(issue_key)
+		local shown = detail_state.current_issue
+		if detail.is_open() and shown and shown.key == issue_key then
+			detail.select(fetched_issue, { force_refresh = true })
+		end
 
 		notify.success(string.format("Reloaded %s", issue_key), { timeout = 1200 })
 	end)
@@ -620,7 +612,8 @@ function M.toggle_current_issue_collapsed()
 		return
 	end
 	local node = navigation.current_item()
-	if node and node.issue and state.toggle_issue_collapsed(node.issue.key) then
+	if node and node.issue then
+		state.toggle_issue_collapsed(node.issue.key)
 		render_if_active()
 	end
 end

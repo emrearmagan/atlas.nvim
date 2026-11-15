@@ -1,7 +1,6 @@
 local M = {}
 
 local config = require("atlas.config")
-local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 
@@ -57,7 +56,7 @@ M.jira = {
 			{ text = points, hl_group = "AtlasTextMuted" },
 		}
 		local without_title = join(segments)
-		title.text = utils.truncate(clean(issue.title), width - ui_utils.text_width(without_title) - 1)
+		title.text = utils.truncate(clean(issue.title), width - utils.text_width(without_title) - 1)
 
 		local text, spans = join(segments)
 		return { issue = issue, text = text, spans = spans }
@@ -119,7 +118,7 @@ local function render_row(columns, row, column_count)
 
 	for index, column in ipairs(columns) do
 		local content = column.rows[row] or { text = "", spans = {} }
-		local padded = ui_utils.pad_right(content.text, column.width)
+		local padded = utils.pad_right(content.text, column.width)
 
 		parts[index] = padded
 		cells[index] = { issue = content.issue, column = column.index, start_col = col, end_col = col + #padded }

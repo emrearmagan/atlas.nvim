@@ -1,18 +1,15 @@
 ---@alias PullsPipelinesSelection { pipeline?: PullsPipeline, stage?: PullsPipelineStage, job?: PullsPipelineJob, step?: integer }
 
 ---@class PullsPipelinesExplorer
+---@field session PullsPipelinesSession
 ---@field buf integer|nil
 ---@field win integer|nil
----@field context PullsPipelineContext
----@field backend PullsPipelineBackend|nil
----@field requests AtlasRequestScope|nil
+---@field requests AtlasRequestScope
 ---@field pipelines PullsPipeline[]|"loading"|string
 ---@field line_map table<integer, PullsPipelinesSelection>
 ---@field selection PullsPipelinesSelection|nil
 ---@field spinner SpinnerInstance|nil
 ---@field loading_job_id string|nil
----@field on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean, background?: boolean })|nil
----@field on_update fun()|nil
 
 local M = {}
 
@@ -72,7 +69,7 @@ local function show_selection(pane, selection)
 	local previous_job = pane.selection and pane.selection.job
 	local job = selection and selection.job
 	pane.selection = selection
-	if job and job ~= previous_job and pane.backend and pane.backend.fetch_job then
+	if job and job ~= previous_job and pane.session.backend.fetch_job then
 		M.reload_job(pane, selection)
 		return
 	end
@@ -82,9 +79,7 @@ local function show_selection(pane, selection)
 		stop_spinner(pane)
 	end
 	M.render(pane, selection)
-	if pane.on_select then
-		pane.on_select(selection)
-	end
+	pane.session:show_selection(selection)
 end
 
 ---@param pane PullsPipelinesExplorer
@@ -131,22 +126,19 @@ function M.reload_job(pane, selection, opts)
 	if not selection or not selection.pipeline or not current then
 		return
 	end
-	local fetch = pane.backend and pane.backend.fetch_job
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	local session = pane.session
+	local fetch = session.backend.fetch_job
+	pane.requests.cancel()
 	pane.requests = requests.new()
 	start_spinner(pane, current)
-	if pane.on_update then
-		pane.on_update()
-	end
-	if pane.selection and pane.selection.job == current and pane.on_select then
-		pane.on_select(pane.selection, { force_refresh = true, background = opts.background })
+	session:update_statusline()
+	if pane.selection and pane.selection.job == current then
+		session:show_selection(pane.selection, { force_refresh = true, background = opts.background })
 	end
 
 	pane.requests.run(function(done)
 		if fetch then
-			return fetch(pane.context, selection.pipeline, current, done)
+			return fetch(session.context, selection.pipeline, current, done)
 		end
 		done(current, nil)
 	end, function(job, err)
@@ -163,14 +155,12 @@ function M.reload_job(pane, selection, opts)
 			end
 		end
 		M.render(pane)
-		if pane.on_update then
-			pane.on_update()
-		end
+		session:update_statusline()
 		if err then
 			logger.logerror("Fetch job failed", { job_id = current.id, error = err })
 			notify.error("Failed to refresh job: " .. err)
-		elseif not opts.background and pane.selection and pane.selection.job == current and pane.on_select then
-			pane.on_select(pane.selection, { force_refresh = false })
+		elseif not opts.background and pane.selection and pane.selection.job == current then
+			session:show_selection(pane.selection, { force_refresh = false })
 		end
 	end)
 end
@@ -179,14 +169,10 @@ M.render = renderer.render
 
 ---@param pane PullsPipelinesExplorer
 local function begin_loading(pane)
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	pane.requests = requests.new()
 	pane.pipelines = "loading"
-	if pane.on_select then
-		pane.on_select(nil)
-	end
+	pane.session:show_selection(nil)
 	start_spinner(pane)
 end
 
@@ -196,9 +182,10 @@ end
 local function finish_loading(pane, pipelines, err)
 	stop_spinner(pane)
 	pane.pipelines = err or pipelines or {}
-	local target = pane.context.target
+	local context = pane.session.context
+	local target = context.target
 	if not err and type(target) == "table" and not target.source and pipelines and pipelines[1] then
-		pane.context.target = pipelines[1]
+		context.target = pipelines[1]
 	end
 	local selection = pane.selection
 	if selection then
@@ -221,21 +208,17 @@ function M.refresh(pane, selection, opts)
 	pane.selection = selection and selection.pipeline and selection or nil
 	begin_loading(pane)
 
-	local backend = pane.backend
-	if not backend then
-		finish_loading(pane, nil, "Pipelines are not available")
-		return
-	end
-
-	local target = pane.context.target
+	local session = pane.session
+	local backend = session.backend
+	local target = session.context.target
 	pane.requests.run(function(done)
 		if type(target) == "table" and not target.source then
 			---@cast target PullsPipeline
-			return backend.fetch_pipeline(pane.context, target, function(pipeline, err)
+			return backend.fetch_pipeline(session.context, target, function(pipeline, err)
 				done(pipeline and { pipeline } or nil, err)
 			end)
 		end
-		return backend.fetch(pane.context, { force_refresh = (opts or {}).force_refresh ~= false }, done)
+		return backend.fetch(session.context, { force_refresh = (opts or {}).force_refresh ~= false }, done)
 	end, function(pipelines, err)
 		finish_loading(pane, pipelines, err)
 	end)
@@ -245,13 +228,14 @@ end
 ---@param run PullsPipeline
 ---@param index integer|nil
 local function load_pipeline(pane, run, index)
-	if not pane.on_select then
+	local session = pane.session
+	if session.closed then
 		return
 	end
 	local pipelines = index and pane.pipelines or {}
 	begin_loading(pane)
 	pane.requests.run(function(done)
-		return pane.backend.fetch_pipeline(pane.context, run, done)
+		return session.backend.fetch_pipeline(session.context, run, done)
 	end, function(loaded, err)
 		if err then
 			finish_loading(pane, nil, err)
@@ -282,13 +266,13 @@ end
 
 ---@param pane PullsPipelinesExplorer
 function M.show_history(pane)
-	local backend = pane.backend
-	if not backend or not backend.fetch_history then
+	local session = pane.session
+	if not session.backend.fetch_history then
 		notify.warn("Build history is not available for this provider")
 		return
 	end
 
-	history.open(pane.context, backend, function(run)
+	history.open(session.context, session.backend, function(run)
 		pane.selection = nil
 		load_pipeline(pane, run)
 	end)
@@ -296,21 +280,12 @@ end
 
 ---@param pane PullsPipelinesExplorer
 function M.dispose(pane)
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	stop_spinner(pane)
-	pane.on_select = nil
-	pane.on_update = nil
 end
 
 ---@param pane PullsPipelinesExplorer
----@param on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean, background?: boolean })
----@param on_update fun()
-function M.setup(pane, on_select, on_update)
-	pane.on_select = on_select
-	pane.on_update = on_update
-
+function M.setup(pane)
 	vim.api.nvim_set_option_value("cursorline", true, { win = pane.win })
 	vim.api.nvim_set_option_value("winfixwidth", true, { win = pane.win })
 	vim.api.nvim_set_option_value("winbar", " Pipelines ", { win = pane.win })

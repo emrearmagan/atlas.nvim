@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local logs = require("atlas.pulls.pipelines.ui.logs")
 
 ---@param pane PullsPipelinesLogs
@@ -11,8 +12,8 @@ function M.items(pane)
 		{
 			keymap = keymaps.resolve("ui.refresh"),
 			callback = function()
-				if pane.selection and pane.on_reload then
-					pane.on_reload(pane.selection)
+				if pane.selection then
+					explorer.reload_job(pane.session.explorer, pane.selection)
 				end
 			end,
 		},

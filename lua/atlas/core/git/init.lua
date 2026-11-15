@@ -385,20 +385,6 @@ function M.diff_stat(root, base, head, on_done)
 	)
 end
 
----@param root string
----@param remote string|nil  -- defaults to "origin"
----@param on_done fun(url: string|nil, err: string|nil)
----@return { cancel: fun() }
-function M.remote_url(root, remote, on_done)
-	remote = remote or "origin"
-	return M.run({ "-C", root, "remote", "get-url", remote }, { text = true }, function(res)
-		on_done(
-			res.code == 0 and trim(res.stdout) or nil,
-			res.code ~= 0 and string.format("Remote '%s' is not configured", remote) or nil
-		)
-	end)
-end
-
 ---@param remote string
 ---@return AtlasTarget|nil target, string|nil err
 function M.parse_remote_url(remote)

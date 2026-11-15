@@ -27,10 +27,9 @@ function M.get_auth()
 	return user, token, nil
 end
 
----@param headers table|nil
 ---@param has_body boolean
 ---@return table<string, string>|nil, string|nil
-local function build_headers(headers, has_body)
+local function build_headers(has_body)
 	local user, token, auth_err = M.get_auth()
 	if auth_err then
 		local err = sanitize_error(auth_err)
@@ -39,11 +38,11 @@ local function build_headers(headers, has_body)
 	end
 
 	local auth = vim.base64.encode(string.format("%s:%s", user, token))
-	return vim.tbl_extend("force", {
+	return {
 		Authorization = "Basic " .. auth,
 		["Content-Type"] = has_body and "application/json" or nil,
 		Accept = "application/json",
-	}, headers or {})
+	}
 end
 
 ---@param url string
@@ -153,18 +152,18 @@ end
 
 ---@param method string "GET"|"POST"|"PUT"|"DELETE"
 ---@param url string Full URL or endpoint
----@param headers table|nil Optional headers (will merge with auth headers)
----@param body string|nil Optional JSON body
+---@param data table|nil JSON body
 ---@param callback fun(result: table|nil, err: string|nil)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, url, headers, body, callback, ctx)
-	local request_headers, auth_err = build_headers(headers, body ~= nil)
+function M.request(method, url, data, callback, ctx)
+	local request_headers, auth_err = build_headers(data ~= nil)
 	if auth_err then
 		callback(nil, auth_err)
 		return nil
 	end
 
+	local body = data and vim.json.encode(data)
 	local full_url = request_url(url)
 	local message, log = log_request(method, full_url, ctx)
 
@@ -215,7 +214,7 @@ function M.fetch_all_values(url, on_done, ctx)
 		if cancelled then
 			return
 		end
-		current = M.request("GET", page_url, nil, nil, function(result, err)
+		current = M.request("GET", page_url, nil, function(result, err)
 			if cancelled then
 				return
 			end
@@ -247,12 +246,11 @@ end
 ---@param method string "GET"|"POST"|"PUT"|"DELETE"
 ---@param url string Full URL or endpoint
 ---@param headers table|nil Optional headers (will merge with auth headers)
----@param body string|nil Optional body
 ---@param callback fun(text: string|nil, err: string|nil, status?: integer)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request_text(method, url, headers, body, callback, ctx)
-	local request_headers, auth_err = build_headers(headers, body ~= nil)
+function M.request_text(method, url, headers, callback, ctx)
+	local request_headers, auth_err = build_headers(false)
 	if auth_err then
 		callback(nil, auth_err)
 		return nil
@@ -261,7 +259,8 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	local full_url = request_url(url)
 	local message, log = log_request(method, full_url, ctx)
 
-	return http.curl_text_request(method, full_url, request_headers, body, function(text, err, status)
+	request_headers = vim.tbl_extend("force", request_headers, headers or {})
+	return http.curl_text_request(method, full_url, request_headers, nil, function(text, err, status)
 		if err then
 			local safe_err = sanitize_error(err)
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = safe_err }))

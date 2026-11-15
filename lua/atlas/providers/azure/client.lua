@@ -100,11 +100,10 @@ end
 ---@param data? table
 ---@param on_done fun(result: any, err: string|nil, headers?: table<string, string>)
 ---@param ctx? table
----@param api_version? string
----@param content_type? string
----@param response_headers? boolean
+---@param opts? { api_version?: string, content_type?: string, response_headers?: boolean }
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done, ctx, api_version, content_type, response_headers)
+function M.request(method, endpoint, data, on_done, ctx, opts)
+	opts = opts or {}
 	local cfg = azure_config()
 	if not cfg.base_url or cfg.base_url == "" or not cfg.token or cfg.token == "" then
 		local err = "Missing Azure DevOps credentials in config"
@@ -115,11 +114,11 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 
 	local payload = data and vim.fn.json_encode(data) or nil
 	local separator = endpoint:find("?", 1, true) and "&" or "?"
-	endpoint = endpoint .. separator .. "api-version=" .. (api_version or "7.1")
+	endpoint = endpoint .. separator .. "api-version=" .. (opts.api_version or "7.1")
 
 	local headers = {
 		Authorization = "Basic " .. vim.base64.encode(":" .. cfg.token),
-		["Content-Type"] = content_type or "application/json",
+		["Content-Type"] = opts.content_type or "application/json",
 		["Content-Length"] = (method == "POST" or method == "PUT") and payload == nil and "0" or nil,
 		Accept = "application/json",
 	}
@@ -141,7 +140,7 @@ function M.request(method, endpoint, data, on_done, ctx, api_version, content_ty
 			M.clear_cache()
 		end
 		on_done(result, nil, headers_out)
-	end, { response_headers = response_headers })
+	end, { response_headers = opts.response_headers })
 end
 
 ---Fetch every page of a list endpoint that pages with continuation tokens.
@@ -160,7 +159,7 @@ function M.fetch_all(endpoint, params, ctx, on_done)
 			continuationToken = continuation_token,
 		}))
 		scope.run(function(done)
-			return M.request("GET", endpoint .. query, nil, done, ctx, nil, nil, true)
+			return M.request("GET", endpoint .. query, nil, done, ctx, { response_headers = true })
 		end, function(result, err, headers)
 			if err then
 				on_done(nil, err)

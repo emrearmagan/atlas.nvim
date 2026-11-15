@@ -31,11 +31,6 @@ end
 ---@param on_done fun(users: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignable_users(slug, query, on_done)
-	if slug == "" then
-		on_done(nil, "Missing repository slug")
-		return nil
-	end
-
 	local q = vim.trim(tostring(query or "")):lower()
 	return client.gh(
 		{ "api", "--paginate", "--slurp", string.format("repos/%s/assignees?per_page=100", slug) },

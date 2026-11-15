@@ -10,7 +10,6 @@ local MAX_COMMENT_LINES = 8
 ---@field expanded_comments table<string, boolean>
 ---@field expanded_runs table<string, boolean>
 ---@field requests AtlasRequestScope
----@field current_pr PullRequest|nil
 local M = {
 	conversation = nil,
 	error = nil,
@@ -18,11 +17,9 @@ local M = {
 	expanded_comments = {},
 	expanded_runs = {},
 	requests = request_scope.new(),
-	current_pr = nil,
 }
 
 function M.reset()
-	M.current_pr = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 	M.conversation = nil
@@ -30,26 +27,6 @@ function M.reset()
 	M.collapsed = {}
 	M.expanded_comments = {}
 	M.expanded_runs = {}
-end
-
----@param pr PullRequest
-function M.activate(pr)
-	M.reset()
-	M.current_pr = pr
-end
-
-function M.deactivate()
-	M.current_pr = nil
-	M.requests.cancel()
-	M.requests = request_scope.new()
-end
-
----@param pr PullRequest
----@return boolean
-function M.is_current(pr)
-	return M.current_pr ~= nil
-		and tostring(M.current_pr.id or "") == tostring(pr.id or "")
-		and tostring(M.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 ---@param run_id any
@@ -139,15 +116,9 @@ local function is_comment_long(comment)
 end
 
 ---@param comment PullsComment
----@return boolean
-local function is_comment_expanded(comment)
-	return M.expanded_comments[comment_key(comment)] == true
-end
-
----@param comment PullsComment
 ---@return integer|nil
 function M.comment_max_lines(comment)
-	if is_comment_long(comment) and not is_comment_expanded(comment) then
+	if is_comment_long(comment) and not M.expanded_comments[comment_key(comment)] then
 		return MAX_COMMENT_LINES
 	end
 	return nil

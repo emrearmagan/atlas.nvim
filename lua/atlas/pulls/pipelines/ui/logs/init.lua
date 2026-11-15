@@ -2,16 +2,16 @@ local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local parser = require("atlas.pulls.pipelines.parser")
+local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local renderer = require("atlas.pulls.pipelines.ui.logs.renderer")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
 
 ---@class PullsPipelinesLogs
+---@field session PullsPipelinesSession
 ---@field buf integer|nil
 ---@field win integer|nil
----@field context PullsPipelineContext
----@field backend PullsPipelineBackend|nil
----@field requests AtlasRequestScope|nil
+---@field requests AtlasRequestScope
 ---@field selection PullsPipelinesSelection|nil
 ---@field log (PullsLogLine|PullsLogGroup)[]|"loading"|string|nil
 ---@field source PullsLog|nil
@@ -26,8 +26,6 @@ local utils = require("atlas.ui.shared.utils")
 ---@field refreshing boolean|nil
 ---@field follow_pending boolean|nil
 ---@field refresh_complete boolean|nil
----@field on_update fun()|nil
----@field on_reload fun(selection: PullsPipelinesSelection, opts?: { background?: boolean })|nil
 
 local M = {}
 
@@ -128,7 +126,7 @@ end
 local function step_target(pane)
 	local selection = pane.selection
 	local log = pane.log
-	local resolve = pane.backend and pane.backend.step_target
+	local resolve = pane.session.backend.step_target
 	if not selection or not selection.job or not selection.step or type(log) ~= "table" or not resolve then
 		return
 	end
@@ -145,9 +143,7 @@ local function update(pane, target, following)
 	if following or not (target and M.jump(pane, target)) then
 		render(pane, following)
 	end
-	if pane.on_update then
-		pane.on_update()
-	end
+	pane.session:update_statusline()
 end
 
 ---@param pane PullsPipelinesLogs
@@ -197,19 +193,17 @@ local function stop_auto_refresh(pane)
 end
 
 ---@param pane PullsPipelinesLogs
----@param on_update fun()
----@param on_reload fun(selection: PullsPipelinesSelection, opts?: { background?: boolean })
-function M.setup(pane, on_update, on_reload)
-	pane.on_update = on_update
-	pane.on_reload = on_reload
+function M.setup(pane)
 	vim.api.nvim_set_option_value("cursorline", false, { win = pane.win })
 	vim.api.nvim_set_option_value("winfixwidth", false, { win = pane.win })
 	update(pane)
 end
 
+---@alias PullsPipelinesShowOpts { force_refresh?: boolean, background?: boolean }
+
 ---@param pane PullsPipelinesLogs
 ---@param selection PullsPipelinesSelection|nil
----@param opts { force_refresh?: boolean, background?: boolean }|nil
+---@param opts PullsPipelinesShowOpts|nil
 function M.show(pane, selection, opts)
 	opts = opts or {}
 	local same_job = selection and selection.job and pane.selection and selection.job == pane.selection.job
@@ -233,9 +227,7 @@ function M.show(pane, selection, opts)
 		pane.follow_pending = is_following(pane)
 	end
 
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	pane.refreshing = false
 	pane.selection = selection
 	if not background then
@@ -254,7 +246,8 @@ function M.show(pane, selection, opts)
 		return
 	end
 
-	local fetch = pane.backend and pane.backend.fetch_job_log
+	local session = pane.session
+	local fetch = session.backend.fetch_job_log
 	if not fetch then
 		pane.log = "Job logs are not supported by this provider"
 		update(pane)
@@ -271,12 +264,10 @@ function M.show(pane, selection, opts)
 		sync_spinner(pane)
 		M.render(pane)
 	end
-	if pane.on_update then
-		pane.on_update()
-	end
+	session:update_statusline()
 
 	pane.requests.run(function(done)
-		return fetch(pane.context, selection.pipeline, selection.job, done)
+		return fetch(session.context, selection.pipeline, selection.job, done)
 	end, function(log, err)
 		pane.refreshing = false
 		pane.refresh_complete = finished and not err
@@ -292,7 +283,7 @@ function M.show(pane, selection, opts)
 			end
 		elseif not pane.source or pane.source.raw ~= (log and log.raw or "") then
 			pane.source = log or { raw = "" }
-			local entries = parser.parse(pane.source, pane.backend.parse)
+			local entries = parser.parse(pane.source, session.backend.parse)
 			set_fold_keys(pane, entries, "")
 			pane.log = entries
 			changed = true
@@ -305,9 +296,7 @@ function M.show(pane, selection, opts)
 		if changed or spinner_changed then
 			render(pane, following)
 		end
-		if pane.on_update then
-			pane.on_update()
-		end
+		session:update_statusline()
 	end)
 end
 
@@ -333,7 +322,7 @@ function M.toggle_auto_refresh(pane)
 					return
 				end
 
-				pane.on_reload(pane.selection, { background = true })
+				explorer.reload_job(pane.session.explorer, pane.selection, { background = true })
 			end)
 		)
 	end
@@ -394,13 +383,9 @@ function M.dispose(pane)
 		pane.refresh_timer:close()
 		pane.refresh_timer = nil
 	end
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	pane.refreshing = false
 	stop_spinner(pane)
-	pane.on_update = nil
-	pane.on_reload = nil
 end
 
 return M

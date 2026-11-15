@@ -76,7 +76,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_discussions(issue, opts, on_done)
 	opts = opts or {}
-	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
+	local path, iid = normalizer.parse_key(issue.key)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
 		return nil

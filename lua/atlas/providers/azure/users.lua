@@ -64,7 +64,7 @@ function M.fetch_user(on_done)
 		}
 		service.set_persistent_cache(cache_key, user)
 		on_done(user, nil)
-	end, { action = "Fetch current user" }, "7.1-preview.1")
+	end, { action = "Fetch current user" }, { api_version = "7.1-preview.1" })
 end
 
 ---@param endpoint string

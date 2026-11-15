@@ -153,11 +153,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function post_pipeline_action(context, endpoint, action, on_done)
-	local repo_slug = tostring(context.repo_full_name or "")
-	if repo_slug == "" then
-		on_done(false, "Missing repo")
-		return nil
-	end
+	local repo_slug = context.repo_full_name
 	return cli.gh({ "api", "-X", "POST", string.format("repos/%s/%s", repo_slug, endpoint) }, function(_, err)
 		on_done(err == nil, err)
 	end, {
@@ -533,12 +529,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	opts = opts or {}
-	local owner, repo = (context.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
-	if not owner then
-		on_done(nil, "Missing repo")
-		return nil
-	end
-
+	local owner, repo = context.repo_full_name:match("^([^/]+)/([^/]+)$")
 	local target = context.target
 	local pr = type(target) == "table" and target.source and target or nil
 	local branch = type(target) == "string" and target or nil
@@ -709,12 +700,8 @@ end
 ---@param on_done fun(job: PullsPipelineJob|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job(context, _pipeline, job, on_done)
-	local repo_slug = tostring(context.repo_full_name or "")
+	local repo_slug = context.repo_full_name
 	local job_id = tonumber(job.id)
-	if repo_slug == "" then
-		on_done(nil, "Missing repo")
-		return nil
-	end
 	if not job_id then
 		on_done(job, nil)
 		return nil
@@ -744,11 +731,11 @@ end
 ---@param on_done fun(log: PullsLog|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, _pipeline, job, on_done)
-	local repo_slug = tostring(context.repo_full_name or "")
+	local repo_slug = context.repo_full_name
 	local job_id = tonumber(job.id)
-	if repo_slug == "" or job_id == nil then
+	if job_id == nil then
 		vim.schedule(function()
-			on_done(nil, repo_slug == "" and "Missing repo" or "Missing workflow job ID")
+			on_done(nil, "Missing workflow job ID")
 		end)
 		return nil
 	end

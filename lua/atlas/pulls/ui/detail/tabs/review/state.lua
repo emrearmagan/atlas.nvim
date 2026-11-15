@@ -6,13 +6,11 @@ local review_actions = require("atlas.pulls.actions.review")
 ---@field status string|nil
 ---@field expanded_threads table<string, boolean>
 ---@field requests AtlasRequestScope
----@field current_pr PullRequest|nil
 local M = {
 	data = nil,
 	status = nil,
 	expanded_threads = {},
 	requests = request_scope.new(),
-	current_pr = nil,
 }
 
 function M.reset()
@@ -21,7 +19,6 @@ function M.reset()
 	M.expanded_threads = {}
 	M.requests.cancel()
 	M.requests = request_scope.new()
-	M.current_pr = nil
 end
 
 ---@param root PullsComment
@@ -32,12 +29,6 @@ function M.is_thread_expanded(root)
 		return expanded
 	end
 	return root.state ~= "RESOLVED"
-end
-
----@param root PullsComment
----@param expanded boolean
-local function set_expanded(root, expanded)
-	M.expanded_threads[tostring(root.id)] = expanded
 end
 
 ---@param roots PullsComment[]
@@ -54,7 +45,7 @@ function M.toggle_threads(roots)
 		end
 	end
 	for _, root in ipairs(roots) do
-		set_expanded(root, expand)
+		M.expanded_threads[tostring(root.id)] = expand
 	end
 	return true
 end

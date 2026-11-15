@@ -7,6 +7,8 @@ local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 
+local registrations = {}
+
 ---@param action_id AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@param map_item table
 ---@return table|nil
@@ -18,16 +20,6 @@ local function item(action_id, map_item)
 	map_item.key = keymap.key
 	map_item.desc = keymap.desc
 	return map_item
-end
-
----@param action_id AtlasKeymapActionId|AtlasKeymapActionId[]
----@return table|nil
-local function remove_item(action_id)
-	local keymap = resolver.resolve(action_id)
-	if keymap == nil then
-		return nil
-	end
-	return { key = keymap.key }
 end
 
 ---@param buf integer
@@ -76,15 +68,16 @@ function M.setup(buf, refresh)
 		})
 	)
 	help.register("Detail", items, { index = 2, buffer = buf })
+	registrations[buf] = items
 end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {}
-	utils.insert_if(items, remove_item("ui.toggle_description_mode"))
-	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	utils.insert_if(items, remove_item({ "ui.show_details", "ui.select" }))
-	help.remove("Detail", items, { buffer = buf })
+	local registered = registrations[buf]
+	if registered then
+		help.remove("Detail", registered, { buffer = buf })
+		registrations[buf] = nil
+	end
 end
 
 return M

@@ -7,6 +7,7 @@ local logs = require("atlas.pulls.pipelines.ui.logs")
 local overview = require("atlas.pulls.pipelines.ui.overview")
 local icons = require("atlas.ui.shared.icons")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
+local requests = require("atlas.core.requests")
 local statusline = require("atlas.ui.statusline")
 local components = require("atlas.ui.statusline.components")
 local utils = require("atlas.ui.shared.utils")
@@ -15,12 +16,16 @@ local utils = require("atlas.ui.shared.utils")
 ---@field tab integer
 ---@field closed boolean
 ---@field group integer|nil
+---@field context PullsPipelineContext
+---@field backend PullsPipelineBackend
 ---@field explorer PullsPipelinesExplorer
 ---@field logs PullsPipelinesLogs
 ---@field overview PullsPipelinesOverview
 ---@field config PullsPipelinesConfig
 ---@field statusline AtlasStatusline
 ---@field action PullsPipelineAction|nil
+local Session = {}
+Session.__index = Session
 
 local M = {}
 
@@ -28,7 +33,7 @@ local M = {}
 ---@return AtlasStatuslineLayout
 local function statusline_layout(session)
 	local function title(ctx)
-		local context = session.explorer.context
+		local context = session.context
 		local target = context.target
 		local text = context.repo_full_name
 
@@ -85,27 +90,25 @@ local function statusline_layout(session)
 	return { title, hints, "%=", log_counts, duration, started, components.help }
 end
 
----@param session PullsPipelinesSession
-local function update_statusline(session)
-	if session.action then
-		session.statusline:notify("loading", session.action.label .. "...")
-	elseif session.explorer.pipelines == "loading" then
-		session.statusline:notify("loading", "Loading pipelines...")
-	elseif session.explorer.spinner then
-		session.statusline:notify("loading", "Refreshing job...")
-	elseif session.logs.refreshing then
-		session.statusline:notify("loading", "Loading logs...")
-	elseif session.config.file == "loading" then
-		session.statusline:notify("loading", "Loading configuration...")
+function Session:update_statusline()
+	if self.action then
+		self.statusline:notify("loading", self.action.label .. "...")
+	elseif self.explorer.pipelines == "loading" then
+		self.statusline:notify("loading", "Loading pipelines...")
+	elseif self.explorer.spinner then
+		self.statusline:notify("loading", "Refreshing job...")
+	elseif self.logs.refreshing then
+		self.statusline:notify("loading", "Loading logs...")
+	elseif self.config.file == "loading" then
+		self.statusline:notify("loading", "Loading configuration...")
 	else
-		session.statusline:clear_notice()
+		self.statusline:clear_notice()
 	end
 end
 
----@param session PullsPipelinesSession
 ---@param selection PullsPipelinesSelection|nil
-local function open_actions(session, selection)
-	if session.closed or session.action then
+function Session:open_actions(selection)
+	if self.closed or self.action then
 		return
 	end
 	if not selection or not selection.pipeline then
@@ -115,15 +118,14 @@ local function open_actions(session, selection)
 
 	---@type PullsPipelineActionContext
 	local ctx = {
-		context = session.explorer.context,
+		context = self.context,
 		pipeline = selection.pipeline,
 		stage = selection.stage,
 		job = selection.job,
 	}
-	local backend = session.explorer.backend
 	local available = vim.tbl_filter(function(action)
 		return action_runner.is_available(action, ctx)
-	end, backend and backend.actions or {})
+	end, self.backend.actions or {})
 
 	local url = ctx.job and ctx.job.url or ctx.pipeline.url
 	if url and url ~= "" then
@@ -149,27 +151,27 @@ local function open_actions(session, selection)
 			return
 		end
 
-		if session.closed or session.action then
+		if self.closed or self.action then
 			return
 		end
-		session.action = action
-		update_statusline(session)
+		self.action = action
+		self:update_statusline()
 		action_runner.run(action, ctx, function(ok, err)
-			if session.closed then
+			if self.closed then
 				return
 			end
 			if not ok then
-				session.action = nil
-				update_statusline(session)
+				self.action = nil
+				self:update_statusline()
 				if err then
 					notify.error(action.label .. " failed: " .. err)
 				end
 				return
 			end
 			vim.defer_fn(function()
-				if not session.closed then
-					session.action = nil
-					explorer.refresh(session.explorer)
+				if not self.closed then
+					self.action = nil
+					explorer.refresh(self.explorer)
 				end
 			end, 1000)
 		end)
@@ -229,29 +231,28 @@ local function cleanup(session)
 	vim.api.nvim_del_augroup_by_id(session.group)
 end
 
----@param session PullsPipelinesSession
-local function close(session)
-	cleanup(session)
-	if utils.tab.valid(session.tab) and #vim.api.nvim_list_tabpages() > 1 then
-		vim.cmd(vim.api.nvim_tabpage_get_number(session.tab) .. "tabclose")
+function Session:close()
+	cleanup(self)
+	if utils.tab.valid(self.tab) and #vim.api.nvim_list_tabpages() > 1 then
+		vim.cmd(vim.api.nvim_tabpage_get_number(self.tab) .. "tabclose")
 	else
-		for _, pane in ipairs({ session.explorer, session.logs }) do
+		for _, pane in ipairs({ self.explorer, self.logs }) do
 			if utils.window.valid(pane.win) then
 				pcall(vim.api.nvim_win_close, pane.win, true)
 			end
 		end
 	end
-	utils.buffer.delete(session.explorer.buf)
-	utils.buffer.delete(session.logs.buf)
-	utils.buffer.delete(session.overview.buf)
-	utils.buffer.delete(session.config.buf)
+	utils.buffer.delete(self.explorer.buf)
+	utils.buffer.delete(self.logs.buf)
+	utils.buffer.delete(self.overview.buf)
+	utils.buffer.delete(self.config.buf)
 end
 
 ---@param session PullsPipelinesSession
 local function on_close(session)
 	cleanup(session)
 	vim.schedule(function()
-		close(session)
+		session:close()
 	end)
 end
 
@@ -290,73 +291,59 @@ local function show_buffer(session, buf)
 	session.statusline:attach(session.logs.win)
 end
 
----@param session PullsPipelinesSession
 ---@param selection PullsPipelinesSelection|nil
----@param opts { force_refresh?: boolean, background?: boolean }|nil
-local function show_selection(session, selection, opts)
-	config.clear(session.config)
+---@param opts PullsPipelinesShowOpts|nil
+function Session:show_selection(selection, opts)
+	config.clear(self.config)
 	if selection and selection.pipeline and not selection.job then
-		show_buffer(session, session.overview.buf)
-		logs.show(session.logs, nil)
-		overview.show(session.overview, selection)
+		show_buffer(self, self.overview.buf)
+		logs.show(self.logs, nil)
+		overview.show(self.overview, selection)
 	else
-		show_buffer(session, session.logs.buf)
-		logs.show(session.logs, selection, opts)
+		show_buffer(self, self.logs.buf)
+		logs.show(self.logs, selection, opts)
 	end
 end
 
----@param session PullsPipelinesSession
 ---@param selection PullsPipelinesSelection|nil
-local function toggle_config(session, selection)
-	if utils.window.has_buffer(session.logs.win, session.config.buf) then
-		show_selection(session, session.explorer.selection)
+function Session:toggle_config(selection)
+	if utils.window.has_buffer(self.logs.win, self.config.buf) then
+		self:show_selection(self.explorer.selection)
 		return
 	end
 	if not selection or not selection.pipeline then
 		notify.warn("No pipeline selected")
 		return
 	end
-	show_buffer(session, session.config.buf)
-	logs.show(session.logs, nil)
-	config.show(session.config, selection)
-end
-
----@param session PullsPipelinesSession
-local function setup_panes(session)
-	session.config.on_update = function()
-		update_statusline(session)
-	end
-	logs.setup(session.logs, function()
-		update_statusline(session)
-	end, function(selection, opts)
-		explorer.reload_job(session.explorer, selection, opts)
-	end)
-	explorer.setup(session.explorer, function(selection, opts)
-		show_selection(session, selection, opts)
-	end, function()
-		update_statusline(session)
-	end)
+	show_buffer(self, self.config.buf)
+	logs.show(self.logs, nil)
+	config.show(self.config, selection)
 end
 
 ---@param context PullsPipelineContext
----@param backend PullsPipelineBackend|nil
+---@param backend PullsPipelineBackend
 ---@param opts { selected_pipeline?: PullsPipeline, selected_stage?: PullsPipelineStage, selected_job?: PullsPipelineJob }|nil
 function M.open(context, backend, opts)
 	opts = opts or {}
 	vim.cmd("tabnew")
-	local session = {
+	local session = setmetatable({
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
-		explorer = { context = context, backend = backend, pipelines = "loading", line_map = {} },
-		logs = { context = context, backend = backend, collapsed = {}, line_map = {}, entry_rows = {} },
+		context = context,
+		backend = backend,
+		explorer = { pipelines = "loading", line_map = {}, requests = requests.new() },
+		logs = { collapsed = {}, line_map = {}, entry_rows = {}, requests = requests.new() },
 		overview = { line_map = {} },
-		config = { context = context, backend = backend },
-	}
+		config = { requests = requests.new() },
+	}, Session)
 	---@cast session PullsPipelinesSession
+	session.explorer.session = session
+	session.logs.session = session
+	session.config.session = session
 	session.statusline = statusline.new({
 		layout = statusline_layout(session),
 		context = function(ctx)
-			local target = session.explorer.context.target
+			local target = session.context.target
 			if type(target) == "table" and target.source then
 				---@cast target PullRequest
 				ctx.pr = target
@@ -368,14 +355,9 @@ function M.open(context, backend, opts)
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)
-	setup_panes(session)
-	keymaps.setup(session, function()
-		close(session)
-	end, function(selection)
-		open_actions(session, selection)
-	end, function(selection)
-		toggle_config(session, selection)
-	end)
+	logs.setup(session.logs)
+	explorer.setup(session.explorer)
+	keymaps.setup(session)
 	explorer.refresh(
 		session.explorer,
 		{ pipeline = opts.selected_pipeline, stage = opts.selected_stage, job = opts.selected_job },
