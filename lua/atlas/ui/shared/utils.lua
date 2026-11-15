@@ -1,12 +1,64 @@
-local ui_utils = require("atlas.ui.utils")
-
 local M = {
 	window = {},
 	buffer = {},
 	tab = {},
 }
 
----@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }|{ line: integer, line_hl_group: string }
+---@alias AtlasUIHighlight { line: integer, start_col?: integer, end_col?: integer, hl_group?: string, line_hl_group?: string, url?: string }
+
+---@param text string|nil
+---@return number
+function M.text_width(text)
+	return vim.fn.strdisplaywidth(text or "")
+end
+
+---@param text string
+---@param width integer
+---@return string padded_text
+---@return integer left_pad
+function M.center_text(text, width)
+	local content_width = vim.fn.strdisplaywidth(text)
+	if content_width >= width then
+		return text, 0
+	end
+	local left_pad = math.floor((width - content_width) / 2)
+	return string.rep(" ", left_pad) .. text, left_pad
+end
+
+---@param text string
+---@param width integer
+---@return string
+function M.pad_right(text, width)
+	local w = M.text_width(text)
+	if w >= width then
+		return text
+	end
+	return text .. string.rep(" ", width - w)
+end
+
+---@param text string
+---@param width integer
+---@param align string|nil "left"|"center"|"right"
+---@return string
+function M.pad_aligned(text, width, align)
+	local w = M.text_width(text)
+	if w >= width then
+		return text
+	end
+
+	local pad = width - w
+	if align == "center" then
+		local left = math.floor(pad / 2)
+		local right = pad - left
+		return string.rep(" ", left) .. text .. string.rep(" ", right)
+	end
+
+	if align == "right" then
+		return string.rep(" ", pad) .. text
+	end
+
+	return M.pad_right(text, width)
+end
 
 -- Window
 
@@ -92,7 +144,7 @@ function M.buffer.center_message(buf, win, text, header)
 		lines[#lines + 1] = ""
 	end
 	for _, line in ipairs(message) do
-		lines[#lines + 1] = ui_utils.center_text(line, width)
+		lines[#lines + 1] = M.center_text(line, width)
 	end
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -142,20 +194,14 @@ function M.append_block(lines, spans, block, padding)
 		table.insert(lines, prefix .. line)
 	end
 	for _, span in ipairs(block.highlights or {}) do
-		if span.line_hl_group ~= nil then
-			table.insert(spans, {
+		table.insert(
+			spans,
+			vim.tbl_extend("force", span, {
 				line = base + span.line,
-				line_hl_group = span.line_hl_group,
+				start_col = span.start_col and pad + span.start_col,
+				end_col = span.end_col and pad + span.end_col,
 			})
-		else
-			table.insert(spans, {
-				line = base + span.line,
-				start_col = pad + span.start_col,
-				end_col = pad + span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
+		)
 	end
 end
 
@@ -165,23 +211,18 @@ end
 function M.apply_spans(buf, ns, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	for _, span in ipairs(spans) do
-		if span.line_hl_group then
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
-				line_hl_group = span.line_hl_group,
-			})
-		else
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
-				end_row = span.line,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
-		end
+		vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col or 0, {
+			end_col = span.end_col,
+			hl_group = span.hl_group,
+			line_hl_group = span.line_hl_group,
+			url = span.url,
+			strict = false,
+		})
 	end
 end
 
 ---Wrap display content, preserving highlights and prefixing each resulting row.
----@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string, url?: string }[] }
+---@param content { lines: string[], highlights?: AtlasUIHighlight[] }
 ---@param width integer Content width, excluding the prefix.
 ---@param prefix string
 ---@return { lines: string[], highlights: AtlasUIHighlight[] }
@@ -214,13 +255,14 @@ function M.wrap_content(content, width, prefix)
 				local start_col = math.max(0, highlight.start_col - offset)
 				local end_col = math.min(highlight.end_col - offset, #row)
 				if end_col > start_col then
-					table.insert(spans, {
-						line = #lines - 1,
-						start_col = #prefix + start_col,
-						end_col = #prefix + end_col,
-						hl_group = highlight.hl_group,
-						url = highlight.url,
-					})
+					table.insert(
+						spans,
+						vim.tbl_extend("force", highlight, {
+							line = #lines - 1,
+							start_col = #prefix + start_col,
+							end_col = #prefix + end_col,
+						})
+					)
 				end
 			end
 		end

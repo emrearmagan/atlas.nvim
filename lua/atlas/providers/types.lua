@@ -23,7 +23,7 @@
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field users AtlasUsersCapability|nil
 ---@field completion table<string, AtlasCompletionSource>|nil
----@field actions AtlasAction[]|nil
+---@field fetch_links (fun(kind: "pr"|"issue", entity: PullRequest|Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasLink[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class AtlasAction
 ---@field id string
@@ -54,9 +54,8 @@
 ---| "linked"
 ---| string
 
----@class AtlasRelatedItem
----@field kind "issue"|"pr"|"external"
----@field url string Canonical web URL; never resolved relative to the current repository.
+---@class AtlasLink
+---@field url string
 ---@field key string|nil
 ---@field title string|nil
 ---@field relationship AtlasRelationship|nil
@@ -124,5 +123,5 @@
 ---@field fetch_branches fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
 ---@field fetch_tags fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
 ---@field fetch_releases (fun(repo: AtlasRepository, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_release (fun(repo: AtlasRepository, opts: { id?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)): { cancel: fun() }|nil)|nil
+---@field fetch_release (fun(repo: AtlasRepository, opts: { id?: string, tag?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)): { cancel: fun() }|nil)|nil
 ---@field delete_branch (fun(repo: AtlasRepository, branch: AtlasRepositoryBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

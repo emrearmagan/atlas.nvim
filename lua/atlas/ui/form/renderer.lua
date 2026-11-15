@@ -145,13 +145,7 @@ function M.render_meta(form)
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, meta_lines)
 	vim.bo[buf].modifiable = false
-	vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-	for _, span in ipairs(meta_spans) do
-		vim.api.nvim_buf_set_extmark(buf, NS, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.apply_spans(buf, NS, meta_spans)
 	local height = vim.api.nvim_win_get_height(win)
 	local available = height + vim.api.nvim_win_get_height(form.editor_win)
 	local target = math.max(2, math.min(#meta_lines + 1, math.floor(available / 3)))

@@ -60,7 +60,7 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		encoded_path
 	)
 
-	return service.request_text("GET", endpoint, { Accept = "text/plain" }, nil, function(result, err)
+	return service.request_text("GET", endpoint, { Accept = "text/plain" }, function(result, err)
 		if err ~= nil then
 			on_done(nil, err)
 			return
@@ -92,7 +92,7 @@ function M.fetch_details(repo, on_done)
 		string.format("/repositories/%s/%s?fields=%%2Bmainbranch.target.hash", url_encode(owner), url_encode(repo_name))
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return service.request("GET", endpoint, nil, nil, done, {
+		return service.request("GET", endpoint, nil, done, {
 			action = "Fetch repository details",
 			owner = owner,
 			repo = repo_name,
@@ -147,7 +147,7 @@ function M.fetch_branches(repo, opts, on_done)
 
 	local url = refs_url(branches_url, opts)
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -191,7 +191,7 @@ function M.fetch_tags(repo, opts, on_done)
 
 	local url = refs_url(tags_url, opts)
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -254,7 +254,7 @@ function M.delete_branch(repo, branch, on_done)
 		return nil
 	end
 
-	return service.request("DELETE", endpoint, nil, nil, function(_, err)
+	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err ~= nil then
 			on_done(false, err)
 			return

@@ -400,12 +400,12 @@ function M.fetch(context, opts, on_done)
 	local target = context.target
 	local pr = type(target) == "table" and target or nil
 	---@cast pr PullRequest|nil
-	local path = tostring(context.repo_full_name or "")
+	local path = context.repo_full_name
 	local iid = pr and tonumber(pr.id)
 	local branch = type(target) == "string" and target or nil
-	if path == "" or (pr and not iid) or (not pr and (not branch or branch == "")) then
+	if not pr and (not branch or branch == "") then
 		vim.schedule(function()
-			on_done(nil, pr and "Invalid MR identifier" or "Missing pipeline repository or branch")
+			on_done(nil, "Missing pipeline branch")
 		end)
 		return nil
 	end

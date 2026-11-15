@@ -3,12 +3,6 @@ local M = {}
 local json = require("atlas.core.json")
 local github_mapper = require("atlas.providers.github.mapper")
 
----@param value any
----@return string
-local function body_text(value)
-	return json.safe_str(value) or ""
-end
-
 ---@param login string
 ---@return AtlasUser|nil
 local function actor_from_login(login)
@@ -275,7 +269,7 @@ function M.to_pull_request(raw)
 		},
 		repo_full_name = repo_full_name,
 		stack = pull_stack(raw.stackEntry),
-		node_id = json.safe_str(raw.id),
+		node_id = raw.id,
 		head_repository = json.safe_str(json.safe_table(raw.headRepository).nameWithOwner),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
@@ -339,7 +333,7 @@ function M.to_activity(node)
 		entry.label = entry.kind == "approval" and "approved"
 			or entry.kind == "changes_requested" and "requested changes"
 			or "left a review"
-		local body = body_text(node.body)
+		local body = json.safe_str(node.body) or ""
 		entry.body = body ~= "" and body or nil
 	elseif event == "ReviewDismissedEvent" then
 		entry.kind = "review_dismissed"
@@ -409,7 +403,7 @@ function M.to_comment(node, author_login)
 		id = node.id,
 		author = comment_author(node.author),
 		author_roles = github_mapper.author_roles(node, author_login),
-		body = body_text(node.body),
+		body = json.safe_str(node.body) or "",
 		created_at = json.safe_str(node.createdAt) or "",
 		url = json.safe_str(node.url) or "",
 		reactions = github_mapper.graphql_reactions(node.reactionGroups),
@@ -429,7 +423,7 @@ end
 ---@param node table GraphQL `PullRequestReview`
 ---@return PullsReviewHistoryEntry|nil
 function M.to_conversation_review(node)
-	local body = body_text(node.body)
+	local body = json.safe_str(node.body) or ""
 	local state = (json.safe_str(node.state) or ""):lower()
 	if vim.trim(body) == "" or state == "pending" then
 		return nil
@@ -486,7 +480,7 @@ function M.to_review_comment(node, thread, fallback_parent, author_login)
 		id = node.id,
 		author = comment_author(node.author),
 		author_roles = github_mapper.author_roles(node, author_login),
-		body = body_text(node.body),
+		body = json.safe_str(node.body) or "",
 		created_at = json.safe_str(node.createdAt) or "",
 		url = json.safe_str(node.url) or "",
 		parent_id = reply_to and reply_to.id or fallback_parent,

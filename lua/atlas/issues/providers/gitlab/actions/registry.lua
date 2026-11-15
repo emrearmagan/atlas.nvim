@@ -9,6 +9,7 @@ local actions = require("atlas.issues.actions")
 local utils = require("atlas.issues.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
@@ -21,8 +22,7 @@ local gitlab_search = require("atlas.providers.gitlab.completion.search")
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue(ctx)
-	local issue = ctx.issue
-	return issue ~= nil and tostring(issue.key or "") ~= ""
+	return ctx.issue ~= nil
 end
 
 ---@type AtlasIssueAction[]
@@ -332,16 +332,17 @@ local function search_issues(project, ctx, done)
 		title = project ~= "" and "Search " .. project .. " Issues" or "Search GitLab Issues",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title = item.value.title .. " - "
+			return title .. item.id, { { title }, { item.id, "AtlasTextMuted" } }
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local issue = item.value
 			return issues_api.fetch_issue(issue, nil, function(details, err)
 				if err or details == nil then
 					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				preview_done(utils.issue_preview(issue, details))
+				preview_done(picker_format.issue(issue, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -363,11 +364,7 @@ local function search_issues(project, ctx, done)
 				end
 				local items = {}
 				for _, issue in ipairs(page.items) do
-					table.insert(items, {
-						id = issue.key,
-						label = string.format("%s - %s", issue.key, issue.title),
-						value = issue,
-					})
+					table.insert(items, { id = issue.key, value = issue })
 				end
 				fetch_done(items, nil)
 			end)

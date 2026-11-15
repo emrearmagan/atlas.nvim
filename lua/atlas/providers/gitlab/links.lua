@@ -9,7 +9,6 @@ fragment RelatedWorkItem on WorkItem {
   reference(full: true)
   title
   webUrl
-  project { fullPath }
 }
 ]]
 
@@ -65,20 +64,20 @@ local function issue_records(data)
 	local closing, referenced, linked, hierarchy = {}, {}, {}, {}
 	for _, widget in ipairs(json.safe_table(item.widgets)) do
 		for _, node in ipairs(nodes(widget.closingMergeRequests)) do
-			table.insert(closing, { raw = node.mergeRequest, kind = "pr", relationship = "closed by" })
+			table.insert(closing, { raw = node.mergeRequest, relationship = "closed by" })
 		end
 		for _, raw in ipairs(nodes(widget.relatedMergeRequests)) do
-			table.insert(referenced, { raw = raw, kind = "pr", relationship = "referenced by" })
+			table.insert(referenced, { raw = raw, relationship = "referenced by" })
 		end
 		for _, node in ipairs(nodes(widget.linkedItems)) do
-			table.insert(linked, { raw = node.workItem, link_type = node.linkType, work_item = true })
+			table.insert(linked, { raw = node.workItem, link_type = node.linkType })
 		end
 		local parent = json.nilify(widget.parent)
 		if parent then
-			table.insert(hierarchy, { raw = parent, relationship = "parent", work_item = true })
+			table.insert(hierarchy, { raw = parent, relationship = "parent" })
 		end
 		for _, child in ipairs(nodes(widget.children)) do
-			table.insert(hierarchy, { raw = child, relationship = "sub-issue", work_item = true })
+			table.insert(hierarchy, { raw = child, relationship = "sub-issue" })
 		end
 	end
 	vim.list_extend(closing, referenced)
@@ -94,10 +93,8 @@ local function pr_records(data)
 	end
 	local records = {}
 	for _, node in ipairs(json.safe_table(pr.linkedWorkItems)) do
-		local work_item = json.nilify(node.workItem)
 		table.insert(records, {
-			raw = work_item or json.nilify(node.externalIssue),
-			work_item = work_item ~= nil,
+			raw = json.nilify(node.workItem) or json.nilify(node.externalIssue),
 			relationship = node.linkType == "CLOSES" and "closes" or "relates to",
 		})
 	end
@@ -108,11 +105,6 @@ local function to_link(record)
 	local raw = json.safe_table(record.raw)
 	local url = json.safe_str(raw.webUrl)
 	local key = json.safe_str(raw.reference)
-	local kind = record.kind or "issue"
-	if record.work_item and json.nilify(raw.project) == nil then
-		-- Group epics cannot be opened by the project issue provider.
-		kind = "external"
-	end
 	if not url and key and key:match("^[A-Z][A-Z0-9_]*%-%d+$") then
 		local jira = config.provider_options("jira") or {}
 		if jira.base_url and jira.base_url ~= "" then
@@ -130,7 +122,6 @@ local function to_link(record)
 	}
 	local link_type = json.safe_str(record.link_type)
 	return {
-		kind = kind,
 		url = url,
 		key = key or url,
 		title = json.safe_str(raw.title) or "",
@@ -183,28 +174,19 @@ local function collect(path, iid, entity, opts, on_done)
 	end, { action = "Fetch GitLab relationships", path = path, iid = iid })
 end
 
----@param issue IssueRef
+---@param kind "pr"|"issue"
+---@param entity PullRequest|Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
-function M.fetch_issue(issue, opts, on_done)
-	local path, iid = tostring(issue.key or ""):match("^(.-)#(%d+)$")
-	if not path or path == "" then
-		on_done(nil, "Invalid GitLab issue key")
-		return nil
+---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
+function M.fetch(kind, entity, opts, on_done)
+	if kind == "pr" then
+		---@cast entity PullRequest
+		return collect(entity.repo_full_name, tonumber(entity.id), "merge_requests", opts, on_done)
 	end
-	return collect(path, tonumber(iid), "issues", opts, on_done)
-end
 
----@param pr PullRequestRef
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
-function M.fetch_pullrequest(pr, opts, on_done)
-	local path, iid = tostring(pr.repo_full_name or ""), tonumber(pr.id)
-	if path == "" or not iid then
-		on_done(nil, "Invalid GitLab merge request identifier")
-		return nil
-	end
-	return collect(path, iid, "merge_requests", opts, on_done)
+	---@cast entity Issue
+	local path, iid = entity.key:match("^(.-)#(%d+)$")
+	return collect(path, tonumber(iid), "issues", opts, on_done)
 end
 
 return M

@@ -14,7 +14,7 @@ describe("Bitbucket merge checks", function()
 			set_cache = function(key, value)
 				cache[key] = value
 			end,
-			request = function(_, _, _, _, done)
+			request = function(_, _, _, done)
 				complete = done
 				return handle
 			end,

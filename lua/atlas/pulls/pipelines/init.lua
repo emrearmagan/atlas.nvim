@@ -96,7 +96,7 @@ function M.open(context, provider, opts)
 		context = { provider = context.provider, repo_full_name = context.repo_full_name, target = context }
 	end
 	---@cast context PullsPipelineContext
-	ui.open(context, M.get(provider), opts)
+	ui.open(context, assert(M.get(provider)), opts)
 end
 
 return M

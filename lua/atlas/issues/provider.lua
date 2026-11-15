@@ -30,8 +30,10 @@
 ---@field views fun(): IssuesViewConfig[]
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
+---@field shared AtlasProviderCapabilities
 
----@class IssuesProviderCapabilities : AtlasProviderCapabilities
+---@class IssuesProviderCapabilities
+---@field actions AtlasAction[]|nil
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
 ---@field ui IssuesUICapability|nil
@@ -40,7 +42,6 @@
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_links (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class IssuesCommentsCapability
 ---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil

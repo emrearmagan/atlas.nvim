@@ -1,10 +1,11 @@
-local actions = require("atlas.pulls.notes.ui.actions")
+local editor = require("atlas.pulls.notes.ui.editor")
+local help = require("atlas.ui.popups.help")
 local icons = require("atlas.ui.shared.icons")
-local keymaps = require("atlas.pulls.notes.ui.keymaps")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.notes.ui.renderer")
 local resolver = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
@@ -53,11 +54,6 @@ local function render()
 
 	local win = valid_window() and state.win or nil
 	local filter = state.filter
-	local selected
-	if win then
-		local item = state.line_map[vim.api.nvim_win_get_cursor(win)[1]]
-		selected = item and item.tree_key or nil
-	end
 	local lines, spans, line_map = renderer.render_manager({
 		documents = state.documents,
 		width = win and vim.api.nvim_win_get_width(win) or vim.o.columns,
@@ -91,24 +87,7 @@ local function render()
 	vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
-	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col, {
-			end_row = span.line,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-			url = span.url,
-		})
-	end
-	if selected and valid_window() then
-		for line = 1, #lines do
-			local item = line_map[line]
-			if item and item.tree_key == selected then
-				vim.api.nvim_win_set_cursor(state.win, { line, 0 })
-				break
-			end
-		end
-	end
+	utils.apply_spans(state.buf, namespace, spans)
 end
 
 local resize_group = vim.api.nvim_create_augroup("AtlasNotesResize", { clear = true })
@@ -145,6 +124,124 @@ end
 
 M.refresh = refresh
 
+---@return AtlasNotesUIItem|nil
+local function selected_item()
+	if not valid_window() or vim.api.nvim_get_current_buf() ~= state.buf then
+		return nil
+	end
+	return state.line_map[vim.api.nvim_win_get_cursor(state.win)[1]]
+end
+
+local function toggle()
+	local selected = selected_item()
+	local key = selected and selected.tree_key or nil
+	if not key then
+		return
+	end
+	state.expanded[key] = not state.expanded[key]
+	render()
+end
+
+local function show_details()
+	local selected = selected_item()
+	if selected and selected.note then
+		editor.details(selected.note, selected.target, state.buf)
+	end
+end
+
+local function edit_note()
+	local selected = selected_item()
+	if not selected or not selected.note then
+		notify.warn("Select a note to edit", { vim_notify = true })
+		return
+	end
+	editor.edit(selected.target, selected.note, function(updated, err)
+		if not updated then
+			notify.error(err or "Unable to update note", { vim_notify = true })
+			return
+		end
+		notify.info("Note updated", { vim_notify = true })
+		refresh()
+	end)
+end
+
+local function delete_notes()
+	if not valid_window() or vim.api.nvim_get_current_buf() ~= state.buf then
+		return
+	end
+	local first = vim.api.nvim_win_get_cursor(state.win)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		if first > last then
+			first, last = last, first
+		end
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	local selected, seen = {}, {}
+	for line = first, last do
+		local item = state.line_map[line]
+		local note = item and item.note or nil
+		local key = note and item.tree_key or nil
+		if note and not seen[key] then
+			seen[key] = true
+			table.insert(selected, { target = item.target, note = note })
+		end
+	end
+	if #selected == 0 then
+		notify.warn("Select a note to delete", { vim_notify = true })
+		return
+	end
+
+	local prompt = #selected == 1 and "Delete note? [y/N]: " or string.format("Delete %d notes? [y/N]: ", #selected)
+	vim.ui.input({ prompt = prompt }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer ~= "y" and answer ~= "yes" then
+			return
+		end
+		for _, item in ipairs(selected) do
+			local deleted, err = notes.delete(item.target, item.note.id)
+			if not deleted then
+				notify.error(err or "Unable to delete note", { vim_notify = true })
+				refresh()
+				return
+			end
+		end
+		notify.info(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected), {
+			vim_notify = true,
+		})
+		refresh()
+	end)
+end
+
+local function close()
+	if valid_window() then
+		vim.api.nvim_win_close(state.win, true)
+	end
+end
+
+---@param items AtlasHelpKeyItem[]
+---@param action AtlasKeymapActionId
+---@param index integer
+---@param callback function
+---@param options { mode: string[]|nil, silent: boolean|nil }|nil
+local function add_key(items, action, index, callback, options)
+	local keymap = resolver.resolve(action)
+	if not keymap then
+		return
+	end
+	table.insert(items, {
+		key = keymap.key,
+		mode = options and options.mode,
+		desc = keymap.desc,
+		index = index,
+		callback = callback,
+		opts = { nowait = true, silent = options and options.silent },
+	})
+end
+
 ---@return integer
 local function ensure_buffer()
 	if valid_buffer() then
@@ -159,7 +256,21 @@ local function ensure_buffer()
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	vim.api.nvim_set_option_value("filetype", "atlas-ui.notes", { buf = buf })
 	pcall(vim.treesitter.stop, buf)
-	keymaps.register(buf, actions.new(state, refresh, render))
+
+	local note_keys = {}
+	add_key(note_keys, "ui.show_details", 1, show_details)
+	add_key(note_keys, "ui.comments.edit", 2, edit_note)
+	add_key(note_keys, "ui.delete", 3, delete_notes, { mode = { "n", "x" } })
+	add_key(note_keys, "ui.toggle_fold", 4, toggle, { silent = true })
+	help.register("Notes", note_keys, { buffer = buf, index = 100 })
+	local view_keys = {}
+	add_key(view_keys, "ui.refresh_view", 5, refresh)
+	add_key(view_keys, "ui.help", 6, function()
+		help.toggle({ buffer = buf })
+	end)
+	add_key(view_keys, "ui.close", 7, close)
+	help.register("View", view_keys, { buffer = buf, index = 110 })
+
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,
 		once = true,

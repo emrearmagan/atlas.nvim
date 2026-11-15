@@ -5,7 +5,6 @@ local notifications = require("atlas.ui.notifications")
 local layouts = require("atlas.pulls.ui.layouts")
 local state = require("atlas.pulls.state")
 local bookmarks = require("atlas.ui.shared.bookmarks")
-local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 
 local M = {}
@@ -19,7 +18,7 @@ local function append_centered_loading(lines, text, width, height)
 	for _ = 1, math.max(0, math.floor((available_height - 1) / 2)) do
 		table.insert(lines, "")
 	end
-	local centered = ui_utils.center_text(text, width)
+	local centered = utils.center_text(text, width)
 	table.insert(lines, centered)
 end
 
@@ -87,7 +86,7 @@ local function render_header(lines, spans, width)
 			})
 		end
 	end
-	if state.provider and state.provider.capabilities.notifications then
+	if state.provider and state.provider.shared.notifications then
 		if #actions > 0 then
 			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		end

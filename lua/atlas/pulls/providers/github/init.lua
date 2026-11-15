@@ -8,7 +8,7 @@
 ---@field entries GitHubPullStackEntry[]|nil
 
 ---@class GitHubPullRequest : PullRequest
----@field node_id string|nil
+---@field node_id string
 ---@field head_repository string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
@@ -31,7 +31,6 @@ local config = require("atlas.config")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local github_mapper = require("atlas.providers.github.mapper")
 local git = require("atlas.core.git")
-local links_api = require("atlas.providers.github.links")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local request_scope = require("atlas.core.requests")
@@ -96,9 +95,9 @@ end
 ---@param branch string|nil
 ---@return AtlasPullsViewConfig
 local function repository_view(repository, branch)
-	local search = string.format("repo:%s/%s is:pr", repository.owner, repository.repo)
-	if repository.number then
-		search = search .. " " .. tostring(repository.number)
+	local search = string.format("repo:%s is:pr", repository.repo_full_name)
+	if repository.id then
+		search = search .. " " .. tostring(repository.id)
 	end
 	if branch then
 		search = search .. " head:" .. branch
@@ -120,7 +119,6 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			fetch_links = links_api.fetch_pr,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			merge = pullrequests_api.merge,
 			decline = pullrequests_api.decline,

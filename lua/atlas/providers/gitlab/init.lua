@@ -3,6 +3,7 @@ local resolver = require("atlas.providers.gitlab.resolve")
 local repositories = require("atlas.providers.gitlab.repositories")
 local notifications = require("atlas.providers.gitlab.notifications")
 local users = require("atlas.providers.gitlab.users")
+local links = require("atlas.providers.gitlab.links")
 
 ---@type AtlasProvider
 return {
@@ -30,5 +31,6 @@ return {
 		repository = repositories,
 		notifications = notifications,
 		users = users,
+		fetch_links = links.fetch,
 	},
 }

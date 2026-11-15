@@ -6,6 +6,7 @@ local diff = require("atlas.pulls.diff")
 local pipelines = require("atlas.pulls.pipelines")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local help = require("atlas.ui.popups.help")
 local info = require("atlas.ui.popups.info")
 local keymaps = require("atlas.ui.repository.pages.branches.keymaps")
@@ -91,12 +92,7 @@ local function render(state)
 	state.line_map = line_map
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.apply_spans(state.buf, namespace, spans)
 
 	vim.bo[state.buf].modifiable = false
 end
@@ -222,8 +218,8 @@ local function search(state)
 		format_item = function(branch)
 			return branch.name
 		end,
-		preview_item = function(branch, done)
-			done(renderer.preview(branch))
+		preview_item = function(branch, done, width)
+			done(picker_format.markdown(renderer.preview(branch), width))
 		end,
 		fetch = function(query, done)
 			return state.requests.run(function(finish)
@@ -530,7 +526,7 @@ function M.open(opts)
 		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		provider = opts.provider,
-		repository = assert(opts.provider.capabilities.repository),
+		repository = assert(opts.provider.shared.repository),
 		branches = "loading",
 		page = 1,
 		cursors = {},

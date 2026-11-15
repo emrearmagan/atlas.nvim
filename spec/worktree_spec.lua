@@ -1,6 +1,13 @@
-local worktree = require("atlas.core.git.worktree")
 local core_git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
+
+local CACHE = vim.fn.stdpath("cache") .. "/atlas/worktrees"
+local DEFAULT = CACHE .. "/owner-repo/abcdef012345"
+
+local function fresh()
+	package.loaded["atlas.core.git.worktree"] = nil
+	return require("atlas.core.git.worktree")
+end
 
 ---@param overrides table|nil
 ---@return AtlasWorktreeContext
@@ -50,7 +57,13 @@ local function ran(calls, subcommand)
 end
 
 describe("worktree", function()
-	describe("default_dir", function()
+	local worktree
+
+	before_each(function()
+		worktree = fresh()
+	end)
+
+	describe("claim directory", function()
 		it("separates commits and pull requests under the repository slug", function()
 			for _, case in ipairs({
 				{ {}, "abcdef012345" },
@@ -58,36 +71,31 @@ describe("worktree", function()
 				{ { pr_id = 1234 }, "pr-1234" },
 				{ { pr_id = 2 }, "pr-2" },
 			}) do
-				assert.equal(worktree.cache_root() .. "/owner-repo/" .. case[2], worktree.default_dir(context(case[1])))
+				assert.equal(CACHE .. "/owner-repo/" .. case[2], fresh().claim(context(case[1]), nil))
 			end
 		end)
 
 		it("falls back to the repo root basename", function()
-			local ctx = context()
-			ctx.repo_full_name = nil
 			for _, root in ipairs({ "/home/dev/code/atlas.nvim", "/home/dev/code/atlas.nvim/" }) do
-				ctx.repo_root = root
-				assert.equal(worktree.cache_root() .. "/atlas-nvim/abcdef012345", worktree.default_dir(ctx))
+				local ctx = context({ repo_root = root })
+				ctx.repo_full_name = nil
+				assert.equal(CACHE .. "/atlas-nvim/abcdef012345", fresh().claim(ctx, nil))
 			end
 		end)
-	end)
 
-	describe("resolve_dir", function()
-		it("returns the default when no override is configured", function()
-			local ctx = context()
-
-			assert.equal(worktree.default_dir(ctx), worktree.resolve_dir(ctx, nil))
-			assert.equal(worktree.default_dir(ctx), worktree.resolve_dir(ctx, { enabled = true }))
+		it("uses the default when no override is configured", function()
+			assert.equal(DEFAULT, fresh().claim(context(), nil))
+			assert.equal(DEFAULT, fresh().claim(context(), { enabled = true }))
 		end)
 
 		it("accepts an absolute string override", function()
 			for _, dir in ipairs({ "/var/tmp/review", "/var/tmp/review/" }) do
-				assert.equal("/var/tmp/review", worktree.resolve_dir(context(), { dir = dir }))
+				assert.equal("/var/tmp/review", fresh().claim(context(), { dir = dir }))
 			end
 		end)
 
 		it("rejects a relative string override", function()
-			local dir, err = worktree.resolve_dir(context(), { dir = "review" })
+			local dir, err = worktree.claim(context(), { dir = "review" })
 
 			assert.is_nil(dir)
 			assert.is_truthy(err)
@@ -95,7 +103,7 @@ describe("worktree", function()
 
 		it("calls a function override with the context and the default", function()
 			local seen
-			local dir = worktree.resolve_dir(context(), {
+			local dir = worktree.claim(context(), {
 				dir = function(ctx)
 					seen = ctx
 					return "/var/tmp/" .. ctx.head_sha:sub(1, 7)
@@ -105,15 +113,13 @@ describe("worktree", function()
 			assert.equal("/var/tmp/abcdef0", dir)
 			assert.equal("owner/repo", seen.repo_full_name)
 			assert.equal("/home/dev/code/atlas.nvim", seen.repo_root)
-			assert.equal(worktree.default_dir(context()), seen.default)
+			assert.equal(DEFAULT, seen.default)
 		end)
 
 		it("uses the default when the function returns nil", function()
-			local ctx = context()
-
 			assert.equal(
-				worktree.default_dir(ctx),
-				worktree.resolve_dir(ctx, {
+				DEFAULT,
+				worktree.claim(context(), {
 					dir = function()
 						return nil
 					end,
@@ -122,7 +128,7 @@ describe("worktree", function()
 		end)
 
 		it("reports an error when the function raises", function()
-			local dir, err = worktree.resolve_dir(context(), {
+			local dir, err = worktree.claim(context(), {
 				dir = function()
 					error("boom")
 				end,
@@ -137,7 +143,7 @@ describe("worktree", function()
 			local invalid_dir = function()
 				return 42
 			end
-			local dir, err = worktree.resolve_dir(context(), { dir = invalid_dir })
+			local dir, err = worktree.claim(context(), { dir = invalid_dir })
 
 			assert.is_nil(dir)
 			assert.is_truthy(err)
@@ -186,70 +192,6 @@ describe("worktree", function()
 		end)
 	end)
 
-	describe("claim", function()
-		local claimed = {}
-		after_each(function()
-			for _, dir in ipairs(claimed) do
-				worktree.release(dir)
-			end
-			claimed = {}
-		end)
-
-		it("isolates simultaneous sessions and reuses a directory only after release", function()
-			local ctx = context()
-			local first = assert(worktree.claim(ctx, nil))
-			local second = assert(worktree.claim(ctx, nil))
-			claimed = { first, second }
-
-			assert.equal(worktree.default_dir(ctx), first)
-			assert.equal(first .. "-2", second)
-			assert.is_true(worktree.is_claimed(first))
-			assert.is_true(worktree.is_claimed(second))
-
-			worktree.release(first)
-			assert.is_false(worktree.is_claimed(first))
-			local reused = worktree.claim(ctx, nil)
-			claimed[#claimed + 1] = reused
-			assert.equal(first, reused)
-			assert.is_true(worktree.is_claimed(second))
-		end)
-	end)
-
-	describe("is_cache_path", function()
-		it("accepts directories below the cache root", function()
-			assert.is_true(worktree.is_cache_path(worktree.cache_root() .. "/repo/pr-1"))
-			assert.is_true(worktree.is_cache_path(worktree.cache_root() .. "/repo/pr-1/"))
-		end)
-
-		it("rejects the cache root itself", function()
-			assert.is_false(worktree.is_cache_path(worktree.cache_root()))
-			assert.is_false(worktree.is_cache_path(worktree.cache_root() .. "/"))
-		end)
-
-		it("rejects paths outside the cache root", function()
-			assert.is_false(worktree.is_cache_path("/home/dev/reviews"))
-			assert.is_false(worktree.is_cache_path(worktree.cache_root() .. "-other/repo"))
-			assert.is_false(worktree.is_cache_path(""))
-		end)
-	end)
-
-	describe("parse_worktree_list", function()
-		it("returns every worktree path from porcelain output", function()
-			local paths = worktree.parse_worktree_list(table.concat({
-				"worktree /home/dev/code/atlas.nvim",
-				"HEAD 0123456789abcdef0123456789abcdef01234567",
-				"branch refs/heads/main",
-				"",
-				"worktree /tmp/atlas/worktrees/repo/pr-1",
-				"HEAD abcdef0123456789abcdef0123456789abcdef01",
-				"detached",
-				"",
-			}, "\n"))
-
-			assert.same({ "/home/dev/code/atlas.nvim", "/tmp/atlas/worktrees/repo/pr-1" }, paths)
-		end)
-	end)
-
 	describe("remove and ensure on existing directories", function()
 		local original_run = core_git.run
 		local original_fn = vim.fn
@@ -287,22 +229,66 @@ describe("worktree", function()
 			logger.loginfo = original_loginfo
 		end)
 
+		it("isolates simultaneous sessions and reuses a directory only after discard", function()
+			fake_git({ ["worktree remove"] = { code = 0 } })
+			local ctx = context()
+			local first = assert(worktree.claim(ctx, nil))
+			local second = assert(worktree.claim(ctx, nil))
+
+			assert.equal(DEFAULT, first)
+			assert.equal(first .. "-2", second)
+
+			worktree.discard(ctx.repo_root, first)
+			assert.equal(first, worktree.claim(ctx, nil))
+			assert.equal(first .. "-3", worktree.claim(ctx, nil))
+		end)
+
+		it("force-removes only worktrees below the cache root", function()
+			local forces = {}
+			core_git.run = function(args, _, on_done)
+				local force_count = 0
+				for _, arg in ipairs(args) do
+					if arg == "--force" then
+						force_count = force_count + 1
+					end
+				end
+				forces[args[#args]] = force_count
+				on_done({ code = 0, stdout = "", stderr = "" })
+				return { cancel = function() end }
+			end
+
+			for _, dir in ipairs({ CACHE .. "/repo/pr-1", CACHE .. "/repo/pr-2/", CACHE, CACHE .. "/" }) do
+				worktree.discard("/home/dev/code/atlas.nvim", dir)
+			end
+			worktree.discard("/home/dev/code/atlas.nvim", "/home/dev/reviews")
+			worktree.discard("/home/dev/code/atlas.nvim", CACHE .. "-other/repo")
+
+			assert.same({
+				[CACHE .. "/repo/pr-1"] = 2,
+				[CACHE .. "/repo/pr-2/"] = 2,
+				[CACHE] = 1,
+				[CACHE .. "/"] = 1,
+				["/home/dev/reviews"] = 1,
+				[CACHE .. "-other/repo"] = 1,
+			}, forces)
+		end)
+
 		it("remove deletes by hand only below the cache root", function()
-			local inside = worktree.cache_root() .. "/repo/pr-1"
+			local inside = CACHE .. "/repo/pr-1"
 			local outside = "/home/dev/reviews"
 			fake_git({
 				["worktree remove"] = { code = 128, stderr = "not a working tree" },
 				["worktree prune"] = { code = 0 },
 			})
 
-			worktree.remove("/home/dev/code/atlas.nvim", inside)
-			worktree.remove("/home/dev/code/atlas.nvim", outside)
+			worktree.discard("/home/dev/code/atlas.nvim", inside)
+			worktree.discard("/home/dev/code/atlas.nvim", outside)
 
 			assert.same({ inside }, deleted)
 		end)
 
 		it("removes locked cache worktrees through git while preserving locked custom worktrees", function()
-			local inside = worktree.cache_root() .. "/repo/pr-1"
+			local inside = CACHE .. "/repo/pr-1"
 			local outside = "/home/dev/reviews"
 			local removed = {}
 			core_git.run = function(args, _, on_done)
@@ -324,15 +310,15 @@ describe("worktree", function()
 				return { cancel = function() end }
 			end
 
-			worktree.remove("/home/dev/code/atlas.nvim", inside)
-			worktree.remove("/home/dev/code/atlas.nvim", outside)
+			worktree.discard("/home/dev/code/atlas.nvim", inside)
+			worktree.discard("/home/dev/code/atlas.nvim", outside)
 
 			assert.same({ inside }, removed)
 			assert.same({}, deleted)
 		end)
 
 		it("ensure takes over a deleted worktree path, even a locked one below the cache root", function()
-			local inside = worktree.cache_root() .. "/repo/pr-1"
+			local inside = CACHE .. "/repo/pr-1"
 			local outside = "/home/dev/reviews"
 			local forces = {}
 			vim.fn.isdirectory = function()
@@ -386,7 +372,7 @@ describe("worktree", function()
 		end)
 
 		it("ensure rebuilds an unregistered directory below the cache root", function()
-			local dir = worktree.cache_root() .. "/repo/pr-1"
+			local dir = CACHE .. "/repo/pr-1"
 			local calls = fake_git({
 				["worktree list"] = { code = 0, stdout = "worktree /home/dev/code/atlas.nvim\n\n" },
 				["worktree remove"] = { code = 128, stderr = "not a working tree" },
@@ -479,7 +465,7 @@ describe("worktree", function()
 				local handle = worktree.ensure({
 					repo_root = "/home/dev/code/atlas.nvim",
 					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-					dir = worktree.cache_root() .. "/repo/pr-1",
+					dir = CACHE .. "/repo/pr-1",
 				}, function()
 					completed = true
 				end)

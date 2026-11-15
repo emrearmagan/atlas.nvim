@@ -4,32 +4,30 @@ local client = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 
 local FIELDS = "number title url repository { nameWithOwner }"
-local SUBJECT = "__typename ... on Issue { " .. FIELDS .. " } ... on PullRequest { " .. FIELDS .. " }"
+local SUBJECT = "... on Issue { " .. FIELDS .. " } ... on PullRequest { " .. FIELDS .. " }"
 
 local ISSUE_CONNECTIONS = {
-	{ name = "sub-issues", field = "subIssues", kind = "issue", relationship = "sub-issue" },
+	{ name = "sub-issues", field = "subIssues", relationship = "sub-issue" },
 	{
 		name = "linked pull requests",
 		field = "closedByPullRequestsReferences",
 		arguments = ", includeClosedPrs: true",
-		kind = "pr",
 		relationship = "closed by",
 	},
-	{ name = "blocking issues", field = "blockedBy", kind = "issue", relationship = "blocked by" },
-	{ name = "blocked issues", field = "blocking", kind = "issue", relationship = "blocks" },
+	{ name = "blocking issues", field = "blockedBy", relationship = "blocked by" },
+	{ name = "blocked issues", field = "blocking", relationship = "blocks" },
 	{ name = "references", field = "timelineItems", timeline = true },
 }
 
 local PR_CONNECTIONS = {
-	{ name = "closing issues", field = "closingIssuesReferences", kind = "issue", relationship = "closes" },
+	{ name = "closing issues", field = "closingIssuesReferences", relationship = "closes" },
 	{ name = "references", field = "timelineItems", timeline = true },
 }
 
 ---@param raw any
----@param kind string|nil
 ---@param relationship AtlasRelationship
----@return AtlasRelatedItem|nil
-local function to_link(raw, kind, relationship)
+---@return AtlasLink|nil
+local function to_link(raw, relationship)
 	raw = json.safe_table(raw)
 	local url = json.safe_str(raw.url)
 	local number = tonumber(raw.number)
@@ -38,7 +36,6 @@ local function to_link(raw, kind, relationship)
 		return nil
 	end
 	return {
-		kind = kind or (raw.__typename == "PullRequest" and "pr" or "issue"),
 		url = url,
 		key = string.format("%s#%d", slug, number),
 		title = json.safe_str(raw.title) or "",
@@ -75,8 +72,8 @@ end
 
 local function related_items(kind, item, connections)
 	local links, messages, seen, closing = {}, {}, {}, {}
-	local function add(raw, link_kind, relationship)
-		local link = to_link(raw, link_kind, relationship)
+	local function add(raw, relationship)
+		local link = to_link(raw, relationship)
 		if not link then
 			return
 		end
@@ -92,7 +89,7 @@ local function related_items(kind, item, connections)
 		table.insert(links, link)
 	end
 	if kind == "issue" then
-		add(item.parent, "issue", "parent")
+		add(item.parent, "parent")
 	end
 	for _, connection in ipairs(connections) do
 		local related = json.nilify(item[connection.field])
@@ -106,29 +103,31 @@ local function related_items(kind, item, connections)
 				local target = json.safe_table(node.target)
 				if source.url == item.url then
 					if target.url ~= item.url then
-						add(target, nil, "references")
+						add(target, "references")
 					end
 				elseif source.url ~= item.url then
-					add(source, nil, "referenced by")
+					add(source, "referenced by")
 				end
 			else
-				add(node, connection.kind, connection.relationship)
+				add(node, connection.relationship)
 			end
 		end
 	end
 	return links, messages
 end
 
-local function fetch(kind, entity, opts, done)
+---@param kind "pr"|"issue"
+---@param entity PullRequest|Issue
+---@param opts { force_refresh?: boolean }|nil
+---@param done fun(links: AtlasLink[]|nil, err: string|nil)
+function M.fetch(kind, entity, opts, done)
 	opts = opts or {}
-	local slug, number = entity.repo_full_name, kind == "pr" and entity.id or entity.number
-	if kind == "issue" and entity.key then
-		local key_slug, key_number = entity.key:match("^(.-)#(%d+)$")
-		slug, number = key_slug or slug, key_number or number
-	end
+	local reference = kind == "pr" and (tostring(entity.repo_full_name) .. "#" .. tostring(entity.id))
+		or tostring(entity.key)
+	local slug, number_text = reference:match("^(.-)#(%d+)$")
 	local owner, repo = tostring(slug or ""):match("^([^/]+)/([^/]+)$")
-	number = tonumber(number)
-	if not owner or not repo or not number or number < 1 or number % 1 ~= 0 then
+	local number = tonumber(number_text)
+	if not owner or not repo or not number or number < 1 then
 		done(nil, "Missing or invalid GitHub issue/pull request reference")
 		return nil
 	end
@@ -176,20 +175,6 @@ local function fetch(kind, entity, opts, done)
 		end
 		done(links, #messages > 0 and table.concat(messages, "; ") or nil)
 	end, { action = "Fetch GitHub links", repository = slug, number = number })
-end
-
----@param issue Issue
----@param opts { force_refresh?: boolean }|nil
----@param done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
-function M.fetch_issue(issue, opts, done)
-	return fetch("issue", issue, opts, done)
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param done fun(links: AtlasRelatedItem[]|nil, err: string|nil)
-function M.fetch_pr(pr, opts, done)
-	return fetch("pr", pr, opts, done)
 end
 
 return M

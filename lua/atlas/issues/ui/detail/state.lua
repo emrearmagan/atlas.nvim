@@ -13,7 +13,7 @@ local request_scope = require("atlas.core.requests")
 ---@field back fun()|nil
 ---@field line_map table<integer, table>
 ---@field details_loading boolean
----@field links { items: AtlasRelatedItem[], loading: boolean, error: string|nil }|nil
+---@field links { items: AtlasLink[], loading: boolean, error: string|nil }|nil
 ---@field issue_loading boolean
 ---@field issue_error string|nil
 ---@field requests AtlasRequestScope

@@ -88,23 +88,6 @@ end
 
 ---@param value PullRequestRef|IssueRef
 ---@param provider string
----@return AtlasStarredItem|nil, string|nil
-function M.add(value, provider)
-	local item = to_item(value, provider)
-	local items, err = load()
-	if items == nil then
-		return nil, err
-	end
-	items[item.ref] = item
-	err = write(items)
-	if err then
-		return nil, err
-	end
-	return item, nil
-end
-
----@param value PullRequestRef|IssueRef
----@param provider string
 ---@return boolean|nil, string|nil
 function M.toggle(value, provider)
 	local item = to_item(value, provider)

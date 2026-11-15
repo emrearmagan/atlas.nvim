@@ -22,11 +22,6 @@ local function build_choices()
 	return choices
 end
 
----@param provider IssuesProvider
-local function create(provider)
-	actions.run("create_issue", { provider = provider })
-end
-
 local function pick()
 	local choices = build_choices()
 
@@ -36,7 +31,7 @@ local function pick()
 	end
 
 	if #choices == 1 then
-		create(choices[1].provider)
+		actions.run("create_issue", { provider = choices[1].provider })
 		return
 	end
 
@@ -48,7 +43,7 @@ local function pick()
 		end,
 		on_select = function(choice)
 			if choice then
-				create(choice.provider)
+				actions.run("create_issue", { provider = choice.provider })
 			end
 		end,
 	})
@@ -58,7 +53,7 @@ end
 local function create_with(provider_id)
 	for _, choice in ipairs(build_choices()) do
 		if choice.provider.id == provider_id then
-			create(choice.provider)
+			actions.run("create_issue", { provider = choice.provider })
 			return
 		end
 	end

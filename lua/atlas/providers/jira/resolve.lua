@@ -18,7 +18,7 @@ function M.resolve(value, parsed)
 			domain = "issues",
 			entity = "issue",
 			host = base.host,
-			issue_key = reference,
+			id = reference,
 			url = base_url .. "/browse/" .. reference,
 		}
 	end
@@ -42,7 +42,7 @@ function M.resolve(value, parsed)
 		entity = "issue",
 		url = value,
 		host = parsed.host,
-		issue_key = issue_key,
+		id = issue_key,
 	}
 end
 

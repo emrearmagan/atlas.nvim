@@ -4,7 +4,6 @@ local config = require("atlas.config")
 local icons = require("atlas.ui.shared.icons")
 local providers = require("atlas.providers")
 local utils = require("atlas.ui.shared.utils")
-local ui_utils = require("atlas.ui.utils")
 
 ---@class AtlasBookmarkSelection
 ---@field kind "bookmark"|"starred"
@@ -145,10 +144,10 @@ function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
 
 	local left_indent = 1
 	local gap = 4
-	local arrow_w = ui_utils.text_width(arrow)
+	local arrow_w = utils.text_width(arrow)
 	local name_w = 0
 	for _, item in ipairs(items) do
-		local w = ui_utils.text_width(item.name)
+		local w = utils.text_width(item.name)
 		if w > name_w then
 			name_w = w
 		end
@@ -157,7 +156,7 @@ function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
 	local preview_w = math.max(width - prefix_w - left_indent, 10)
 
 	for _, item in ipairs(items) do
-		local item_w = ui_utils.text_width(item.name)
+		local item_w = utils.text_width(item.name)
 		local name_pad = string.rep(" ", math.max(name_w - item_w, 0))
 		local preview = vim.trim((item.preview or preview_text(item.value)):gsub("%s+", " "))
 		preview = utils.truncate(preview, preview_w, false)

@@ -140,6 +140,51 @@ describe("Jira Markdown to ADF", function()
 		})
 	end)
 
+	it("converts nested lists", function()
+		converts("* parent\n  1. child\n* next", {
+			{
+				type = "bulletList",
+				content = {
+					{
+						type = "listItem",
+						content = {
+							paragraph({ text("parent") }),
+							{
+								type = "orderedList",
+								content = { { type = "listItem", content = { paragraph({ text("child") }) } } },
+							},
+						},
+					},
+					{ type = "listItem", content = { paragraph({ text("next") }) } },
+				},
+			},
+		})
+	end)
+
+	it("converts task lists", function()
+		converts("- [ ] todo\n- [x] done\n  - [X] nested", {
+			{
+				type = "taskList",
+				attrs = { localId = "" },
+				content = {
+					{ type = "taskItem", attrs = { localId = "", state = "TODO" }, content = { text("todo") } },
+					{ type = "taskItem", attrs = { localId = "", state = "DONE" }, content = { text("done") } },
+					{
+						type = "taskList",
+						attrs = { localId = "" },
+						content = {
+							{
+								type = "taskItem",
+								attrs = { localId = "", state = "DONE" },
+								content = { text("nested") },
+							},
+						},
+					},
+				},
+			},
+		})
+	end)
+
 	it("converts horizontal rules", function()
 		converts("above\n\n---\n\nbelow", {
 			paragraph({ text("above") }),

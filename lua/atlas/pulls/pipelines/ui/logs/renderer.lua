@@ -179,7 +179,7 @@ end
 ---@param pane PullsPipelinesLogs
 ---@return string[], table[]
 local function build_content(pane)
-	local options = config.provider_options(pane.context.provider) or {}
+	local options = config.provider_options(pane.session.context.provider) or {}
 	local format, counts = highlights.new(options.ci and options.ci.highlights)
 	local prepared = {}
 	local log = pane.log

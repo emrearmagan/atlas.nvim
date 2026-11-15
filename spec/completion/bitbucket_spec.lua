@@ -54,7 +54,7 @@ describe("Bitbucket completion", function()
 				calls.defaults = calls.defaults + 1
 				done({ values = { { user = default_reviewer } } }, nil)
 			end,
-			request = function(method, endpoint, _, _, done)
+			request = function(method, endpoint, _, done)
 				assert.equal("GET", method)
 				if endpoint:find("/pullrequests?", 1, true) then
 					reference_calls[#reference_calls + 1] = endpoint

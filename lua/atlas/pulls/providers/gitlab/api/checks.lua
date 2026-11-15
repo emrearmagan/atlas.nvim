@@ -144,12 +144,8 @@ end
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
-	local path = tostring(pr.repo_full_name or "")
-	local iid = tonumber(pr.id)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id) --[[@as integer]]
 
 	local cache_key = string.format("gitlab_pulls:merge-checks:%s!%d", path, iid)
 	if not (opts or {}).force_refresh then

@@ -12,6 +12,15 @@ local detail = require("atlas.pulls.ui.detail.state")
 ---@field review_entry PullsReviewHistoryEntry|nil
 
 ---@param pr PullRequest
+---@return boolean
+local function is_current(pr)
+	local current = detail.current_pr
+	return current ~= nil
+		and tostring(current.id or "") == tostring(pr.id or "")
+		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
+end
+
+---@param pr PullRequest
 ---@param comment PullsComment|nil
 ---@return AtlasReviewActionContext|nil
 local function action_context(pr, comment)
@@ -25,12 +34,12 @@ local function action_context(pr, comment)
 		comment = comment,
 		conversation = state.comments(),
 		upsert_comment = function(created)
-			if state.is_current(pr) then
+			if is_current(pr) then
 				state.upsert_comment(created)
 			end
 		end,
 		remove_comment = function(removed)
-			if state.is_current(pr) then
+			if is_current(pr) then
 				state.remove_comment(removed)
 			end
 		end,
@@ -48,7 +57,7 @@ local function on_done(pr, refresh)
 		end
 		if result.changed_pr then
 			require("atlas.pulls.ui.detail").apply_action_result(pr, on_update, result)
-		elseif state.is_current(pr) then
+		elseif is_current(pr) then
 			refresh()
 		end
 	end
@@ -133,7 +142,7 @@ function M.react(pr, entry, refresh)
 	end
 	-- TODO: Reacting to the description doesn't update the overview's reactions until the details are reloaded.
 	reactions.pick(detail.provider.capabilities.comments.reactions, pr, comment, function()
-		return state.is_current(pr)
+		return is_current(pr)
 	end, refresh)
 end
 

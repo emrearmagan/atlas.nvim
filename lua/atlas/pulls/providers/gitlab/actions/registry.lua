@@ -8,6 +8,7 @@
 local actions = require("atlas.pulls.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.providers.gitlab.users")
@@ -133,42 +134,23 @@ local function edit_assignees(ctx, done)
 				end,
 				title = string.format("Assignees for %s", pr_label(pr)),
 				on_done = function(selected)
-					local final_ids = {}
-					local final_set = {}
-					for _, it in ipairs(selected) do
-						local id = tonumber(it.id)
-						if id then
-							table.insert(final_ids, id)
-							final_set[id] = true
-						end
+					local selected_set = {}
+					for _, item in ipairs(selected) do
+						selected_set[tonumber(item.id)] = true
 					end
-
-					local changed = false
-					if #final_ids ~= #original then
-						changed = true
-					else
-						for id, _ in pairs(original_set) do
-							if not final_set[id] then
-								changed = true
-								break
-							end
-						end
-					end
-
-					if not changed then
+					if vim.deep_equal(selected_set, original_set) then
 						done({ changed_pr = false }, nil)
 						return
 					end
 
 					notify.loading(string.format("Updating assignees on %s...", pr_label(pr)))
-					pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
+					pullrequests_api.update_pr(pr, { assignees = selected }, function(ok, set_err)
 						if not ok then
 							notify.error(set_err or "Failed")
 							done(nil, set_err or "Failed")
 							return
 						end
-						local msg = string.format("%d assignee(s)", #final_ids)
-						notify.success(msg, { timeout = 1200 })
+						notify.success(string.format("%d assignee(s)", #selected), { timeout = 1200 })
 						done({ changed_pr = true }, nil)
 					end)
 				end,
@@ -237,39 +219,6 @@ local function select_project(opts)
 	})
 end
 
----@param pr PullRequest
----@param details GitLabPullRequestDetails
----@return string[]
-local function search_preview(pr, details)
-	local reviewers = vim.tbl_map(function(user)
-		return "@" .. user.username
-	end, pr.reviewers or {})
-	local assignees = vim.tbl_map(function(user)
-		return "@" .. user.username
-	end, details.assignees)
-	local labels = vim.tbl_map(function(label)
-		return label.name
-	end, details.labels)
-	local lines = {
-		"**Status:** " .. pr.state,
-		"**Author:** @" .. pr.author.username,
-		string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
-	}
-	if #reviewers > 0 then
-		table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
-	end
-	if #assignees > 0 then
-		table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
-	end
-	if #labels > 0 then
-		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-	end
-	vim.list_extend(lines, { "", "## Description", "" })
-	local description = vim.trim(details.description)
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return lines
-end
-
 ---@param project string
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
@@ -278,21 +227,17 @@ local function search_merge_requests(project, ctx, done)
 		title = "Search " .. project .. " Merge Requests",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title, ref = item.value.title .. " - ", pr_label(item.value)
+			return title .. ref, { { title }, { ref, "AtlasTextMuted" } }
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local pr = item.value
 			return pullrequests_api.fetch_pullrequest(pr, nil, function(details, err)
 				if err or details == nil then
 					preview_done({ title = pr_label(pr), lines = { err or "Failed to load merge request" } })
 					return
 				end
-				---@cast details GitLabPullRequestDetails
-
-				preview_done({
-					title = string.format("%s - %s", pr_label(pr), pr.title),
-					lines = search_preview(pr, details),
-				})
+				preview_done(picker_format.pullrequest(pr, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -315,11 +260,7 @@ local function search_merge_requests(project, ctx, done)
 				end
 				local items = {}
 				for _, pr in ipairs(page.items) do
-					table.insert(items, {
-						id = pr.repo_full_name .. "!" .. tostring(pr.id),
-						label = string.format("%s - %s", pr_label(pr), pr.title),
-						value = pr,
-					})
+					table.insert(items, { id = pr.repo_full_name .. "!" .. tostring(pr.id), value = pr })
 				end
 				fetch_done(items, nil)
 			end)

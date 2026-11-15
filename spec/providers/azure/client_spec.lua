@@ -82,7 +82,7 @@ describe("Azure client HTTP contract", function()
 		require("atlas.providers.azure.client").request("PATCH", "/_apis/wit/workitems/42", {}, function(result, err)
 			received_error = err
 			assert.is_nil(result)
-		end, nil, "7.1-preview.4", "application/json-patch+json")
+		end, nil, { api_version = "7.1-preview.4", content_type = "application/json-patch+json" })
 		assert.equal("HTTP 400", received_error)
 		assert.equal("PATCH", captured.method)
 		assert.equal("application/json-patch+json", captured.headers["Content-Type"])

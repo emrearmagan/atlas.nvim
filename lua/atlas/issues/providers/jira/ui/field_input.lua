@@ -3,7 +3,7 @@ local M = {}
 local picker = require("atlas.ui.picker")
 local popup_editor = require("atlas.ui.popups.editor")
 local icons = require("atlas.ui.shared.icons")
-local ui_utils = require("atlas.ui.utils")
+local utils = require("atlas.ui.shared.utils")
 local service = require("atlas.providers.jira.client")
 local adf = require("atlas.formats.adf.from_markdown")
 
@@ -188,7 +188,7 @@ function M.select(fields, values, on_select)
 		title = "Fields",
 		items = items,
 		format_item = function(item)
-			local name = ui_utils.pad_right(item.name, name_width) .. "  "
+			local name = utils.pad_right(item.name, name_width) .. "  "
 			local value, hl = M.display(item.id, item.field, values[item.id])
 			return name .. value, { { name }, { value, hl } }
 		end,

@@ -47,12 +47,6 @@ local resolved_icon, resolved_icon_hl = icons.get("success")
 ---@field target AtlasStorageTarget
 ---@field notes AtlasNote[]
 
----@param value AtlasNoteType
----@return string
-local function type_label(value)
-	return value:upper()
-end
-
 ---@param target AtlasStorageTarget
 ---@param note AtlasNote
 ---@return string
@@ -88,7 +82,7 @@ end
 ---@param value { file_path: string, start_line: integer, end_line: integer }
 ---@return string
 function M.note_title(note_type, value)
-	return string.format("Note [%s] %s:%s", type_label(note_type), value.file_path, M.line_range(value))
+	return string.format("Note [%s] %s:%s", note_type:upper(), value.file_path, M.line_range(value))
 end
 
 ---@param note AtlasNote
@@ -97,7 +91,7 @@ end
 ---@return string[], AtlasUIHighlight[]
 function M.render_details(note, target, width)
 	local label = notes.target_label(target)
-	local note_type = type_label(note.type)
+	local note_type = note.type:upper()
 	local location = note.file_path .. ":" .. M.line_range(note)
 	local lines = { string.format("%s  %s  %s", note_type, location, label), "", "Target: " .. target.ref }
 	local spans = {
@@ -202,7 +196,7 @@ local function card_item(note, opts)
 	return {
 		icon = note_icon,
 		icon_hl = note_icon_hl,
-		author = string.format("Note [%s]", type_label(note.type)),
+		author = string.format("Note [%s]", note.type:upper()),
 		author_hl = type_highlight(note.type),
 		additional = { { timestamp, "AtlasTextMuted" } },
 		right_text = M.status_marker(note, outdated),
@@ -249,7 +243,7 @@ local function list_item(item, opts)
 	return {
 		icon = expander,
 		icon_hl = expander_hl,
-		author = type_label(note.type),
+		author = note.type:upper(),
 		author_hl = type_highlight(note.type),
 		additional = metadata,
 		content = item.expanded and note.body or nil,

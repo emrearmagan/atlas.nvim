@@ -26,6 +26,6 @@ return {
 		repository = require("atlas.providers.azure.repositories"),
 		-- notifications = nil,
 		completion = require("atlas.providers.azure.completion"),
-		-- actions = nil,
+		fetch_links = require("atlas.providers.azure.links").fetch,
 	},
 }

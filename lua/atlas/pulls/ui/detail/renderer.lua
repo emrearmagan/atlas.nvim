@@ -7,60 +7,12 @@ local chips = require("atlas.pulls.ui.components.chips")
 local tabs = require("atlas.ui.components.tabs")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local links = require("atlas.ui.links")
 
 local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 
 local PADDING_X = 1
 
----@return IssuesDetailChip[]
-local function link_chips()
-	local counts = { issue = 0, pr = 0, external = 0 }
-	for _, link in ipairs(links.items(state.links and state.links.items or {}, state.current_pr)) do
-		counts[link.kind] = (counts[link.kind] or 0) + 1
-	end
-	local result = {}
-	for _, entry in ipairs({ { "issue", "issue" }, { "pr", "PR" }, { "external", "link" } }) do
-		local count = counts[entry[1]]
-		if count > 0 then
-			table.insert(result, {
-				label = icons.get("link") .. " " .. count .. " " .. entry[2] .. (count == 1 and "" or "s"),
-				hl = "AtlasRelatedChip",
-			})
-		end
-	end
-	return result
-end
-
----@param buf integer
----@param lines string[]
----@param spans table[]
-local function apply_spans(buf, lines, spans)
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans) do
-		if span.line ~= nil and span.line_hl_group ~= nil then
-			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
-				line_hl_group = span.line_hl_group,
-			})
-		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
-			local line_text = lines[span.line + 1] or ""
-			local max_col = #line_text
-			local sc = math.min(span.start_col, max_col)
-			local ec = math.min(span.end_col, max_col)
-			if ec > sc then
-				vim.api.nvim_buf_set_extmark(buf, ns, span.line, sc, {
-					end_row = span.line,
-					end_col = ec,
-					hl_group = span.hl_group,
-					url = span.url,
-				})
-			end
-		end
-	end
-end
-
----@param tab_items PullsDetailTab[]
-function M.render(tab_items)
+function M.render()
 	local buf = state.buf
 	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
@@ -122,7 +74,14 @@ function M.render(tab_items)
 				and provider_detail.chips
 				and provider_detail.chips(pr, details, state.details_loading)
 			or {}
-		vim.list_extend(extra_chips, link_chips())
+
+		local link_count = #(state.links and state.links.items or {})
+		if link_count > 0 then
+			table.insert(extra_chips, {
+				label = icons.get("link") .. " " .. link_count .. " link" .. (link_count == 1 and "" or "s"),
+				hl = "AtlasRelatedChip",
+			})
+		end
 
 		-- Header
 		local h_lines, h_spans = header.render(pr, width, extra_fields)
@@ -140,8 +99,8 @@ function M.render(tab_items)
 		end
 
 		-- Tab bar
-		if #tab_items > 1 then
-			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
+		if #state.tabs > 1 then
+			local tab_lines, tab_spans = tabs.render(state.tabs, state.current_tab, width, {
 				inactive_hl = "AtlasTextMuted",
 				gap = " ",
 				padding_x = PADDING_X,
@@ -171,7 +130,7 @@ function M.render(tab_items)
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	apply_spans(buf, lines, spans)
+	utils.apply_spans(buf, ns, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
 

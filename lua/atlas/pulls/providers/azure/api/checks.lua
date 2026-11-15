@@ -78,7 +78,11 @@ function M.fetch(pr, opts, on_done)
 		end
 		service.set_cache(cache_key, checks)
 		on_done(checks, nil)
-	end, { action = "Fetch pull request policies", repo = pr.repo_full_name, id = pr.id }, "7.1-preview.1")
+	end, {
+		action = "Fetch pull request policies",
+		repo = pr.repo_full_name,
+		id = pr.id,
+	}, { api_version = "7.1-preview.1" })
 end
 
 return M
