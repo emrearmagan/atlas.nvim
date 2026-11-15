@@ -1,6 +1,5 @@
 local keymap_resolver = require("atlas.core.keymaps")
 local keymaps = require("atlas.pulls.diff.ui.review_panel.keymaps")
-local providers = require("atlas.providers")
 local renderer = require("atlas.pulls.diff.ui.review_panel.renderer")
 local utils = require("atlas.ui.shared.utils")
 
@@ -37,9 +36,7 @@ function ReviewPanel:render()
 		return self.expanded[key]
 	end
 
-	local pr = self.session.source.pr
-	local provider = pr and providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider|nil
+	local provider = self.session.provider
 	local comments = provider and provider.capabilities.comments
 	local can_react = comments and comments.reactions ~= nil
 	local reviews = provider and provider.capabilities.reviews

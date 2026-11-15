@@ -248,23 +248,17 @@ function Viewer:show_details()
 		return
 	end
 
-	annotations.open(
-		self.renderer.tabpage,
-		self.session.source.pr,
-		file.path,
-		items,
-		function(action, target, on_submit)
-			---@type AtlasDiffActionContext
-			local context = {
-				session = self.session,
-				comment = target.comment,
-				note = target.note,
-				pending = target.pending,
-				on_submit = on_submit,
-			}
-			self:run_action(action, context)
-		end
-	)
+	annotations.open(self.renderer.tabpage, self.session, file.path, items, function(action, target, on_submit)
+		---@type AtlasDiffActionContext
+		local context = {
+			session = self.session,
+			comment = target.comment,
+			note = target.note,
+			pending = target.pending,
+			on_submit = on_submit,
+		}
+		self:run_action(action, context)
+	end)
 end
 
 ---@param action "delete_comment"|"toggle_resolved"

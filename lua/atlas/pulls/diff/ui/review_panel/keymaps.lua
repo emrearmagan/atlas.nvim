@@ -1,6 +1,5 @@
 local resolver = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
-local providers = require("atlas.providers")
 
 local M = {}
 
@@ -113,11 +112,8 @@ function M.setup(state, callbacks)
 		end
 	end)
 
-	if state.session.source.kind == "pr" then
-		local pr = state.session.source.pr
-		---@cast pr PullRequest
-		local provider = providers.load(pr.provider, "pulls")
-		---@cast provider PullsProvider
+	local provider = state.session.provider
+	if provider then
 		local reviews = provider.capabilities.reviews
 		local pending_reviews = reviews and reviews.submit_review ~= nil
 

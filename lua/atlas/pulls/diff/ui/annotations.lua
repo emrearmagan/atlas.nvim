@@ -2,7 +2,6 @@ local box = require("atlas.ui.components.box")
 local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
-local providers = require("atlas.providers")
 local review_actions = require("atlas.pulls.actions.review")
 local statusline = require("atlas.ui.statusline")
 local suggestions = require("atlas.pulls.diff.suggestions")
@@ -492,16 +491,15 @@ function M.close(owner)
 end
 
 ---@param owner integer
----@param pr PullRequest|nil
+---@param session AtlasDiffSessionInternal
 ---@param path string
 ---@param items AtlasDiffAnnotation[]
 ---@param on_action fun(action: AtlasReviewActionId, target: {comment?: PullsComment, note?: AtlasNote, pending?: boolean}, on_submit: fun())
-function M.open(owner, pr, path, items, on_action)
+function M.open(owner, session, path, items, on_action)
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
 
-	local provider = pr and providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider|nil
+	local provider = session.provider
 	local tasks = provider and provider.capabilities.tasks
 	local can_add_task = tasks and tasks.add_task ~= nil
 	local reviews = provider and provider.capabilities.reviews

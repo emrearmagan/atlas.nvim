@@ -9,7 +9,6 @@ local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local picker_format = require("atlas.ui.picker.format")
-local providers = require("atlas.providers")
 local reactions = require("atlas.ui.shared.reactions")
 local request_scope = require("atlas.core.requests")
 local suggestions = require("atlas.pulls.diff.suggestions")
@@ -145,15 +144,8 @@ local function review_context(context)
 		return nil
 	end
 
-	local provider = providers.load(pr.provider, "pulls")
-	if not provider then
-		notify.warn("Pull request provider is unavailable")
-		return nil
-	end
-	---@cast provider PullsProvider
-
 	return {
-		provider = provider,
+		provider = session.provider,
 		pr = pr,
 		current_user = session.current_user,
 		data = data,
@@ -421,9 +413,7 @@ note_actions.toggle_resolved = {
 ---@param context AtlasDiffActionContext
 ---@return AtlasReactionsCapability|nil
 local function reactions_capability(context)
-	local pr = context.session.source.pr
-	local provider = pr and providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider|nil
+	local provider = context.session.provider
 	local comments = provider and provider.capabilities.comments
 	return comments and comments.reactions
 end

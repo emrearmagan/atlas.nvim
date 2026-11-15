@@ -1,6 +1,5 @@
 local resolver = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
-local providers = require("atlas.providers")
 
 local M = {}
 
@@ -85,8 +84,7 @@ function M.setup(viewer)
 	local session = viewer.session
 	local staging = session.source.kind == "worktree" and not session.source.base
 	local editing = session.source.edit ~= nil
-	local pr = session.source.pr
-	local provider = pr and providers.load(pr.provider, "pulls")
+	local provider = session.provider
 	local reviews = provider and provider.capabilities.reviews
 	local pending_reviews = reviews and reviews.submit_review ~= nil
 

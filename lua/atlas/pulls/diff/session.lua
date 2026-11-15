@@ -27,6 +27,7 @@ local reviewed_store = require("atlas.pulls.reviewed")
 
 ---@class AtlasDiffSession
 ---@field source AtlasDiffSource
+---@field provider PullsProvider|nil
 ---@field range AtlasDiffRange
 ---@field files AtlasDiffFile[]
 ---@field commits AtlasGitCommit[]
@@ -49,11 +50,15 @@ local reviewed_store = require("atlas.pulls.reviewed")
 local Session = {}
 Session.__index = Session
 
----@param pr PullRequest
+---@param session AtlasDiffSessionInternal
 ---@param root string
 ---@param head string
 ---@return table<string, fun(done: fun(value: any, err: string|nil)): { cancel: fun() }|nil>
-local function review_starts(pr, root, head)
+local function review_starts(session, root, head)
+	local pr = session.source.pr
+	---@cast pr PullRequest
+	local provider = session.provider
+	---@cast provider PullsProvider
 	local starts = {
 		notes = function(done)
 			local data, err = notes.for_pull_request(pr)
@@ -67,8 +72,6 @@ local function review_starts(pr, root, head)
 		end,
 	}
 
-	local provider = providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider
 	local reviews = provider.capabilities.reviews
 	if reviews then
 		starts.review = function(done)
@@ -154,6 +157,7 @@ end
 function Session.new(source, root, base, head, opts, on_done)
 	local session = setmetatable({
 		source = source,
+		provider = source.pr and providers.load(source.pr.provider, "pulls"),
 		files = {},
 		commits = {},
 		requests = request_scope.new(),
@@ -164,12 +168,12 @@ function Session.new(source, root, base, head, opts, on_done)
 	local starts = {}
 
 	if pr then
-		local provider = providers.load(pr.provider, "pulls")
+		local provider = session.provider
 		---@cast provider PullsProvider
 		local capabilities = provider.capabilities
 		session.review_context = capabilities.reviews and { reviewed_files = {}, outdated_files = {} } or nil
 		---@cast head string
-		starts = review_starts(pr, root, head)
+		starts = review_starts(session, root, head)
 		if capabilities.reviews and not capabilities.reviews.set_files_reviewed then
 			starts.reviewed = function(done)
 				done(reviewed_store.read(pr))
@@ -277,7 +281,7 @@ function Session:set_reviewed(files, reviewed)
 
 	local pr = self.source.pr
 	---@cast pr PullRequest
-	local provider = providers.load(pr.provider, "pulls")
+	local provider = self.provider
 	---@cast provider PullsProvider
 	local reviews = provider.capabilities.reviews
 	---@cast reviews -nil
@@ -383,7 +387,7 @@ end
 function Session:reload(on_done)
 	local source = self.source
 	local range = self.full_range
-	local starts = source.kind == "pr" and review_starts(source.pr, range.root, range.head_revision) or {}
+	local starts = source.kind == "pr" and review_starts(self, range.root, range.head_revision) or {}
 	self.requests.all(starts, function(values, errors)
 		apply_review(self, values)
 		if next(errors) then
