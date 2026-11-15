@@ -41,7 +41,7 @@ describe("github pulls.fetch_commits", function()
 		})
 		local api = fresh_module()
 
-		local pr = { id = 42, repo_full_name = "owner/repo" }
+		local pr = { id = 42, repo_full_name = "owner/repo", repo = { owner = "owner", repo_name = "repo" } }
 		local commits
 		api.fetch_commits(pr, nil, function(c)
 			commits = c

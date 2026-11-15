@@ -74,7 +74,7 @@ function M.add_task(pr, content, parent, on_done)
 		end
 	end
 
-	return service.request("POST", endpoint(pr), nil, vim.json.encode(payload), function(result, err)
+	return service.request("POST", endpoint(pr), payload, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -98,7 +98,7 @@ function M.edit_task(pr, task, on_done)
 	if task.body ~= "" then
 		payload.content = { raw = task.body }
 	end
-	return service.request("PUT", url, nil, vim.json.encode(payload), function(result, err)
+	return service.request("PUT", url, payload, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -118,7 +118,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_task(pr, task, on_done)
 	local url = endpoint(pr) .. "/" .. tostring(task.id)
-	return service.request("DELETE", url, nil, nil, function(_, err)
+	return service.request("DELETE", url, nil, function(_, err)
 		on_done(err == nil, err)
 	end, { action = "Delete PR task", task_id = task.id })
 end

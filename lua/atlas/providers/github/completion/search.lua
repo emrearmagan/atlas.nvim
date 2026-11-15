@@ -4,8 +4,16 @@
 
 local M = {}
 
+local cli = require("atlas.providers.github.client")
 local prompt = require("atlas.ui.prompt")
 local utils = require("atlas.core.utils")
+
+local DEFAULT_ISSUE_TYPES = { "Task", "Bug", "Feature" }
+
+---@type string|nil
+local local_slug = nil
+---@type table<string, boolean>
+local pending = {}
 
 ---@type string[]
 local QUALIFIERS = {
@@ -50,7 +58,6 @@ local QUALIFIERS = {
 ---@type table<string, string[]>
 local VALUES = {
 	["is"] = { "pr", "issue", "open", "closed", "merged", "queued", "draft", "locked", "public", "private", "archived" },
-	["type"] = { "pr", "issue" },
 	["state"] = { "open", "closed" },
 	["in"] = { "title", "body", "comments" },
 	["no"] = { "label", "milestone", "assignee", "project" },
@@ -73,12 +80,6 @@ local VALUES = {
 	},
 }
 
----@param value string
----@return string
-local function lower_trim(value)
-	return vim.trim(tostring(value or "")):lower()
-end
-
 ---@param items string[]
 ---@param prefix string
 ---@param qualifier string|nil
@@ -86,7 +87,7 @@ end
 local function matches(items, prefix, qualifier)
 	local results = {}
 	for _, item in ipairs(items) do
-		local value = lower_trim(item)
+		local value = vim.trim(item):lower()
 		local matched = prefix == ""
 			or (#prefix <= 3 and value:sub(1, #prefix) == prefix)
 			or (#prefix > 3 and value:find(prefix, 1, true) ~= nil)
@@ -96,6 +97,62 @@ local function matches(items, prefix, qualifier)
 	end
 	table.sort(results)
 	return results
+end
+
+---@param slug string
+---@return string
+local function issue_types_key(slug)
+	return "github_search:issue_types:" .. slug:lower()
+end
+
+---@param slug string
+local function prefetch_issue_types(slug)
+	local key = issue_types_key(slug)
+	local _, ok = cli.get_cache(key)
+	if ok or pending[key] then
+		return
+	end
+	pending[key] = true
+	require("atlas.issues.providers.github.api.issues").list_issue_types(slug, function(types)
+		pending[key] = nil
+		if types then
+			cli.set_cache(
+				key,
+				vim.tbl_map(function(item)
+					return item.name
+				end, types)
+			)
+		end
+	end)
+end
+
+---@param query string
+---@return string[]
+local function type_values(query)
+	for token in query:lower():gmatch("%S+") do
+		if token == "is:pr" then
+			return {}
+		end
+	end
+
+	local slug = local_slug
+	for repo in query:gmatch("repo:([%w%-%._]+/[%w%-%._]+)") do
+		slug = repo
+	end
+
+	local names = DEFAULT_ISSUE_TYPES
+	if slug then
+		local cached, ok = cli.get_cache(issue_types_key(slug))
+		if ok then
+			names = cached
+		else
+			prefetch_issue_types(slug)
+		end
+	end
+
+	return vim.tbl_map(function(name)
+		return name:find("%s") and ('"' .. name .. '"') or name
+	end, names)
 end
 
 ---@param _arglead string
@@ -116,16 +173,23 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	if partial:find(":") then
 		local qualifier, value_prefix = partial:match("^([%w%-]+):(.*)$")
 		if qualifier ~= nil then
-			return matches(VALUES[qualifier:lower()] or {}, lower_trim(value_prefix), qualifier)
+			local values = qualifier:lower() == "type" and type_values(query) or VALUES[qualifier:lower()]
+			return matches(values or {}, vim.trim(value_prefix):lower(), qualifier)
 		end
 	end
 
-	return matches(QUALIFIERS, lower_trim(partial), nil)
+	return matches(QUALIFIERS, vim.trim(partial):lower(), nil)
 end
 
 ---@param default string
 ---@param on_submit fun(query: string)
 function M.edit(default, on_submit)
+	require("atlas.core.git").local_repository(nil, function(info)
+		local_slug = info and info.provider == "github" and info.repo_full_name or nil
+		if default:lower():find("is:issue", 1, true) then
+			type_values(default)
+		end
+	end)
 	prompt.open({
 		name = "AtlasGitHubSearch",
 		prompt = "GitHub search: ",

@@ -28,22 +28,9 @@ local function fetch(items)
 end
 
 describe("GitHub notifications", function()
-	local stubbed = {}
-
-	local function stub(name, value)
-		if stubbed[name] == nil then
-			stubbed[name] = { value = package.loaded[name] }
-		end
-		package.loaded[name] = value
-	end
-
 	after_each(function()
 		github_client.uninstall()
 		package.loaded[MODULE] = nil
-		for name, previous in pairs(stubbed) do
-			package.loaded[name] = previous.value
-		end
-		stubbed = {}
 	end)
 
 	it("builds web URLs for every subject type", function()
@@ -55,6 +42,7 @@ describe("GitHub notifications", function()
 			raw("Commit", api .. "commits/8ac653b6"),
 			raw("Release", api .. "releases/413897911"),
 			raw("CheckSuite", nil),
+			raw("CheckSuite", nil, "CI workflow run failed for feat/open-notifications branch"),
 			raw("RepositoryDependabotAlertsThread", nil),
 			raw("RepositoryInvitation", nil),
 			raw("SecurityAdvisory", nil),
@@ -69,6 +57,7 @@ describe("GitHub notifications", function()
 				web .. "/commit/8ac653b6",
 				web .. "/releases",
 				web .. "/actions",
+				web .. "/actions?query=branch:feat/open-notifications",
 				web .. "/security/dependabot",
 				web .. "/invitations",
 				web,
@@ -79,80 +68,24 @@ describe("GitHub notifications", function()
 		)
 	end)
 
-	it("opens CI runs in the pipelines of the branch named in the title, or the builds page", function()
-		local pipelines, repository
-		stub("atlas.providers", {
-			load = function()
-				return {}
+	it("marks threads read and done", function()
+		local calls, results = {}, {}
+		github_client.install({
+			api = function(method, endpoint, callback)
+				table.insert(calls, method .. " " .. endpoint)
+				callback(nil, nil)
 			end,
 		})
-		stub("atlas.pulls.pipelines", {
-			open = function(context)
-				pipelines = context
-			end,
-		})
-		stub("atlas.ui.repository", {
-			open = function(repo, _, opts)
-				repository = { repo = repo, opts = opts }
-			end,
-		})
+		package.loaded[MODULE] = nil
 
-		local notifications = fetch({
-			raw("CheckSuite", nil, "CI workflow run failed for feat/open-notifications branch"),
-			raw("CheckSuite", nil, "Dependabot updates run failed"),
-		})
+		require(MODULE).mark_read("7", function(ok)
+			table.insert(results, ok)
+		end)
+		require(MODULE).mark_done("7", function(ok)
+			table.insert(results, ok)
+		end)
 
-		assert.is_true(require(MODULE).open(notifications[1]))
-		assert.are.same(
-			{ provider = "github", repo_full_name = "octo/repo", target = "feat/open-notifications" },
-			pipelines
-		)
-		assert.is_true(require(MODULE).open(notifications[2]))
-		assert.are.same({ repo = "octo/repo", opts = { page = "builds" } }, repository)
-	end)
-
-	it("opens releases on the repository releases page", function()
-		local opened
-		stub("atlas.providers", {
-			load = function()
-				return {}
-			end,
-		})
-		stub("atlas.ui.repository", {
-			open = function(repo, _, opts)
-				opened = { repo = repo, opts = opts }
-			end,
-		})
-
-		local notifications = fetch({
-			raw("Release", "https://api.github.com/repos/octo/repo/releases/413897911", "0.8.2"),
-		})
-
-		assert.is_true(require(MODULE).open(notifications[1]))
-		assert.are.same(
-			{ repo = "octo/repo", opts = { page = "releases", ctx = { release_id = "413897911" } } },
-			opened
-		)
-	end)
-
-	it("opens discussions on the repository discussions page", function()
-		local opened
-		stub("atlas.providers", {
-			load = function()
-				return {}
-			end,
-		})
-		stub("atlas.ui.repository", {
-			open = function(repo, _, opts)
-				opened = { repo = repo, opts = opts }
-			end,
-		})
-
-		local notifications = fetch({
-			raw("Discussion", "https://api.github.com/repos/octo/repo/discussions/40"),
-		})
-
-		assert.is_true(require(MODULE).open(notifications[1]))
-		assert.are.same({ repo = "octo/repo", opts = { page = "discussions", ctx = { number = 40 } } }, opened)
+		assert.are.same({ "PATCH notifications/threads/7", "DELETE notifications/threads/7" }, calls)
+		assert.are.same({ true, true }, results)
 	end)
 end)

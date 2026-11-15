@@ -34,10 +34,6 @@ end
 ---@param on_done fun(users: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_members(project_path, query, on_done)
-	if project_path == "" then
-		on_done(nil, "Missing project path")
-		return nil
-	end
 	local q = vim.trim(tostring(query or ""))
 	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(project_path))
 	if q ~= "" then

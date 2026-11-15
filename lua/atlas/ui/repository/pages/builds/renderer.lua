@@ -4,12 +4,6 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@param value string
----@return string
-local function clean(value)
-	return (value:gsub("%c", " "))
-end
-
 ---@param state RepositoryBuilds
 ---@param width integer
 ---@return string[], AtlasUIHighlight[], table<integer, PullsPipeline>
@@ -22,7 +16,7 @@ function M.render(state, width)
 	---@param hl string|nil
 	---@param run PullsPipeline|nil
 	local function add(text, hl, run)
-		utils.push(lines, spans, utils.truncate(clean(text), content_width), hl)
+		utils.push(lines, spans, utils.truncate((text:gsub("%c", " ")), content_width), hl)
 		line_map[#lines] = run
 	end
 
@@ -35,7 +29,7 @@ function M.render(state, width)
 		local leading = icon .. "  "
 		local time = content_width >= 60 and run.started_at and utils.relative_time_text(run.started_at) or ""
 		local available = content_width - vim.fn.strdisplaywidth(leading) - (time ~= "" and #time + 2 or 0)
-		local left = leading .. utils.truncate(clean(title), math.max(0, available))
+		local left = leading .. utils.truncate((title:gsub("%c", " ")), math.max(0, available))
 		local gap = time ~= "" and math.max(2, content_width - vim.fn.strdisplaywidth(left) - #time) or 0
 		add(left .. string.rep(" ", gap) .. time, "Normal", run)
 		local line = lines[#lines]

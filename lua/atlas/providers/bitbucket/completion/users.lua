@@ -83,7 +83,7 @@ return {
 			repository,
 			context.pr.id
 		)
-		return service.request("GET", endpoint, nil, nil, function(result, err)
+		return service.request("GET", endpoint, nil, function(result, err)
 			if err or not result then
 				done(nil, err)
 				return

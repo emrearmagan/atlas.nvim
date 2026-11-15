@@ -396,9 +396,9 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@return string project_path, integer|nil iid
+---@return string project_path, integer iid
 local function project_iid(pr)
-	return pr.repo_full_name, tonumber(pr.id)
+	return pr.repo_full_name, tonumber(pr.id) --[[@as integer]]
 end
 
 ---@param pr PullRequest
@@ -407,10 +407,6 @@ end
 ---@return { cancel: fun() }|nil
 local function update(pr, payload, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err then
@@ -520,13 +516,7 @@ end
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing project slug")
-		end)
-		return nil
-	end
+	local slug = opts.repo_slug
 
 	local starts = {
 		members = function(done)
@@ -586,24 +576,11 @@ function M.fetch_reviewer_candidates(opts, on_done)
 end
 
 ---@param pr PullRequest
----@param ids integer[]
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.update_assignees(pr, ids, on_done)
-	local body = { assignee_ids = (#ids == 0) and { 0 } or ids }
-	return update(pr, body, on_done)
-end
-
----@param pr PullRequest
 ---@param opts PullsMergeOpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
 	---@type table<string, boolean|string>
 	local body = {
 		squash = opts.method == "squash",
@@ -635,11 +612,7 @@ end
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_pr(opts, on_done)
-	local path = tostring(opts.repo_slug or "")
-	if path == "" then
-		on_done(nil, "Missing repository slug")
-		return nil
-	end
+	local path = opts.repo_slug
 	local source = tostring(opts.head or "")
 	if source == "" then
 		on_done(nil, "Missing source branch")

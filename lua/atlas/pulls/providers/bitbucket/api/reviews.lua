@@ -223,7 +223,7 @@ local function set_review_state(pr, action, body, on_done)
 	end
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return service.request("POST", url, nil, nil, done, {
+		return service.request("POST", url, nil, done, {
 			action = action == "approve" and "Approve pull request" or "Request PR changes",
 			repo = pr.repo_full_name,
 			id = pr.id,

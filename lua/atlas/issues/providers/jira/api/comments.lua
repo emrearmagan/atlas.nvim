@@ -8,12 +8,7 @@ local markdown = require("atlas.formats.adf.from_markdown")
 ---@param issue Issue
 ---@return IssueComment[]
 local function map_comments(raw, issue)
-	return normalizer.to_comments_list(
-		raw,
-		tostring(issue.key or ""),
-		service.base_url(),
-		issue.reporter and issue.reporter.id
-	)
+	return normalizer.to_comments_list(raw, issue.key, service.base_url(), issue.reporter and issue.reporter.id)
 end
 
 ---@param issue Issue
@@ -22,11 +17,7 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
-	local issue_key = tostring(issue.key or "")
-	if issue_key == "" then
-		on_done(nil, "Invalid issue key")
-		return nil
-	end
+	local issue_key = issue.key
 	local cache_key = "jira:panel:comments:" .. issue_key
 
 	if not opts.force_refresh then
@@ -61,7 +52,7 @@ end
 ---@param callback fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 local function write_comment(issue, comment, comment_id, parent_id, callback)
-	local issue_key = tostring(issue.key or "")
+	local issue_key = issue.key
 	if vim.trim(comment) == "" then
 		callback(nil, "Comment cannot be empty")
 		return nil
@@ -115,7 +106,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_comment(issue, comment, on_done)
-	local issue_key = tostring(issue.key or "")
+	local issue_key = issue.key
 	local id = tostring(comment.id)
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
 

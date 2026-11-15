@@ -192,11 +192,6 @@ local function label_style(color)
 	}
 end
 
----@return string|nil
-local function footer_background()
-	return background("StatusLine") or line_background()
-end
-
 ---Groups that map one to one onto a standard Neovim highlight. Only UI
 ---surfaces link; text colors copy the foreground alone so theme attributes
 ---like italic do not leak into Atlas.
@@ -220,7 +215,7 @@ end
 ---@return table<string, table>
 local function styles()
 	local line = line_background()
-	local footer = footer_background()
+	local footer = background("StatusLine") or line
 	-- Use Comment's color without its attributes so muted text stays upright.
 	local muted = foreground("Comment") or foreground("NonText")
 	local text = foreground("Normal") or muted

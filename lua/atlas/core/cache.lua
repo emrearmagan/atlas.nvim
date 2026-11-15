@@ -16,12 +16,6 @@ local function ensure_cache_dir()
 	end
 end
 
----@param key string
----@return string
-local function key_to_hash(key)
-	return vim.fn.sha256(key)
-end
-
 ---@param hash string
 ---@param expires_at number|nil
 ---@return string
@@ -50,7 +44,7 @@ end
 ---@param key string
 ---@return string|nil
 local function key_to_path(key)
-	local hash = key_to_hash(key)
+	local hash = vim.fn.sha256(key)
 	local paths = paths_for_hash(hash)
 	if not paths or #paths == 0 then
 		return nil
@@ -62,7 +56,7 @@ end
 
 ---@param key string
 local function delete_paths_for_key(key)
-	for _, path in ipairs(paths_for_hash(key_to_hash(key))) do
+	for _, path in ipairs(paths_for_hash(vim.fn.sha256(key))) do
 		vim.fn.delete(path)
 	end
 end
@@ -127,7 +121,7 @@ function M.set(key, value, ttl)
 
 	local encoded = vim.json.encode(entry)
 	delete_paths_for_key(key)
-	vim.fn.writefile({ encoded }, cache_path(key_to_hash(key), expires_at))
+	vim.fn.writefile({ encoded }, cache_path(vim.fn.sha256(key), expires_at))
 end
 
 ---@param key string
@@ -152,11 +146,6 @@ function M.get(key)
 	end
 
 	return entry
-end
-
----@param key string
-function M.delete(key)
-	delete_paths_for_key(key)
 end
 
 ---@param prefix string

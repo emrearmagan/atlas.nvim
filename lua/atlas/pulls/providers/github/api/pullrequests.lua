@@ -81,11 +81,6 @@ local function check_status_fields()
 end
 
 ---@return string
-local function get_pr_gql()
-	return string.format(GET_PR_GQL, stack_fields(true))
-end
-
----@return string
 local function pull_request_fields_gql()
 	return string.format(PULL_REQUEST_FIELDS_GQL, check_status_fields(), stack_fields(false))
 end
@@ -310,7 +305,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		"api",
 		"graphql",
 		"-f",
-		"query=" .. vim.trim(get_pr_gql()),
+		"query=" .. vim.trim(string.format(GET_PR_GQL, stack_fields(true))),
 		"-f",
 		"owner=" .. owner,
 		"-f",
@@ -345,12 +340,11 @@ end
 ---@param on_done fun(subscribed: boolean|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_subscription(pr, subscribed, on_done)
-	local node_id = pr.node_id or ""
 	local state = subscribed and "SUBSCRIBED" or "UNSUBSCRIBED"
 	local gql =
 		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
 	return cli.gh(
-		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
+		{ "api", "graphql", "-F", "id=" .. pr.node_id, "-f", "state=" .. state, "-f", "query=" .. gql },
 		function(_, err)
 			if err then
 				on_done(nil, err)
@@ -405,44 +399,11 @@ function M.reopen(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param adds string[]
----@param removes string[]
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.update_assignees(pr, adds, removes, on_done)
-	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
-	for _, login in ipairs(adds) do
-		table.insert(args, "--add-assignee")
-		table.insert(args, login)
-	end
-	for _, login in ipairs(removes) do
-		table.insert(args, "--remove-assignee")
-		table.insert(args, login)
-	end
-	return cli.gh(args, function(_, err)
-		on_done(not err, err)
-	end, {
-		action = "Update PR assignees",
-		repo = pr.repo_full_name,
-		number = pr.id,
-		added = #adds,
-		removed = #removes,
-	})
-end
-
----@param pr PullRequest
 ---@param draft boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_draft(pr, draft, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(false, "Missing repo")
-		end)
-		return nil
-	end
-
+	local repo_slug = pr.repo_full_name
 	local args = {
 		"pr",
 		"ready",
@@ -471,11 +432,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.decline(pr, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		on_done(false, "Missing repo")
-		return nil
-	end
+	local repo_slug = pr.repo_full_name
 	return cli.gh({
 		"pr",
 		"close",
@@ -510,14 +467,7 @@ end
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo slug")
-		end)
-		return nil
-	end
-
+	local slug = opts.repo_slug
 	local starts = {
 		collaborators = function(done)
 			return cli.gh(
@@ -590,14 +540,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_reviewers(pr, selected, original, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(false, "Missing repo")
-		end)
-		return nil
-	end
-
+	local repo_slug = pr.repo_full_name
 	local selected_set = {}
 	for _, reviewer in ipairs(selected) do
 		selected_set[reviewer.provider_id] = true
@@ -761,14 +704,7 @@ end
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_pr(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
+	local slug = opts.repo_slug
 	local head = create_remotes.head_ref(slug, opts.head_repo_slug, tostring(opts.head or ""))
 
 	local args = {
@@ -824,13 +760,6 @@ end
 ---@param on_done fun(labels: PullsLabel[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
 	return cli.gh({
 		"api",
 		"--paginate",
@@ -858,44 +787,6 @@ function M.list_labels(slug, on_done)
 	end, {
 		action = "List labels",
 		repo = slug,
-	})
-end
-
----@param slug string
----@param number integer|string
----@param diff { add?: string[], remove?: string[] }
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.update_labels(slug, number, diff, on_done)
-	local adds = diff.add or {}
-	local removes = diff.remove or {}
-	if #adds == 0 and #removes == 0 then
-		on_done(true, nil)
-		return nil
-	end
-
-	local args = { "pr", "edit", tostring(number), "--repo", slug }
-	for _, v in ipairs(adds) do
-		table.insert(args, "--add-label")
-		table.insert(args, tostring(v))
-	end
-	for _, v in ipairs(removes) do
-		table.insert(args, "--remove-label")
-		table.insert(args, tostring(v))
-	end
-
-	return cli.gh(args, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end, {
-		action = "Update PR labels",
-		repo = slug,
-		number = number,
-		added = #adds,
-		removed = #removes,
 	})
 end
 

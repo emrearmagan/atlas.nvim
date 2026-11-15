@@ -83,14 +83,7 @@ end
 ---@param on_done fun(pulls: table[]|nil, err: string|nil) One GraphQL `PullRequest` per page
 ---@return { cancel: fun() }|nil
 local function fetch_timeline(pr, on_done)
-	local owner, name = (pr.repo_full_name or ""):match("^([^/]+)/(.+)$")
-	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
+	local owner, name = pr.repo.owner, pr.repo.repo_name
 	return cli.gh({
 		"api",
 		"graphql",

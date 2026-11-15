@@ -347,48 +347,82 @@ line_handlers.blockquote = {
 	end,
 }
 
-local function list_items(ctx, pattern)
-	local items = {}
-	while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match(pattern) do
-		local item = ctx.lines[ctx.i]:gsub(pattern, "")
-		table.insert(items, {
-			type = "listItem",
-			content = {
-				{
-					type = "paragraph",
-					content = parse_inline(item),
-				},
-			},
-		})
-		ctx.i = ctx.i + 1
+---@param line string
+---@return "bulletList"|"orderedList"|"taskList"|nil, integer, string, string|nil
+local function list_line(line)
+	local indent, checkbox, text = line:match("^(%s*)[-*+]%s+%[([ xX])%]%s+(.*)$")
+	if indent then
+		return "taskList", #indent, text, checkbox == " " and "TODO" or "DONE"
 	end
-	ctx.i = ctx.i - 1
-	return items
+
+	indent, text = line:match("^(%s*)[-*+]%s+(.*)$")
+	if indent then
+		return "bulletList", #indent, text
+	end
+
+	indent, text = line:match("^(%s*)%d+%.%s+(.*)$")
+	if indent then
+		return "orderedList", #indent, text
+	end
+
+	return nil, 0, ""
+end
+
+---@param ctx { lines: string[], i: integer }
+---@return table
+local function parse_list(ctx)
+	local list_type, indent = list_line(ctx.lines[ctx.i])
+	local list = { type = list_type, content = {} }
+	if list_type == "taskList" then
+		list.attrs = { localId = "" }
+	end
+
+	while ctx.i <= #ctx.lines do
+		local item_type, item_indent, text, state = list_line(ctx.lines[ctx.i])
+		if item_type == nil or item_indent < indent then
+			break
+		end
+
+		if item_indent > indent then
+			local nested = parse_list(ctx)
+			if list_type == "taskList" then
+				table.insert(list.content, nested)
+			else
+				table.insert(list.content[#list.content].content, nested)
+			end
+		elseif item_type ~= list_type then
+			break
+		elseif list_type == "taskList" then
+			table.insert(list.content, {
+				type = "taskItem",
+				attrs = { localId = "", state = state },
+				content = parse_inline(text),
+			})
+			ctx.i = ctx.i + 1
+		else
+			table.insert(list.content, {
+				type = "listItem",
+				content = { { type = "paragraph", content = parse_inline(text) } },
+			})
+			ctx.i = ctx.i + 1
+		end
+	end
+
+	return list
 end
 
 -- * bullet item
-line_handlers.bulletList = {
-	match = function(line)
-		return line:match("^[-*+]%s+") ~= nil
-	end,
-	parse = function(_, ctx)
-		return {
-			type = "bulletList",
-			content = list_items(ctx, "^[-*+]%s+"),
-		}
-	end,
-}
-
 -- 1. ordered item
-line_handlers.orderedList = {
+-- - [x] task item
+--   * nested item
+line_handlers.list = {
 	match = function(line)
-		return line:match("^%d+%.%s+") ~= nil
+		return list_line(line) ~= nil
 	end,
 	parse = function(_, ctx)
-		return {
-			type = "orderedList",
-			content = list_items(ctx, "^%d+%.%s+"),
-		}
+		local list = parse_list(ctx)
+		ctx.i = ctx.i - 1
+		return list
 	end,
 }
 
@@ -479,8 +513,7 @@ local handler_order = {
 	"heading",
 	"panel",
 	"blockquote",
-	"bulletList",
-	"orderedList",
+	"list",
 	"rule",
 	"table",
 	"paragraph",

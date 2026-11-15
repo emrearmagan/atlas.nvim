@@ -163,12 +163,7 @@ end
 ---@param on_done fun(page: GitHubDiscussionPage|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(repo, opts, on_done)
-	local owner, name = repo.full_name:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		on_done(nil, "Missing repository info")
-		return nil
-	end
-
+	local owner, name = repo.owner, repo.repo_name
 	local args = {
 		"api",
 		"graphql",
@@ -238,12 +233,7 @@ end
 ---@param on_done fun(discussion: GitHubDiscussionDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_discussion(repo, number, on_done)
-	local owner, name = repo.full_name:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		on_done(nil, "Missing repository info")
-		return nil
-	end
-
+	local owner, name = repo.owner, repo.repo_name
 	local args = {
 		"api",
 		"graphql",

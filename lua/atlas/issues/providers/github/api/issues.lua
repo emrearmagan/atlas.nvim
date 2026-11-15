@@ -493,13 +493,6 @@ end
 ---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
 	return fetch_labels(string.format("repos/%s/labels?per_page=100", slug), {
 		action = "Fetch repo labels",
 		slug = slug,
@@ -519,13 +512,6 @@ end
 ---@param on_done fun(milestones: GitHubMilestone[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_milestones(slug, on_done)
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
 	return cli.gh({
 		"api",
 		"--paginate",
@@ -572,13 +558,6 @@ query($owner: String!, $repo: String!) {
 ---@return { cancel: fun() }|nil
 function M.list_issue_types(slug, on_done)
 	local owner, repo = slug:match("^([^/]+)/(.+)$")
-	if owner == nil or repo == nil then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
 	return cli.gh({
 		"api",
 		"graphql",

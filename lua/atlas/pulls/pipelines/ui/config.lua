@@ -1,17 +1,15 @@
 local requests = require("atlas.core.requests")
 local spinner = require("atlas.ui.components.spinner")
-local ui_utils = require("atlas.ui.utils")
+local utils = require("atlas.ui.shared.utils")
 
 ---@class PullsPipelinesConfig
+---@field session PullsPipelinesSession
 ---@field buf integer
 ---@field win integer
----@field context PullsPipelineContext
----@field backend PullsPipelineBackend|nil
 ---@field selection PullsPipelinesSelection|nil
 ---@field file { path: string, content: string }|"loading"|string|nil
----@field requests AtlasRequestScope|nil
+---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance|nil
----@field on_update fun()
 
 local M = {}
 
@@ -44,7 +42,7 @@ function M.render(pane)
 			lines[#lines + 1] = ""
 		end
 		local message = pane.spinner:text("Loading configuration...")
-		lines[#lines + 1] = ui_utils.center_text(message, vim.api.nvim_win_get_width(pane.win))
+		lines[#lines + 1] = utils.center_text(message, vim.api.nvim_win_get_width(pane.win))
 	end
 
 	pcall(vim.treesitter.stop, pane.buf)
@@ -72,9 +70,7 @@ end
 
 ---@param pane PullsPipelinesConfig
 function M.clear(pane)
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	stop_spinner(pane)
 	pane.selection = nil
 	pane.file = nil
@@ -83,22 +79,21 @@ end
 ---@param pane PullsPipelinesConfig
 ---@param selection PullsPipelinesSelection
 function M.show(pane, selection)
+	local session = pane.session
 	local previous = pane.selection
 	pane.selection = selection
 	if previous and previous.pipeline == selection.pipeline and pane.file then
-		pane.on_update()
+		session:update_statusline()
 		return
 	end
-	if pane.requests then
-		pane.requests.cancel()
-	end
+	pane.requests.cancel()
 	stop_spinner(pane)
 
-	local fetch = pane.backend and pane.backend.fetch_config
+	local fetch = session.backend.fetch_config
 	if not fetch then
 		pane.file = "Configuration is not available for this provider"
 		M.render(pane)
-		pane.on_update()
+		session:update_statusline()
 		return
 	end
 
@@ -114,16 +109,16 @@ function M.show(pane, selection)
 	})
 	pane.spinner = loading_spinner
 	M.render(pane)
-	pane.on_update()
+	session:update_statusline()
 	loading_spinner:start()
 	pane.requests = requests.new()
 	pane.requests.run(function(done)
-		return fetch(pane.context, selection.pipeline, done)
+		return fetch(session.context, selection.pipeline, done)
 	end, function(file, err)
 		stop_spinner(pane)
 		pane.file = err or file or "Configuration is not available"
 		M.render(pane)
-		pane.on_update()
+		session:update_statusline()
 	end)
 end
 

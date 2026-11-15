@@ -69,13 +69,7 @@ local function render(state)
 		vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 		vim.bo[state.buf].modifiable = false
 	end
-
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col or 0, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.apply_spans(state.buf, namespace, spans)
 end
 
 ---@param state RepositoryBuilds
@@ -187,7 +181,7 @@ local function copy_url(state)
 	end
 end
 
----@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline, ctx: { id?: string } }
 function M.open(opts)
 	local provider = providers.load(opts.provider.id, "pulls")
 	---@cast provider PullsProvider|nil
@@ -200,7 +194,7 @@ function M.open(opts)
 		provider = provider,
 		backend = provider and pipelines.get(provider),
 		statusline = opts.statusline,
-		branch = opts.repo.default_branch,
+		branch = opts.ctx.id or opts.repo.default_branch,
 		runs = "loading",
 		line_map = {},
 		requests = requests.new(),

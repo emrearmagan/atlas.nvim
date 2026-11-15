@@ -1,7 +1,6 @@
 local M = {}
 
 local action_runner = require("atlas.core.actions")
-local request_scope = require("atlas.core.requests")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
@@ -14,15 +13,13 @@ local utils = require("atlas.ui.shared.utils")
 ---@param pr PullRequest
 ---@return boolean
 local function is_current(pr)
-	return state.current_pr ~= nil
-		and tostring(state.current_pr.id or "") == tostring(pr.id or "")
-		and tostring(state.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
+	local current = detail.current_pr
+	return current ~= nil
+		and tostring(current.id or "") == tostring(pr.id or "")
+		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
-function M.reset()
-	state.reset()
-	notify.clear()
-end
+M.reset = state.reset
 
 -- Lifecycle
 
@@ -30,8 +27,9 @@ end
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, refresh, opts)
-	M.reset()
-	state.current_pr = pr
+	if (state.data ~= nil or state.status == "loading") and not (opts and opts.force_refresh) then
+		return
+	end
 
 	local provider = detail.provider
 	local reviews = provider and provider.capabilities.reviews
@@ -43,14 +41,10 @@ function M.on_select(pr, refresh, opts)
 
 	local pr_id = tostring(pr.id or "")
 	state.status = "loading"
-	notify.loading(string.format("Loading review for #%s...", pr_id))
 
 	state.requests.run(function(done)
 		return reviews.fetch_threads(pr, opts, done)
 	end, function(data, err)
-		if not is_current(pr) then
-			return
-		end
 		if err or not data then
 			local message = tostring(err or "Provider returned no review data")
 			state.status = message
@@ -61,7 +55,6 @@ function M.on_select(pr, refresh, opts)
 
 		state.data = data
 		state.status = nil
-		notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
 		refresh()
 	end)
 end
@@ -141,11 +134,7 @@ function M.activate(buf, refresh)
 end
 
 function M.deactivate(buf)
-	state.current_pr = nil
 	keymaps.teardown(buf)
-	state.requests.cancel()
-	state.requests = request_scope.new()
-	notify.clear()
 end
 
 ---@param pr PullRequest

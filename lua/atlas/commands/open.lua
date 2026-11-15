@@ -23,7 +23,9 @@ vim.api.nvim_create_autocmd("User", {
 local function open_target(target, entity, back)
 	local provider = providers.load(target.provider, target.domain)
 
-	if target.entity == "pr" then
+	if target.entity == "pipeline" or (target.entity == "pr" and target.page == "builds") then
+		require("atlas.commands.pipelines").open(target.url)
+	elseif target.entity == "pr" then
 		---@cast provider PullsProvider
 		---@cast entity PullRequest|nil
 		local pr = entity or { id = assert(target.id), repo_full_name = assert(target.repo_full_name) }
@@ -35,8 +37,6 @@ local function open_target(target, entity, back)
 		local issue = entity or assert(provider.issue_ref(target))
 
 		require("atlas.issues.ui.detail").open(issue, { provider = provider, back = back })
-	elseif target.entity == "pipeline" then
-		require("atlas.commands.pipelines").open(target.url)
 	elseif target.entity == "repo" then
 		require("atlas.commands.browse").open(target.url, target.page)
 	end

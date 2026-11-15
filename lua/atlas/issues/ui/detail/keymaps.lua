@@ -47,7 +47,7 @@ local function open_current_line()
 
 	local url = utils.url_at_cursor(win)
 	if url then
-		vim.ui.open(url)
+		links.open(url, detail.way_back())
 		return true
 	end
 

@@ -8,7 +8,7 @@ local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
-local ui_utils = require("atlas.ui.utils")
+local utils = require("atlas.ui.shared.utils")
 local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
@@ -114,7 +114,7 @@ local function comment_template_action()
 				title = "Comment templates",
 				items = templates,
 				format_item = function(template)
-					return ui_utils.pad_right(template.label, label_width) .. "  " .. template.text
+					return utils.pad_right(template.label, label_width) .. "  " .. template.text
 				end,
 				on_select = function(template)
 					if template then
@@ -592,6 +592,10 @@ M.toggle_resolved = {
 ---@param capability "submit_review"|"approve"|"request_changes"
 ---@return boolean, string|nil
 local function review_available(context, capability)
+	if not context.pr then
+		return false, "No PR selected"
+	end
+
 	if capability ~= "submit_review" and context.pr.state ~= "open" and context.pr.state ~= "draft" then
 		return false, "PR is not open"
 	end

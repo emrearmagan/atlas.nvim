@@ -24,7 +24,7 @@ function M.fetch_user(on_done)
 		return nil
 	end
 
-	return service.request("GET", "/user", nil, nil, function(result, err)
+	return service.request("GET", "/user", nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
