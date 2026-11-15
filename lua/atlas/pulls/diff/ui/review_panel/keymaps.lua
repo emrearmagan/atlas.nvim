@@ -68,15 +68,12 @@ function M.setup(state, callbacks)
 	end
 
 	---@param id AtlasReviewActionId
-	---@param entry AtlasDiffReviewPanelRow
 	---@param pending boolean|nil
-	local function dispatch(id, entry, pending)
-		callbacks.on_action(id, {
-			comment = entry.comment,
-			note = entry.note,
-			review_entry = entry.review_entry,
-			pending = pending,
-		})
+	local function dispatch(id, pending)
+		local entry = current(state)
+		if entry and (entry.comment or entry.note) then
+			callbacks.on_action(id, { comment = entry.comment, note = entry.note, pending = pending })
+		end
 	end
 
 	local function close()
@@ -139,84 +136,39 @@ function M.setup(state, callbacks)
 			end)
 		end
 
-		local function reply(pending)
-			local entry = current(state)
-			if entry and entry.note then
-				dispatch("note_to_comment", entry, pending)
-			elseif entry and entry.comment and not entry.comment.is_task then
-				dispatch("add_comment", entry, pending)
-			end
-		end
 		if pending_reviews then
 			add(items, "pulls.review.add_comment", 30, function()
-				reply(true)
+				dispatch("add_comment", true)
 			end)
 		end
 		add(items, "pulls.review.submit_comment", 31, function()
-			reply(false)
+			dispatch("add_comment", false)
 		end)
 		add(items, "pulls.review.add_task", 35, function()
-			local entry = current(state)
-			if entry and entry.comment and not entry.comment.is_task then
-				dispatch("add_task", entry)
-			end
+			dispatch("add_task")
 		end)
 
 		local comments = provider.capabilities.comments
 		if comments and comments.reactions then
 			add(items, "ui.comments.react", 37, function()
-				local entry = current(state)
-				if entry and entry.comment and not entry.comment.is_task then
-					dispatch("react", entry)
-				end
+				dispatch("react")
 			end)
 		end
 	end
 
 	add(items, "ui.comments.edit", 36, function()
 		local entry = current(state)
-		if not entry then
+		if entry and entry.review_entry then
+			callbacks.on_action("edit_review", { review_entry = entry.review_entry })
 			return
 		end
-		if entry.note then
-			return dispatch("edit_note", entry)
-		end
-		if entry.review_entry then
-			return dispatch("edit_review", entry)
-		end
-		if entry.comment then
-			dispatch("edit_comment", entry)
-		end
+		dispatch("edit_comment")
 	end)
 	add(items, "ui.delete", 41, function()
-		local entry = current(state)
-		if not entry then
-			return
-		end
-		if entry.note then
-			return dispatch("delete_note", entry)
-		end
-		if entry.comment then
-			dispatch("delete_comment", entry)
-		end
+		dispatch("delete_comment")
 	end)
-
 	add(items, "ui.comments.toggle_resolved", 40, function()
-		local entry = current(state)
-		if not entry then
-			return
-		end
-		if entry.note then
-			return dispatch("toggle_note_resolved", entry)
-		end
-		local comment = entry.comment
-		if not comment then
-			return
-		end
-		if comment.is_task then
-			return dispatch("toggle_task", entry)
-		end
-		callbacks.on_action("toggle_resolved", { comment = entry.thread_root or comment })
+		dispatch("toggle_resolved")
 	end)
 
 	help.register("Review", items, { buffer = state.buf, index = 1 })

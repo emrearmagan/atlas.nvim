@@ -621,31 +621,12 @@ function M.open(owner, pr, path, items, on_action)
 	local function action(name)
 		return function()
 			local entry = line_map[vim.api.nvim_win_get_cursor(win)[1]]
-			if not entry then
-				return
-			end
-
-			if entry.note then
-				if name == "toggle_resolved" then
-					on_action("toggle_note_resolved", { note = entry.note }, close)
-				elseif name == "edit_comment" or name == "delete_comment" then
-					local note_action = name == "edit_comment" and "edit_note" or "delete_note"
-					on_action(note_action, { note = entry.note }, close)
-				elseif name == "add_comment" then
-					on_action("note_to_comment", { note = entry.note, pending = pending_reviews }, close)
-				end
-			elseif entry.comment then
-				local target = entry.comment
-				local selected_action = name
-				if name == "toggle_resolved" then
-					selected_action = target.is_task and "toggle_task" or "toggle_resolved"
-					target = target.is_task and target or entry.thread_root
-				end
-				on_action(
-					selected_action,
-					{ comment = target, pending = name == "add_comment" and pending_reviews or nil },
-					close
-				)
+			if entry and (entry.note or entry.comment) then
+				on_action(name, {
+					note = entry.note,
+					comment = entry.comment,
+					pending = name == "add_comment" and pending_reviews or nil,
+				}, close)
 			end
 		end
 	end

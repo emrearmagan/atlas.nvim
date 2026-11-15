@@ -154,7 +154,7 @@ end
 
 -- Actions
 
----@param action "add_comment"|"edit_comment"|"delete_comment"|"toggle_task"|"toggle_resolved"
+---@param action "add_comment"|"edit_comment"|"delete_comment"|"toggle_resolved"
 ---@param pr PullRequest
 ---@param comment PullsComment|nil
 ---@param refresh fun()
@@ -223,10 +223,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.toggle_resolved(pr, entry, refresh)
-	local comment = entry and entry.comment
-	local action = comment and comment.is_task and "toggle_task" or "toggle_resolved"
-	local target = action == "toggle_resolved" and entry and entry.thread_root or comment
-	run_comment_action(action, pr, target, refresh)
+	run_comment_action("toggle_resolved", pr, entry and entry.comment, refresh)
 end
 
 ---@param pr PullRequest

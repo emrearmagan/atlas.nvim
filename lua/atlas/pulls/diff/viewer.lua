@@ -279,21 +279,11 @@ function Viewer:run_annotation_action(action)
 	end
 
 	local item = items[1]
-	---@type AtlasDiffActionContext
-	local context = { session = self.session }
-	---@type AtlasReviewActionId
-	local selected_action = action
-	if item.note then
-		context.note = item.note
-		selected_action = action == "delete_comment" and "delete_note" or "toggle_note_resolved"
-	else
-		context.comment = item.thread.comment
-		if action == "toggle_resolved" and item.thread.comment.is_task then
-			selected_action = "toggle_task"
-		end
-	end
-
-	self:run_action(selected_action, context)
+	self:run_action(action, {
+		session = self.session,
+		note = item.note,
+		comment = item.thread and item.thread.comment,
+	})
 end
 
 ---@param direction 1|-1

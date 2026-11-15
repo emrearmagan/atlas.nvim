@@ -558,6 +558,9 @@ M.toggle_resolved = {
 		if not context.comment or context.comment.deleted then
 			return false, "No thread selected"
 		end
+		if context.comment.is_task then
+			return M.toggle_task.is_available(context)
+		end
 		local comments = context.provider.capabilities.comments
 		return comments ~= nil and comments.set_thread_resolved ~= nil, "Provider does not support resolving threads"
 	end,
@@ -566,6 +569,18 @@ M.toggle_resolved = {
 	---@return boolean handled
 	run = function(context, on_done)
 		local comment = assert(context.comment)
+		if comment.is_task then
+			return M.toggle_task.run(context, on_done)
+		end
+
+		local by_id = {}
+		for _, item in ipairs(context.data and context.data.comments or {}) do
+			by_id[item.id] = item
+		end
+		while comment.parent_id and by_id[comment.parent_id] do
+			comment = by_id[comment.parent_id]
+		end
+
 		local resolved = comment.state ~= "RESOLVED"
 		local set_resolved = assert(context.provider.capabilities.comments.set_thread_resolved)
 		if context.on_submit then

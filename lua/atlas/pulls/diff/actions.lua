@@ -16,6 +16,10 @@ local suggestions = require("atlas.pulls.diff.suggestions")
 
 local M = {}
 
+-- What each comment key does when a note is under the cursor.
+---@type table<AtlasReviewActionId, AtlasDiffAction>
+local note_actions = {}
+
 ---@alias AtlasReviewActionId
 ---| "add_comment"
 ---| "add_task"
@@ -31,10 +35,6 @@ local M = {}
 ---| "approve"
 ---| "request_changes"
 ---| "add_note"
----| "edit_note"
----| "delete_note"
----| "toggle_note_resolved"
----| "note_to_comment"
 ---| "toggle_detail_panel"
 ---| "toggle_review_panel"
 ---| "toggle_commits"
@@ -229,8 +229,8 @@ M.add_note = {
 }
 
 ---@type AtlasDiffAction
-M.note_to_comment = {
-	id = "note_to_comment",
+note_actions.add_comment = {
+	id = "add_comment",
 	label = "Comment from note",
 	icon = icons.get("comment"),
 	is_available = function(context)
@@ -340,8 +340,8 @@ M.note_to_comment = {
 }
 
 ---@type AtlasDiffAction
-M.edit_note = {
-	id = "edit_note",
+note_actions.edit_comment = {
+	id = "edit_comment",
 	label = "Edit note",
 	icon = icons.get("edit", "actions"),
 	is_available = has_note,
@@ -366,8 +366,8 @@ M.edit_note = {
 }
 
 ---@type AtlasDiffAction
-M.delete_note = {
-	id = "delete_note",
+note_actions.delete_comment = {
+	id = "delete_comment",
 	label = "Delete note",
 	icon = icons.get("delete", "actions"),
 	confirm = "Delete note?",
@@ -392,8 +392,8 @@ M.delete_note = {
 }
 
 ---@type AtlasDiffAction
-M.toggle_note_resolved = {
-	id = "toggle_note_resolved",
+note_actions.toggle_resolved = {
+	id = "toggle_resolved",
 	label = "Toggle note resolved",
 	icon = icons.get("success", "actions"),
 	is_available = has_note,
@@ -720,6 +720,14 @@ end
 function M.dispatch(id, context, on_done)
 	local function complete(result, err)
 		finish(context.session, on_done, result, err)
+	end
+
+	if context.note then
+		local note_action = note_actions[id]
+		if not note_action then
+			return false
+		end
+		return action_runner.run(note_action, context, complete)
 	end
 
 	local action = M[id]
