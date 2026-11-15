@@ -58,19 +58,6 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function review_available(ctx)
-	local ok, err = repository_available(ctx)
-	if not ok then
-		return ok, err
-	end
-	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
-		return false, "PR is not open"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
 local function merge_available(ctx)
 	local ok, err = repository_available(ctx)
 	if not ok then
@@ -548,21 +535,8 @@ local function toggle_auto_merge(ctx, done)
 	end)
 end
 
-register({
-	id = actions.approve.id,
-	label = actions.approve.label,
-	icon = actions.approve.icon,
-	is_available = review_available,
-	run = actions.approve.run,
-})
-
-register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	icon = actions.request_changes.icon,
-	is_available = review_available,
-	run = actions.request_changes.run,
-})
+register(actions.approve)
+register(actions.request_changes)
 
 register({
 	id = "merge",
