@@ -95,6 +95,31 @@ describe("Jira ADF to Markdown", function()
 		}, "- [ ] todo\n- [x] done")
 	end)
 
+	it("indents nested lists", function()
+		local child = { type = "orderedList", content = { list_item("child") } }
+		converts({
+			{
+				type = "bulletList",
+				content = {
+					{ type = "listItem", content = { paragraph({ text("parent") }), child } },
+					list_item("next"),
+				},
+			},
+		}, "* parent\n  1. child\n* next")
+		converts({
+			{
+				type = "taskList",
+				content = {
+					{ type = "taskItem", attrs = { state = "TODO" }, content = { text("todo") } },
+					{
+						type = "taskList",
+						content = { { type = "taskItem", attrs = { state = "DONE" }, content = { text("done") } } },
+					},
+				},
+			},
+		}, "- [ ] todo\n  - [x] done")
+	end)
+
 	it("converts blockquotes", function()
 		converts({
 			{ type = "blockquote", content = { paragraph({ text("quoted") }) } },

@@ -54,9 +54,7 @@ end
 function M.search_issues(jql, on_done, opts)
 	local cache_key = string.format("jira:search:v8:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
-	if opts.force_refresh then
-		service.clear_cache()
-	else
+	if not opts.force_refresh then
 		local cached = service.get_persistent_cache(cache_key)
 		if cached then
 			on_done(cached, nil)
@@ -220,9 +218,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 		return ref.key
 	end, refs)
 	local cache_key = "jira:issues:" .. table.concat(keys, ",")
-	if opts.force_refresh then
-		service.clear_cache()
-	else
+	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)

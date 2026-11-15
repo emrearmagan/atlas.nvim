@@ -137,7 +137,9 @@ local function views()
 			},
 		}
 	end
-	return configured
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
 end
 
 return {
