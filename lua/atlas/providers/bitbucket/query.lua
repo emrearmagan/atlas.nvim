@@ -151,12 +151,11 @@ function M.query(view)
 	return table.concat(parts, " "), states
 end
 
----@param workspace string
----@param repo string
+---@param full_name string workspace/repo
 ---@param value string|nil
 ---@return string
-function M.for_repo(workspace, repo, value)
-	local scope = string.format("repo:%s/%s", workspace, repo)
+function M.for_repo(full_name, value)
+	local scope = "repo:" .. full_name
 	value = vim.trim(value or "")
 	return value == "" and scope or (scope .. " " .. value)
 end

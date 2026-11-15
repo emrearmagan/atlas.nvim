@@ -86,13 +86,14 @@ function M.render(groups, opts)
 		-- Rebase content spans and line_map
 		local line_offset = #lines - #(group.lines or {})
 		for _, span in ipairs(group.spans or {}) do
-			table.insert(highlights, {
-				line = line_offset + span.line,
-				start_col = col_shift + span.start_col,
-				end_col = col_shift + span.end_col,
-				hl_group = span.hl_group,
-				url = span.url,
-			})
+			table.insert(
+				highlights,
+				vim.tbl_extend("force", span, {
+					line = line_offset + span.line,
+					start_col = col_shift + span.start_col,
+					end_col = col_shift + span.end_col,
+				})
+			)
 		end
 		local target_map = opts.line_map or line_map
 		local map_base = opts.line_map and (opts.line_offset or 0) or 0

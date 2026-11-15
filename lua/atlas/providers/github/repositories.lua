@@ -326,7 +326,7 @@ function M.fetch_releases(repo, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts { id?: string }
+---@param opts { id?: string, tag?: string }
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
@@ -338,7 +338,8 @@ function M.fetch_release(repo, opts, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("repos/%s/releases/%s", slug, opts.id or "latest")
+	local release = opts.id or (opts.tag and "tags/" .. utils.url_encode(opts.tag)) or "latest"
+	local endpoint = string.format("repos/%s/releases/%s", slug, release)
 	return cli.gh({ "api", endpoint, "--include" }, function(result, err, status)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch release", status)

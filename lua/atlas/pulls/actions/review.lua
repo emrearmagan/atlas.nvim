@@ -592,6 +592,10 @@ M.toggle_resolved = {
 ---@param capability "submit_review"|"approve"|"request_changes"
 ---@return boolean, string|nil
 local function review_available(context, capability)
+	if not context.pr then
+		return false, "No PR selected"
+	end
+
 	if capability ~= "submit_review" and context.pr.state ~= "open" and context.pr.state ~= "draft" then
 		return false, "PR is not open"
 	end

@@ -6,37 +6,6 @@ local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 
----@param issue Issue
----@param details IssueDetails
----@return { title: string, lines: string[] }
-function M.issue_preview(issue, details)
-	local assignees = vim.tbl_map(function(user)
-		return "@" .. (user.username or user.name)
-	end, details.assignees)
-	local label_names = vim.tbl_map(function(label)
-		return label.name
-	end, details.labels)
-	local author = issue.reporter and ("@" .. (issue.reporter.username or issue.reporter.name)) or "Unknown"
-	local lines = {
-		"**Status:** " .. tostring(issue.status or "Open"),
-		"**Author:** " .. author,
-		"**Assignees:** " .. (#assignees > 0 and table.concat(assignees, ", ") or "Unassigned"),
-	}
-	if #label_names > 0 then
-		table.insert(lines, "**Labels:** " .. table.concat(label_names, ", "))
-	end
-	if details.milestone then
-		table.insert(lines, "**Milestone:** " .. details.milestone.title)
-	end
-	vim.list_extend(lines, { "", "## Description", "" })
-	local description = vim.trim(details.description)
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return {
-		title = string.format("%s - %s", issue.key, issue.title),
-		lines = lines,
-	}
-end
-
 ---@param original table<string, boolean>
 ---@param selected table<string, boolean>
 ---@return string[] adds, string[] removes

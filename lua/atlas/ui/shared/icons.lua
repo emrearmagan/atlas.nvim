@@ -1,7 +1,5 @@
 local M = {}
 
-local providers = require("atlas.providers")
-
 ---@class AtlasIconStyle
 ---@field icon string
 ---@field hl_group string|nil
@@ -152,7 +150,7 @@ end
 ---@param domain AtlasDomain
 ---@return string, string
 function M.provider_icon(provider_id, domain)
-	local provider_domain = providers.domain(provider_id, domain)
+	local provider_domain = require("atlas.providers").domain(provider_id, domain)
 	local style = provider_domain and provider_domain.icon or ICONS.fallback
 	return style.icon, style.hl_group
 end

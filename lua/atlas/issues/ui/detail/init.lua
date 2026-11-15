@@ -124,7 +124,7 @@ local function load_links(issue, force_refresh)
 	end
 	local refresh = refresh_callback(issue)
 	state.requests.run(function(done)
-		return links.fetch(provider, issue, { force_refresh = force_refresh }, done)
+		return links.fetch(provider, issue, "issue", { force_refresh = force_refresh }, done)
 	end, function(items, err)
 		if state.links ~= current then
 			return
@@ -257,15 +257,15 @@ function M.select(issue, opts)
 	load_details(issue, opts.force_refresh == true)
 end
 
+---@param input Issue|IssueRef
 ---@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil, back: fun()|nil }|nil
----@return IssuesProvider|nil, boolean force_refresh
-local function prepare_open(opts)
+function M.open(input, opts)
 	opts = opts or {}
 	local provider = opts.provider or state.provider
 	---@cast provider IssuesProvider|nil
 	if provider == nil then
 		notify.error("Issue provider unavailable")
-		return nil, false
+		return
 	end
 
 	state.win, state.buf = detail_window.open(cleanup, render)
@@ -273,26 +273,13 @@ local function prepare_open(opts)
 	state.on_update = opts.on_update
 	state.back = opts.back
 
-	return provider, opts.force_refresh == true
-end
-
----@param issue Issue
----@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil, back: fun()|nil }|nil
-function M.open(issue, opts)
-	local provider, force_refresh = prepare_open(opts)
-	if provider == nil then
+	local force_refresh = opts.force_refresh == true
+	if input.status ~= nil then
+		M.select(input --[[@as Issue]], { force_refresh = force_refresh })
 		return
 	end
-	M.select(issue, { force_refresh = force_refresh })
-end
 
----@param ref IssueRef
----@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil, back: fun()|nil }|nil
-function M.open_ref(ref, opts)
-	local provider, force_refresh = prepare_open(opts)
-	if provider == nil then
-		return
-	end
+	local ref = input --[[@as IssueRef]]
 	if
 		not force_refresh
 		and same_ref(state.current_issue or pending_ref, ref)
@@ -308,12 +295,14 @@ function M.open_ref(ref, opts)
 	load_details(ref, force_refresh)
 	update_spinner()
 	render()
+
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = force_refresh }, done)
 	end, function(issues, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
 		end
+
 		local loaded_issue = issues and issues[1] or nil
 		if loaded_issue == nil then
 			state.issue_loading = false
@@ -325,6 +314,7 @@ function M.open_ref(ref, opts)
 			notify.error(state.issue_error)
 			return
 		end
+
 		show_issue(loaded_issue, force_refresh)
 	end)
 end
@@ -340,7 +330,7 @@ function M.refresh(ref)
 		and pending_ref
 		and (ref == nil or same_ref(pending_ref, ref))
 	then
-		M.open_ref(pending_ref, { force_refresh = true })
+		M.open(pending_ref, { force_refresh = true })
 		return
 	end
 	if not M.is_open() or issue == nil or provider == nil or (ref ~= nil and not same_ref(issue, ref)) then

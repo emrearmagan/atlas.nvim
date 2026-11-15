@@ -43,7 +43,6 @@ local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
-local links_api = require("atlas.issues.providers.jira.api.links")
 local requests = require("atlas.core.requests")
 local notify = require("atlas.core.notify")
 
@@ -59,8 +58,8 @@ end
 ---@param target AtlasTarget
 ---@return IssueRef|nil
 local function target_issue_ref(target)
-	if target.issue_key then
-		return { key = target.issue_key }
+	if target.id then
+		return { key = tostring(target.id) }
 	end
 end
 
@@ -138,7 +137,9 @@ local function views()
 			},
 		}
 	end
-	return configured
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
 end
 
 return {
@@ -150,7 +151,6 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
-			fetch_links = links_api.fetch,
 		},
 		comments = {
 			fetch_activity = issues_api.fetch_activity,

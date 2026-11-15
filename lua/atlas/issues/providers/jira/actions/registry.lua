@@ -8,13 +8,13 @@
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.providers.jira.users")
 local issues_state = require("atlas.issues.state")
-local presentation = require("atlas.issues.ui.presentation")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -323,44 +323,6 @@ local function create_issue(_, done)
 	end)
 end
 
----@param issue Issue
----@param details JiraIssueDetails
----@return AtlasPickerPreview
-local function format_preview(issue, details)
-	local assignee = details.assignees[1]
-	local status = "**Status:** " .. (details.status or "Unknown")
-	local assignee_name = "**Assignee:** " .. (assignee and presentation.person_name(assignee) or "Unassigned")
-	local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
-	local lines = {
-		status
-			.. string.rep(" ", column - vim.fn.strdisplaywidth(status))
-			.. "**Priority:** "
-			.. (details.priority or "None"),
-		assignee_name
-			.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
-			.. "**Reporter:** "
-			.. presentation.person_name(details.reporter),
-	}
-	local labels = vim.tbl_map(function(label)
-		return label.name
-	end, details.labels)
-	if #labels > 0 then
-		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-	end
-	for _, field in ipairs(details.custom_fields) do
-		table.insert(lines, string.format("**%s:** %s", field.name, field.formatted))
-	end
-	table.insert(lines, "")
-	table.insert(lines, "## Description")
-	table.insert(lines, "")
-	local description = vim.trim(details.description)
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return {
-		title = string.format("%s - %s", issue.key, issue.title),
-		lines = lines,
-	}
-end
-
 ---@param project JiraIssueProject|nil
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
@@ -369,17 +331,17 @@ local function search_issues(project, ctx, done)
 		title = project and "Search " .. project.key .. " Issues" or "Search Issues",
 		debounce_ms = 200,
 		format_item = function(item)
-			return tostring(item.label or "")
+			local title = item.value.title .. " - "
+			return title .. item.value.key, { { title }, { item.value.key, "AtlasTextMuted" } }
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local issue = item.value
 			return issues_api.fetch_issue({ key = issue.key }, nil, function(details, err)
 				if err or details == nil then
 					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				---@cast details JiraIssueDetails
-				preview_done(format_preview(issue, details))
+				preview_done(picker_format.issue(issue, details, width, { provider = "jira" }))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -391,11 +353,7 @@ local function search_issues(project, ctx, done)
 
 				local picker_items = {}
 				for _, issue in ipairs(items) do
-					table.insert(picker_items, {
-						id = tostring(issue.id or issue.key),
-						label = string.format("%s - %s", issue.key, issue.title),
-						value = issue,
-					})
+					table.insert(picker_items, { id = tostring(issue.id or issue.key), value = issue })
 				end
 
 				fetch_done(picker_items, nil)
@@ -403,7 +361,7 @@ local function search_issues(project, ctx, done)
 		end,
 		on_select = function(item)
 			local issue = item.value
-			require("atlas.issues.ui.detail").open_ref({ key = issue.key }, { provider = ctx.provider })
+			require("atlas.issues.ui.detail").open({ key = issue.key }, { provider = ctx.provider })
 			done(nil, nil)
 		end,
 		on_cancel = function()

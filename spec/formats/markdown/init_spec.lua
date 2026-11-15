@@ -147,7 +147,7 @@ describe("Markdown parsing", function()
 	end)
 
 	it("keeps shortcodes after words, digits or colons and in code literal", function()
-		for _, source in ipairs({ "a:fire:", "10:30:00", "std::vector::size", ":---:", "https://example.com" }) do
+		for _, source in ipairs({ "a:fire:", "10:30:00", "std::vector::size", ":---:" }) do
 			assert.are.same({ lines = { source }, highlights = {}, targets = {} }, markdown.parse(source))
 		end
 		assert.same({ ":fire:" }, markdown.parse("`:fire:`").lines)
@@ -465,6 +465,25 @@ describe("Markdown parsing", function()
 			target("link", "stripe", 10, #"|  ", #"|  zz"),
 			target("link", "right", 10, #"|  zz  |       ", #"|  zz  |       B"),
 		}, result.targets)
+	end)
+
+	it("links bare URLs and autolinks without trailing punctuation", function()
+		local cases = {
+			{ "See https://example.com/docs.", "https://example.com/docs", #"See " },
+			{ "(https://example.com/a)", "https://example.com/a", #"(" },
+			{ "<https://example.org>", "https://example.org", 0 },
+			{ "x https://e.com/x_y_z*", "https://e.com/x_y_z", #"x " },
+			{ "http://a.b/c?q=1&x=2#frag end", "http://a.b/c?q=1&x=2#frag", 0 },
+		}
+		for _, case in ipairs(cases) do
+			assert.are.same(
+				{ target("link", case[2], 0, case[3], case[3] + #case[2]) },
+				markdown.parse(case[1]).targets
+			)
+		end
+
+		assert.are.same({}, markdown.parse("xhttps://example.com").targets)
+		assert.are.same({}, markdown.parse("`https://example.com`").targets)
 	end)
 
 	it("does not return targets for links inside literal code or comments", function()

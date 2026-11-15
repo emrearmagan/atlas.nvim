@@ -3,6 +3,22 @@ local M = {}
 local url = require("atlas.providers.url")
 local client = require("atlas.providers.github.client")
 
+local ROUTES = {
+	{ path = "/pull/(%d+)/checks", entity = "pr", page = "builds" },
+	{ path = "/pull/(%d+)", entity = "pr" },
+	{ path = "/issues/(%d+)", entity = "issue" },
+	{ path = "/actions/runs/(%d+)", entity = "pipeline" },
+	{ path = "/discussions/(%d+)", page = "discussions" },
+	{ path = "/releases/tag/(.+)", page = "releases" },
+	{ path = "/issues", page = "issues" },
+	{ path = "/pulls", page = "pulls" },
+	{ path = "/discussions", page = "discussions" },
+	{ path = "/actions", page = "builds", query = "branch:([^&+%s]+)" },
+	{ path = "/releases", page = "releases" },
+	{ path = "/tags", page = "tags" },
+	{ path = "/branches", page = "branches" },
+}
+
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -15,6 +31,7 @@ function M.resolve(value, parsed)
 	if parsed.remote then
 		path = path:gsub("%.git$", "")
 	end
+
 	local owner, repo, rest = path:match("^/([^/]+)/([^/]+)(.*)$")
 	if parsed.remote and (owner == nil or rest ~= "") then
 		return nil, "Unsupported GitHub remote. Expected owner/repository"
@@ -33,43 +50,36 @@ function M.resolve(value, parsed)
 		url = web_url,
 		repository_url = web_url .. ".git",
 		host = parsed.host,
-		owner = owner,
-		repo = repo,
 		repo_full_name = full_name,
 	}
+	if rest == "" then
+		return target
+	end
 
-	local entity, number, tail = "pr", rest:match("^/pull/(%d+)(.*)$")
-	if number == nil then
-		entity, number, tail = "issue", rest:match("^/issues/(%d+)(.*)$")
-	end
-	if number == nil then
-		entity, number, tail = "pipeline", rest:match("^/actions/runs/(%d+)(.*)$")
-	end
-	if number then
-		if not url.valid_tail(tail) then
-			return nil, "Unsupported GitHub URL"
+	for _, route in ipairs(ROUTES) do
+		local captures = { rest:match("^" .. route.path .. "(.*)$") }
+		if #captures > 0 then
+			local tail = table.remove(captures)
+			if not url.valid_tail(tail) then
+				return nil, "Unsupported GitHub URL"
+			end
+
+			local id = captures[1]
+			if route.query and parsed.query then
+				id = parsed.query:match(route.query)
+			end
+
+			return vim.tbl_extend("force", target, {
+				domain = route.entity == "issue" and "issues" or "pulls",
+				entity = route.entity or "repo",
+				url = value,
+				id = route.entity and tonumber(id) or id,
+				page = route.page,
+			})
 		end
-		target.domain = entity == "issue" and "issues" or "pulls"
-		target.entity = entity
-		target.url = value
-		target.number = assert(tonumber(number))
-		target.id = entity ~= "issue" and target.number or nil
-		return target
-	end
-
-	target.page = ({
-		issues = "issues",
-		pulls = "pulls",
-		discussions = "discussions",
-		actions = "builds",
-		releases = "releases",
-		tags = "tags",
-		branches = "branches",
-	})[rest:match("^/([^/]+)") or ""]
-	if rest == "" or target.page then
-		return target
 	end
 
 	return nil, "Unsupported GitHub URL. Expected a repository, issue, pull request, or pipeline URL"
 end
+
 return M

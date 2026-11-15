@@ -1,7 +1,7 @@
 local M = {}
 
 local picker = require("atlas.ui.picker")
-local utils = require("atlas.issues.actions.utils")
+local picker_format = require("atlas.ui.picker.format")
 local notify = require("atlas.core.notify")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local projects_api = require("atlas.issues.providers.azure.api.projects")
@@ -44,17 +44,18 @@ local function search_issues(project, context, done)
 		title = "Search " .. project .. " Work Items",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title = item.value.title .. " - "
+			return title .. item.id, { { title }, { item.id, "AtlasTextMuted" } }
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local issue = item.value
 			return issues_api.fetch_issue(issue, nil, function(details, err)
 				if err then
 					preview_done({ title = issue.key, lines = { err } })
 					return
 				end
-				---@cast details AzureIssueDetails
-				preview_done(utils.issue_preview(issue, details))
+
+				preview_done(picker_format.issue(issue, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -79,11 +80,7 @@ local function search_issues(project, context, done)
 				end
 				local items = {}
 				for _, issue in ipairs(page.items) do
-					table.insert(items, {
-						id = issue.key,
-						label = string.format("%s - %s", issue.key, issue.title),
-						value = issue,
-					})
+					table.insert(items, { id = issue.key, value = issue })
 				end
 				fetch_done(items, nil)
 			end)

@@ -1,6 +1,4 @@
 local notify = require("atlas.core.notify")
-local picker = require("atlas.ui.picker")
-local providers = require("atlas.providers")
 local ui_utils = require("atlas.ui.utils")
 
 local M = {}
@@ -54,7 +52,7 @@ end
 ---@return string[]
 local function complete_providers(domain, arglead)
 	local ids = {}
-	for _, provider in ipairs(providers.configured(domain)) do
+	for _, provider in ipairs(require("atlas.providers").configured(domain)) do
 		table.insert(ids, provider.id)
 	end
 	return complete_options(arglead, ids)
@@ -65,7 +63,7 @@ end
 local function provider_choices(domain)
 	local label = domain == "pulls" and "pull requests" or "issues"
 	local choices = { { args = { "." }, description = "Open " .. label .. " with the current repository's provider" } }
-	for _, provider in ipairs(providers.configured(domain)) do
+	for _, provider in ipairs(require("atlas.providers").configured(domain)) do
 		local description = string.format("Open %s %s", provider.name, label)
 		table.insert(choices, { args = { provider.id }, description = description })
 	end
@@ -110,6 +108,7 @@ M.register({
 	name = "search",
 	description = "Search across providers",
 	choices = function()
+		local providers = require("atlas.providers")
 		local choices = { { args = { "." }, description = "Search the current repository's provider" } }
 		for _, provider_id in ipairs(require("atlas.commands.search").complete("")) do
 			table.insert(choices, { args = { provider_id }, description = "Search " .. providers[provider_id].name })
@@ -129,10 +128,10 @@ M.register({
 
 M.register({
 	name = "open",
-	description = "Open a pull request or issue",
+	description = "Open a provider URL, key or number",
 	choices = function()
 		return {
-			{ args = {}, description = "Open a pull request or issue" },
+			{ args = {}, description = "Open a provider URL, key or number" },
 			{ args = { "." }, description = "Open the current branch's pull request" },
 		}
 	end,
@@ -323,7 +322,7 @@ local function pick_command()
 		label_width = math.max(label_width, vim.fn.strdisplaywidth(choice.label))
 	end
 
-	picker.select({
+	require("atlas.ui.picker").select({
 		title = "Atlas:",
 		items = choices,
 		format_item = function(choice)

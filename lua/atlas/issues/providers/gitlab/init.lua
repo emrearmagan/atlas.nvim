@@ -9,7 +9,6 @@ local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local git = require("atlas.core.git")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
-local links_api = require("atlas.providers.gitlab.links")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local request_scope = require("atlas.core.requests")
@@ -71,8 +70,8 @@ end
 ---@param target AtlasTarget
 ---@return IssueRef|nil
 local function issue_ref(target)
-	if target.project_path and target.number then
-		return { key = string.format("%s#%d", target.project_path, target.number) }
+	if target.repo_full_name and target.id then
+		return { key = string.format("%s#%s", target.repo_full_name, target.id) }
 	end
 end
 
@@ -85,7 +84,6 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
-			fetch_links = links_api.fetch_issue,
 		},
 		comments = {
 			-- fetch_activity = nil,

@@ -13,6 +13,7 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local cli = require("atlas.providers.github.client")
 local picker = require("atlas.ui.picker")
+local picker_format = require("atlas.ui.picker.format")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local users_api = require("atlas.providers.github.users")
 local merge_buffer = require("atlas.pulls.ui.merge")
@@ -51,19 +52,6 @@ local function repository_available(ctx)
 	end
 	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function review_available(ctx)
-	local ok, err = repository_available(ctx)
-	if not ok then
-		return ok, err
-	end
-	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
-		return false, "PR is not open"
 	end
 	return true, nil
 end
@@ -346,33 +334,6 @@ local function select_repository(opts)
 	})
 end
 
----@param pr PullRequest
----@param details GitHubPullRequestDetails
----@return string[]
-local function search_preview(pr, details)
-	local assignees = vim.tbl_map(function(user)
-		return "@" .. user.username
-	end, details.assignees)
-	local labels = vim.tbl_map(function(label)
-		return label.name
-	end, details.labels)
-	local lines = {
-		"**Status:** " .. pr.state,
-		"**Author:** @" .. pr.author.username,
-		string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
-	}
-	if #assignees > 0 then
-		table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
-	end
-	if #labels > 0 then
-		table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
-	end
-	vim.list_extend(lines, { "", "## Description", "" })
-	local description = vim.trim(details.description)
-	vim.list_extend(lines, vim.split(description ~= "" and description or "No description", "\n", { plain = true }))
-	return lines
-end
-
 ---@param repo string
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
@@ -381,18 +342,17 @@ local function search_results(repo, ctx, done)
 		title = repo ~= "" and "Search " .. repo .. " Pull Requests" or "Search GitHub Pull Requests",
 		fetch_on_open = false,
 		format_item = function(item)
-			return item.label
+			local title = item.value.title .. " - "
+			return title .. item.id, { { title }, { item.id, "AtlasTextMuted" } }
 		end,
-		preview_item = function(item, preview_done)
+		preview_item = function(item, preview_done, width)
 			local pr = item.value
 			return pullrequests.fetch_pullrequest(pr, nil, function(details, err)
 				if err or details == nil then
-					preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
+					preview_done({ title = item.id, lines = { err or "Failed to load pull request" } })
 					return
 				end
-				---@cast details GitHubPullRequestDetails
-
-				preview_done({ title = item.label, lines = search_preview(pr, details) })
+				preview_done(picker_format.pullrequest(pr, details, width))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -412,8 +372,7 @@ local function search_results(repo, ctx, done)
 				end
 				local items = {}
 				for _, pr in ipairs(page.items) do
-					local id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id))
-					table.insert(items, { id = id, label = id .. " - " .. pr.title, value = pr })
+					table.insert(items, { id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id)), value = pr })
 				end
 				fetch_done(items, nil)
 			end)
@@ -576,21 +535,8 @@ local function toggle_auto_merge(ctx, done)
 	end)
 end
 
-register({
-	id = actions.approve.id,
-	label = actions.approve.label,
-	icon = actions.approve.icon,
-	is_available = review_available,
-	run = actions.approve.run,
-})
-
-register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	icon = actions.request_changes.icon,
-	is_available = review_available,
-	run = actions.request_changes.run,
-})
+register(actions.approve)
+register(actions.request_changes)
 
 register({
 	id = "merge",

@@ -76,7 +76,7 @@ function M.render(opts)
 
 	local actions = {}
 
-	if provider and provider.capabilities.notifications then
+	if provider and provider.shared.notifications then
 		local count = notifications.unread_count(provider)
 		local bell_icon, bell_hl
 		if count > 0 then

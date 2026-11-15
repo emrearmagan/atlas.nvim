@@ -9,6 +9,7 @@ describe("commands.open", function()
 	local issue_result
 	local issue_error
 	local branch_pulls
+	local configured
 	local calls
 	local original_loaded
 
@@ -20,6 +21,8 @@ describe("commands.open", function()
 		"atlas.providers",
 		"atlas.pulls.ui.detail",
 		"atlas.issues.ui.detail",
+		"atlas.commands.pipelines",
+		"atlas.commands.browse",
 	}
 
 	before_each(function()
@@ -41,6 +44,7 @@ describe("commands.open", function()
 		issue_result = nil
 		issue_error = "Issue not found"
 		branch_pulls = {}
+		configured = true
 		calls = {
 			resolve = {},
 			fetch = {},
@@ -71,7 +75,7 @@ describe("commands.open", function()
 		}
 		local issue_provider = {
 			issue_ref = function(target)
-				return { key = "ISSUE-" .. tostring(target.number) }
+				return { key = "ISSUE-" .. tostring(target.id) }
 			end,
 			capabilities = {
 				core = {
@@ -106,10 +110,12 @@ describe("commands.open", function()
 		}
 		package.loaded["atlas.config"] = {
 			provider_options = function()
-				return {}
+				return configured and {} or nil
 			end,
 		}
 		package.loaded["atlas.providers"] = {
+			github = { name = "GitHub" },
+			is_reference = providers.is_reference,
 			resolve = function(value, opts)
 				table.insert(calls.resolve, { value = value, opts = opts })
 				if opts then
@@ -135,6 +141,16 @@ describe("commands.open", function()
 				table.insert(calls.issue_detail, { entity = entity, opts = opts })
 			end,
 		}
+		package.loaded["atlas.commands.pipelines"] = {
+			open = function(value)
+				calls.pipelines = value
+			end,
+		}
+		package.loaded["atlas.commands.browse"] = {
+			open = function(value, page)
+				calls.browse = { value, page }
+			end,
+		}
 		package.loaded["atlas.commands.open"] = nil
 		command = require("atlas.commands.open")
 	end)
@@ -156,12 +172,50 @@ describe("commands.open", function()
 			repo_full_name = "owner/repo",
 		}
 		resolved[value] = target
+		local back = function() end
 
-		command.open(value)
+		command.open(value, { back = back })
 
 		assert.same({ { value = value } }, calls.resolve)
 		assert.are.equal(0, #calls.fetch)
 		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
+		assert.are.equal(back, calls.pull_detail[1].opts.back)
+	end)
+
+	it("hands pipeline and repository links to their commands", function()
+		local pipeline = "https://github.com/owner/repo/actions/runs/9"
+		resolved[pipeline] = { provider = "github", domain = "pulls", entity = "pipeline", url = pipeline }
+		resolved["https://github.com/owner/repo/releases"] = {
+			provider = "github",
+			domain = "pulls",
+			entity = "repo",
+			url = "https://github.com/owner/repo",
+			page = "releases",
+		}
+
+		command.open(pipeline)
+		command.open("https://github.com/owner/repo/releases")
+
+		assert.are.equal(pipeline, calls.pipelines)
+		assert.same({ "https://github.com/owner/repo", "releases" }, calls.browse)
+	end)
+
+	it("hands pull request checks to pipelines", function()
+		local checks = "https://github.com/owner/repo/pull/42/checks"
+		resolved[checks] = {
+			provider = "github",
+			domain = "pulls",
+			entity = "pr",
+			url = checks,
+			id = 42,
+			repo_full_name = "owner/repo",
+			page = "builds",
+		}
+
+		command.open(checks)
+
+		assert.are.equal(checks, calls.pipelines)
+		assert.are.equal(0, #calls.pull_detail)
 	end)
 
 	it("opens the pull request of the current branch for dot", function()
@@ -181,7 +235,7 @@ describe("commands.open", function()
 		command.open(".")
 
 		assert.are.equal(0, #calls.pull_detail)
-		assert.same({ "No open pull request for branch feature/x" }, calls.infos)
+		assert.same({ "No open pull request for branch feature/x" }, calls.errors)
 	end)
 
 	it("resolves a number against the current repository with PR priority", function()
@@ -192,7 +246,6 @@ describe("commands.open", function()
 
 		assert.same({
 			{ value = "#42", opts = { repository = repository, domain = "pulls" } },
-			{ value = "#42", opts = { repository = repository, domain = "issues" } },
 		}, calls.resolve)
 		assert.are.equal(1, #calls.fetch)
 		assert.same({ "pulls" }, { calls.fetch[1].domain })
@@ -231,5 +284,24 @@ describe("commands.open", function()
 		assert.same({ { value = "owner/repo#42" } }, calls.resolve)
 		assert.are.equal(0, calls.local_repository)
 		assert.are.equal("Unsupported Atlas target", calls.errors[1])
+	end)
+
+	it("reports a provider that is not configured", function()
+		local value = "https://github.com/owner/repo/pull/42"
+		resolved[value] = {
+			provider = "github",
+			domain = "pulls",
+			entity = "pr",
+			id = 42,
+			repo_full_name = "owner/repo",
+		}
+		configured = false
+
+		command.open(value)
+		command.open("#42")
+
+		assert.same({ "GitHub is not configured", "GitHub is not configured" }, calls.errors)
+		assert.are.equal(0, #calls.fetch)
+		assert.are.equal(0, #calls.pull_detail)
 	end)
 end)

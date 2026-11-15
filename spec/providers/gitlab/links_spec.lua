@@ -8,7 +8,6 @@ local function issue(iid, path)
 		title = "Issue " .. iid,
 		webUrl = "https://gitlab.example.com/gitlab/" .. path .. "/-/issues/" .. iid,
 		reference = path .. "#" .. iid,
-		project = { fullPath = path },
 	}
 end
 
@@ -66,7 +65,7 @@ describe("GitLab linked items", function()
 			{ linkType = "MENTIONED", workItem = issue(3) },
 		}
 		local result
-		api.fetch_pullrequest({ repo_full_name = "group/repo", id = 7 }, nil, function(links, err)
+		api.fetch("pr", { repo_full_name = "group/repo", id = 7 }, nil, function(links, err)
 			assert.is_nil(err)
 			result = links
 		end)
@@ -74,7 +73,6 @@ describe("GitLab linked items", function()
 		assert.equal("closes", result[1].relationship)
 		assert.equal("other/repo#2", result[1].key)
 		assert.equal("https://gitlab.example.com/gitlab/other/repo/-/issues/2", result[1].url)
-		assert.equal("issue", result[1].kind)
 		assert.equal("relates to", result[2].relationship)
 	end)
 
@@ -92,27 +90,24 @@ describe("GitLab linked items", function()
 			{ linkedItems = { nodes = { { linkType = "is_blocked_by", workItem = issue(4) } } } },
 		}
 		local result
-		api.fetch_issue({ key = "group/repo#1" }, nil, function(links)
+		api.fetch("issue", { key = "group/repo#1" }, nil, function(links)
 			result = links
 		end)
 		assert.equal(2, #result)
-		assert.equal("pr", result[1].kind)
 		assert.equal("other/repo!5", result[1].key)
 		assert.equal("closed by", result[1].relationship)
 		assert.equal("blocked by", result[2].relationship)
 	end)
 
-	it("maps project sub-issues and keeps group epic parents as external links", function()
+	it("maps sub-issues and group epic parents", function()
 		local parent = { reference = "group&1", webUrl = "https://gitlab.example.com/groups/group/-/epics/1" }
 		local first = {
 			reference = "group/repo#2",
 			webUrl = "https://gitlab.example.com/gitlab/group/repo/-/work_items/2",
-			project = { fullPath = "group/repo" },
 		}
 		local second = {
 			reference = "group/repo#3",
 			webUrl = "https://gitlab.example.com/gitlab/group/repo/-/work_items/3",
-			project = { fullPath = "group/repo" },
 		}
 		graphql_widgets = {
 			{
@@ -121,14 +116,13 @@ describe("GitLab linked items", function()
 			},
 		}
 		local result
-		api.fetch_issue({ key = "group/repo#1" }, nil, function(links, err)
+		api.fetch("issue", { key = "group/repo#1" }, nil, function(links, err)
 			assert.is_nil(err)
 			result = links
 		end)
 		assert.equal(3, #result)
-		assert.equal("external", result[1].kind)
 		assert.equal("parent", result[1].relationship)
-		assert.equal("issue", result[2].kind)
+		assert.equal("group&1", result[1].key)
 		assert.equal("sub-issue", result[3].relationship)
 	end)
 
@@ -147,12 +141,11 @@ describe("GitLab linked items", function()
 				parent = {
 					reference = "group/repo#4",
 					webUrl = blocker.webUrl,
-					project = { fullPath = "group/repo" },
 				},
 			},
 		}
 		local result
-		api.fetch_issue({ key = "group/repo#1" }, nil, function(links, err)
+		api.fetch("issue", { key = "group/repo#1" }, nil, function(links, err)
 			assert.is_nil(err)
 			result = links
 		end)
@@ -169,7 +162,7 @@ describe("GitLab linked items", function()
 			{ linkType = "MENTIONED", externalIssue = { reference = "P-1", title = "Single-letter project" } },
 		}
 		local result
-		api.fetch_pullrequest({ repo_full_name = "group/repo", id = 7 }, nil, function(links)
+		api.fetch("pr", { repo_full_name = "group/repo", id = 7 }, nil, function(links)
 			result = links
 		end)
 		assert.equal("PROJ-42", result[1].key)

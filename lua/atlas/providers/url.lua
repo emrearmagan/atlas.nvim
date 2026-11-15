@@ -5,17 +5,29 @@ local config = require("atlas.config")
 ---@class AtlasParsedUrl
 ---@field host string
 ---@field path string
+---@field query string|nil
 ---@field remote boolean
+
+---@param value string
+---@return string
+local function decode(value)
+	return (value:gsub("%%(%x%x)", function(hex)
+		return string.char(tonumber(hex, 16))
+	end))
+end
 
 ---@param host string
 ---@param path string
 ---@param remote boolean
+---@param query string|nil
 ---@return AtlasParsedUrl
-local function normalized(host, path, remote)
-	path = path:gsub("%%(%x%x)", function(hex)
-		return string.char(tonumber(hex, 16))
-	end):gsub("/+$", "")
-	return { host = host:lower(), path = path, remote = remote }
+local function normalized(host, path, remote, query)
+	return {
+		host = host:lower(),
+		path = decode(path):gsub("/+$", ""),
+		query = query and decode(query),
+		remote = remote,
+	}
 end
 
 ---@param value string
@@ -39,7 +51,8 @@ function M.parse(value)
 	if scheme == "ssh" then
 		host = host:gsub(":%d+$", "")
 	end
-	return normalized(host, path, scheme == "ssh" or scheme == "git" or path:match("%.git/*$") ~= nil)
+	local remote = scheme == "ssh" or scheme == "git" or path:match("%.git/*$") ~= nil
+	return normalized(host, path, remote, value:match("%?([^#]*)"))
 end
 
 ---@param provider AtlasProviderId
