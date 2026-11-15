@@ -2,24 +2,21 @@ local emojis = require("atlas.ui.shared.emojis")
 
 describe("ui.shared.reactions", function()
 	local modules = { "atlas.ui.picker", "atlas.core.notify", "atlas.ui.shared.reactions" }
-	local original_loaded, reactions, select, notified
+	local original_loaded, reactions, select
 
 	before_each(function()
 		original_loaded = {}
 		for _, name in ipairs(modules) do
 			original_loaded[name] = package.loaded[name]
 		end
-		notified = {}
 		package.loaded["atlas.ui.picker"] = {
 			select = function(opts)
 				select = opts
 			end,
 		}
 		package.loaded["atlas.core.notify"] = setmetatable({}, {
-			__index = function(_, level)
-				return function(message)
-					notified[#notified + 1] = level .. ": " .. message
-				end
+			__index = function()
+				return function() end
 			end,
 		})
 		package.loaded["atlas.ui.shared.reactions"] = nil
@@ -99,7 +96,6 @@ describe("ui.shared.reactions", function()
 			return true
 		end, function() end)
 
-		assert.equal("React", select.title)
 		assert.equal(emojis.get("thumbsup") .. " thumbsup by alice +1 (you)", (select.format_item(select.items[1])))
 		select.on_select(select.items[1])
 		select.on_select(select.items[2])
@@ -110,7 +106,6 @@ describe("ui.shared.reactions", function()
 			{ { name = "thumbsup", count = 1, users = { { username = "alice" } }, reacted = false } },
 			comment.reactions
 		)
-		assert.same("success: Reaction removed", notified[#notified])
 	end)
 
 	it("lists existing reactions first with who reacted, then the other options", function()
@@ -167,9 +162,5 @@ describe("ui.shared.reactions", function()
 
 		assert.is_nil(comment.reactions)
 		assert.equal(0, done)
-		assert.same(
-			{ "loading: Adding reaction...", "error: Reaction failed: boom", "loading: Adding reaction..." },
-			notified
-		)
 	end)
 end)

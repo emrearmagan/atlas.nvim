@@ -8,7 +8,7 @@ local modules = {
 
 describe("Bitbucket completion", function()
 	local saved, source, calls, pull_request
-	local pull_source, reference_calls, references, failure, request_handle
+	local pull_source, reference_calls, references, failure
 	local author = { account_id = "author", display_name = "Author", nickname = "author" }
 	local commenter =
 		{ account_id = "commenter", uuid = "{commenter}", display_name = "Commenter", nickname = "commenter" }
@@ -24,7 +24,6 @@ describe("Bitbucket completion", function()
 		end
 		reference_calls, failure = {}, nil
 		references = { { id = 42, title = "Fix login", state = "OPEN", draft = false } }
-		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
 			get = function(name)
 				return name
@@ -59,7 +58,7 @@ describe("Bitbucket completion", function()
 				if endpoint:find("/pullrequests?", 1, true) then
 					reference_calls[#reference_calls + 1] = endpoint
 					done({ values = references }, failure)
-					return request_handle
+					return
 				end
 				assert.truthy(endpoint:match("^/repositories/acme/[^/]+/pullrequests/%d+%?"))
 				calls.pr = calls.pr + 1
@@ -124,12 +123,11 @@ describe("Bitbucket completion", function()
 	end)
 
 	it("fetches recent PR references using repository and PR contexts", function()
-		assert.same({ "#" }, pull_source.triggers)
 		for _, reference_context in ipairs({
 			{ provider = "bitbucket", repository = "acme/create" },
 			{ provider = "bitbucket", pr = { id = 7, repo_full_name = "acme/pulls" } },
 		}) do
-			local handle = pull_source.complete(reference_context, "login", function(items, err)
+			pull_source.complete(reference_context, "login", function(items, err)
 				assert.is_nil(err)
 				assert.same({
 					{
@@ -140,7 +138,6 @@ describe("Bitbucket completion", function()
 					},
 				}, items)
 			end)
-			assert.equal(request_handle, handle)
 		end
 		for index, repo in ipairs({ "create", "pulls" }) do
 			local endpoint = reference_calls[index]

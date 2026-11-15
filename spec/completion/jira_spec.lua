@@ -10,7 +10,7 @@ local modules = {
 
 describe("Jira completion", function()
 	local saved, source, calls, response, failure, server
-	local issue_source, request_handle
+	local issue_source
 	local alice = { accountId = "account:alice", name = "alice", displayName = "Alice Smith", active = true }
 
 	local function complete(context, query)
@@ -28,7 +28,6 @@ describe("Jira completion", function()
 			package.loaded[name] = nil
 		end
 		response, failure, server = { alice }, nil, false
-		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
 			get = function(name)
 				return name
@@ -60,7 +59,6 @@ describe("Jira completion", function()
 			request = function(method, endpoint, data, done)
 				calls[#calls + 1] = { method = method, endpoint = endpoint, data = data }
 				done(response, failure)
-				return request_handle
 			end,
 		}
 		source = require("atlas.providers.jira.completion").users
@@ -137,7 +135,6 @@ describe("Jira completion", function()
 	end)
 
 	it("fetches recent project issues with the Cloud and Server search APIs", function()
-		assert.same({ "#" }, issue_source.triggers)
 		for index, case in ipairs({
 			{
 				server = false,
@@ -165,14 +162,13 @@ describe("Jira completion", function()
 					},
 				},
 			}
-			local handle = issue_source.complete(case.context, "Linear", function(items, err)
+			issue_source.complete(case.context, "Linear", function(items, err)
 				assert.is_nil(err)
 				assert.equal(
 					server and key or "[" .. key .. "](https://jira.example/jira/browse/" .. key .. ")",
 					items[1].insert_text
 				)
 			end)
-			assert.equal(request_handle, handle)
 			assert.same({
 				method = "POST",
 				endpoint = case.endpoint,

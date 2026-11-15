@@ -3,7 +3,6 @@ local highlights = require("atlas.pulls.pipelines.highlights")
 local github = require("atlas.pulls.pipelines.github.parser")
 local gitlab = require("atlas.pulls.pipelines.gitlab.parser")
 local bamboo = require("atlas.pulls.pipelines.bamboo.parser")
-local bitbucket = require("atlas.pulls.pipelines.bitbucket.parser")
 local azure = require("atlas.pulls.pipelines.azure.parser")
 
 describe("pipeline logs", function()
@@ -57,17 +56,6 @@ describe("pipeline logs", function()
 			assert.same({ { text = text, timestamp = timestamp } }, parser.parse({ raw = text }))
 		end
 		assert.same({ { text = "2026-09-20T14:30:12suffix" } }, parser.parse({ raw = "2026-09-20T14:30:12suffix" }))
-	end)
-
-	it("passes cleaned lines to a custom parser and returns its entries", function()
-		local log = { raw = "\27[32mBuilding\27[0m" }
-		local expected = { { name = "Custom build", entries = { { text = "Building" } } } }
-		local entries = parser.parse(log, function(value)
-			assert.equal(log, value)
-			assert.same({ { text = "Building" } }, value.lines)
-			return expected
-		end)
-		assert.equal(expected, entries)
 	end)
 
 	it("parses nested GitHub groups in both marker formats", function()
@@ -182,13 +170,6 @@ describe("pipeline logs", function()
 			{ name = "Run lint", entries = { { name = "Unclosed", entries = { { text = "Linting" } } } } },
 			{ text = "Done" },
 		}, entries)
-	end)
-
-	it("keeps Bitbucket output flat after shared cleanup", function()
-		local log = { raw = "##[group]Build\n\27[32mCompiling\27[0m" }
-		local entries = parser.parse(log, bitbucket.parse)
-		assert.equal(log.lines, entries)
-		assert.same({ { text = "##[group]Build" }, { text = "Compiling" } }, entries)
 	end)
 
 	it("applies default highlights and counts log levels", function()

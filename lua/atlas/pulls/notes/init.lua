@@ -55,7 +55,7 @@ end
 ---@param note AtlasNote
 ---@param hunks DiffHunk[] Changes from the note's commit to the current file.
 ---@return AtlasNotePosition
-function M.position(note, hunks)
+local function position(note, hunks)
 	local start_line, end_line = diff.map_range(hunks, "LEFT", note.start_line, note.end_line)
 	if not start_line or not end_line then
 		local line = math.max(1, (diff.map_line(hunks, "LEFT", note.start_line)))
@@ -84,7 +84,7 @@ function M.locate(root, head, items, on_done)
 		local positions = {}
 		for _, note in ipairs(items) do
 			local changes = note.commit == head and {} or hunks[note.commit]
-			positions[note.id] = changes and M.position(note, changes[note.file_path] or {})
+			positions[note.id] = changes and position(note, changes[note.file_path] or {})
 				or { start_line = note.start_line, end_line = note.end_line, outdated = true }
 		end
 		on_done(positions)

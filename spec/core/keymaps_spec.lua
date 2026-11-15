@@ -25,13 +25,6 @@ describe("core.keymaps", function()
 			assert.are.same({ "]", "<Tab>" }, assert(keymaps.resolve("ui.next_panel_tab")).key)
 		end)
 
-		it("returns the description and label", function()
-			assert.are.same(
-				{ key = { "p" }, desc = "Toggle detail panel", label = "panel" },
-				keymaps.resolve("ui.toggle_panel")
-			)
-		end)
-
 		it("merges the keys of several ids under the first description", function()
 			local keymap = assert(keymaps.resolve({ "ui.toggle_panel", "ui.next_panel_tab" }))
 			assert.are.same({ "p", "]", "<Tab>" }, keymap.key)

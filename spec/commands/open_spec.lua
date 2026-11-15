@@ -46,13 +46,11 @@ describe("commands.open", function()
 		branch_pulls = {}
 		configured = true
 		calls = {
-			resolve = {},
 			fetch = {},
 			pull_detail = {},
 			issue_detail = {},
 			errors = {},
 			infos = {},
-			local_repository = 0,
 		}
 
 		local pull_provider = {
@@ -93,7 +91,6 @@ describe("commands.open", function()
 				return "/repo"
 			end,
 			local_repository = function(_, on_done)
-				calls.local_repository = calls.local_repository + 1
 				on_done(repository, nil)
 			end,
 			current_branch = function(_, on_done)
@@ -117,7 +114,6 @@ describe("commands.open", function()
 			github = { name = "GitHub" },
 			is_reference = providers.is_reference,
 			resolve = function(value, opts)
-				table.insert(calls.resolve, { value = value, opts = opts })
 				if opts then
 					return providers.resolve(value, opts)
 				end
@@ -161,31 +157,15 @@ describe("commands.open", function()
 		end
 	end)
 
-	it("routes a direct target to detail as a pull request ref", function()
-		local value = "https://github.com/owner/repo/pull/42"
-		local target = {
-			provider = "github",
-			domain = "pulls",
-			entity = "pr",
-			id = 42,
-			number = 42,
-			repo_full_name = "owner/repo",
-		}
-		resolved[value] = target
-		local back = function() end
-
-		command.open(value, { back = back })
-
-		assert.same({ { value = value } }, calls.resolve)
-		assert.are.equal(0, #calls.fetch)
-		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
-		assert.are.equal(back, calls.pull_detail[1].opts.back)
-	end)
-
-	it("hands pipeline and repository links to their commands", function()
-		local pipeline = "https://github.com/owner/repo/actions/runs/9"
-		resolved[pipeline] = { provider = "github", domain = "pulls", entity = "pipeline", url = pipeline }
-		resolved["https://github.com/owner/repo/releases"] = {
+	it("opens each link in the view that shows it", function()
+		local pr = "https://github.com/owner/repo/pull/42"
+		local checks = pr .. "/checks"
+		local run = "https://github.com/owner/repo/actions/runs/9"
+		local releases = "https://github.com/owner/repo/releases"
+		resolved[pr] = { provider = "github", domain = "pulls", entity = "pr", id = 42, repo_full_name = "owner/repo" }
+		resolved[checks] = vim.tbl_extend("force", resolved[pr], { url = checks, page = "builds" })
+		resolved[run] = { provider = "github", domain = "pulls", entity = "pipeline", url = run }
+		resolved[releases] = {
 			provider = "github",
 			domain = "pulls",
 			entity = "repo",
@@ -193,29 +173,15 @@ describe("commands.open", function()
 			page = "releases",
 		}
 
-		command.open(pipeline)
-		command.open("https://github.com/owner/repo/releases")
-
-		assert.are.equal(pipeline, calls.pipelines)
-		assert.same({ "https://github.com/owner/repo", "releases" }, calls.browse)
-	end)
-
-	it("hands pull request checks to pipelines", function()
-		local checks = "https://github.com/owner/repo/pull/42/checks"
-		resolved[checks] = {
-			provider = "github",
-			domain = "pulls",
-			entity = "pr",
-			url = checks,
-			id = 42,
-			repo_full_name = "owner/repo",
-			page = "builds",
-		}
-
+		command.open(pr)
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
 		command.open(checks)
-
 		assert.are.equal(checks, calls.pipelines)
-		assert.are.equal(0, #calls.pull_detail)
+		command.open(run)
+		assert.are.equal(run, calls.pipelines)
+		command.open(releases)
+		assert.same({ "https://github.com/owner/repo", "releases" }, calls.browse)
+		assert.are.equal(1, #calls.pull_detail)
 	end)
 
 	it("opens the pull request of the current branch for dot", function()
@@ -238,18 +204,12 @@ describe("commands.open", function()
 		assert.same({ "No open pull request for branch feature/x" }, calls.errors)
 	end)
 
-	it("resolves a number against the current repository with PR priority", function()
+	it("opens the pull request when a number matches one", function()
 		pull_result = { id = 42, title = "PR" }
 		pull_error = nil
 
 		command.open("#42")
 
-		assert.same({
-			{ value = "#42", opts = { repository = repository, domain = "pulls" } },
-		}, calls.resolve)
-		assert.are.equal(1, #calls.fetch)
-		assert.same({ "pulls" }, { calls.fetch[1].domain })
-		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
 		assert.are.equal(pull_result, calls.pull_detail[1].entity)
 		assert.are.equal(0, #calls.issue_detail)
 	end)
@@ -260,30 +220,15 @@ describe("commands.open", function()
 
 		command.open("42")
 
-		assert.same({
-			{ value = "42", opts = { repository = repository, domain = "pulls" } },
-			{ value = "42", opts = { repository = repository, domain = "issues" } },
-		}, calls.resolve)
-		assert.same({ "pulls", "issues" }, { calls.fetch[1].domain, calls.fetch[2].domain })
-		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.fetch[1].ref)
-		assert.same({ key = "ISSUE-42" }, calls.fetch[2].ref)
 		assert.are.equal(issue_result, calls.issue_detail[1].entity)
+		assert.are.equal(0, #calls.pull_detail)
 	end)
 
 	it("requires local repository context for a number", function()
 		repository = nil
 		command.open("42")
 
-		assert.are.equal(0, #calls.resolve)
 		assert.are.equal("A numeric reference requires a supported local Git repository", calls.errors[1])
-	end)
-
-	it("does not give owner/repo#number special repository handling", function()
-		command.open("owner/repo#42")
-
-		assert.same({ { value = "owner/repo#42" } }, calls.resolve)
-		assert.are.equal(0, calls.local_repository)
-		assert.are.equal("Unsupported Atlas target", calls.errors[1])
 	end)
 
 	it("reports a provider that is not configured", function()

@@ -19,25 +19,6 @@ end
 
 describe("pulls.create.remotes", function()
 	describe("base_remote", function()
-		it("prefers upstream like gh", function()
-			local value = remotes.base_remote({
-				remote("origin", "me/repo"),
-				remote("upstream", "parent/repo"),
-			})
-
-			assert.equal("upstream", assert(value).name)
-		end)
-
-		it("falls back to the first supported remote", function()
-			local value = remotes.base_remote({
-				remote("mirror"),
-				remote("parent", "parent/repo"),
-				remote("fork", "me/repo"),
-			})
-
-			assert.equal("parent", assert(value).name)
-		end)
-
 		it("uses the tracked remote before origin", function()
 			local value = remotes.base_remote({
 				remote("origin", "me/repo"),
@@ -72,14 +53,6 @@ describe("pulls.create.remotes", function()
 		end)
 	end)
 
-	describe("same_repository", function()
-		it("compares the head target with the base repository", function()
-			assert.is_true(remotes.same_repository(nil, "me/repo"))
-			assert.is_true(remotes.same_repository(assert(remote("origin", "me/repo").target), "me/repo"))
-			assert.is_false(remotes.same_repository(assert(remote("fork", "me/repo").target), "parent/repo"))
-		end)
-	end)
-
 	describe("head_remote", function()
 		it("prefers origin and otherwise uses the first remote", function()
 			assert.equal("origin", assert(remotes.head_remote({ remote("fork"), remote("origin") })).name)
@@ -103,26 +76,15 @@ describe("pulls.create.remotes", function()
 	end)
 
 	describe("validate", function()
-		it("accepts matching providers and hosts", function()
-			assert.is_nil(remotes.validate(remote("origin", "me/repo"), remote("upstream", "parent/repo")))
-		end)
-
-		it("rejects mismatched providers or hosts", function()
-			local err = remotes.validate(
-				remote("origin", "me/repo", "github", "github.com"),
-				remote("upstream", "parent/repo", "gitlab", "gitlab.com")
-			)
-			assert.matches("different providers", assert(err), 1, true)
-
-			err = remotes.validate(
-				remote("origin", "me/repo", "github", "github.com"),
-				remote("upstream", "parent/repo", "github", "github.example.com")
-			)
-			assert.matches("different providers", assert(err), 1, true)
-		end)
-
-		it("allows unresolved targets", function()
-			assert.is_nil(remotes.validate(remote("origin"), remote("upstream", "parent/repo")))
+		it("rejects mismatched providers or hosts and allows unresolved targets", function()
+			for _, case in ipairs({
+				{ remote("upstream", "parent/repo"), false },
+				{ remote("upstream"), false },
+				{ remote("upstream", "parent/repo", "gitlab", "gitlab.com"), true },
+				{ remote("upstream", "parent/repo", "github", "github.example.com"), true },
+			}) do
+				assert.equal(case[2], remotes.validate(remote("origin", "me/repo"), case[1]) ~= nil)
+			end
 		end)
 	end)
 
@@ -153,13 +115,19 @@ describe("pulls.create.remotes", function()
 			upstream = { "dev", "feature", "main" },
 		}
 
-		it("qualifies branches with their remote", function()
+		it("qualifies branches with their remote and its target", function()
 			local options = remotes.branch_options(branches, { origin, upstream }, "origin", "topic", origin.target)
 
 			assert.same(
-				{ "origin/feature", "origin/main", "upstream/dev", "upstream/feature", "upstream/main" },
+				{
+					"me/repo origin/feature",
+					"me/repo origin/main",
+					"parent/repo upstream/dev",
+					"parent/repo upstream/feature",
+					"parent/repo upstream/main",
+				},
 				vim.tbl_map(function(option)
-					return option.label
+					return option.target.repo_full_name .. " " .. option.label
 				end, options)
 			)
 		end)
@@ -173,12 +141,6 @@ describe("pulls.create.remotes", function()
 					return option.label
 				end, options)
 			)
-		end)
-
-		it("uses the remote target for each option", function()
-			local options = remotes.branch_options(branches, { upstream }, "origin", "topic", origin.target)
-
-			assert.equal("parent/repo", options[1].target.repo_full_name)
 		end)
 	end)
 

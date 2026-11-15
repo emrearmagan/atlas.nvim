@@ -1,7 +1,7 @@
 local github_client = require("spec.support.github_client_stub")
 
 local MODULE = "atlas.providers.github.discussions"
-local REPO = { full_name = "octo/repo", owner = "octo", repo_name = "repo" }
+local REPO = { full_name = "owner/repo", owner = "owner", repo_name = "repo" }
 
 local function fetch(repository, search)
 	local sent
@@ -13,7 +13,7 @@ local function fetch(repository, search)
 	})
 	package.loaded[MODULE] = nil
 	local page, err
-	require(MODULE).fetch(REPO, { query = "repo:octo/repo is:open" }, function(value, fetch_err)
+	require(MODULE).fetch(REPO, { query = "repo:owner/repo is:open" }, function(value, fetch_err)
 		page, err = value, fetch_err
 	end)
 	return page, err, sent
@@ -52,11 +52,11 @@ describe("GitHub discussions", function()
 				{
 					number = 40,
 					title = "Welcome",
-					url = "https://github.com/octo/repo/discussions/40",
+					url = "https://github.com/owner/repo/discussions/40",
 					createdAt = "2026-07-13T17:41:27Z",
 					isAnswered = vim.NIL,
 					upvoteCount = 1,
-					author = { login = "octo" },
+					author = { login = "alice" },
 					category = { id = "C1", name = "Announcements", emoji = ":mega:", isAnswerable = false },
 					labels = { nodes = { { name = "news", color = "0e8a16" } } },
 					comments = { totalCount = 3 },
@@ -74,14 +74,14 @@ describe("GitHub discussions", function()
 		})
 
 		page = assert(page)
-		assert.are.same({ "-f", "search=repo:octo/repo is:open" }, { sent[#sent - 1], sent[#sent] })
+		assert.are.same({ "-f", "search=repo:owner/repo is:open" }, { sent[#sent - 1], sent[#sent] })
 		assert.are.same({ { id = "C1", name = "Announcements", emoji = "mega", answerable = false } }, page.categories)
 		assert.are.equal("next", page.next_cursor)
 		assert.are.same({
 			number = 40,
 			title = "Welcome",
-			url = "https://github.com/octo/repo/discussions/40",
-			author = "octo",
+			url = "https://github.com/owner/repo/discussions/40",
+			author = "alice",
 			category = { id = "C1", name = "Announcements", emoji = "mega", answerable = false },
 			labels = { { name = "news", color = "0e8a16" } },
 			comments = 3,
@@ -105,7 +105,6 @@ describe("GitHub discussions", function()
 				body = "Question",
 				viewerSubscription = "SUBSCRIBED",
 				category = { id = "C1", name = "Q&A", emoji = ":pray:", isAnswerable = true },
-				reactionGroups = { { content = "THUMBS_UP", viewerHasReacted = true, reactors = { totalCount = 2 } } },
 				comments = {
 					totalCount = 3,
 					nodes = {
@@ -115,7 +114,7 @@ describe("GitHub discussions", function()
 							isAnswer = true,
 							upvoteCount = 1,
 							viewerHasUpvoted = true,
-							author = { login = "octo" },
+							author = { login = "alice" },
 							reactionGroups = {},
 							replies = {
 								nodes = {
@@ -133,7 +132,7 @@ describe("GitHub discussions", function()
 							body = "",
 							createdAt = "2026-08-03T10:00:00Z",
 							deletedAt = "2026-08-04T10:00:00Z",
-							author = { login = "octo" },
+							author = { login = "alice" },
 							reactionGroups = {},
 						},
 					},
@@ -147,15 +146,12 @@ describe("GitHub discussions", function()
 		assert.are.equal(3, discussion.comments)
 		assert.are.equal("Question", discussion.description.body)
 		assert.is_true(discussion.subscribed)
-		assert.are.equal("thumbsup", discussion.description.reactions[1].name)
-		assert.are.equal(2, discussion.description.reactions[1].count)
-		assert.is_true(discussion.description.reactions[1].reacted)
 		assert.is_true(discussion.thread[1].answer)
 		assert.is_true(discussion.thread[1].upvoted)
 		assert.is_false(discussion.thread[1].deleted)
 		assert.is_true(discussion.thread[2].deleted)
 		assert.is_false(discussion.thread[1].replies[1].upvoted)
-		assert.are.equal("octo", discussion.thread[1].author)
+		assert.are.equal("alice", discussion.thread[1].author)
 		assert.are.equal("Thanks", discussion.thread[1].replies[1].body)
 		assert.is_nil(discussion.thread[1].replies[1].author)
 		assert.is_false(discussion.thread[1].replies[1].answer)
@@ -174,7 +170,7 @@ describe("GitHub discussions", function()
 								body = "Thanks",
 								createdAt = "2026-10-16T10:00:00Z",
 								upvoteCount = 0,
-								author = { login = "octo" },
+								author = { login = "alice" },
 								reactionGroups = {},
 							},
 						},
@@ -195,7 +191,7 @@ describe("GitHub discussions", function()
 
 		assert.are.same({ "-f", "replyToId=DC_1" }, { sent[#sent - 1], sent[#sent] })
 		assert.are.equal("DC_2", created.id)
-		assert.are.equal("octo", created.author)
+		assert.are.equal("alice", created.author)
 		assert.are.same({}, created.replies)
 	end)
 

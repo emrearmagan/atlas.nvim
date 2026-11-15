@@ -99,34 +99,7 @@ describe("GitLab linked items", function()
 		assert.equal("blocked by", result[2].relationship)
 	end)
 
-	it("maps sub-issues and group epic parents", function()
-		local parent = { reference = "group&1", webUrl = "https://gitlab.example.com/groups/group/-/epics/1" }
-		local first = {
-			reference = "group/repo#2",
-			webUrl = "https://gitlab.example.com/gitlab/group/repo/-/work_items/2",
-		}
-		local second = {
-			reference = "group/repo#3",
-			webUrl = "https://gitlab.example.com/gitlab/group/repo/-/work_items/3",
-		}
-		graphql_widgets = {
-			{
-				parent = parent,
-				children = { nodes = { first, second } },
-			},
-		}
-		local result
-		api.fetch("issue", { key = "group/repo#1" }, nil, function(links, err)
-			assert.is_nil(err)
-			result = links
-		end)
-		assert.equal(3, #result)
-		assert.equal("parent", result[1].relationship)
-		assert.equal("group&1", result[1].key)
-		assert.equal("sub-issue", result[3].relationship)
-	end)
-
-	it("preserves both hierarchy and blocking relationships to the same issue", function()
+	it("maps the parent and sub-issues, keeping a blocker that is also the parent", function()
 		local blocker = issue(4, "group/repo")
 		graphql_widgets = {
 			{
@@ -138,10 +111,8 @@ describe("GitLab linked items", function()
 				},
 			},
 			{
-				parent = {
-					reference = "group/repo#4",
-					webUrl = blocker.webUrl,
-				},
+				parent = blocker,
+				children = { nodes = { issue(2, "group/repo"), issue(3, "group/repo") } },
 			},
 		}
 		local result
@@ -149,14 +120,17 @@ describe("GitLab linked items", function()
 			assert.is_nil(err)
 			result = links
 		end)
-		assert.equal(2, #result)
+		assert.same(
+			{ "blocked by", "parent", "sub-issue", "sub-issue" },
+			vim.tbl_map(function(link)
+				return link.relationship
+			end, result)
+		)
 		assert.equal(result[1].url, result[2].url)
-		assert.equal("blocked by", result[1].relationship)
-		assert.equal("parent", result[2].relationship)
 	end)
 
 	it("maps external tracker issue keys using the configured Jira instance", function()
-		jira_options.base_url = "https://example.atlassian.net"
+		jira_options.base_url = "https://jira.example.com"
 		graphql_links = {
 			{ linkType = "MENTIONED", externalIssue = { reference = "PROJ-42", title = "Jira work" } },
 			{ linkType = "MENTIONED", externalIssue = { reference = "P-1", title = "Single-letter project" } },
@@ -166,7 +140,7 @@ describe("GitLab linked items", function()
 			result = links
 		end)
 		assert.equal("PROJ-42", result[1].key)
-		assert.equal("https://example.atlassian.net/browse/PROJ-42", result[1].url)
-		assert.equal("https://example.atlassian.net/browse/P-1", result[2].url)
+		assert.equal("https://jira.example.com/browse/PROJ-42", result[1].url)
+		assert.equal("https://jira.example.com/browse/P-1", result[2].url)
 	end)
 end)

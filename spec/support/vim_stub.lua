@@ -54,7 +54,6 @@ _G.vim = {
 	o = { background = "dark" },
 	g = {},
 	deepcopy = deepcopy,
-	inspect = json_encode,
 
 	split = function(s, sep, opts)
 		local plain = opts and opts.plain
@@ -107,17 +106,6 @@ _G.vim = {
 		end,
 	},
 
-	treesitter = {
-		language = {
-			get_lang = function(filetype)
-				return filetype
-			end,
-		},
-		get_string_parser = function()
-			error("No Tree-sitter parsers in the test environment")
-		end,
-	},
-
 	api = {
 		nvim_create_namespace = function()
 			return 1
@@ -129,11 +117,6 @@ _G.vim = {
 
 		nvim_create_autocmd = function()
 			return 1
-		end,
-
-		nvim_set_hl = function() end,
-		nvim_get_hl = function()
-			return {}
 		end,
 	},
 

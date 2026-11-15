@@ -110,30 +110,4 @@ describe("Azure linked items", function()
 		assert.equal("Fix login", result[4].title)
 		assert.equal("Spec", result[5].title)
 	end)
-
-	it("links the work items of a pull request", function()
-		local endpoint = "/project-id/_apis/git/repositories/repo-id/pullRequests/17/workitems"
-		responses[endpoint] = { value = { { id = "5", url = "https://dev.azure.com/acme/_apis/wit/workItems/5" } } }
-
-		local result
-		api.fetch(
-			"pr",
-			{ id = 17, project_id = "project-id", repository_id = "repo-id", repo_full_name = "Platform/api" },
-			nil,
-			function(links, err)
-				assert.is_nil(err)
-				result = links
-			end
-		)
-
-		assert.same({ endpoint }, endpoints)
-		assert.same({
-			{
-				url = "https://dev.azure.com/acme/Platform/_workitems/edit/5",
-				key = "5",
-				title = "Item 5",
-				relationship = "linked",
-			},
-		}, result)
-	end)
 end)

@@ -154,26 +154,15 @@ describe("ui.components.code_preview", function()
 		assert.same({ "1  local value", "2  " }, preview.render({ lines = { "local value", "" }, width = 8 }).lines)
 	end)
 
-	it("uses registered language mappings and preserves explicit parser names", function()
-		for alias, language in pairs({
-			js = "javascript",
-			jsx = "javascript",
-			ts = "typescript",
-			tsx = "tsx",
-			sh = "bash",
-			bash = "bash",
-			latex = "latex",
-			cs = "c_sharp",
+	it("picks the parser from the language before the file path and falls back to the filetype", function()
+		for _, case in ipairs({
+			{ { language = "js", file_path = "wrong.lua" }, "javascript" },
+			{ { file_path = "app.tsx" }, "tsx" },
+			{ { language = "lua" }, "lua" },
 		}) do
-			preview.render({ lines = { "code" }, language = alias, file_path = "wrong.lua" })
-			assert.equal(language, parsed_language)
+			preview.render(vim.tbl_extend("force", { lines = { "code" } }, case[1]))
+			assert.equal(case[2], parsed_language)
 		end
-
-		vim.treesitter.language.get_lang = function(filetype)
-			return filetype == "js" and "custom_parser" or filetype
-		end
-		preview.render({ lines = { "code" }, language = "js" })
-		assert.equal("custom_parser", parsed_language)
 	end)
 
 	it("applies capture metadata and splits multiline Unicode into byte ranges", function()
@@ -190,7 +179,7 @@ describe("ui.components.code_preview", function()
 		}, syntax_spans(result))
 	end)
 
-	it("keeps code visible without a language, parser or highlight query", function()
+	it("keeps code visible without a language or when the parser or query is missing or fails", function()
 		local opts = { lines = { "local x = 1" }, show_line_numbers = false }
 		local plain = preview.render(opts)
 		assert.same({ "local x = 1" }, plain.lines)
@@ -198,28 +187,22 @@ describe("ui.components.code_preview", function()
 		assert.is_nil(parsed_source)
 
 		opts.language = "lua"
-		vim.treesitter.query.get = function() end
-		assert.same(plain, preview.render(opts))
-		vim.treesitter.get_string_parser = function()
-			error("Parser unavailable")
+		local treesitter = vim.treesitter
+		local function fail()
+			error("broken", 0)
 		end
-		assert.same(plain, preview.render(opts))
-	end)
-
-	it("keeps code visible when query or parser execution fails", function()
-		local opts = { lines = { "local x = 1" }, language = "lua" }
-		local plain = preview.render({ lines = opts.lines })
-		vim.treesitter.query.get = function()
-			error("Invalid query", 0)
-		end
-		assert.same(plain, preview.render(opts))
-		vim.treesitter.get_string_parser = function()
-			return {
-				parse = function()
-					error("Parse error", 0)
+		for _, broken in ipairs({
+			{ query = { get = function() end } },
+			{ query = { get = fail } },
+			{ get_string_parser = fail },
+			{
+				get_string_parser = function()
+					return { parse = fail }
 				end,
-			}
+			},
+		}) do
+			vim.treesitter = vim.tbl_extend("force", treesitter, broken)
+			assert.same(plain, preview.render(opts))
 		end
-		assert.same(plain, preview.render(opts))
 	end)
 end)

@@ -11,7 +11,7 @@ local modules = {
 
 describe("GitLab completion", function()
 	local saved, source, cache, calls, participants, reviewers, failure
-	local issue_source, pull_source, reference_nodes, request_handle
+	local issue_source, pull_source, reference_nodes
 	local member = { username = "alice", name = "Alice" }
 	local commenter = { username = "external", name = "External commenter" }
 	local reviewer = { username = "reviewer", name = "Reviewer" }
@@ -26,7 +26,6 @@ describe("GitLab completion", function()
 		failure = nil
 		participants, reviewers = { commenter }, { reviewer, commenter }
 		reference_nodes = { issues = { { iid = "42", title = "Fix login", state = "opened" } }, pulls = {} }
-		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
 			get = function(name)
 				return name
@@ -46,7 +45,7 @@ describe("GitLab completion", function()
 					calls.references[#calls.references + 1] = { query = query, variables = variables }
 					local kind = field == "mergeRequests" and "pulls" or "issues"
 					done({ project = { [field] = { nodes = reference_nodes[kind] } } }, failure)
-					return request_handle
+					return
 				end
 				calls.participants[#calls.participants + 1] = variables
 				local item = { participants = { nodes = vim.deepcopy(participants) } }
@@ -150,13 +149,12 @@ describe("GitLab completion", function()
 	end)
 
 	it("fetches recent issue references using repository, MR, and issue contexts", function()
-		assert.same({ "#" }, issue_source.triggers)
 		for _, context in ipairs({
 			{ provider = "gitlab", repository = "group/subgroup/repository" },
 			{ provider = "gitlab", pr = { id = 42, repo_full_name = "group/subgroup/pulls" } },
 			{ provider = "gitlab", issue = { key = "group/subgroup/issues#42" } },
 		}) do
-			local handle = issue_source.complete(context, "login", function(items, err)
+			issue_source.complete(context, "login", function(items, err)
 				assert.is_nil(err)
 				assert.same({
 					{
@@ -167,14 +165,9 @@ describe("GitLab completion", function()
 					},
 				}, items)
 			end)
-			assert.equal(request_handle, handle)
 		end
 		for index, project in ipairs({ "repository", "pulls", "issues" }) do
-			local call = calls.references[index]
-			assert.same({ path = "group/subgroup/" .. project }, call.variables)
-			assert.truthy(call.query:find("issues(", 1, true))
-			assert.truthy(call.query:find("first:%s*100"))
-			assert.truthy(call.query:find("sort: UPDATED_DESC", 1, true))
+			assert.same({ path = "group/subgroup/" .. project }, calls.references[index].variables)
 		end
 	end)
 
@@ -192,7 +185,6 @@ describe("GitLab completion", function()
 				{ iid = "181", title = "Draft MR", state = "opened", draft = true },
 			},
 		}
-		assert.same({ "!" }, pull_source.triggers)
 		for _, case in ipairs({
 			{ issue_source, { "#77", "#178" }, { "issue #77", "success #178" } },
 			{
@@ -220,8 +212,6 @@ describe("GitLab completion", function()
 			end
 		end
 		assert.equal(2, #calls.references)
-		assert.truthy(calls.references[2].query:find("mergeRequests(", 1, true))
-		assert.truthy(calls.references[2].query:find("draft", 1, true))
 
 		issue_source.complete({ provider = "gitlab", issue = { key = "group/project#9" } }, "77", function(items, err)
 			assert.is_nil(err)

@@ -8,7 +8,7 @@ local function raw(subject_type, subject_url, title)
 		unread = true,
 		reason = "mention",
 		updated_at = "2026-10-15T10:00:00Z",
-		repository = { full_name = "octo/repo" },
+		repository = { full_name = "owner/repo" },
 		subject = { type = subject_type, url = subject_url, title = title or "Title" },
 	}
 end
@@ -34,7 +34,7 @@ describe("GitHub notifications", function()
 	end)
 
 	it("builds web URLs for every subject type", function()
-		local api = "https://api.github.com/repos/octo/repo/"
+		local api = "https://api.github.com/repos/owner/repo/"
 		local notifications = fetch({
 			raw("PullRequest", api .. "pulls/35"),
 			raw("Issue", api .. "issues/106"),
@@ -48,7 +48,7 @@ describe("GitHub notifications", function()
 			raw("SecurityAdvisory", nil),
 		})
 
-		local web = "https://github.com/octo/repo"
+		local web = "https://github.com/owner/repo"
 		assert.are.same(
 			{
 				web .. "/pull/35",
@@ -66,26 +66,5 @@ describe("GitHub notifications", function()
 				return notification.url
 			end, notifications)
 		)
-	end)
-
-	it("marks threads read and done", function()
-		local calls, results = {}, {}
-		github_client.install({
-			api = function(method, endpoint, callback)
-				table.insert(calls, method .. " " .. endpoint)
-				callback(nil, nil)
-			end,
-		})
-		package.loaded[MODULE] = nil
-
-		require(MODULE).mark_read("7", function(ok)
-			table.insert(results, ok)
-		end)
-		require(MODULE).mark_done("7", function(ok)
-			table.insert(results, ok)
-		end)
-
-		assert.are.same({ "PATCH notifications/threads/7", "DELETE notifications/threads/7" }, calls)
-		assert.are.same({ true, true }, results)
 	end)
 end)

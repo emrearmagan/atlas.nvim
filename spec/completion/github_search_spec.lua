@@ -87,12 +87,12 @@ describe("GitHub search completion", function()
 
 	it("prefers the repository named in the query and fetches it once", function()
 		types_by_repo["owner/local"] = { "Bug" }
-		types_by_repo["cli/cli"] = { "Task", "Epic" }
-		local complete = open("owner/local", "repo:cli/cli is:issue ")
+		types_by_repo["owner/other"] = { "Task", "Epic" }
+		local complete = open("owner/local", "repo:owner/other is:issue ")
 
-		assert.same({ "type:Epic" }, complete("repo:cli/cli type:Ep"))
-		complete("repo:cli/cli type:")
-		assert.same({ "cli/cli" }, requested)
+		assert.same({ "type:Epic" }, complete("repo:owner/other type:Ep"))
+		complete("repo:owner/other type:")
+		assert.same({ "owner/other" }, requested)
 	end)
 
 	it("fetches on demand when the search did not start as an issue search", function()

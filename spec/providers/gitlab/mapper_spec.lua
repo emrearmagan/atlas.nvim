@@ -37,33 +37,14 @@ describe("GitLab issue mapper", function()
 			milestone = { id = "gid://gitlab/Milestone/15", title = "Next" },
 		}))
 
-		assert.is_nil(rawget(details, "project_path"))
-		assert.is_nil(rawget(details, "iid"))
 		assert.are.equal("Hydrated description", details.description)
 		assert.are.equal("Details", details.title)
 		assert.same({ id = 15, title = "Next" }, details.milestone)
 	end)
 end)
 
-describe("GitLab pull request details", function() end)
-
 describe("GitLab descriptions", function()
 	local alice = { name = "Alice", username = "alice" }
-
-	it("maps a merge request description as a comment with its award emoji", function()
-		local comment = assert(mapper.to_description({
-			id = "gid://gitlab/MergeRequest/7",
-			description = "Body",
-			author = { id = "gid://gitlab/User/9", name = "Alice", username = "alice" },
-			awardEmoji = { nodes = { { name = "rocket", user = alice } } },
-		}, "alice"))
-
-		assert.equal("gid://gitlab/MergeRequest/7", comment.id)
-		assert.equal("Body", comment.body)
-		assert.equal("alice", comment.author.username)
-		assert.equal("rocket", comment.reactions[1].name)
-		assert.is_true(comment.reactions[1].reacted)
-	end)
 
 	it("reads an issue's award emoji from its work item", function()
 		local work_item = {
@@ -134,25 +115,21 @@ describe("GitLab comment resolution metadata", function()
 		assert.equal("https://gitlab.com/o/r/-/merge_requests/1#note_101", comment.url)
 	end)
 
-	it("does not attach thread resolution metadata to replies", function()
-		local note = resolved_note()
-		note.id = 102
-		local comment = mapper.to_discussion_note(note, discussion(resolved_note()), "")
+	it("keeps resolution metadata off replies and unresolved roots", function()
+		local reply = resolved_note()
+		reply.id = 102
+		local unresolved = resolved_note()
+		unresolved.resolved = false
 
-		assert.are.equal("RESOLVED", comment.state)
-		assert.are.equal("gid://gitlab/Note/101", comment.parent_id)
-		assert.is_nil(comment.resolved_at)
-		assert.is_nil(comment.resolved_by)
-	end)
+		local reply_comment = mapper.to_discussion_note(reply, discussion(resolved_note()), "")
+		local root_comment = mapper.to_discussion_note(unresolved, discussion(unresolved), "")
 
-	it("does not retain resolution metadata on unresolved roots", function()
-		local note = resolved_note()
-		note.resolved = false
-		local comment = mapper.to_discussion_note(note, discussion(note), "")
-
-		assert.is_nil(comment.state)
-		assert.is_nil(comment.resolved_at)
-		assert.is_nil(comment.resolved_by)
+		assert.same({ "RESOLVED", "gid://gitlab/Note/101" }, { reply_comment.state, reply_comment.parent_id })
+		assert.is_nil(root_comment.state)
+		for _, comment in ipairs({ reply_comment, root_comment }) do
+			assert.is_nil(comment.resolved_at)
+			assert.is_nil(comment.resolved_by)
+		end
 	end)
 
 	it("keeps the original multiline location of outdated comments", function()

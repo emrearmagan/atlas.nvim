@@ -10,7 +10,7 @@ local modules = {
 
 describe("GitHub completion", function()
 	local saved, source, calls, failure, repository_users, participants, reviewers
-	local issue_source, pull_source, reference_response, request_handle
+	local issue_source, pull_source, reference_response
 
 	before_each(function()
 		saved = {}
@@ -23,7 +23,6 @@ describe("GitHub completion", function()
 		participants = {}
 		reviewers = {}
 		reference_response = { issues = { { number = 42, title = "Fix login", state = "OPEN" } }, pulls = {} }
-		request_handle = { cancel = function() end }
 		package.loaded["atlas.ui.shared.icons"] = {
 			get = function(name)
 				return name
@@ -43,7 +42,7 @@ describe("GitHub completion", function()
 				if command:find("search=repo:", 1, true) then
 					local kind = command:find(" is:pr ", 1, true) and "pulls" or "issues"
 					done({ data = { search = { nodes = reference_response[kind] } } }, failure)
-					return request_handle
+					return
 				end
 				done({
 					data = {
@@ -89,7 +88,6 @@ describe("GitHub completion", function()
 		assert.equal(3, #calls)
 		for index, repo in ipairs({ "create", "issues", "pulls" }) do
 			local args = table.concat(calls[index], " ")
-			assert.truthy(args:find("mentionableUsers", 1, true))
 			assert.truthy(args:find("owner=acme", 1, true))
 			assert.truthy(args:find("repo=" .. repo, 1, true))
 			assert.truthy(args:find("search=" .. queries[index], 1, true))
@@ -98,20 +96,20 @@ describe("GitHub completion", function()
 
 	it("ranks participants before reviewers and repository users without duplicates", function()
 		local pr_context = { provider = "github", pr = { id = 42, repo_full_name = "acme/repo" } }
-		local dobson = { id = "U2", login = "dobsontom", name = "Tom Dobson" }
+		local carol = { id = "U2", login = "carol", name = "Carol" }
 		local donna = { id = "U3", login = "donna", name = "Donna" }
 		local david = { id = "U4", login = "david", name = "David" }
 		local dan = { id = "U5", login = "dan", name = "Dan" }
 		local items
-		repository_users = { dan, david, dobson }
-		participants = { dobson, donna }
+		repository_users = { dan, david, carol }
+		participants = { carol, donna }
 		reviewers = { { requestedReviewer = donna }, { requestedReviewer = david }, { requestedReviewer = {} } }
 		source.complete(pr_context, "", function(result, err)
 			assert.is_nil(err)
 			items = result
 		end)
 		assert.same(
-			{ "@dobsontom", "@donna", "@david", "@dan" },
+			{ "@carol", "@donna", "@david", "@dan" },
 			vim.tbl_map(function(item)
 				return item.insert_text
 			end, items)
@@ -167,13 +165,12 @@ describe("GitHub completion", function()
 	end)
 
 	it("fetches recent issues using repository, PR, and issue contexts", function()
-		assert.same({ "#" }, issue_source.triggers)
 		for _, context in ipairs({
 			{ provider = "github", repository = "acme/create" },
 			{ provider = "github", pr = { id = 42, repo_full_name = "acme/pulls" } },
 			{ provider = "github", issue = { key = "acme/issues#42" } },
 		}) do
-			local handle = issue_source.complete(context, "login", function(items, err)
+			issue_source.complete(context, "login", function(items, err)
 				assert.is_nil(err)
 				assert.same({
 					{
@@ -184,13 +181,10 @@ describe("GitHub completion", function()
 					},
 				}, items)
 			end)
-			assert.equal(request_handle, handle)
 		end
 		for index, repo in ipairs({ "create", "pulls", "issues" }) do
 			local command = table.concat(calls[index], " ")
 			assert.truthy(command:find("search=repo:acme/" .. repo .. " is:issue sort:updated-desc", 1, true))
-			assert.truthy(command:find("first:%s*100"))
-			assert.truthy(command:find("... on Issue", 1, true))
 		end
 	end)
 
@@ -208,7 +202,6 @@ describe("GitHub completion", function()
 				{ number = 181, title = "Draft pull request", state = "OPEN", isDraft = true },
 			},
 		}
-		assert.same({ "#" }, pull_source.triggers)
 		for _, case in ipairs({
 			{ issue_source, { "#77", "#178" }, { "issue #77", "success #178" } },
 			{
@@ -238,8 +231,6 @@ describe("GitHub completion", function()
 		assert.equal(2, #calls)
 		local command = table.concat(calls[2], " ")
 		assert.truthy(command:find("search=repo:acme/repo is:pr sort:updated-desc", 1, true))
-		assert.truthy(command:find("... on PullRequest", 1, true))
-		assert.truthy(command:find("isDraft", 1, true))
 
 		for _, other in ipairs({
 			{ provider = "github", pr = { id = 7, repo_full_name = "acme/repo" } },

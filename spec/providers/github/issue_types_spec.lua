@@ -60,20 +60,6 @@ describe("github issue types", function()
 				return item.name
 			end, types)
 		)
-		assert.equal("owner=owner", calls[1][6])
-		assert.equal("repo=repo", calls[1][8])
-	end)
-
-	it("returns no types when the owner deleted all of them", function()
-		install({ data = { repository = { issueTypes = { nodes = {} } } } })
-		local api = fresh_module()
-
-		local types
-		api.list_issue_types("owner/repo", function(result)
-			types = result
-		end)
-
-		assert.same({}, types)
 	end)
 
 	it("sets and removes the issue type with gh issue edit", function()

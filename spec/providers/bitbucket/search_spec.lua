@@ -1,12 +1,19 @@
 local query = require("atlas.providers.bitbucket.query")
 
 describe("Bitbucket pull request search", function()
-	it("parses a project scope", function()
-		local parsed, err = assert(query.parse("project:acme/WEB"))
-
-		assert.is_nil(err)
-		assert.same({ { workspace = "acme", project = "WEB" } }, parsed.targets)
-		assert.is_nil(parsed.query)
+	it("parses project and repository scopes before and after the query", function()
+		for _, case in ipairs({
+			{ "project:acme/WEB", { targets = { { workspace = "acme", project = "WEB" } } } },
+			{
+				'repo:acme/core title ~ "atlas" repo:other/app',
+				{
+					targets = { { workspace = "acme", repo = "core" }, { workspace = "other", repo = "app" } },
+					query = 'title ~ "atlas"',
+				},
+			},
+		}) do
+			assert.same(case[2], query.parse(case[1]))
+		end
 	end)
 
 	it("requires a scope", function()
@@ -28,16 +35,5 @@ describe("Bitbucket pull request search", function()
 		view._states = { "declined" }
 		_, states = query.query(view)
 		assert.same({ "declined" }, states)
-	end)
-
-	it("parses repository scopes before and after the query", function()
-		local parsed, err = assert(query.parse('repo:acme/core title ~ "atlas" repo:other/app'))
-
-		assert.is_nil(err)
-		assert.same({
-			{ workspace = "acme", repo = "core" },
-			{ workspace = "other", repo = "app" },
-		}, parsed.targets)
-		assert.equal('title ~ "atlas"', parsed.query)
 	end)
 end)

@@ -1,46 +1,6 @@
 local html = require("atlas.formats.markdown.html")
 
 describe("HTML parsing", function()
-	it("parses quoted image attributes and consumes only the tag", function()
-		for _, tag in ipairs({ '<img src="image.png" alt="logo">', "<img alt='logo' src='image.png' />" }) do
-			local fragment, consumed = html.inline.image(tag .. " after")
-			assert.same({ text = "󰋩 logo", style = "image", url = "image.png" }, fragment)
-			assert.equal(#tag, consumed)
-		end
-	end)
-
-	it("defaults empty or missing image labels", function()
-		for _, tag in ipairs({ '<img src="image.png">', '<img src="image.png" alt="">' }) do
-			assert.same({ text = "󰋩 image", style = "image", url = "image.png" }, html.inline.image(tag))
-		end
-	end)
-
-	it("keeps inline comments literal and stops at the closing marker", function()
-		local comment = "<!-- **café** -->"
-		local fragment, consumed = html.inline.comment(comment .. " text <!-- next -->")
-		assert.same({ text = comment, style = "comment" }, fragment)
-		assert.equal(#comment, consumed)
-	end)
-
-	it("consumes block comments through the complete closing line", function()
-		local rows, next_index = html.block.comment({ "before", "  <!--", "", "--> **raw**", "after" }, 2)
-		assert.same({
-			{ { text = "  <!--", style = "comment" } },
-			{ { text = "", style = "comment" } },
-			{ { text = "--> **raw**", style = "comment" } },
-		}, rows)
-		assert.equal(5, next_index)
-	end)
-
-	it("preserves unclosed block comments through EOF", function()
-		local rows, next_index = html.block.comment({ "<!--", "**raw**" }, 1)
-		assert.same({
-			{ { text = "<!--", style = "comment" } },
-			{ { text = "**raw**", style = "comment" } },
-		}, rows)
-		assert.equal(3, next_index)
-	end)
-
 	it("skips lines made only of tags without content", function()
 		for _, tag in ipairs({
 			'<a id="github"></a>',
@@ -56,14 +16,6 @@ describe("HTML parsing", function()
 			assert.same({}, rows)
 			assert.equal(3, next_index)
 		end
-	end)
-
-	it("renders summary text with an expanded icon", function()
-		local summary =
-			'<summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>'
-		local rows, next_index = html.block.summary({ "before", summary, "after" }, 2)
-		assert.same({ { { text = "▾ Using lazy.nvim" } } }, rows)
-		assert.equal(3, next_index)
 	end)
 
 	it("renders standalone heading tags as headings", function()

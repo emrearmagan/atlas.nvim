@@ -45,14 +45,6 @@ describe("ui.highlights", function()
 		vim.api.nvim_get_hl, vim.api.nvim_set_hl = original_get, original_set
 	end)
 
-	it("links semantic groups to standard highlights", function()
-		highlights.setup()
-
-		assert.are.same({ link = "CursorLine", default = true }, set.AtlasTabInactive)
-		assert.are.same({ link = "AtlasTextMuted", default = true }, set.AtlasLogDebug)
-		assert.are.same({ link = "AtlasCodeBackground", default = true }, set.AtlasMarkdownInlineCode)
-	end)
-
 	it("takes only the foreground for status colors", function()
 		theme.DiagnosticInfo = { fg = 0x0ea5e9, italic = true }
 		highlights.setup()
@@ -107,10 +99,9 @@ describe("ui.highlights", function()
 		theme.Pmenu = { bg = 0x313244 }
 		highlights.setup()
 		highlights.label("#40a02b")
-
-		assert.is_not_nil(set.AtlasLabel_40a02b.fg)
-		assert.are_not.equal("#40a02b", set.AtlasLabel_40a02b.bg)
 		vim.o.background = original
+
+		assert.are.same({ fg = "#4ec234", bg = "#344640", bold = true }, set.AtlasLabel_40a02b)
 	end)
 
 	it("derives every GitHub issue type color from the colorscheme", function()

@@ -35,7 +35,7 @@ describe("providers.resolve", function()
 	describe("GitHub", function()
 		local base = "https://github.com/team/repo"
 
-		it("resolves a repository", function()
+		it("resolves a repository from its URL and Git remotes", function()
 			local target = assert(providers.resolve(base))
 			assert.are.equal("github", target.provider)
 			assert.are.equal("pulls", target.domain)
@@ -43,15 +43,8 @@ describe("providers.resolve", function()
 			assert.are.equal("team/repo", target.repo_full_name)
 			assert.are.equal(base, target.url)
 			assert.are.equal(base .. ".git", target.repository_url)
-		end)
-
-		it("resolves Git remotes as the repository", function()
 			for _, remote in ipairs({ "git@github.com:team/repo.git", base .. ".git" }) do
-				local target = assert(providers.resolve(remote))
-				assert.are.equal("repo", target.entity)
-				assert.are.equal("team/repo", target.repo_full_name)
-				assert.are.equal(base, target.url)
-				assert.are.equal(base .. ".git", target.repository_url)
+				assert.same(target, providers.resolve(remote))
 			end
 		end)
 
@@ -88,37 +81,28 @@ describe("providers.resolve", function()
 			assert.are.equal(99, assert(providers.resolve(base .. "/actions/runs/99/job/5")).id)
 		end)
 
-		it("resolves repository pages", function()
-			assert.are.equal("issues", assert(providers.resolve(base .. "/issues")).page)
-			assert.are.equal("pulls", assert(providers.resolve(base .. "/pulls")).page)
-			assert.are.equal("discussions", assert(providers.resolve(base .. "/discussions")).page)
-			assert.are.equal("discussions", assert(providers.resolve(base .. "/discussions/40")).page)
-			assert.are.equal("builds", assert(providers.resolve(base .. "/actions")).page)
-			assert.are.equal("builds", assert(providers.resolve(base .. "/actions/workflows/ci.yml")).page)
-			assert.are.equal("releases", assert(providers.resolve(base .. "/releases")).page)
-			assert.are.equal("releases", assert(providers.resolve(base .. "/releases/tag/v1.0.0")).page)
-			assert.are.equal("tags", assert(providers.resolve(base .. "/tags")).page)
-			assert.are.equal("branches", assert(providers.resolve(base .. "/branches")).page)
-			assert.are.equal("repo", assert(providers.resolve(base .. "/discussions/40")).entity)
-		end)
-
-		it("keeps the discussion or release a page points to", function()
-			assert.are.equal("40", assert(providers.resolve(base .. "/discussions/40")).id)
-			assert.are.equal(base .. "/discussions/40", assert(providers.resolve(base .. "/discussions/40")).url)
-			assert.are.equal("v1.0.0", assert(providers.resolve(base .. "/releases/tag/v1.0.0")).id)
-			assert.is_nil(assert(providers.resolve(base .. "/discussions")).id)
-			assert.is_nil(assert(providers.resolve(base .. "/releases")).id)
-		end)
-
-		it("keeps the branch of a workflow runs search", function()
-			local target = assert(providers.resolve(base .. "/actions?query=branch:feat/x"))
-			assert.are.equal("builds", target.page)
-			assert.are.equal("feat/x", target.id)
-			assert.are.equal(
-				"feat/x",
-				assert(providers.resolve(base .. "/actions?query=is%3Afailure+branch%3Afeat%2Fx")).id
-			)
-			assert.is_nil(assert(providers.resolve(base .. "/actions")).id)
+		it("resolves repository pages with the discussion, release or branch they point to", function()
+			for _, case in ipairs({
+				{ "/issues", "issues" },
+				{ "/pulls", "pulls" },
+				{ "/discussions", "discussions" },
+				{ "/discussions/40", "discussions", "40" },
+				{ "/actions", "builds" },
+				{ "/actions/workflows/ci.yml", "builds" },
+				{ "/actions?query=branch:feat/x", "builds", "feat/x" },
+				{ "/actions?query=is%3Afailure+branch%3Afeat%2Fx", "builds", "feat/x" },
+				{ "/releases", "releases" },
+				{ "/releases/tag/v1.0.0", "releases", "v1.0.0" },
+				{ "/tags", "tags" },
+				{ "/branches", "branches" },
+			}) do
+				local target = providers.resolve(base .. case[1])
+				---@cast target -nil
+				assert.same(
+					{ "repo", base .. case[1], case[2], case[3] },
+					{ target.entity, target.url, target.page, target.id }
+				)
+			end
 		end)
 
 		it("resolves Enterprise Server URLs on the active host only", function()
@@ -244,31 +228,20 @@ describe("providers.resolve", function()
 	describe("Bitbucket", function()
 		local base = "https://bitbucket.org/team/repo"
 
-		it("resolves a repository", function()
+		it("resolves a repository from its URL and Git remotes, including the SSH host", function()
 			local target = assert(providers.resolve(base))
 			assert.are.equal("bitbucket", target.provider)
 			assert.are.equal("repo", target.entity)
 			assert.are.equal("team/repo", target.repo_full_name)
 			assert.are.equal(base, target.url)
 			assert.are.equal(base .. ".git", target.repository_url)
-		end)
-
-		it("resolves Git remotes as the repository", function()
-			for _, remote in ipairs({ "git@bitbucket.org:team/repo.git", "git://bitbucket.org/team/repo.git" }) do
-				local target = assert(providers.resolve(remote))
-				assert.are.equal("repo", target.entity)
-				assert.are.equal(base, target.url)
-				assert.are.equal(base .. ".git", target.repository_url)
-			end
-		end)
-
-		it("resolves SSH host remotes to the canonical Cloud repository", function()
-			local expected = assert(providers.resolve(base))
 			for _, remote in ipairs({
+				"git@bitbucket.org:team/repo.git",
+				"git://bitbucket.org/team/repo.git",
 				"git@ssh.bitbucket.org:team/repo.git",
 				"ssh://git@ssh.bitbucket.org/team/repo.git",
 			}) do
-				assert.same(expected, assert(providers.resolve(remote)))
+				assert.same(target, providers.resolve(remote))
 			end
 		end)
 

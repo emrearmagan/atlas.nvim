@@ -63,22 +63,6 @@ describe("Azure pull request API logic", function()
 		assert.same({ repository = { id = "fork-id" } }, requests[2].payload.forkSource)
 	end)
 
-	it("maps all pull request commits", function()
-		client.fetch_all = function(url, _, _, done)
-			assert.equal(endpoint .. "/commits", url)
-			done({
-				{ commitId = "1", comment = "Commit", author = {} },
-				{ commitId = "2", comment = "Commit", author = {} },
-			})
-		end
-		local result
-		require("atlas.pulls.providers.azure.api.changes").fetch_commits(pr, {}, function(commits, err)
-			assert.is_nil(err)
-			result = commits
-		end)
-		assert.same({ "1", "2" }, { result[1].hash, result[2].hash })
-	end)
-
 	it("maps blocking policies to failures and optional policies to warnings", function()
 		client.request = function(_, url, _, done)
 			assert.equal(

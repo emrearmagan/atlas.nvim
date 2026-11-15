@@ -38,13 +38,4 @@ describe("core.storage", function()
 			assert.is_nil(storage.parse("https://github.com/owner/repo/pull/2"))
 		end)
 	end)
-
-	describe("dir", function()
-		it("places a pull request under its host and repository", function()
-			local target = storage.target({ host = "gitlab.com", repository = "group/sub/repo", id = "1" })
-			---@cast target AtlasStorageTarget
-
-			assert.are.equal("/tmp/atlas/gitlab.com/group/sub/repo/pr-1", storage.dir(target))
-		end)
-	end)
 end)

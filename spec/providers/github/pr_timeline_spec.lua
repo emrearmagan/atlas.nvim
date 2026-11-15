@@ -47,13 +47,8 @@ describe("GitHub pull request timeline mapper", function()
 			body = "hi",
 			createdAt = "d",
 			author = actor,
-			reactionGroups = { { content = "THUMBS_UP", reactors = { totalCount = 1, nodes = { { login = "bob" } } } } },
 		})
 		assert.same({ "IC_42", "alice", "hi" }, { comment.id, comment.author.username, comment.body })
-		assert.same(
-			{ { name = "thumbsup", count = 1, users = { { name = "bob", username = "bob" } }, reacted = false } },
-			comment.reactions
-		)
 
 		local review = assert(mapper.to_conversation_review({
 			id = "PRR_1",

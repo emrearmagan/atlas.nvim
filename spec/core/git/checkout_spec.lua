@@ -2,73 +2,7 @@ local config = require("atlas.config")
 local git = require("atlas.core.git")
 local checkout = require("atlas.core.git.checkout")
 
-local function resolve(paths, repo)
-	local original = config.options
-	config.options = { pulls = { repo_config = { paths = paths } } }
-	local path, err = checkout.resolve_repo_path(repo, { require_existing = false })
-	config.options = original
-	return path, err
-end
-
 describe("core.git.checkout", function()
-	describe("validate", function()
-		it("fails when wildcard parity is wrong", function()
-			local path, err = resolve({ ["ws/*"] = "~/code/no-star" }, "ws/repo")
-			assert.is_nil(path)
-			assert.matches("wildcard parity mismatch", assert(err), 1, true)
-		end)
-
-		it("rejects missing or empty namespace and repository segments", function()
-			for _, key in ipairs({ "bad", "/group/repo", "group//repo", "group/subgroup/", "group/subgroup//repo" }) do
-				local mapped_path, mapped_err = resolve({ [key] = "~/x" }, "ws/repo")
-				assert.is_nil(mapped_path)
-				assert.matches("invalid key", assert(mapped_err), 1, true)
-				local path, err = resolve({}, key)
-				assert.is_nil(path)
-				assert.matches("invalid repository identifier", assert(err), 1, true)
-			end
-		end)
-	end)
-
-	describe("resolve", function()
-		it("resolves exact mapping over wildcard", function()
-			for _, namespace in ipairs({ "ws", "group/subgroup", "group/subgroup/team" }) do
-				local path = resolve({
-					[namespace .. "/*"] = "~/code/*",
-					[namespace .. "/repo"] = "~/code/special",
-				}, namespace .. "/repo")
-
-				assert.is_string(path)
-				assert.matches("special", assert(path))
-			end
-		end)
-
-		it("prefers more specific wildcard", function()
-			for _, namespace in ipairs({ "ws", "group/subgroup" }) do
-				local path = resolve({
-					[namespace .. "/*"] = "~/code/*",
-					[namespace .. "/proj-*"] = "~/work/proj-*",
-				}, namespace .. "/proj-foo")
-				assert.matches("/work/proj%-foo$", assert(path))
-			end
-		end)
-
-		it("substitutes multiple captures in order", function()
-			for _, namespace in ipairs({ "ws", "group/subgroup" }) do
-				local path = resolve({ [namespace .. "/proj-*-v*"] = "~/code/*/v*" }, namespace .. "/proj-foo-v2")
-				assert.matches("/code/foo/v2$", assert(path))
-			end
-		end)
-
-		it("does not match across namespaces", function()
-			for _, repo in ipairs({ "other/repo", "ws/subgroup/repo" }) do
-				local path, err = resolve({ ["ws/*"] = "~/code/*" }, repo)
-				assert.is_nil(path)
-				assert.matches("no repo_paths mapping", assert(err), 1, true)
-			end
-		end)
-	end)
-
 	describe("mapped pull request workflows", function()
 		local original_options, original_isdirectory, original_git
 		local pending, pending_root, current_root, cancelled, checked_commits, checked_out, pr

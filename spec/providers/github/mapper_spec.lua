@@ -1,5 +1,6 @@
 local normalizer = require("atlas.pulls.providers.github.api.mapper")
 local issue_mapper = require("atlas.issues.providers.github.api.mapper")
+local github_mapper = require("atlas.providers.github.mapper")
 
 local function base_raw()
 	return {
@@ -35,18 +36,6 @@ describe("GitHub issue mapping", function()
 			repository = { nameWithOwner = "owner/repo" },
 		}
 	end
-
-	it("maps editable issue details without issue identity fields", function()
-		local details = assert(issue_mapper.to_issue_details(vim.tbl_extend("force", issue_raw(), {
-			body = "Description",
-		})))
-
-		assert.equal("My issue", details.title)
-		assert.equal("Description", details.description)
-		assert.is_nil(rawget(details, "repo_full_name"))
-		assert.is_nil(rawget(details, "number"))
-		assert.is_nil(rawget(details, "node_id"))
-	end)
 
 	it("maps GitHub milestone progress and sub-issues", function()
 		local raw = issue_raw()
@@ -113,28 +102,31 @@ describe("normalize_pr author.name", function()
 end)
 
 describe("GitHub descriptions", function()
-	local groups = {
-		{ content = "HOORAY", viewerHasReacted = true, reactors = { totalCount = 1, nodes = { { login = "bob" } } } },
-	}
-
-	it("maps a pull request description as a comment with its reactions", function()
-		local raw = vim.tbl_extend("force", base_raw(), { id = "PR_1", reactionGroups = groups })
-
-		local comment = assert(normalizer.to_description(raw))
+	it("maps a pull request description as a comment only when it has an id", function()
+		local comment = assert(normalizer.to_description(vim.tbl_extend("force", base_raw(), { id = "PR_1" })))
 
 		assert.equal("PR_1", comment.id)
 		assert.equal("Description", comment.body)
-		assert.equal("tada", comment.reactions[1].name)
-		assert.is_true(comment.reactions[1].reacted)
-		assert.same(comment.reactions, normalizer.to_pull_request_details(raw).reactions)
+		assert.is_nil(normalizer.to_description(base_raw()))
 	end)
+end)
 
-	it("maps an issue description as a comment", function()
-		local comment = assert(issue_mapper.to_comment({ id = "I_1", body = "Body", reactionGroups = groups }))
+describe("GitHub reactions", function()
+	it("maps known reaction groups that have reactors", function()
+		local reactions = github_mapper.graphql_reactions({
+			{
+				content = "HOORAY",
+				viewerHasReacted = true,
+				reactors = { totalCount = 2, nodes = { { login = "bob" } } },
+			},
+			{ content = "HEART", reactors = { totalCount = 0 } },
+			{ content = "UNKNOWN", reactors = { totalCount = 1 } },
+		})
 
-		assert.equal("I_1", comment.id)
-		assert.equal("Body", comment.body)
-		assert.equal("tada", comment.reactions[1].name)
+		assert.same(
+			{ { name = "tada", count = 2, users = { { name = "bob", username = "bob" } }, reacted = true } },
+			reactions
+		)
 	end)
 end)
 
@@ -293,43 +285,16 @@ describe("GitHub pull request stacks", function()
 end)
 
 describe("GitHub auto-merge", function()
-	it("maps the auto-merge method onto the pull request", function()
-		local raw = base_raw()
-		raw.autoMergeRequest = { mergeMethod = "SQUASH" }
-
-		assert.equal("SQUASH", normalizer.to_pull_request(raw).auto_merge_method)
-	end)
-
-	it("leaves the auto-merge method nil when auto-merge is off", function()
+	it("maps the auto-merge method and leaves it nil when auto-merge is off", function()
 		for _, case in ipairs({
+			{ label = "enabled", value = { mergeMethod = "SQUASH" }, expected = "SQUASH" },
 			{ label = "missing" },
 			{ label = "vim.NIL", value = vim.NIL },
 		}) do
 			local raw = base_raw()
 			raw.autoMergeRequest = case.value
 
-			assert.are.equal(nil, normalizer.to_pull_request(raw).auto_merge_method, case.label)
+			assert.are.equal(case.expected, normalizer.to_pull_request(raw).auto_merge_method, case.label)
 		end
-	end)
-
-	it("maps the viewer's auto-merge permissions onto pull request details", function()
-		local raw = base_raw()
-		raw.viewerCanEnableAutoMerge = true
-		raw.viewerCanDisableAutoMerge = false
-
-		local details = normalizer.to_pull_request_details(raw)
-
-		assert.is_true(details.can_enable_auto_merge)
-		assert.is_false(details.can_disable_auto_merge)
-	end)
-
-	it("treats missing auto-merge permissions as false", function()
-		local raw = base_raw()
-		raw.viewerCanEnableAutoMerge = vim.NIL
-
-		local details = normalizer.to_pull_request_details(raw)
-
-		assert.is_false(details.can_enable_auto_merge)
-		assert.is_false(details.can_disable_auto_merge)
 	end)
 end)

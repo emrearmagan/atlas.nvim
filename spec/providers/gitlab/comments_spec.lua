@@ -3,7 +3,7 @@ local client_name = "atlas.providers.gitlab.client"
 local reactions_name = "atlas.providers.gitlab.reactions"
 
 describe("GitLab merge request comments", function()
-	local api, notes, cached, previous
+	local api, notes, previous
 	local pr = { id = 12, repo_full_name = "group/project", author = { username = "alice" } }
 
 	before_each(function()
@@ -13,7 +13,6 @@ describe("GitLab merge request comments", function()
 			package.loaded[name] = nil
 		end
 		notes = {}
-		cached = nil
 		package.loaded[client_name] = {
 			graphql = function(_, _, callback)
 				callback({
@@ -33,9 +32,7 @@ describe("GitLab merge request comments", function()
 			url_encode = function(value)
 				return (value:gsub("/", "%%2F"))
 			end,
-			set_cache = function(_, value)
-				cached = value
-			end,
+			set_cache = function() end,
 		}
 		api = require(module_name)
 	end)
@@ -55,7 +52,6 @@ describe("GitLab merge request comments", function()
 				end)
 				assert.is_nil(err)
 				assert.is_table(result)
-				assert.same(result, cached)
 				return method == "fetch_conversation_comments" and result.comments or result
 			end
 

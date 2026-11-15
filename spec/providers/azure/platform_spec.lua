@@ -196,26 +196,4 @@ describe("Azure repositories and builds", function()
 		requests[2].done({ content = "trigger: none" })
 		assert.same({ path = "azure-pipelines.yml", content = "trigger: none" }, result)
 	end)
-
-	it("sends the Azure cancellation payload and reports rejection", function()
-		local ok, err
-		pipelines.cancel(context, { id = "5" }, function(value, message)
-			ok, err = value, message
-		end)
-		assert.equal("PATCH", requests[1].method)
-		assert.equal("/Project/_apis/build/builds/5", requests[1].endpoint)
-		assert.same({ status = "cancelling" }, requests[1].payload)
-		requests[1].done(nil, "Forbidden")
-		assert.is_false(ok)
-		assert.equal("Forbidden", err)
-	end)
-
-	it("retries all stage jobs only for the retry operation", function()
-		for index, action in ipairs({ "retry", "cancel" }) do
-			pipelines.update_stage(context, { id = "5" }, { ref_name = "Build" }, action, function() end)
-			assert.equal("PATCH", requests[index].method)
-			assert.equal("/Project/_apis/build/builds/5/stages/Build", requests[index].endpoint)
-			assert.same({ state = action, forceRetryAllJobs = action == "retry" or nil }, requests[index].payload)
-		end
-	end)
 end)

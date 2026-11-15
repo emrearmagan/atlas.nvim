@@ -40,7 +40,7 @@ describe("Azure client HTTP contract", function()
 		package.loaded["atlas.core.logger"] = original_logger
 	end)
 
-	it("sends authenticated requests without asking for response headers", function()
+	it("sends authenticated requests with the API version", function()
 		local client = require("atlas.providers.azure.client")
 		client.request("GET", "/_apis/git/repositories?top=1", nil, function(result, err)
 			assert.equal(response, result)
@@ -48,7 +48,6 @@ describe("Azure client HTTP contract", function()
 		end)
 		assert.equal("https://dev.azure.com/acme/_apis/git/repositories?top=1&api-version=7.1", captured.url)
 		assert.equal("Basic test-encoded", captured.headers.Authorization)
-		assert.falsy(captured.opts.response_headers)
 	end)
 
 	it("follows encoded continuation tokens and combines pages", function()

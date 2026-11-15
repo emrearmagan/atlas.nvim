@@ -31,7 +31,7 @@ describe("GitHub issue timeline mapper", function()
 		assert.is_nil(mapper.to_timeline_entry({ __typename = "SomeFutureEvent" }))
 	end)
 
-	it("maps GraphQL comments with node ids and reactors", function()
+	it("maps GraphQL comments with node ids", function()
 		local comment = assert(mapper.to_comment({
 			id = "IC_42",
 			url = "https://github.com/o/r/issues/1#issuecomment-42",
@@ -39,15 +39,10 @@ describe("GitHub issue timeline mapper", function()
 			createdAt = "2026-01-02T03:04:05Z",
 			updatedAt = "2026-01-03T03:04:05Z",
 			author = { login = "alice", name = "Alice", databaseId = 1 },
-			reactionGroups = { { content = "HEART", reactors = { totalCount = 2, nodes = { { login = "bob" } } } } },
 		}))
 		assert.same(
 			{ "IC_42", "Alice", "alice", "hi" },
 			{ comment.id, comment.author.name, comment.author.username, comment.body }
-		)
-		assert.same(
-			{ { name = "heart", count = 2, users = { { name = "bob", username = "bob" } }, reacted = false } },
-			comment.reactions
 		)
 		assert.is_nil(mapper.to_comment({ body = "no id" }))
 	end)

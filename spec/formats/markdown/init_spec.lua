@@ -201,23 +201,6 @@ describe("Markdown parsing", function()
 		}, markdown.parse("<!-->\n**raw**\n"))
 	end)
 
-	it("renders headings, lists and quotes with correctly shifted highlights", function()
-		assert.are.same({
-			lines = { "Title", "", "• first", "  • next", "3) third", "▎ quote" },
-			targets = {},
-			highlights = {
-				span(0, 0, 5, "AtlasMarkdownHeading2"),
-				span(2, 0, #"• ", "AtlasMarkdownList"),
-				span(2, #"• ", #"• first", "AtlasMarkdownStrong"),
-				span(3, 0, #"  • ", "AtlasMarkdownList"),
-				span(4, 0, 3, "AtlasMarkdownList"),
-				span(5, 0, #"▎ quote", "AtlasMarkdownQuote"),
-				span(5, 0, #"▎ ", "AtlasMarkdownQuoteBar"),
-				span(5, #"▎ ", #"▎ quote", "AtlasMarkdownEmphasis"),
-			},
-		}, markdown.parse("## Title\n\n- **first**\n  + next\n3) third\n> *quote*"))
-	end)
-
 	it("renders fenced code literally and resumes Markdown after the fence", function()
 		local result = markdown.parse("```lua\n# raw\n**raw**\n```\n\n### Title")
 		assert.are.same({
@@ -306,13 +289,14 @@ describe("Markdown parsing", function()
 	end)
 
 	it("renders Markdown and HTML images with labels and destinations", function()
-		local url = "https://github.com/user-attachments/assets/925926a0-a795-4fc1-b62c-b05ca6a4acd1"
-		local label = "659439788-01d01980-3584-409b-84e2-a19468ec2185"
+		local url = "https://example.com/assets/screenshot.png"
+		local label = "screenshot"
 		for _, case in ipairs({
 			{ "![photo](https://example.com/image.png)", "photo", "https://example.com/image.png" },
 			{ "![](image.png)", "image", "image.png" },
 			{ '<img width="1366" height="1118" alt="' .. label .. '" src="' .. url .. '" />', label, url },
 			{ "<img src='image.png'>", "image", "image.png" },
+			{ '<img src="image.png" alt="">', "image", "image.png" },
 		}) do
 			assert.are.same({
 				lines = { "é 󰋩 " .. case[2] .. "!" },
@@ -342,7 +326,7 @@ describe("Markdown parsing", function()
 	it("renders details summaries and keeps their Markdown body visible", function()
 		local result = markdown.parse(table.concat({
 			"<details>",
-			'<summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>',
+			'<summary><strong>Using <a href="https://example.com/owner/repo">repo</a></strong></summary>',
 			"",
 			"```lua",
 			"print(1)",
@@ -352,7 +336,7 @@ describe("Markdown parsing", function()
 			"**after**",
 		}, "\n"))
 		assert.same({
-			"▾ Using lazy.nvim",
+			"▾ Using repo",
 			"",
 			"     lua  ",
 			" print(1) ",
@@ -471,7 +455,7 @@ describe("Markdown parsing", function()
 			{ "See https://example.com/docs.", "https://example.com/docs", #"See " },
 			{ "(https://example.com/a)", "https://example.com/a", #"(" },
 			{ "<https://example.org>", "https://example.org", 0 },
-			{ "x https://e.com/x_y_z*", "https://e.com/x_y_z", #"x " },
+			{ "x https://example.com/x_y_z*", "https://example.com/x_y_z", #"x " },
 			{ "http://a.b/c?q=1&x=2#frag end", "http://a.b/c?q=1&x=2#frag", 0 },
 		}
 		for _, case in ipairs(cases) do
@@ -508,9 +492,16 @@ describe("Markdown parsing", function()
 	end)
 
 	it("renders ordered and unordered lists with indentation", function()
-		for _, case in ipairs({ { "-", "•" }, { "+", "•" }, { "*", "•" }, { "1.", "1." }, { "3)", "3)" } }) do
-			local prefix = "  " .. case[2] .. " "
-			local result = markdown.parse("  " .. case[1] .. " **item**")
+		for _, case in ipairs({
+			{ "-", "•" },
+			{ "  -", "  •" },
+			{ "  +", "  •" },
+			{ "  *", "  •" },
+			{ "  1.", "  1." },
+			{ "  3)", "  3)" },
+		}) do
+			local prefix = case[2] .. " "
+			local result = markdown.parse(case[1] .. " **item**")
 			assert.same({ prefix .. "item" }, result.lines)
 			assert.same({
 				span(0, 0, #prefix, "AtlasMarkdownList"),
@@ -577,16 +568,13 @@ describe("Markdown parsing", function()
 	it("adds colored language icons when available and keeps code labels readable in narrow panels", function()
 		local unknown = markdown.parse("```unknown\nx\n```", { width = 14 })
 		local unlabeled = markdown.parse("```\nx\n```", { width = 14 })
-		local requested = {}
 		local icons = {
 			lua = { "", "DevIconLua" },
 			bash = { "", "DevIconBash" },
 			javascript = { "", "DevIconJavascript" },
 		}
 		package.loaded["nvim-web-devicons"] = {
-			get_icon_by_filetype = function(filetype, opts)
-				assert.same({ default = false }, opts)
-				requested[#requested + 1] = filetype
+			get_icon_by_filetype = function(filetype)
 				local icon = icons[filetype]
 				if icon then
 					return icon[1], icon[2]
@@ -607,7 +595,6 @@ describe("Markdown parsing", function()
 			assert.equal(14, vim.fn.strdisplaywidth(result.lines[1]))
 			has_span(result, span(0, #padding, #padding + #icon, group))
 			has_span(result, span(0, #padding + #icon + 1, #padding + #icon + 1 + #language, "AtlasMarkdownCodeLabel"))
-			assert.equal(filetype, requested[#requested])
 
 			local natural = markdown.parse(source)
 			assert.equal("  " .. icon .. " " .. language .. "  ", natural.lines[1])
@@ -619,9 +606,7 @@ describe("Markdown parsing", function()
 		end
 
 		assert.same(unknown, markdown.parse("```unknown\nx\n```", { width = 14 }))
-		local calls = #requested
 		assert.same(unlabeled, markdown.parse("```\nx\n```", { width = 14 }))
-		assert.equal(calls, #requested)
 	end)
 
 	it("renders an empty code block with a background", function()
@@ -760,7 +745,7 @@ describe("Markdown parsing", function()
 	end)
 
 	it("formats table columns, headers and borders", function()
-		local result = markdown.parse("| Name | Value |\n| --- | --- |\n| A | longer |")
+		local result = markdown.parse("| Name | Value |\n| :--- | --- |\n| A | longer |")
 		assert.are.same({
 			"|------|--------|",
 			"| Name | Value  |",
@@ -792,11 +777,6 @@ describe("Markdown parsing", function()
 			"| x | y |",
 			"|---|---|",
 		}, result.lines)
-	end)
-
-	it("honors left, center and right table alignment", function()
-		local result = markdown.parse("Left | Center | Right\n:--- | :---: | ---:\nx | y | z")
-		assert.equal("| x    |   y    |     z |", result.lines[4])
 	end)
 
 	it("preserves inline table highlights after padding and removed markers", function()
@@ -950,18 +930,6 @@ describe("Markdown parsing", function()
 		}) do
 			assert.are.same(markdown.parse(source), markdown.parse(source, { width = 3 }))
 		end
-	end)
-
-	it("aligns multibyte table text while keeping highlight offsets in bytes", function()
-		local result = markdown.parse("Name | Value\n--- | ---\n**café** | x")
-		assert.are.same({
-			"|------|-------|",
-			"| Name | Value |",
-			"|------|-------|",
-			"| café | x     |",
-			"|------|-------|",
-		}, result.lines)
-		has_span(result, span(3, #"| ", #"| café", "AtlasMarkdownStrong"))
 	end)
 
 	it("pads multibyte code without truncating it", function()

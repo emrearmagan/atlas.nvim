@@ -52,9 +52,21 @@ describe("core.git remotes", function()
 		---@param slug string|nil
 		---@param host string|nil
 		local function remote(name, slug, host)
-			local url = slug and ("https://" .. (host or "github.com") .. "/" .. slug .. ".git")
-				or "https://example.com/x"
-			return { name = name, url = url, target = slug and git.parse_remote_url(url) or nil }
+			if not slug then
+				return { name = name, url = "https://example.com/x" }
+			end
+			host = host or "github.com"
+			local url = "https://" .. host .. "/" .. slug
+			return {
+				name = name,
+				url = url .. ".git",
+				target = {
+					provider = host == "gitlab.com" and "gitlab" or "github",
+					host = host,
+					repo_full_name = slug,
+					url = url,
+				},
+			}
 		end
 
 		local function selected(remotes, resolved)
@@ -114,25 +126,24 @@ describe("core.git remotes", function()
 		assert.equal("origin", remote)
 	end)
 
-	it("resolves the remotes a branch tracks and pushes to", function()
-		git.run = function(args, _, done)
-			assert.same({
-				"-C",
-				"/repo",
-				"for-each-ref",
-				"--format=%(upstream:remotename) %(push:remotename)",
-				"refs/heads/feature",
-			}, args)
-			return complete("upstream origin\n", done)
+	it("reads the remotes a branch tracks and pushes to, leaving out a missing one", function()
+		for _, case in ipairs({
+			{ "upstream origin\n", { merge = "upstream", push = "origin" } },
+			{ " origin\n", { push = "origin" } },
+			{ "upstream \n", { merge = "upstream" } },
+			{ "\n", {} },
+		}) do
+			git.run = function(_, _, done)
+				return complete(case[1], done)
+			end
+
+			local remotes
+			git.branch_remotes("/repo", "feature", function(value)
+				remotes = value
+			end)
+
+			assert.same(case[2], remotes)
 		end
-
-		local remotes
-		git.branch_remotes("/repo", "feature", function(value)
-			remotes = value
-		end)
-
-		assert.equal("upstream", remotes.merge)
-		assert.equal("origin", remotes.push)
 	end)
 
 	it("checks qualified base revisions without assuming origin", function()

@@ -13,7 +13,7 @@ end
 ---@return AtlasWorktreeContext
 local function context(overrides)
 	local ctx = {
-		repo_root = "/home/dev/code/atlas.nvim",
+		repo_root = "/home/dev/code/repo.nvim",
 		repo_full_name = "owner/repo",
 		head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 	}
@@ -44,6 +44,23 @@ local function fake_git(responses)
 	return recorder
 end
 
+-- Every worktree is locked: Git only removes or replaces one when `--force` is given twice.
+---@return string[] removed
+local function locked_git()
+	local removed = {}
+	core_git.run = function(args, _, on_done)
+		local forced = #vim.tbl_filter(function(arg)
+			return arg == "--force"
+		end, args) == 2
+		if forced and args[4] == "remove" then
+			table.insert(removed, args[#args])
+		end
+		on_done({ code = forced and 0 or 128, stdout = "", stderr = forced and "" or "worktree is locked" })
+		return { cancel = function() end }
+	end
+	return removed
+end
+
 ---@param calls string[][]
 ---@param subcommand string
 ---@return boolean
@@ -67,38 +84,27 @@ describe("worktree", function()
 		it("separates commits and pull requests under the repository slug", function()
 			for _, case in ipairs({
 				{ {}, "abcdef012345" },
+				{ {}, "abcdef012345", { enabled = true } },
 				{ { head_sha = "0123456789abcdef0123456789abcdef01234567" }, "0123456789ab" },
 				{ { pr_id = 1234 }, "pr-1234" },
 				{ { pr_id = 2 }, "pr-2" },
 			}) do
-				assert.equal(CACHE .. "/owner-repo/" .. case[2], fresh().claim(context(case[1]), nil))
+				assert.equal(CACHE .. "/owner-repo/" .. case[2], fresh().claim(context(case[1]), case[3]))
 			end
 		end)
 
 		it("falls back to the repo root basename", function()
-			for _, root in ipairs({ "/home/dev/code/atlas.nvim", "/home/dev/code/atlas.nvim/" }) do
+			for _, root in ipairs({ "/home/dev/code/repo.nvim", "/home/dev/code/repo.nvim/" }) do
 				local ctx = context({ repo_root = root })
 				ctx.repo_full_name = nil
-				assert.equal(CACHE .. "/atlas-nvim/abcdef012345", fresh().claim(ctx, nil))
+				assert.equal(CACHE .. "/repo-nvim/abcdef012345", fresh().claim(ctx, nil))
 			end
-		end)
-
-		it("uses the default when no override is configured", function()
-			assert.equal(DEFAULT, fresh().claim(context(), nil))
-			assert.equal(DEFAULT, fresh().claim(context(), { enabled = true }))
 		end)
 
 		it("accepts an absolute string override", function()
 			for _, dir in ipairs({ "/var/tmp/review", "/var/tmp/review/" }) do
 				assert.equal("/var/tmp/review", fresh().claim(context(), { dir = dir }))
 			end
-		end)
-
-		it("rejects a relative string override", function()
-			local dir, err = worktree.claim(context(), { dir = "review" })
-
-			assert.is_nil(dir)
-			assert.is_truthy(err)
 		end)
 
 		it("calls a function override with the context and the default", function()
@@ -112,7 +118,7 @@ describe("worktree", function()
 
 			assert.equal("/var/tmp/abcdef0", dir)
 			assert.equal("owner/repo", seen.repo_full_name)
-			assert.equal("/home/dev/code/atlas.nvim", seen.repo_root)
+			assert.equal("/home/dev/code/repo.nvim", seen.repo_root)
 			assert.equal(DEFAULT, seen.default)
 		end)
 
@@ -151,12 +157,9 @@ describe("worktree", function()
 	end)
 
 	describe("validate", function()
-		it("accepts an absent or empty config", function()
+		it("accepts an absent, empty or well formed config", function()
 			assert.is_true(worktree.validate(nil))
 			assert.is_true(worktree.validate({}))
-		end)
-
-		it("accepts a well formed config", function()
 			assert.is_true(worktree.validate({
 				enabled = true,
 				dir = "/var/tmp/review",
@@ -164,31 +167,23 @@ describe("worktree", function()
 			}))
 		end)
 
-		it("rejects invalid enabled and directory settings", function()
-			for _, config in ipairs({ { enabled = "yes" }, { dir = 42 }, { dir = "review" } }) do
+		it("rejects invalid settings and links outside the repository or into .git", function()
+			for _, config in ipairs({
+				{ enabled = "yes" },
+				{ dir = 42 },
+				{ dir = "review" },
+				{ link = { 42 } },
+				{ link = { "" } },
+				{ link = { "/etc" } },
+				{ link = { ".." } },
+				{ link = { "../secrets" } },
+				{ link = { "packages/../../secrets" } },
+				{ link = { "packages/.." } },
+				{ link = { ".git" } },
+				{ link = { ".git/hooks" } },
+			}) do
 				assert.is_false(worktree.validate(config))
 			end
-		end)
-
-		it("rejects link entries that are not strings", function()
-			assert.is_false(worktree.validate({ link = { 42 } } --[[@as any]]))
-			assert.is_false(worktree.validate({ link = { "" } }))
-		end)
-
-		it("rejects absolute link entries", function()
-			assert.is_false(worktree.validate({ link = { "/etc" } }))
-		end)
-
-		it("rejects link entries that escape the repository", function()
-			assert.is_false(worktree.validate({ link = { ".." } }))
-			assert.is_false(worktree.validate({ link = { "../secrets" } }))
-			assert.is_false(worktree.validate({ link = { "packages/../../secrets" } }))
-			assert.is_false(worktree.validate({ link = { "packages/.." } }))
-		end)
-
-		it("rejects linking the git directory", function()
-			assert.is_false(worktree.validate({ link = { ".git" } }))
-			assert.is_false(worktree.validate({ link = { ".git/hooks" } }))
 		end)
 	end)
 
@@ -243,36 +238,6 @@ describe("worktree", function()
 			assert.equal(first .. "-3", worktree.claim(ctx, nil))
 		end)
 
-		it("force-removes only worktrees below the cache root", function()
-			local forces = {}
-			core_git.run = function(args, _, on_done)
-				local force_count = 0
-				for _, arg in ipairs(args) do
-					if arg == "--force" then
-						force_count = force_count + 1
-					end
-				end
-				forces[args[#args]] = force_count
-				on_done({ code = 0, stdout = "", stderr = "" })
-				return { cancel = function() end }
-			end
-
-			for _, dir in ipairs({ CACHE .. "/repo/pr-1", CACHE .. "/repo/pr-2/", CACHE, CACHE .. "/" }) do
-				worktree.discard("/home/dev/code/atlas.nvim", dir)
-			end
-			worktree.discard("/home/dev/code/atlas.nvim", "/home/dev/reviews")
-			worktree.discard("/home/dev/code/atlas.nvim", CACHE .. "-other/repo")
-
-			assert.same({
-				[CACHE .. "/repo/pr-1"] = 2,
-				[CACHE .. "/repo/pr-2/"] = 2,
-				[CACHE] = 1,
-				[CACHE .. "/"] = 1,
-				["/home/dev/reviews"] = 1,
-				[CACHE .. "-other/repo"] = 1,
-			}, forces)
-		end)
-
 		it("remove deletes by hand only below the cache root", function()
 			local inside = CACHE .. "/repo/pr-1"
 			local outside = "/home/dev/reviews"
@@ -281,83 +246,64 @@ describe("worktree", function()
 				["worktree prune"] = { code = 0 },
 			})
 
-			worktree.discard("/home/dev/code/atlas.nvim", inside)
-			worktree.discard("/home/dev/code/atlas.nvim", outside)
+			worktree.discard("/home/dev/code/repo.nvim", inside)
+			worktree.discard("/home/dev/code/repo.nvim", outside)
 
 			assert.same({ inside }, deleted)
 		end)
 
-		it("removes locked cache worktrees through git while preserving locked custom worktrees", function()
-			local inside = CACHE .. "/repo/pr-1"
-			local outside = "/home/dev/reviews"
-			local removed = {}
-			core_git.run = function(args, _, on_done)
-				local code = 0
-				if args[4] == "remove" then
-					local force_count = 0
-					for _, arg in ipairs(args) do
-						if arg == "--force" then
-							force_count = force_count + 1
-						end
-					end
-					if force_count == 2 then
-						table.insert(removed, args[#args])
-					else
-						code = 128
-					end
-				end
-				on_done({ code = code, stderr = code ~= 0 and "worktree is locked" or "" })
-				return { cancel = function() end }
+		it("removes locked worktrees only below the cache root and never deletes the others", function()
+			local removed = locked_git()
+
+			for _, dir in ipairs({
+				CACHE .. "/repo/pr-1",
+				CACHE .. "/repo/pr-2/",
+				CACHE,
+				CACHE .. "/",
+				CACHE .. "-other/repo",
+				"/home/dev/reviews",
+			}) do
+				worktree.discard("/home/dev/code/repo.nvim", dir)
 			end
 
-			worktree.discard("/home/dev/code/atlas.nvim", inside)
-			worktree.discard("/home/dev/code/atlas.nvim", outside)
-
-			assert.same({ inside }, removed)
+			assert.same({ CACHE .. "/repo/pr-1", CACHE .. "/repo/pr-2/" }, removed)
 			assert.same({}, deleted)
 		end)
 
-		it("ensure takes over a deleted worktree path, even a locked one below the cache root", function()
-			local inside = CACHE .. "/repo/pr-1"
-			local outside = "/home/dev/reviews"
-			local forces = {}
+		it("ensure takes over a locked worktree path only below the cache root", function()
+			locked_git()
 			vim.fn.isdirectory = function()
 				return 0
 			end
-			core_git.run = function(args, _, on_done)
-				local force_count = 0
-				for _, arg in ipairs(args) do
-					if arg == "--force" then
-						force_count = force_count + 1
-					end
-				end
-				forces[args[#args - 1]] = force_count
-				on_done({ code = 0, stdout = "", stderr = "" })
-				return { cancel = function() end }
-			end
-
-			for _, dir in ipairs({ inside, outside }) do
+			local function ensure(dir)
+				local result, err
 				worktree.ensure({
-					repo_root = "/home/dev/code/atlas.nvim",
+					repo_root = "/home/dev/code/repo.nvim",
 					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 					dir = dir,
-				}, function() end)
+				}, function(value, ensure_err)
+					result, err = value, ensure_err
+				end)
+				return result, err
 			end
 
-			assert.same({ [inside] = 2, [outside] = 1 }, forces)
+			assert.equal(CACHE .. "/repo/pr-1", (ensure(CACHE .. "/repo/pr-1")))
+			local dir, err = ensure("/home/dev/reviews")
+			assert.is_nil(dir)
+			assert.matches("locked", assert(err))
 		end)
 
 		it("ensure refuses an existing directory that is not a worktree of the repository", function()
 			local calls = fake_git({
 				["worktree list"] = {
 					code = 0,
-					stdout = "worktree /home/dev/code/atlas.nvim\nHEAD 0123\nbranch refs/heads/main\n\n",
+					stdout = "worktree /home/dev/code/repo.nvim\nHEAD 0123\nbranch refs/heads/main\n\n",
 				},
 			})
 			local result, err
 
 			worktree.ensure({
-				repo_root = "/home/dev/code/atlas.nvim",
+				repo_root = "/home/dev/code/repo.nvim",
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = "/home/dev/reviews",
 			}, function(dir, ensure_err)
@@ -374,7 +320,7 @@ describe("worktree", function()
 		it("ensure rebuilds an unregistered directory below the cache root", function()
 			local dir = CACHE .. "/repo/pr-1"
 			local calls = fake_git({
-				["worktree list"] = { code = 0, stdout = "worktree /home/dev/code/atlas.nvim\n\n" },
+				["worktree list"] = { code = 0, stdout = "worktree /home/dev/code/repo.nvim\n\n" },
 				["worktree remove"] = { code = 128, stderr = "not a working tree" },
 				["worktree prune"] = { code = 0 },
 				["worktree add"] = { code = 0 },
@@ -382,7 +328,7 @@ describe("worktree", function()
 			local result
 
 			worktree.ensure({
-				repo_root = "/home/dev/code/atlas.nvim",
+				repo_root = "/home/dev/code/repo.nvim",
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = dir,
 			}, function(created)
@@ -399,14 +345,14 @@ describe("worktree", function()
 			local calls = fake_git({
 				["worktree list"] = {
 					code = 0,
-					stdout = "worktree /home/dev/code/atlas.nvim\n\nworktree " .. dir .. "\ndetached\n\n",
+					stdout = "worktree /home/dev/code/repo.nvim\n\nworktree " .. dir .. "\ndetached\n\n",
 				},
 				["rev-parse"] = { code = 0, stdout = "abcdef0123456789abcdef0123456789abcdef01\n" },
 			})
 			local result
 
 			worktree.ensure({
-				repo_root = "/home/dev/code/atlas.nvim",
+				repo_root = "/home/dev/code/repo.nvim",
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = dir,
 			}, function(created)
@@ -430,7 +376,7 @@ describe("worktree", function()
 			local result
 
 			worktree.ensure({
-				repo_root = "/home/dev/code/atlas.nvim",
+				repo_root = "/home/dev/code/repo.nvim",
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = dir,
 			}, function(created)
@@ -463,7 +409,7 @@ describe("worktree", function()
 				end
 
 				local handle = worktree.ensure({
-					repo_root = "/home/dev/code/atlas.nvim",
+					repo_root = "/home/dev/code/repo.nvim",
 					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 					dir = CACHE .. "/repo/pr-1",
 				}, function()

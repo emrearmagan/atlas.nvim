@@ -5,8 +5,8 @@ local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
+local repo_paths = require("atlas.core.git.repo_paths")
 
-local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 local CLONE_STALE_SECONDS = 30 * 24 * 60 * 60 -- 30 days
 
 ---@return AtlasGitTransport transport
@@ -14,130 +14,16 @@ local function configured_git_transport()
 	return config.options.pulls.git_transport == "ssh" and "ssh" or "https"
 end
 
-local function star_count(s)
-	local _, n = s:gsub("%*", "")
-	return n
-end
-
--- Split "group/subgroup/repo" -> namespace, repo.
-local function split_key(key)
-	if key:sub(1, 1) == "/" or key:find("//", 1, true) then
-		return nil
-	end
-	return key:match("^(.+)/([^/]+)$")
-end
-
-local function normalize_path(path)
-	if path:sub(1, 2) == "~/" then
-		path = (vim.env.HOME or vim.fn.expand("~")) .. path:sub(2)
-	end
-	return vim.fn.fnamemodify(path, ":p")
-end
-
--- Turn a seg like "proj-*-v*" into a Lua pattern with one capture per `*`.
-local function seg_to_pattern(seg)
-	local escaped = seg:gsub(LUA_PATTERN_SPECIALS, "%%%0"):gsub("%*", "([^/]+)")
-	return "^" .. escaped .. "$"
-end
-
--- Replace each `*` in `value` with the next capture from `captures`.
-local function apply_captures(value, captures)
-	local idx = 0
-	return (value:gsub("%*", function()
-		idx = idx + 1
-		return captures[idx] or ""
-	end))
-end
-
--- Pattern specificity: fewer `*` wins, then longer literal text, then alphabetical key.
-local function more_specific(a, b)
-	if a.stars ~= b.stars then
-		return a.stars < b.stars
-	end
-	if a.lit ~= b.lit then
-		return a.lit > b.lit
-	end
-	return a.key < b.key
-end
-
----@param repo_paths table<string, string>|nil
----@return boolean ok
----@return string|nil err
-local function validate_repo_paths(repo_paths)
-	if repo_paths == nil then
-		return true, nil
-	end
-	if type(repo_paths) ~= "table" then
-		return false, "repo_paths must be a table<string,string>"
-	end
-
-	for key, value in pairs(repo_paths) do
-		if type(key) ~= "string" or type(value) ~= "string" then
-			return false, "repo_paths keys and values must be strings"
-		end
-		local _, seg = split_key(key)
-		if seg == nil then
-			return false, string.format("invalid key '%s' (expected namespace/repo or namespace/<pattern with *>)", key)
-		end
-		if star_count(seg) ~= star_count(value) then
-			return false, string.format("wildcard parity mismatch for '%s' → '%s'", key, value)
-		end
-	end
-
-	return true, nil
-end
-
 ---@param repo_name string
 ---@param opts {require_existing: boolean|nil }
 ---@return string|nil repo_path
 ---@return string|nil err
-function M.resolve_repo_path(repo_name, opts)
-	local repo_paths = (config.options.pulls.repo_config or {}).paths or {}
-	local ok, err = validate_repo_paths(repo_paths)
-	if not ok then
-		return nil, err
+local function resolve_repo_path(repo_name, opts)
+	local path, err = repo_paths.resolve((config.options.pulls.repo_config or {}).paths or {}, repo_name)
+	if path and opts.require_existing ~= false and vim.fn.isdirectory(path) ~= 1 then
+		return nil, string.format("mapped path does not exist: %s", path)
 	end
-
-	local namespace, repo = split_key(repo_name)
-	if not namespace then
-		return nil, "invalid repository identifier (expected namespace/repo)"
-	end
-
-	-- Exact match wins over any wildcard.
-	---@type string|nil
-	local resolved = repo_paths[repo_name]
-	if not resolved or resolved == "" then
-		local best
-		for key, value in pairs(repo_paths) do
-			local key_namespace, seg = split_key(key)
-			if key_namespace == namespace and seg:find("*", 1, true) and value ~= "" then
-				local captures = { repo:match(seg_to_pattern(seg)) }
-				if captures[1] then
-					local stars = star_count(seg)
-					local candidate = {
-						key = key,
-						stars = stars,
-						lit = #seg - stars,
-						value = apply_captures(value, captures),
-					}
-					if not best or more_specific(candidate, best) then
-						best = candidate
-					end
-				end
-			end
-		end
-		resolved = best and best.value or nil
-	end
-
-	if not resolved or resolved == "" then
-		return nil, string.format("no repo_paths mapping for '%s'", repo_name)
-	end
-	resolved = normalize_path(resolved)
-
-	if opts.require_existing ~= false and vim.fn.isdirectory(resolved) ~= 1 then
-		return nil, string.format("mapped path does not exist: %s", resolved)
-	end
-	return resolved, nil
+	return path, err
 end
 
 ---@param pr PullRequest
@@ -145,7 +31,7 @@ end
 ---@param on_done fun(repo_path: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.resolve_repo_path_for_pr(pr, opts, on_done)
-	local root, err = M.resolve_repo_path(pr.repo_full_name, opts)
+	local root, err = resolve_repo_path(pr.repo_full_name, opts)
 	if not root then
 		on_done(nil, err)
 		return nil
@@ -607,7 +493,7 @@ end
 ---@param on_done fun(root: string|nil, err: string|nil, remote: string|nil)
 ---@return { cancel: fun() }|nil
 function M.resolve_repo_root(repo_full_name, repo_url, on_done)
-	local path, err = M.resolve_repo_path(repo_full_name, { require_existing = true })
+	local path, err = resolve_repo_path(repo_full_name, { require_existing = true })
 	if not path then
 		on_done(nil, err)
 		return nil

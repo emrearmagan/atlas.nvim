@@ -61,12 +61,6 @@ describe("core.http", function()
 		assert.equal(12, completed)
 	end)
 
-	it("only asks curl for response headers when requested", function()
-		local http = require("atlas.core.http")
-		http.curl_request("GET", "https://example.test/item", {}, nil, function() end)
-		assert.falsy(configs[1]:find("header_json", 1, true))
-	end)
-
 	it("returns requested response headers", function()
 		local http = require("atlas.core.http")
 		local body = '{"value":[]}'

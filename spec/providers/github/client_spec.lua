@@ -34,7 +34,6 @@ describe("GitHub client host routing", function()
 		original = {
 			system = vim.system,
 			executable = vim.fn.executable,
-			decode = vim.json.decode,
 			gh_host = vim.env.GH_HOST,
 		}
 		options, calls = {}, {}
@@ -49,10 +48,6 @@ describe("GitHub client host routing", function()
 		package.loaded["atlas.core.logger"] = { loginfo = function() end, logerror = function() end }
 		vim.fn.executable = function()
 			return 1
-		end
-		vim.json.decode = function(value)
-			assert.are.equal('{"ok":true}', value)
-			return { ok = true }
 		end
 		---@diagnostic disable-next-line: redundant-parameter
 		vim.system = function(cmd, opts, on_exit)
@@ -71,7 +66,6 @@ describe("GitHub client host routing", function()
 	after_each(function()
 		vim.system = original.system
 		vim.fn.executable = original.executable
-		vim.json.decode = original.decode
 		vim.env.GH_HOST = original.gh_host
 		for _, name in ipairs(dependencies) do
 			package.loaded[name] = saved[name].loaded
@@ -79,18 +73,22 @@ describe("GitHub client host routing", function()
 		end
 	end)
 
-	it("uses an explicit hostname ahead of GH_HOST without changing Neovim's environment", function()
-		vim.env.GH_HOST = "other.example.com"
-		options.hostname = " GitHub.Company.com "
-		assert.is_true(client.is_enterprise_server())
-		local args = { "api", "graphql", "-f", "query={viewer{login}}" }
-		client.gh(args, function() end)
-		assert.same({ "gh", "api", "graphql", "-f", "query={viewer{login}}" }, calls[1].cmd)
-		assert.are.equal("github.company.com", calls[1].opts.env.GH_HOST)
-		assert.are.equal("other.example.com", vim.env.GH_HOST)
-		assert.are.equal(4, #args)
-		options.hostname = "github.com"
-		assert.is_false(client.is_enterprise_server())
+	it("routes requests to the hostname, then GH_HOST, then github.com without changing either", function()
+		for _, case in ipairs({
+			{ hostname = " GitHub.Company.com ", gh_host = "other.example.com", expected = "github.company.com" },
+			{ gh_host = "github.company.com", expected = "github.company.com" },
+			{ expected = "github.com" },
+		}) do
+			options.hostname, vim.env.GH_HOST = case.hostname, case.gh_host
+			local args = { "api", "user" }
+			client.gh(args, function() end)
+
+			assert.same({ "gh", "api", "user" }, calls[#calls].cmd)
+			assert.are.equal(case.expected, calls[#calls].opts.env.GH_HOST)
+			assert.are.equal(case.expected ~= "github.com", client.is_enterprise_server())
+			assert.same({ "api", "user" }, args)
+			assert.are.equal(case.gh_host, vim.env.GH_HOST)
+		end
 	end)
 
 	it("strips the protocol and path from the hostname", function()
@@ -102,19 +100,5 @@ describe("GitHub client host routing", function()
 			options.hostname = hostname
 			assert.are.equal("github.company.com", client.hostname())
 		end
-	end)
-
-	it("uses GH_HOST when no hostname is configured", function()
-		vim.env.GH_HOST = "github.company.com"
-		assert.is_true(client.is_enterprise_server())
-		client.gh({ "api", "user" }, function() end)
-		assert.are.equal("github.company.com", calls[1].opts.env.GH_HOST)
-	end)
-
-	it("explicitly defaults API requests to github.com", function()
-		assert.is_false(client.is_enterprise_server())
-		client.gh({ "api", "user" }, function() end)
-		assert.same({ "gh", "api", "user" }, calls[1].cmd)
-		assert.are.equal("github.com", calls[1].opts.env.GH_HOST)
 	end)
 end)

@@ -387,7 +387,7 @@ end
 
 ---@param remote string
 ---@return AtlasTarget|nil target, string|nil err
-function M.parse_remote_url(remote)
+local function parse_remote_url(remote)
 	local target, err = providers.resolve(remote)
 	if target and target.entity == "repo" then
 		return target
@@ -507,7 +507,7 @@ function M.list_repository_remotes(root, on_done)
 			local name, url, kind = line:match("^(%S+)%s+(.-)%s+%((%a+)%)")
 			if name and url and kind == "fetch" and not seen[name] then
 				seen[name] = true
-				local target = M.parse_remote_url(trim(url))
+				local target = parse_remote_url(trim(url))
 				table.insert(remotes, { name = name, url = trim(url), target = target })
 			end
 		end
@@ -537,7 +537,7 @@ local function with_repository(remote, repo_full_name)
 		return remote
 	end
 	local base_url = remote.target.url:match("^(https?://[^/]+)")
-	local target = base_url and M.parse_remote_url(base_url .. "/" .. repo_full_name)
+	local target = base_url and parse_remote_url(base_url .. "/" .. repo_full_name)
 	if not target then
 		return remote
 	end
