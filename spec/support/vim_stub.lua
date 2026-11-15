@@ -98,6 +98,9 @@ _G.vim = {
 		joinpath = function(...)
 			return (table.concat({ ... }, "/"):gsub("//+", "/"))
 		end,
+		normalize = function(path)
+			return (path:gsub("^~", os.getenv("HOME") or ""))
+		end,
 	},
 
 	filetype = {

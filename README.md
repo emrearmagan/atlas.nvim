@@ -484,13 +484,13 @@ pulls = {
     },
   },
   repo_config = {
-    -- Maps `namespace/repo` to local paths. Used for checkout, diffs, and custom actions.
-    -- PR checkout prefers the matching checkout or worktree Atlas is run from, then falls back here.
+    -- Local clones for checkout, diffs and custom actions. The current checkout is tried first.
     -- Diffs of other repositories use a clone in the cache, removed after 30 days without a review.
     paths = {
-      ["your-workspace/*"] = "~/code/repos/*",
+      ["*/*"] = "~/code/*/*", -- owner/repo → ~/code/owner/repo
+      ["your-workspace/*"] = "~/work/*", -- your-workspace/api → ~/work/api
       ["your-workspace/atlas"] = "~/code/atlas",
-      ["group/subgroup/*"] = "~/code/subgroup/*",
+      ["group/subgroup/*"] = "~/code/subgroup/*", -- group/subgroup/app → ~/code/subgroup/app
     },
     settings = {
       ["your-workspace/atlas"] = {

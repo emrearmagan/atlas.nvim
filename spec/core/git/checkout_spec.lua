@@ -3,6 +3,69 @@ local git = require("atlas.core.git")
 local checkout = require("atlas.core.git.checkout")
 
 describe("core.git.checkout", function()
+	describe("resolve_path", function()
+		it("fails only when the matching mapping has a different number of *", function()
+			local paths =
+				{ ["ws/*"] = "~/code/no-star", ["other/*"] = "~/code/*", bad = "~/x", ["group//repo"] = "~/x" }
+
+			local path, err = checkout.resolve_path(paths, "ws/repo")
+			assert.is_nil(path)
+			assert.is_string(err)
+			assert.equal(vim.env.HOME .. "/code/repo", checkout.resolve_path(paths, "other/repo"))
+		end)
+
+		it("resolves exact mapping over wildcard", function()
+			for _, namespace in ipairs({ "ws", "group/subgroup", "group/subgroup/team" }) do
+				local path = checkout.resolve_path({
+					[namespace .. "/*"] = "~/code/*",
+					[namespace .. "/repo"] = "~/code/special",
+				}, namespace .. "/repo")
+				assert.matches("special", assert(path))
+			end
+		end)
+
+		it("prefers more specific wildcard", function()
+			for _, namespace in ipairs({ "ws", "group/subgroup" }) do
+				local path = checkout.resolve_path({
+					[namespace .. "/*"] = "~/code/*",
+					[namespace .. "/proj-*"] = "~/work/proj-*",
+				}, namespace .. "/proj-foo")
+				assert.matches("/work/proj%-foo$", assert(path))
+			end
+		end)
+
+		it("matches * in any segment, preferring the key with fewer of them", function()
+			local paths = {
+				["*/*"] = "~/code/*/*",
+				["acme/*"] = "~/work/*",
+				["group/*/*"] = "~/code/group/*/*",
+			}
+			for _, case in ipairs({
+				{ "owner/repo", "/code/owner/repo" },
+				{ "acme/web", "/work/web" },
+				{ "group/sub/repo", "/code/group/sub/repo" },
+			}) do
+				assert.equal(vim.env.HOME .. case[2], checkout.resolve_path(paths, case[1]))
+			end
+		end)
+
+		it("substitutes multiple captures in order", function()
+			for _, namespace in ipairs({ "ws", "group/subgroup" }) do
+				local path =
+					checkout.resolve_path({ [namespace .. "/proj-*-v*"] = "~/code/*/v*" }, namespace .. "/proj-foo-v2")
+				assert.matches("/code/foo/v2$", assert(path))
+			end
+		end)
+
+		it("does not match across namespaces", function()
+			for _, repo in ipairs({ "other/repo", "ws/subgroup/repo" }) do
+				local path, err = checkout.resolve_path({ ["ws/*"] = "~/code/*" }, repo)
+				assert.is_nil(path)
+				assert.matches("no repo_paths mapping", assert(err), 1, true)
+			end
+		end)
+	end)
+
 	describe("mapped pull request workflows", function()
 		local original_options, original_isdirectory, original_git
 		local pending, pending_root, current_root, cancelled, checked_commits, checked_out, pr

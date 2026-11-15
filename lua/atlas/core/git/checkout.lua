@@ -5,13 +5,61 @@ local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local providers = require("atlas.providers")
-local repo_paths = require("atlas.core.git.repo_paths")
 
 local CLONE_STALE_SECONDS = 30 * 24 * 60 * 60 -- 30 days
+local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
 	return config.options.pulls.git_transport == "ssh" and "ssh" or "https"
+end
+
+-- Fewer `*` wins, then longer literal text, then alphabetical key.
+local function more_specific(a, b)
+	if a.stars ~= b.stars then
+		return a.stars < b.stars
+	end
+	if a.literal ~= b.literal then
+		return a.literal > b.literal
+	end
+	return a.key < b.key
+end
+
+---Each `*` in a key matches within one path segment and fills the next `*` in its path.
+---@param repo_paths table<string, string> `pulls.repo_config.paths`
+---@param repo_name string
+---@return string|nil path
+---@return string|nil err
+function M.resolve_path(repo_paths, repo_name)
+	local best
+	for key, value in pairs(repo_paths) do
+		if type(key) ~= "string" or type(value) ~= "string" then
+			return nil, "repo_paths keys and values must be strings"
+		end
+
+		local pattern, stars = key:gsub(LUA_PATTERN_SPECIALS, "%%%0"):gsub("%*", "([^/]+)")
+		local captures = { repo_name:match("^" .. pattern .. "$") }
+		if captures[1] and value ~= "" then
+			local candidate = { key = key, value = value, stars = stars, literal = #key - stars, captures = captures }
+			if not best or more_specific(candidate, best) then
+				best = candidate
+			end
+		end
+	end
+
+	if not best then
+		return nil, string.format("no repo_paths mapping for '%s'", repo_name)
+	end
+
+	local index = 0
+	local path, value_stars = best.value:gsub("%*", function()
+		index = index + 1
+		return best.captures[index]
+	end)
+	if value_stars ~= best.stars then
+		return nil, string.format("repo_paths '%s' and '%s' need the same number of *", best.key, best.value)
+	end
+	return vim.fn.fnamemodify(vim.fs.normalize(path), ":p"), nil
 end
 
 ---@param repo_name string
@@ -19,7 +67,7 @@ end
 ---@return string|nil repo_path
 ---@return string|nil err
 local function resolve_repo_path(repo_name, opts)
-	local path, err = repo_paths.resolve((config.options.pulls.repo_config or {}).paths or {}, repo_name)
+	local path, err = M.resolve_path((config.options.pulls.repo_config or {}).paths or {}, repo_name)
 	if path and opts.require_existing ~= false and vim.fn.isdirectory(path) ~= 1 then
 		return nil, string.format("mapped path does not exist: %s", path)
 	end
