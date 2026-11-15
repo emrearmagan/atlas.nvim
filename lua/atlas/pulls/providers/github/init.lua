@@ -8,7 +8,7 @@
 ---@field entries GitHubPullStackEntry[]|nil
 
 ---@class GitHubPullRequest : PullRequest
----@field node_id string|nil
+---@field node_id string
 ---@field head_repository string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil

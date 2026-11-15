@@ -212,7 +212,7 @@ function M.update(issue, fields, on_done, opts)
 			return
 		end
 		on_done(true, nil)
-	end, { action = "Update work item", issue_key = issue.key }, nil, "application/json-patch+json")
+	end, { action = "Update work item", issue_key = issue.key }, { content_type = "application/json-patch+json" })
 end
 
 ---@param issue Issue
@@ -246,7 +246,7 @@ function M.create(project, item_type, fields, on_done)
 			return
 		end
 		on_done(mapper.to_issue(result), nil)
-	end, { action = "Create work item", project = project }, nil, "application/json-patch+json")
+	end, { action = "Create work item", project = project }, { content_type = "application/json-patch+json" })
 end
 
 ---@param issue Issue

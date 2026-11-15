@@ -28,6 +28,11 @@ local function normalize(raw)
 
 	local updated_at = tostring(raw.updated_at or raw.created_at or "")
 
+	local url = type(raw.target_url) == "string" and raw.target_url or nil
+	if url and raw.action_name == "build_failed" then
+		url = url .. "/pipelines"
+	end
+
 	return {
 		id = tostring(raw.id or ""),
 		title = tostring(target.title or raw.body or ""),
@@ -35,7 +40,7 @@ local function normalize(raw)
 		timestamp = updated_at ~= "" and updated_at or nil,
 		kind = raw.action_name == "build_failed" and "checks" or TARGET_KIND[target_type],
 		unread = tostring(raw.state or "") == "pending",
-		url = type(raw.target_url) == "string" and raw.target_url or nil,
+		url = url,
 	}
 end
 
@@ -82,22 +87,6 @@ function M.mark_done(id, on_done)
 		action = "Mark notification done",
 		notification_id = id,
 	})
-end
-
----@param notification AtlasNotification
----@return boolean
-function M.open(notification)
-	if notification.url == nil then
-		return false
-	end
-	if notification.kind == "checks" then
-		require("atlas.commands.pipelines").open(notification.url)
-	elseif notification.kind == "pr" or notification.kind == "issue" then
-		require("atlas.commands.open").open(notification.url)
-	else
-		return false
-	end
-	return true
 end
 
 return M

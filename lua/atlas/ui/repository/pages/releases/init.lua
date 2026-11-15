@@ -25,7 +25,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field keymaps table<string, AtlasHelpKeyItem[]>
 
 ---@class RepositoryReleasesCtx
----@field release_id string|nil
+---@field id string|nil
 
 local M = {
 	key = "releases",
@@ -73,7 +73,8 @@ end
 
 ---@param state RepositoryReleases
 ---@param id string|nil
-local function load(state, id)
+---@param tag string|nil
+local function load(state, id, tag)
 	local fetch_release = state.repository.fetch_release
 	if not fetch_release then
 		state.release = "Releases are not available for this provider"
@@ -89,14 +90,17 @@ local function load(state, id)
 	state.statusline:notify("loading", "Loading release...")
 	render(state)
 	state.requests.run(function(done)
-		return fetch_release(state.repo, { id = id }, done)
+		return fetch_release(state.repo, { id = id, tag = tag }, done)
 	end, function(release, err, status)
 		state.spinner:stop()
 		state.statusline:clear_notice()
-		if not id and status == 404 then
+		if not id and not tag and status == 404 then
 			state.release = nil
 		else
 			state.release = release or err
+		end
+		if type(release) == "table" then
+			state.selected_id = release.id
 		end
 
 		render(state)
@@ -289,7 +293,7 @@ function M.open(opts)
 		refresh = refresh,
 		search = search,
 	})
-	load(state, opts.ctx.release_id)
+	load(state, nil, opts.ctx.id)
 end
 
 ---@param buf integer

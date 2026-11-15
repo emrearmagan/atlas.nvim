@@ -54,12 +54,6 @@ local KEY_SEPARATOR = " / "
 local ITEM_MARKER = " ▸ "
 local MAX_COLUMNS = 4
 
----@param value string
----@return integer
-local function display_width(value)
-	return vim.fn.strdisplaywidth(value)
-end
-
 ---@param opts AtlasHelpGroupOpts?
 ---@param source string
 ---@return integer
@@ -265,7 +259,8 @@ local function column_key_widths(render_items, num_cols)
 		if item.type == "item" then
 			local column = ((item.item_index - 1) % num_cols) + 1
 			widths[item.group_index] = widths[item.group_index] or {}
-			widths[item.group_index][column] = math.max(widths[item.group_index][column] or 0, display_width(item.left))
+			widths[item.group_index][column] =
+				math.max(widths[item.group_index][column] or 0, vim.fn.strdisplaywidth(item.left))
 		end
 	end
 	return widths
@@ -285,7 +280,7 @@ local function columns_for(render_items, max_width)
 			if item.type == "item" then
 				local column = ((item.item_index - 1) % num_cols) + 1
 				local key_width = key_widths[item.group_index][column]
-				local item_width = 2 + key_width + display_width(ITEM_MARKER .. item.right)
+				local item_width = 2 + key_width + vim.fn.strdisplaywidth(ITEM_MARKER .. item.right)
 				if item_width > col_width then
 					fits = false
 					break
@@ -367,13 +362,13 @@ local function get_layout(bufnr, max_width)
 			local column = col_idx + 1
 			local max_left = key_widths[render_item.group_index][column]
 			local content_width = math.max(1, col_width - 2)
-			local marker_width = display_width(ITEM_MARKER)
+			local marker_width = vim.fn.strdisplaywidth(ITEM_MARKER)
 			local left_limit = math.max(1, content_width - marker_width - 1)
 			local left_str = render_item.left
-			if display_width(left_str) > left_limit then
+			if vim.fn.strdisplaywidth(left_str) > left_limit then
 				left_str = utils.truncate(left_str, left_limit)
 			end
-			local left_width = display_width(left_str)
+			local left_width = vim.fn.strdisplaywidth(left_str)
 			local aligned_left_width = math.max(left_width, math.min(max_left, left_limit))
 			local right_pad = aligned_left_width - left_width
 			local padded_left = left_str .. string.rep(" ", right_pad)
@@ -384,7 +379,7 @@ local function get_layout(bufnr, max_width)
 				right_str = ITEM_MARKER .. utils.truncate(render_item.right, description_width)
 			end
 			local display_str = padded_left .. right_str
-			local pad_len = math.max(0, content_width - display_width(display_str))
+			local pad_len = math.max(0, content_width - vim.fn.strdisplaywidth(display_str))
 
 			local start_col = #current_line + 2
 			add_highlight(highlights, "Special", #lines, start_col, start_col + #left_str)

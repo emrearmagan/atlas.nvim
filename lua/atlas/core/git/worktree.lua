@@ -64,7 +64,7 @@ local function canonical(path)
 end
 
 ---@return string
-function M.cache_root()
+local function cache_root()
 	return join(vim.fn.stdpath("cache"), CACHE_SEGMENTS)
 end
 
@@ -72,8 +72,8 @@ end
 -- hand lives there; a user supplied `dir` never qualifies, so a failed removal cannot wipe it.
 ---@param dir string
 ---@return boolean
-function M.is_cache_path(dir)
-	local prefix = M.cache_root() .. "/"
+local function is_cache_path(dir)
+	local prefix = cache_root() .. "/"
 	local value = normalize_separators(trim(dir)):gsub("/+$", "")
 	return #value > #prefix and value:sub(1, #prefix) == prefix
 end
@@ -88,7 +88,7 @@ end
 -- Default location: <cache>/atlas/worktrees/<repo>/pr-<id>, or <repo>/<sha> without a PR.
 ---@param ctx AtlasWorktreeContext
 ---@return string
-function M.default_dir(ctx)
+local function default_dir(ctx)
 	local name = trim(ctx.repo_full_name)
 	if name == "" then
 		local root = normalize_separators(trim(ctx.repo_root)):gsub("/+$", "")
@@ -101,7 +101,7 @@ function M.default_dir(ctx)
 	if leaf == "" then
 		leaf = "head"
 	end
-	return join(M.cache_root(), slugify(name), leaf)
+	return join(cache_root(), slugify(name), leaf)
 end
 
 ---@param cfg AtlasPullsDiffLspConfig|nil
@@ -152,13 +152,13 @@ end
 ---@param cfg AtlasPullsDiffLspConfig|nil
 ---@return string|nil dir
 ---@return string|nil err
-function M.resolve_dir(ctx, cfg)
+local function resolve_dir(ctx, cfg)
 	local ok, err = M.validate(cfg)
 	if not ok then
 		return nil, err
 	end
 
-	local default = M.default_dir(ctx)
+	local default = default_dir(ctx)
 	local override = cfg and cfg.dir or nil
 	if override == nil then
 		return default, nil
@@ -198,12 +198,12 @@ local claims = {}
 
 ---@param dir string
 ---@return boolean
-function M.is_claimed(dir)
+local function is_claimed(dir)
 	return claims[dir] ~= nil
 end
 
 ---@param dir string
-function M.release(dir)
+local function release(dir)
 	claims[dir] = nil
 end
 
@@ -215,19 +215,19 @@ end
 ---@return string|nil dir
 ---@return string|nil err
 function M.claim(ctx, cfg)
-	local base, err = M.resolve_dir(ctx, cfg)
+	local base, err = resolve_dir(ctx, cfg)
 	if not base then
 		return nil, err
 	end
 
-	if not M.is_claimed(base) then
+	if not is_claimed(base) then
 		claims[base] = { repo_root = ctx.repo_root }
 		return base, nil
 	end
 
 	for index = 2, 99 do
 		local candidate = string.format("%s-%d", base, index)
-		if not M.is_claimed(candidate) then
+		if not is_claimed(candidate) then
 			claims[candidate] = { repo_root = ctx.repo_root }
 			return candidate, nil
 		end
@@ -252,7 +252,7 @@ end
 -- Paths from `git worktree list --porcelain`, in the order git prints them.
 ---@param stdout string|nil
 ---@return string[]
-function M.parse_worktree_list(stdout)
+local function parse_worktree_list(stdout)
 	local paths = {}
 	for line in tostring(stdout or ""):gmatch("[^\r\n]+") do
 		local path = line:match("^worktree%s+(.+)$")
@@ -278,7 +278,7 @@ local function delete_owned(dir, reason)
 	if not directory_exists(dir) then
 		return true
 	end
-	if not M.is_cache_path(dir) then
+	if not is_cache_path(dir) then
 		logger.logwarn("worktree refusing to delete outside the cache root", { dir = dir, reason = reason })
 		return false
 	end
@@ -310,7 +310,7 @@ end
 ---@param dir string
 ---@param on_done fun(err: string|nil)|nil
 ---@return { cancel: fun() }|nil
-function M.remove(repo_root, dir, on_done)
+local function remove(repo_root, dir, on_done)
 	on_done = on_done or function() end
 	if trim(dir) == "" then
 		on_done(nil)
@@ -318,7 +318,7 @@ function M.remove(repo_root, dir, on_done)
 	end
 	local args = { "-C", repo_root, "worktree", "remove", "--force", dir }
 	-- Interrupted checkouts leave Git's "initializing" lock. Only force-unlock our cache worktrees.
-	if M.is_cache_path(dir) then
+	if is_cache_path(dir) then
 		table.insert(args, #args, "--force")
 	end
 	local scope = requests.new()
@@ -351,11 +351,11 @@ end
 ---@param dir string
 ---@return { cancel: fun() }|nil
 function M.discard(repo_root, dir)
-	if not M.is_claimed(dir) then
-		return M.remove(repo_root, dir)
+	if not is_claimed(dir) then
+		return remove(repo_root, dir)
 	end
-	return M.remove(repo_root, dir, function()
-		M.release(dir)
+	return remove(repo_root, dir, function()
+		release(dir)
 	end)
 end
 
@@ -364,7 +364,7 @@ function M.shutdown()
 	for dir, info in pairs(claims) do
 		pcall(function()
 			local args = { "git", "-C", info.repo_root, "worktree", "remove", "--force", dir }
-			if M.is_cache_path(dir) then
+			if is_cache_path(dir) then
 				table.insert(args, #args, "--force")
 			end
 			vim.system(args, { text = true, detach = true })
@@ -395,11 +395,11 @@ end
 ---@return boolean
 local function is_stale(dir, now)
 	local stat = vim.uv.fs_stat(dir)
-	return not M.is_claimed(dir) and stat ~= nil and now - stat.mtime.sec > STALE_SECONDS
+	return not is_claimed(dir) and stat ~= nil and now - stat.mtime.sec > STALE_SECONDS
 end
 
 function M.prune()
-	local root = M.cache_root()
+	local root = cache_root()
 	if not directory_exists(root) then
 		return
 	end
@@ -414,7 +414,7 @@ function M.prune()
 					logger.loginfo("worktree.prune removing stale worktree", { dir = dir })
 					local repository = git_dir(dir)
 					if repository and directory_exists(repository) then
-						M.remove(repository, dir, function()
+						remove(repository, dir, function()
 							vim.fn.delete(repo_dir, "d")
 						end)
 					else
@@ -456,7 +456,7 @@ function M.ensure(opts, on_done)
 	local function create()
 		vim.fn.mkdir(vim.fs.dirname(dir), "p")
 		local args = { "-C", repo_root, "worktree", "add", "--force", "--detach", dir, head_sha }
-		if M.is_cache_path(dir) then
+		if is_cache_path(dir) then
 			table.insert(args, 5, "--force")
 		end
 		scope.run(function(done)
@@ -473,7 +473,7 @@ function M.ensure(opts, on_done)
 
 	local function recreate()
 		scope.run(function(done)
-			return M.remove(repo_root, dir, done)
+			return remove(repo_root, dir, done)
 		end, create)
 	end
 
@@ -508,13 +508,13 @@ function M.ensure(opts, on_done)
 			return
 		end
 		local wanted = canonical(dir)
-		for _, path in ipairs(M.parse_worktree_list(res.stdout)) do
+		for _, path in ipairs(parse_worktree_list(res.stdout)) do
 			if canonical(path) == wanted then
 				reuse_or_recreate()
 				return
 			end
 		end
-		if M.is_cache_path(dir) then
+		if is_cache_path(dir) then
 			recreate()
 			return
 		end

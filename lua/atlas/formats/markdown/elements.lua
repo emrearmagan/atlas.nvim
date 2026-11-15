@@ -62,6 +62,31 @@ function M.inline.link(text)
 	return parse_link(text, false)
 end
 
+-- See https://example.com/docs. / <https://example.com/docs>
+-- { text = "https://example.com/docs", style = "link", url = "https://example.com/docs" }.
+function M.inline.url(text, previous_character)
+	local bracketed = text:match("^<(https?://[^%s<>]+)>")
+	if bracketed then
+		return { text = bracketed, style = "link", url = bracketed }, #bracketed + 2
+	end
+
+	if previous_character:match("%w") then
+		return
+	end
+
+	local url = text:match("^https?://[^%s<>]+")
+	if not url then
+		return
+	end
+
+	url = url:gsub("[.,;:!?*_~]+$", "")
+	if url:sub(-1) == ")" and not url:find("(", 1, true) then
+		url = url:sub(1, -2)
+	end
+
+	return { text = url, style = "link", url = url }, #url
+end
+
 -- ![logo](https://example.com/logo.png)
 -- { text = "󰋩 logo", style = "image", url = "https://example.com/logo.png" }.
 -- An empty label displays "image".
@@ -160,6 +185,7 @@ end
 ---@type (fun(text: string, previous_character: string): table?, integer?)[]
 local inline_handlers = {
 	M.inline.escape,
+	M.inline.url,
 	M.inline.image,
 	html.inline.image,
 	M.inline.link,
@@ -194,6 +220,11 @@ function M.parse_inline(text)
 			local plain_text = remaining_text:match("^[^\\%[!`*_~<@:&]+")
 			if not plain_text then
 				plain_text = remaining_text:sub(1, 1)
+			end
+
+			local url_start = remaining_text:find("%f[%w]https?://")
+			if url_start and url_start > 1 and url_start <= #plain_text then
+				plain_text = plain_text:sub(1, url_start - 1)
 			end
 
 			fragment = { text = plain_text }

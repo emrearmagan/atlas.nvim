@@ -76,14 +76,6 @@ query($owner: String!, $repo: String!, $endCursor: String) {
 function M.fetch_details(repo, on_done)
 	local owner = repo.owner
 	local repo_name = repo.repo_name
-
-	if owner == "" or repo_name == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
-
 	local slug = owner .. "/" .. repo_name
 
 	local requests = request_scope.new()
@@ -168,10 +160,6 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_refs(slug, query, opts, on_done)
 	local owner, name = slug:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		on_done(nil, "Missing repository info", nil)
-		return nil
-	end
 	local args = { "api", "graphql", "-f", "query=" .. query, "-f", "owner=" .. owner, "-f", "repo=" .. name }
 	if opts.cursor then
 		vim.list_extend(args, { "-f", "endCursor=" .. opts.cursor })
@@ -267,14 +255,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_releases(repo, on_done)
 	local slug = repo.full_name
-	local owner, name = slug:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
-
+	local owner, name = repo.owner, repo.repo_name
 	return cli.gh({
 		"api",
 		"graphql",
@@ -326,19 +307,13 @@ function M.fetch_releases(repo, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts { id?: string }
+---@param opts { id?: string, tag?: string }
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
 	local slug = repo.full_name
-	if not slug:match("^[^/]+/[^/]+$") then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
-
-	local endpoint = string.format("repos/%s/releases/%s", slug, opts.id or "latest")
+	local release = opts.id or (opts.tag and "tags/" .. utils.url_encode(opts.tag)) or "latest"
+	local endpoint = string.format("repos/%s/releases/%s", slug, release)
 	return cli.gh({ "api", endpoint, "--include" }, function(result, err, status)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch release", status)
@@ -393,12 +368,6 @@ end
 function M.delete_branch(repo, branch, on_done)
 	local slug = repo.full_name
 	local name = branch.name
-	if not slug:match("^[^/]+/[^/]+$") or name == "" then
-		vim.schedule(function()
-			on_done(false, "Missing branch info")
-		end)
-		return nil
-	end
 
 	local endpoint = string.format("repos/%s/git/refs/heads/%s", slug, utils.url_encode(name))
 	return cli.api("DELETE", endpoint, function(_, err)

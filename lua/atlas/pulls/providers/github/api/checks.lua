@@ -165,15 +165,7 @@ end
 ---@param on_done fun(result: GitHubMergeState|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_merge_state(pr, on_done)
-	local repo_slug = pr.repo_full_name
-	local owner, repo = repo_slug:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
+	local owner, repo = pr.repo.owner, pr.repo.repo_name
 	return cli.gh({
 		"api",
 		"graphql",
@@ -225,7 +217,7 @@ local function fetch_merge_state(pr, on_done)
 		on_done(out, nil)
 	end, {
 		action = "Fetch PR merge state",
-		repo = repo_slug,
+		repo = pr.repo_full_name,
 		number = pr.id,
 	})
 end

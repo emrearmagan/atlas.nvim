@@ -48,13 +48,6 @@ local notify = require("atlas.core.notify")
 
 local CATEGORY_ORDER = { new = 1, indeterminate = 2, done = 3 }
 
----@param view IssuesViewConfig
----@return string
-local function resolve_search(view)
-	---@cast view AtlasJiraViewConfig
-	return tostring(view.jql or view.search or "")
-end
-
 ---@param target AtlasTarget
 ---@return IssueRef|nil
 local function target_issue_ref(target)
@@ -68,7 +61,8 @@ end
 ---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
-	local jql = resolve_search(view)
+	---@cast view AtlasJiraViewConfig
+	local jql = tostring(view.jql or view.search or "")
 	if jql == "" then
 		on_done({ items = {}, query = jql }, "Missing Jira view JQL")
 		return nil
@@ -137,7 +131,9 @@ local function views()
 			},
 		}
 	end
-	return configured
+	return vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, configured)
 end
 
 return {

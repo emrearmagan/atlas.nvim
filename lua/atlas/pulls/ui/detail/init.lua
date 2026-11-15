@@ -30,10 +30,6 @@ local function reset_tabs()
 	end
 end
 
-local function render()
-	renderer.render(state.tabs)
-end
-
 -- Loading spinner
 
 local function is_loading()
@@ -60,7 +56,7 @@ loading_spinner.on_tick = function()
 		loading_spinner:stop()
 		return
 	end
-	render()
+	renderer.render()
 end
 
 local function update_spinner()
@@ -73,7 +69,7 @@ end
 
 local function render_if_open()
 	if detail_window.is_open() then
-		render()
+		renderer.render()
 	end
 end
 
@@ -118,16 +114,9 @@ end
 ---@type PullRequestRef|nil
 local pending_ref = nil
 
----@param pr PullRequest
----@return fun()
-local function refresh_callback(pr)
-	return function()
-		if not same_ref(state.current_pr, pr) then
-			return
-		end
-		update_spinner()
-		render_if_open()
-	end
+local function refresh_view()
+	update_spinner()
+	render_if_open()
 end
 
 ---@param pr PullRequest
@@ -140,17 +129,13 @@ local function load_links(pr, force_refresh)
 		return
 	end
 
-	local refresh = refresh_callback(pr)
 	state.requests.run(function(done)
 		return links.fetch(provider, pr, "pr", { force_refresh = force_refresh }, done)
 	end, function(items, err)
-		if state.links ~= current then
-			return
-		end
 		current.items = items or {}
 		current.error = err
 		current.loading = false
-		refresh()
+		refresh_view()
 	end)
 end
 
@@ -159,7 +144,7 @@ end
 local function load_active_tab(pr, opts)
 	local tab_mod = state.tab_module(state.current_tab)
 	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(pr, refresh_callback(pr), opts)
+		tab_mod.on_select(pr, refresh_view, opts)
 	end
 end
 
@@ -180,9 +165,6 @@ local function load_details(ref, force_refresh)
 	state.requests.run(function(done)
 		return core.fetch_pullrequest(ref, { force_refresh = force_refresh }, done)
 	end, function(details, err)
-		if state.current_pr == nil and not same_ref(pending_ref, ref) then
-			return
-		end
 		state.current_details = details
 		state.details_loading = false
 		if details == nil then
@@ -201,7 +183,6 @@ local function load_pr(pr, force_refresh)
 		return
 	end
 
-	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
 	state.merge_checks = core.fetch_merge_checks and "loading" or nil
 	state.pipelines = nil
@@ -211,11 +192,8 @@ local function load_pr(pr, force_refresh)
 		state.requests.run(function(done)
 			return core.fetch_merge_checks(pr, { force_refresh = force_refresh }, done)
 		end, function(checks, err)
-			if not same_ref(state.current_pr, pr) then
-				return
-			end
 			state.merge_checks = err or checks or {}
-			tab_refresh()
+			refresh_view()
 		end)
 	end
 
@@ -224,11 +202,8 @@ local function load_pr(pr, force_refresh)
 		state.requests.run(function(done)
 			return core.fetch_diffstat(pr, { force_refresh = force_refresh }, done)
 		end, function(entries, err)
-			if not same_ref(state.current_pr, pr) then
-				return
-			end
 			state.diffstat = err or entries or {}
-			tab_refresh()
+			refresh_view()
 		end)
 	end
 end
@@ -258,7 +233,7 @@ local function show_pr(pr, force_refresh)
 	load_links(pr, force_refresh)
 	load_pr(pr, force_refresh)
 	update_spinner()
-	render()
+	renderer.render()
 end
 
 ---@param provider PullsProvider
@@ -345,7 +320,7 @@ function M.select(pr, opts)
 	local same_pr = same_ref(state.current_pr, pr)
 	if same_pr and opts.force_refresh ~= true and (state.details_loading or state.current_details) then
 		state.current_pr = pr
-		render()
+		renderer.render()
 		return
 	end
 
@@ -372,7 +347,7 @@ function M.open(input, opts)
 		notify.error("Pull request provider unavailable")
 		return
 	end
-	state.win, state.buf = detail_window.open(cleanup, render)
+	state.win, state.buf = detail_window.open(cleanup, renderer.render)
 	set_provider(provider)
 	state.on_update = opts.on_update
 	state.back = opts.back
@@ -388,7 +363,7 @@ function M.open(input, opts)
 		and same_ref(state.current_pr or pending_ref, ref)
 		and (state.pr_loading or state.details_loading or state.current_details)
 	then
-		render()
+		renderer.render()
 		return
 	end
 
@@ -397,14 +372,11 @@ function M.open(input, opts)
 	state.pr_loading = true
 	state.details_loading = true
 	update_spinner()
-	render()
+	renderer.render()
 	load_details(ref, opts.force_refresh == true)
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = opts.force_refresh == true }, done)
 	end, function(pulls, err)
-		if state.provider ~= provider or not same_ref(pending_ref, ref) then
-			return
-		end
 		local loaded_pr = pulls and pulls[1] or nil
 		if loaded_pr == nil then
 			pending_ref = nil
@@ -412,7 +384,7 @@ function M.open(input, opts)
 			state.current_details = nil
 			state.details_loading = false
 			update_spinner()
-			render()
+			renderer.render()
 			notify.error(tostring(err or "Failed to load pull request"))
 			return
 		end
@@ -433,13 +405,10 @@ function M.refresh(ref)
 	state.pr_loading = true
 	state.details_loading = true
 	update_spinner()
-	render()
+	renderer.render()
 	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(pulls, err)
-		if state.provider ~= provider or not same_ref(state.current_pr, pr) then
-			return
-		end
 		state.pr_loading = false
 		state.details_loading = false
 		local refreshed_pr = pulls and pulls[1] or nil
@@ -479,7 +448,7 @@ local function change_tab(step)
 		update_spinner()
 	end
 
-	render()
+	renderer.render()
 	if state.win and vim.api.nvim_win_is_valid(state.win) then
 		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 	end

@@ -5,7 +5,7 @@ local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 
 ---@param raw_content string
 ---@param opts? { parent_id?: number|string|nil, file?: PullsFileCommentPosition|nil, inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
----@return string
+---@return table
 local function encode_comment_payload(raw_content, opts)
 	opts = opts or {}
 	local payload = {
@@ -31,7 +31,7 @@ local function encode_comment_payload(raw_content, opts)
 		payload.inline = { path = opts.file.path }
 	end
 
-	return vim.json.encode(payload)
+	return payload
 end
 
 ---@param pr PullRequest
@@ -111,7 +111,7 @@ function M.add_comment(pr, content, opts, on_done)
 		inline = opts and opts.inline or nil,
 		pending = (opts and opts.pending == true) or (parent ~= nil and parent.pending == true),
 	})
-	return service.request("POST", comments_url, nil, body, function(result, err)
+	return service.request("POST", comments_url, body, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -140,7 +140,7 @@ function M.edit_comment(pr, comment, content, on_done)
 
 	local url = comments_url .. "/" .. tostring(comment.id)
 	local body = encode_comment_payload(content)
-	return service.request("PUT", url, nil, body, function(result, err)
+	return service.request("PUT", url, body, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -169,7 +169,7 @@ function M.delete_comment(pr, comment, on_done)
 	end
 
 	local url = comments_url .. "/" .. tostring(comment.id)
-	return service.request("DELETE", url, nil, nil, function(_, err)
+	return service.request("DELETE", url, nil, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -192,7 +192,7 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 	end
 
 	local url = string.format("%s/%s/resolve", comments_url, tostring(root.parent_id or root.id))
-	return service.request_text(resolved and "POST" or "DELETE", url, nil, nil, function(_, err)
+	return service.request_text(resolved and "POST" or "DELETE", url, nil, function(_, err)
 		on_done(err == nil, err)
 	end, {
 		action = resolved and "Resolve PR thread" or "Reopen PR thread",

@@ -127,13 +127,8 @@ function M.set_issues(issues)
 end
 
 ---@param issue_key string
----@return boolean changed
 function M.toggle_issue_collapsed(issue_key)
-	if issue_key == "" then
-		return false
-	end
 	M.collapsed_issue_keys[issue_key] = M.collapsed_issue_keys[issue_key] ~= true
-	return true
 end
 
 ---@return boolean changed

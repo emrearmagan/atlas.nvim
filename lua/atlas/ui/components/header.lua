@@ -1,6 +1,6 @@
 local M = {}
 
-local ui_utils = require("atlas.ui.utils")
+local utils = require("atlas.ui.shared.utils")
 
 function M.render(opts)
 	local width = opts.width or vim.o.columns
@@ -9,7 +9,7 @@ function M.render(opts)
 	local hl_group = opts.hl_group or "Title"
 
 	local text = string.format("  %s  %s  ", icon, title)
-	local line, start_col = ui_utils.center_text(text, math.max(width - 2, 20))
+	local line, start_col = utils.center_text(text, math.max(width - 2, 20))
 
 	return {
 		lines = { line, "" },

@@ -150,6 +150,25 @@ node_handlers.date = function(node)
 	return "[" .. label .. "](atlas-date:" .. timestamp .. ")"
 end
 
+---@param text string
+---@param width integer
+---@return string
+local function indent_lines(text, width)
+	return (text:gsub("\n", "\n" .. string.rep(" ", width)))
+end
+
+---@param marker string
+---@param item table
+---@param convert_node fun(node: table): string
+---@return string
+local function list_item(marker, item, convert_node)
+	local parts = {}
+	for _, child in ipairs(item.content or {}) do
+		table.insert(parts, convert_node(child))
+	end
+	return marker .. indent_lines(table.concat(parts, "\n"), #marker)
+end
+
 -- { "type": "listItem", "content": [{ "type": "paragraph", ... }] }
 node_handlers.listItem = function(node, convert_node)
 	return collect_children(node, convert_node)
@@ -159,7 +178,7 @@ end
 node_handlers.bulletList = function(node, convert_node)
 	local items = {}
 	for _, item in ipairs(node.content or {}) do
-		table.insert(items, "* " .. collect_children(item, convert_node))
+		table.insert(items, list_item("* ", item, convert_node))
 	end
 	return table.concat(items, "\n")
 end
@@ -168,20 +187,24 @@ end
 node_handlers.orderedList = function(node, convert_node)
 	local items = {}
 	for i, item in ipairs(node.content or {}) do
-		table.insert(items, i .. ". " .. collect_children(item, convert_node))
+		table.insert(items, list_item(i .. ". ", item, convert_node))
 	end
 	return table.concat(items, "\n")
 end
 
--- { "type": "taskList", "content": [{ "type": "taskItem", "attrs": { "state": "DONE" }, ... }] }
+-- { "type": "taskList", "content": [{ "type": "taskItem", "attrs": { "state": "DONE" }, ... }, { "type": "taskList", ... }] }
 node_handlers.taskList = function(node, convert_node)
 	local items = {}
 	for _, item in ipairs(node.content or {}) do
-		local checkbox = "[ ]"
-		if item.attrs and item.attrs.state == "DONE" then
-			checkbox = "[x]"
+		if item.type == "taskList" then
+			table.insert(items, "  " .. indent_lines(convert_node(item), 2))
+		else
+			local checkbox = "[ ]"
+			if item.attrs and item.attrs.state == "DONE" then
+				checkbox = "[x]"
+			end
+			table.insert(items, "- " .. checkbox .. " " .. collect_children(item, convert_node))
 		end
-		table.insert(items, "- " .. checkbox .. " " .. collect_children(item, convert_node))
 	end
 	return table.concat(items, "\n")
 end

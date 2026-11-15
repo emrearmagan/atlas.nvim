@@ -26,7 +26,7 @@ describe("bitbucket pull request updates", function()
 	end)
 
 	it("combines the merge title and body", function()
-		stub_service(function(_, _, _, body, callback)
+		stub_service(function(_, _, body, callback)
 			table.insert(calls, body)
 			callback({}, nil)
 		end)
@@ -45,19 +45,16 @@ describe("bitbucket pull request updates", function()
 				subject = "Subject",
 				body = case.body,
 			}, function() end)
-			assert.equal(
-				vim.json.encode({
-					close_source_branch = true,
-					merge_strategy = case.method == "merge" and "merge_commit" or "squash",
-					message = case.message,
-				}),
-				calls[index]
-			)
+			assert.same({
+				close_source_branch = true,
+				merge_strategy = case.method == "merge" and "merge_commit" or "squash",
+				message = case.message,
+			}, calls[index])
 		end
 	end)
 
 	it("preserves explicit empty selections and false draft", function()
-		stub_service(function(_, _, _, body, callback)
+		stub_service(function(_, _, body, callback)
 			table.insert(calls, body)
 			callback({}, nil)
 		end)
@@ -71,8 +68,8 @@ describe("bitbucket pull request updates", function()
 		api.update_pr(pr, { title = "New title" }, function() end)
 
 		assert.same({
-			vim.json.encode({ description = "", draft = false, reviewers = {} }),
-			vim.json.encode({ title = "New title" }),
+			{ description = "", draft = false, reviewers = {} },
+			{ title = "New title" },
 		}, calls)
 	end)
 end)

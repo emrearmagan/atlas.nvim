@@ -1,5 +1,5 @@
 local notify = require("atlas.core.notify")
-local ui_utils = require("atlas.ui.utils")
+local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
@@ -322,7 +322,7 @@ local function pick_command()
 		title = "Atlas:",
 		items = choices,
 		format_item = function(choice)
-			return ui_utils.pad_right(choice.label, label_width) .. "  " .. choice.description
+			return utils.pad_right(choice.label, label_width) .. "  " .. choice.description
 		end,
 		on_select = function(choice)
 			if choice then

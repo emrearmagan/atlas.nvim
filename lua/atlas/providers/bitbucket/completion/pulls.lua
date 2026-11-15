@@ -22,7 +22,7 @@ return {
 			"/repositories/%s/pullrequests?pagelen=50&sort=-updated_on&state=OPEN&state=MERGED&state=DECLINED&state=SUPERSEDED&fields=values.id,values.title,values.state,values.draft",
 			repository
 		)
-		return service.request("GET", endpoint, nil, nil, function(result, err)
+		return service.request("GET", endpoint, nil, function(result, err)
 			if err or not result then
 				done(nil, err or "Unable to fetch Bitbucket pull requests")
 				return

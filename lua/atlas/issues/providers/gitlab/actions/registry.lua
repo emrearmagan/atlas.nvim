@@ -22,8 +22,7 @@ local gitlab_search = require("atlas.providers.gitlab.completion.search")
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue(ctx)
-	local issue = ctx.issue
-	return issue ~= nil and tostring(issue.key or "") ~= ""
+	return ctx.issue ~= nil
 end
 
 ---@type AtlasIssueAction[]

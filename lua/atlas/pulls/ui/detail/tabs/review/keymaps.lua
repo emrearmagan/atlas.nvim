@@ -6,6 +6,8 @@ local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
 
+local registrations = {}
+
 local function cursor_entry()
 	local win = detail.win
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
@@ -209,33 +211,16 @@ function M.setup(buf, refresh)
 	)
 
 	help.register("Detail", items, { index = 2, buffer = buf })
-end
-
----@param action_id AtlasKeymapActionId
----@return table|nil
-local function remove_item(action_id)
-	local keymap = resolver.resolve(action_id)
-	if keymap == nil then
-		return nil
-	end
-	return { key = keymap.key }
+	registrations[buf] = items
 end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {}
-	utils.insert_if(items, remove_item("ui.comments.reply"))
-	utils.insert_if(items, remove_item("ui.comments.edit"))
-	utils.insert_if(items, remove_item("pulls.review.add_task"))
-	utils.insert_if(items, remove_item("ui.delete"))
-	utils.insert_if(items, remove_item("ui.comments.react"))
-	utils.insert_if(items, remove_item("ui.comments.toggle_resolved"))
-	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
-	utils.insert_if(items, remove_item("pulls.review.atlas.next_hunk"))
-	utils.insert_if(items, remove_item("pulls.review.atlas.prev_hunk"))
-	utils.insert_if(items, remove_item("ui.show_details"))
-	help.remove("Detail", items, { buffer = buf })
+	local registered = registrations[buf]
+	if registered then
+		help.remove("Detail", registered, { buffer = buf })
+		registrations[buf] = nil
+	end
 end
 
 return M

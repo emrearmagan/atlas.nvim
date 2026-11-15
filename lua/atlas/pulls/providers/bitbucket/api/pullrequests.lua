@@ -70,7 +70,7 @@ local function fetch_page(repo_full_name, url, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, function(result, err)
 		if err then
 			on_done({ items = {}, next_url = nil }, err)
 			return
@@ -219,7 +219,7 @@ function M.fetch_by_refs(refs, _, on_done)
 				tostring(item.ref.id),
 				PULL_REQUEST_FIELDS
 			)
-			return service.request("GET", endpoint, nil, nil, function(result, err)
+			return service.request("GET", endpoint, nil, function(result, err)
 				if err then
 					done(nil, err)
 					return
@@ -272,7 +272,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		repo,
 		tostring(ref.id)
 	)
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -301,7 +301,7 @@ local function update_pullrequest(pr, fields, on_done)
 		return nil
 	end
 
-	return service.request("PUT", url, nil, vim.json.encode(fields), function(_, err)
+	return service.request("PUT", url, fields, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -357,7 +357,7 @@ function M.merge(pr, opts, on_done)
 		payload.message = message
 	end
 
-	return service.request("POST", merge_url, nil, vim.json.encode(payload), function(_, err)
+	return service.request("POST", merge_url, payload, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -376,7 +376,7 @@ function M.decline(pr, on_done)
 		on_done(false, "No decline URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, function(_, err)
+	return service.request("POST", url, nil, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -398,7 +398,7 @@ local function fetch_participants(pr, on_done)
 	local sep = self_url:find("?") and "&" or "?"
 	local url = string.format("%s%sfields=participants", self_url, sep)
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -446,22 +446,8 @@ end
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.create_pr(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
+	local slug = opts.repo_slug
 	local workspace, repo = slug:match("^([^/]+)/(.+)$")
-	if workspace == nil or repo == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid repo slug; expected workspace/repo")
-		end)
-		return nil
-	end
-
 	local source = { branch = { name = opts.head } }
 	if opts.head_repo_slug and opts.head_repo_slug ~= "" and opts.head_repo_slug ~= slug then
 		source.repository = { full_name = opts.head_repo_slug }
@@ -485,7 +471,7 @@ function M.create_pr(opts, on_done)
 	end
 
 	local endpoint = string.format("/repositories/%s/%s/pullrequests", workspace, repo)
-	return service.request("POST", endpoint, nil, vim.json.encode(payload), function(result, err)
+	return service.request("POST", endpoint, payload, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -507,19 +493,12 @@ end
 ---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
+	local slug = opts.repo_slug
 	local workspace, repo = slug:match("^([^/]+)/(.+)$")
-	if workspace == nil or repo == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid repo slug; expected workspace/repo")
-		end)
-		return nil
-	end
-
 	local endpoint = string.format("/repositories/%s/%s/effective-default-reviewers", workspace, repo)
 	local starts = {
 		defaults = function(done)
-			return service.request("GET", endpoint, nil, nil, done, {
+			return service.request("GET", endpoint, nil, done, {
 				action = "Fetch reviewer candidates",
 				repo = slug,
 			})

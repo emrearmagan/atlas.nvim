@@ -93,11 +93,7 @@ end
 ---@param on_done fun(links: AtlasLink[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(_, issue, opts, on_done)
-	local key = tostring(issue.key or "")
-	if not key:match("^[A-Z][A-Z0-9_]*%-%d+$") then
-		on_done(nil, "Invalid Jira issue key")
-		return nil
-	end
+	local key = issue.key
 	local cache_key = "jira:links:" .. service.base_url() .. ":" .. key
 	if not (opts or {}).force_refresh then
 		local cached, found = service.get_cache(cache_key)

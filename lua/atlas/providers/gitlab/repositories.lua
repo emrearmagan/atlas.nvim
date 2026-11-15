@@ -44,13 +44,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_details(repo, on_done)
 	local path = repo.full_name
-	if path == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
-
 	local endpoint = string.format("/projects/%s?statistics=true", service.url_encode(path))
 	local requests = request_scope.new()
 	requests.run(function(done)
@@ -127,12 +120,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	local path = repo.full_name
-	if path == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
 
 	local page = math.max(1, math.floor(tonumber(opts.cursor) or 1))
 	local endpoint =
@@ -178,12 +165,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	local path = repo.full_name
-	if path == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
 
 	local page = math.max(1, math.floor(tonumber(opts.cursor) or 1))
 	local endpoint = string.format("/projects/%s/repository/tags?per_page=100&page=%d", service.url_encode(path), page)
@@ -230,12 +211,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_releases(repo, on_done)
 	local path = repo.full_name
-	if path == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
 
 	local requests = request_scope.new()
 	---@type AtlasRepositoryRelease[]
@@ -285,19 +260,14 @@ function M.fetch_releases(repo, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts { id?: string }
+---@param opts { id?: string, tag?: string }
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
 	local path = repo.full_name
-	if path == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
 
-	local release_path = opts.id and service.url_encode(opts.id) or "permalink/latest"
+	local ref = opts.id or opts.tag
+	local release_path = ref and service.url_encode(ref) or "permalink/latest"
 	local endpoint = string.format("/projects/%s/releases/%s", service.url_encode(path), release_path)
 	return service.request("GET", endpoint, nil, function(result, err, status)
 		if err then
@@ -357,12 +327,6 @@ end
 function M.delete_branch(repo, branch, on_done)
 	local path = repo.full_name
 	local name = branch.name
-	if path == "" or name == "" then
-		vim.schedule(function()
-			on_done(false, "Missing branch info")
-		end)
-		return nil
-	end
 
 	local endpoint =
 		string.format("/projects/%s/repository/branches/%s", service.url_encode(path), service.url_encode(name))
