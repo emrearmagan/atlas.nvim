@@ -38,12 +38,6 @@ function M.activate(issue)
 	M.current_issue = issue
 end
 
-function M.deactivate()
-	M.current_issue = nil
-	M.requests.cancel()
-	M.requests = request_scope.new()
-end
-
 ---@param issue Issue
 ---@return boolean
 function M.is_current(issue)
