@@ -622,7 +622,8 @@ M.apply_suggestion = {
 		if context.on_submit then
 			context.on_submit()
 		end
-		local suggestion = assert(suggestions.parse(assert(context.comment)))
+		local suggestion = suggestions.parse(context.comment --[[@as PullsComment]])
+		---@cast suggestion -nil
 		require("atlas.pulls.diff.edit").start(viewer, { suggestion })
 		return true
 	end,

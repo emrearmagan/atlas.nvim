@@ -129,7 +129,7 @@ function M.layout(viewer)
 	end
 
 	local function editing()
-		if session.source.kind == "worktree" and session.source.edit then
+		if session.source.edit then
 			return { text = "Editing", hl_group = "AtlasFooterWarning" }
 		end
 	end

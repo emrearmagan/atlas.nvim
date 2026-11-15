@@ -413,8 +413,7 @@ local function reloaded_file(viewer, file)
 	if not file then
 		return nil
 	end
-	local source = viewer.session.source
-	local editing = source.kind == "worktree" and source.edit
+	local editing = viewer.session.source.edit
 	return vim.iter(viewer.session.files):find(function(item)
 		if item.path ~= file.path or item.staged ~= file.staged then
 			return false
@@ -1011,7 +1010,7 @@ local function setup(viewer)
 		review_context = session.review_context,
 		review_data = session.review,
 		notes = session.notes and session.notes.items,
-		editing = session.source.kind == "worktree" and session.source.edit ~= nil,
+		editing = session.source.edit ~= nil,
 		on_select = function(file, focus)
 			select_file(viewer, file, focus)
 		end,

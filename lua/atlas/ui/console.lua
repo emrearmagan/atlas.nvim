@@ -131,6 +131,7 @@ function Output:finish(code)
 	end)
 end
 
+---@return AtlasConsoleOutput
 function M.clear()
 	---@type AtlasConsoleOutput
 	local output = setmetatable({
@@ -155,16 +156,14 @@ function M.clear()
 	end
 
 	latest = output
+	return output
 end
 
 ---@param title string
 ---@param cwd string|nil
 ---@return AtlasConsoleOutput
 function M.start(title, cwd)
-	if not latest then
-		M.clear()
-	end
-	local output = assert(latest)
+	local output = latest or M.clear()
 	local separator = #output.chunks > 0 and "\r\n" or ""
 	output.finished = false
 	output:write(separator .. "> " .. title .. "\r\n" .. (cwd and cwd .. "\r\n\r\n" or ""))
@@ -174,10 +173,7 @@ end
 ---@param focus boolean|nil
 ---@param delay_ms integer|nil
 function M.open(focus, delay_ms)
-	if not latest then
-		M.clear()
-	end
-	local output = assert(latest)
+	local output = latest or M.clear()
 	local function open()
 		if delay_ms and (output.finished or output.dismissed) then
 			return

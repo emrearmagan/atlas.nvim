@@ -135,7 +135,7 @@ end
 ---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[], hunks?: { base: table<string, DiffHunk[]>, head: table<string, DiffHunk[]> } }|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function load_files(source, root, base, head, on_done)
-	if source.kind == "worktree" and source.edit then
+	if source.edit then
 		return require("atlas.pulls.diff.edit").load(root, base, on_done)
 	end
 	if source.kind == "worktree" and not source.base then
@@ -160,7 +160,7 @@ function Session.new(source, root, base, head, opts, on_done)
 		closed = false,
 	}, Session)
 	local pr = source.kind == "pr" and source.pr or nil
-	local edited_review = source.kind == "worktree" and source.edit or nil
+	local edited_review = source.edit
 	local starts = {}
 
 	if pr then
@@ -168,7 +168,8 @@ function Session.new(source, root, base, head, opts, on_done)
 		---@cast provider PullsProvider
 		local capabilities = provider.capabilities
 		session.review_context = capabilities.reviews and { reviewed_files = {}, outdated_files = {} } or nil
-		starts = review_starts(pr, root, assert(head))
+		---@cast head string
+		starts = review_starts(pr, root, head)
 		if capabilities.reviews and not capabilities.reviews.set_files_reviewed then
 			starts.reviewed = function(done)
 				done(reviewed_store.read(pr))
@@ -465,7 +466,7 @@ function Session:map_range(path, side, start_line, end_line)
 	end
 
 	local hunks = (side == "LEFT" and self.hunks.base or self.hunks.head)[path] or {}
-	if self.source.kind == "worktree" and self.source.edit then
+	if self.source.edit then
 		-- Keep comments on edited lines instead of hiding them
 		return start_line and diff.map_line(hunks, "LEFT", start_line), (diff.map_line(hunks, "LEFT", end_line))
 	end

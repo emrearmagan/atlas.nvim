@@ -6,7 +6,6 @@ local git = require("atlas.core.git")
 local git_diff = require("atlas.core.git.diff")
 local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
-local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -17,7 +16,7 @@ local M = {}
 
 ---@class AtlasDiffEdit
 ---@field pr PullRequest
----@field review AtlasDiffViewer
+---@field review_tab integer
 ---@field repo_root string
 ---@field message string|nil
 ---@field pushing boolean|nil
@@ -35,7 +34,7 @@ end
 ---@param viewer AtlasDiffViewer
 ---@return AtlasDiffEdit
 local function edit_of(viewer)
-	return assert(edits[edit_key(viewer.session.range.root)])
+	return edits[edit_key(viewer.session.range.root)]
 end
 
 ---@param action AtlasKeymapActionId
@@ -126,13 +125,13 @@ function M.start(review, suggestions)
 		return
 	end
 
-	-- An edit only ends on discard or push, so reopen an existing one with its changes.
+	-- An edit only ends when you close it, so reopen an existing one with its changes.
 	for root, edit in pairs(edits) do
 		if edit.pr.repo_full_name == source.pr.repo_full_name and edit.pr.id == source.pr.id then
 			if suggestions then
 				notify.warn("Commit or discard your edits first")
 			end
-			edit.review = review
+			edit.review_tab = review.renderer.tabpage
 			diff.open_worktree({ root = root, base = session.range.base_revision, edit = session })
 			return
 		end
@@ -146,7 +145,7 @@ function M.start(review, suggestions)
 			return
 		end
 
-		local edit = { pr = source.pr, review = review, repo_root = session.range.root }
+		local edit = { pr = source.pr, review_tab = review.renderer.tabpage, repo_root = session.range.root }
 		if suggestions then
 			require("atlas.pulls.diff.suggestions").apply(root, suggestions)
 			edit.message = #suggestions == 1 and "Update " .. vim.fs.basename(suggestions[1].path)
@@ -157,39 +156,8 @@ function M.start(review, suggestions)
 	end)
 end
 
--- The provider updates the pull request a moment after a push, so a reload right away can miss the commit.
----@param pr PullRequest
----@param head string
----@param on_done fun()
-local function wait_for_head(pr, head, on_done)
-	local provider = providers.load(pr.provider, "pulls")
-	---@cast provider PullsProvider
-	local ref = { provider = pr.provider, repo_full_name = pr.repo_full_name, id = pr.id }
-	local output = console.start("Waiting for the pull request to show " .. head:sub(1, 7))
-	console.open(false, 300)
-
-	local function check(attempt)
-		provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, function(pulls)
-			local current = pulls and pulls[1]
-			local found = current ~= nil and current.source.commit_hash == head
-			output:write(string.format("Attempt %d/5: %s\r\n", attempt, found and "found" or "not yet"))
-			if found or attempt == 5 then
-				output:close()
-				on_done()
-				return
-			end
-
-			vim.defer_fn(function()
-				check(attempt + 1)
-			end, 1000)
-		end)
-	end
-	check(1)
-end
-
 ---@param viewer AtlasDiffViewer
----@param reload boolean
-local function stop(viewer, reload)
+local function stop(viewer)
 	local edit = edit_of(viewer)
 	local root = viewer.session.range.root
 	edits[edit_key(root)] = nil
@@ -200,18 +168,15 @@ local function stop(viewer, reload)
 		vim.bo[buf].modified = false
 	end
 	diff_worktree.discard(edit.repo_root, root)
-	if not edit.review.session.closed then
-		vim.api.nvim_set_current_tabpage(edit.review.renderer.tabpage)
-		if reload then
-			edit.review:reload()
-		end
+	if vim.api.nvim_tabpage_is_valid(edit.review_tab) then
+		vim.api.nvim_set_current_tabpage(edit.review_tab)
 	end
 end
 
 ---@param root string
 ---@param pr PullRequest
 ---@param message string
----@param on_done fun(head: string|nil) The pushed commit, or nil when a step failed.
+---@param on_done fun(ok: boolean)
 local function push(root, pr, message, on_done)
 	local url = config.options.pulls.git_transport == "ssh" and pr.source.ssh_url or pr.source.https_url
 	local steps = {
@@ -223,9 +188,7 @@ local function push(root, pr, message, on_done)
 	local function run(index)
 		local args = steps[index]
 		if not args then
-			git.run({ "rev-parse", "HEAD" }, { cwd = root, text = true }, function(result)
-				on_done(vim.trim(result.stdout))
-			end)
+			on_done(true)
 			return
 		end
 		git.run(args, { cwd = root, text = true, console = true }, function(result)
@@ -234,11 +197,11 @@ local function push(root, pr, message, on_done)
 				-- Undo the commit so a retry can commit again.
 				if args[1] == "push" then
 					git.run({ "reset", "--soft", "HEAD~1" }, { cwd = root }, function()
-						on_done(nil)
+						on_done(false)
 					end)
 					return
 				end
-				on_done(nil)
+				on_done(false)
 				return
 			end
 			run(index + 1)
@@ -353,17 +316,12 @@ local function open_commit(viewer, changes)
 
 		console.clear()
 		notify.info("Pushing to " .. branch .. "...")
-		push(root, edit.pr, message, function(head)
-			if not head then
-				edit.pushing = false
-				return
+		push(root, edit.pr, message, function(ok)
+			edit.pushing = false
+			if ok then
+				edit.message = nil
+				notify.info("Pushed to " .. branch)
 			end
-
-			notify.info("Pushed to " .. branch)
-			wait_for_head(edit.pr, head, function()
-				edit.pushing = false
-				stop(viewer, true)
-			end)
 		end)
 	end
 
@@ -412,7 +370,7 @@ function M.close(viewer)
 		then
 			return
 		end
-		stop(viewer, false)
+		stop(viewer)
 	end)
 end
 
