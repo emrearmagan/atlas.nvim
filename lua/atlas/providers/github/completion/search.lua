@@ -135,6 +135,12 @@ end
 ---@param query string
 ---@return string[]
 local function type_values(query)
+	for token in query:lower():gmatch("%S+") do
+		if token == "is:pr" then
+			return {}
+		end
+	end
+
 	local slug = local_slug
 	for repo in query:gmatch("repo:([%w%-%._]+/[%w%-%._]+)") do
 		slug = repo
@@ -186,11 +192,10 @@ end
 function M.edit(default, on_submit)
 	require("atlas.core.git").local_repository(nil, function(info)
 		local_slug = info and info.provider == "github" and info.repo_full_name or nil
-		if local_slug then
-			prefetch_issue_types(local_slug)
+		if default:lower():find("is:issue", 1, true) then
+			type_values(default)
 		end
 	end)
-	type_values(default or "")
 	prompt.open({
 		name = "AtlasGitHubSearch",
 		prompt = "GitHub search: ",

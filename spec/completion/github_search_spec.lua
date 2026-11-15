@@ -13,7 +13,7 @@ describe("GitHub search completion", function()
 	local types_by_repo
 
 	---@param local_repo string|nil
-	---@param default string|nil
+	---@param default string
 	---@return fun(query: string): string[]
 	local function open(local_repo, default)
 		local mem = {}
@@ -69,7 +69,7 @@ describe("GitHub search completion", function()
 	end)
 
 	it("suggests the default issue types without a repository", function()
-		local complete = open(nil)
+		local complete = open(nil, "is:issue ")
 
 		assert.same({ "type:Bug", "type:Feature", "type:Task" }, complete("is:issue type:"))
 		assert.same({}, requested)
@@ -77,7 +77,8 @@ describe("GitHub search completion", function()
 
 	it("suggests the local repository's types and quotes names with spaces", function()
 		types_by_repo["owner/local"] = { "Bug", "User Story" }
-		local complete = open("owner/local")
+		local complete = open("owner/local", "is:issue ")
+		assert.same({ "owner/local" }, requested)
 
 		assert.same({ 'type:"User Story"', "type:Bug" }, complete("type:"))
 		assert.same({ 'type:"User Story"' }, complete('type:"us'))
@@ -91,11 +92,31 @@ describe("GitHub search completion", function()
 
 		assert.same({ "type:Epic" }, complete("repo:cli/cli type:Ep"))
 		complete("repo:cli/cli type:")
-		assert.same({ "owner/local", "cli/cli" }, requested)
+		assert.same({ "cli/cli" }, requested)
+	end)
+
+	it("fetches on demand when the search did not start as an issue search", function()
+		types_by_repo["owner/local"] = { "Epic" }
+		local complete = open("owner/local", "is:open ")
+		assert.same({}, requested)
+
+		assert.same({ "type:Bug", "type:Feature", "type:Task" }, complete("is:issue type:"))
+		assert.same({ "owner/local" }, requested)
+		assert.same({ "type:Epic" }, complete("is:issue type:"))
+	end)
+
+	it("suggests no issue types for pull request searches", function()
+		types_by_repo["owner/local"] = { "Bug" }
+		local complete = open("owner/local", "is:pr is:open ")
+
+		assert.same({}, complete("is:pr type:"))
+		assert.same({}, requested)
+		complete("is:private type:")
+		assert.same({ "owner/local" }, requested)
 	end)
 
 	it("keeps the defaults when the types cannot be loaded", function()
-		local complete = open("owner/missing")
+		local complete = open("owner/missing", "is:issue ")
 
 		assert.same({ "type:Bug", "type:Feature", "type:Task" }, complete("type:"))
 	end)
