@@ -6,6 +6,7 @@ local M = {}
 
 local shared_actions = {
 	"ui.help",
+	"ui.close",
 	"ui.open_actions",
 	"ui.open_in_browser",
 	"ui.refresh",
@@ -55,12 +56,13 @@ M.action_ids = {
 ---@param index integer
 ---@param callback fun()
 ---@param mode string|string[]|nil
-local function add(items, actions, index, callback, mode)
+---@param desc string|nil
+local function add(items, actions, index, callback, mode, desc)
 	local keymap = resolver.resolve(actions)
 	if keymap then
 		items[#items + 1] = {
 			key = keymap.key,
-			desc = keymap.desc,
+			desc = desc or keymap.desc,
 			index = index,
 			callback = callback,
 			mode = mode,
@@ -93,6 +95,7 @@ end
 ---@param viewer AtlasDiffViewer
 function M.setup(viewer)
 	local session = viewer.session
+	local staging = session.source.kind == "worktree" and not session.source.base
 	local pr = session.source.pr
 	local provider = pr and providers.load(pr.provider, "pulls")
 	local reviews = provider and provider.capabilities.reviews
@@ -161,6 +164,11 @@ function M.setup(viewer)
 			viewer:navigate_annotation(1, "unresolved")
 		end)
 	end
+	if staging then
+		add(review_items, "pulls.review.toggle_file_reviewed", 2, function()
+			viewer:toggle_file_staged()
+		end, nil, "Toggle staged")
+	end
 	if session.notes then
 		add(review_items, "pulls.review.prev_note", 92, function()
 			viewer:navigate_annotation(-1, "note")
@@ -184,6 +192,11 @@ function M.setup(viewer)
 		end)
 	end
 	add(shared_items, "ui.help", 100, help.toggle)
+	add(shared_items, "ui.close", 101, function()
+		if not help.is_open() then
+			viewer:close("user_close")
+		end
+	end)
 
 	local explorer_items = vim.list_extend({}, shared_items)
 	if session.source.kind == "pr" then
@@ -202,6 +215,11 @@ function M.setup(viewer)
 		end
 		add(explorer_review_items, "pulls.review.submit_comment", 31, function()
 			viewer:add_comment(false)
+		end)
+	end
+	if staging then
+		add(explorer_review_items, "pulls.review.atlas.discard_changes", 3, function()
+			viewer:discard_changes()
 		end)
 	end
 
@@ -281,6 +299,8 @@ function M.hints(viewer, buf)
 			"pulls.open_diff",
 			"pulls.review.show_details",
 		}
+	elseif viewer.session.source.kind == "worktree" and not viewer.session.source.base then
+		return { "pulls.review.show_details" }
 	end
 
 	return {

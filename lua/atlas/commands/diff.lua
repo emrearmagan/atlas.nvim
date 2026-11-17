@@ -53,7 +53,16 @@ end
 ---@param value string
 function M.open(value)
 	local base, head = value:match("^(.-)%.%.%.(.*)$")
-	base, head = vim.trim(base or ""), vim.trim(head or "")
+	if not base then
+		diff.open_worktree({ base = value ~= "" and value or nil }, function(open_err)
+			if open_err then
+				notify.error(open_err, { vim_notify = true })
+			end
+		end)
+		return
+	end
+
+	base, head = vim.trim(base), vim.trim(head)
 	if base == "" or head == "" then
 		notify.error("Expected a range like base...head", { vim_notify = true })
 		return

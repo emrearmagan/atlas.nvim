@@ -1,4 +1,5 @@
 local events = require("atlas.core.events")
+local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local actions = require("atlas.pulls.diff.actions")
@@ -40,6 +41,7 @@ local renderers = {
 ---@field expanded_threads table<string, boolean>
 ---@field show_file fun(self: AtlasDiffRenderer, file: AtlasDiffFile, on_done: fun(err?: string))
 ---@field redraw fun(self: AtlasDiffRenderer)
+---@field clear fun(self: AtlasDiffRenderer)
 ---@field get_selection fun(self: AtlasDiffRenderer): AtlasDiffSelection|nil, string|nil
 ---@field navigate_annotation fun(self: AtlasDiffRenderer, direction: 1|-1, kind: AtlasDiffAnnotationKind, from_edge?: boolean): boolean
 ---@field resize fun(self: AtlasDiffRenderer)
@@ -56,6 +58,7 @@ local renderers = {
 ---@field review_panel AtlasDiffReviewPanel
 ---@field statusline AtlasStatusline
 ---@field group integer|nil
+---@field index_watcher uv.uv_fs_event_t|nil
 local Viewer = {}
 Viewer.__index = Viewer
 
@@ -131,6 +134,9 @@ function Viewer:close(reason)
 	if self.group then
 		vim.api.nvim_del_augroup_by_id(self.group)
 	end
+	if self.index_watcher then
+		self.index_watcher:close()
+	end
 
 	annotations.close(self.renderer.tabpage)
 	self.statusline:dispose()
@@ -156,15 +162,30 @@ function Viewer:close(reason)
 	end
 
 	emit_event(self, "AtlasDiffClosed", reason or "viewer_closed")
+
+	local buf = vim.api.nvim_get_current_buf()
+	if
+		reason == "user_close"
+		and #vim.api.nvim_list_tabpages() == 1
+		and vim.api.nvim_buf_get_name(buf) == ""
+		and vim.bo[buf].buftype == ""
+		and not vim.bo[buf].modified
+	then
+		vim.cmd.qall({ mods = { confirm = true } })
+	end
 end
 
 ---@param viewer AtlasDiffViewer
----@param file AtlasDiffFile
+---@param file AtlasDiffFile|nil Nil shows the empty state.
 ---@param focus boolean|nil
 ---@param on_done (fun())|nil
 local function select_file(viewer, file, focus, on_done)
 	local session = viewer.session
 	if session.closed then
+		return
+	end
+	if not file then
+		viewer.renderer:clear()
 		return
 	end
 
@@ -383,6 +404,96 @@ function Viewer:toggle_file_reviewed()
 	end
 end
 
+---@param viewer AtlasDiffViewer
+---@param file AtlasDiffFile|nil
+---@return AtlasDiffFile|nil
+local function reloaded_file(viewer, file)
+	if not file then
+		return nil
+	end
+	return vim.iter(viewer.session.files):find(function(item)
+		return item.path == file.path and item.staged == file.staged
+	end)
+end
+
+function Viewer:reload_files()
+	local shown = self.renderer.current_file
+	self.session:reload_files(function()
+		self.explorer:set_files(self.session.files)
+		local file = reloaded_file(self, shown)
+		local views = {}
+		if file then
+			for _, pane in ipairs({ self.renderer.left, self.renderer.right }) do
+				if pane.win then
+					views[pane.win] = vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
+				end
+			end
+		end
+
+		select_file(self, file or self.explorer.files[1], false, function()
+			for win, view in pairs(views) do
+				if vim.api.nvim_win_is_valid(win) then
+					vim.api.nvim_win_call(win, function()
+						vim.fn.winrestview(view)
+					end)
+				end
+			end
+		end)
+	end)
+end
+
+---@param viewer AtlasDiffViewer
+---@param shown AtlasDiffFile|nil
+local function show_next_file(viewer, shown)
+	viewer.explorer:set_files(viewer.session.files)
+	select_file(viewer, viewer.explorer:current_file() or reloaded_file(viewer, shown) or viewer.explorer.files[1])
+end
+
+function Viewer:toggle_file_staged()
+	local files = {}
+	if vim.api.nvim_get_current_buf() == self.explorer.buf then
+		files = self.explorer:files_under_cursor()
+	end
+	local file = current_file(self)
+	if #files == 0 and file then
+		files = { file }
+	end
+	if #files == 0 then
+		return
+	end
+
+	local shown = self.renderer.current_file
+	self.session:set_staged(files, not files[1].staged, function()
+		show_next_file(self, shown)
+	end)
+end
+
+function Viewer:discard_changes()
+	local files = self.explorer:files_under_cursor()
+	local file = self.explorer:current_file()
+	if #files == 0 and file then
+		files = { file }
+	end
+	if #files == 0 then
+		return
+	end
+	if files[1].staged then
+		notify.info("Only unstaged changes can be discarded")
+		return
+	end
+
+	local name = #files == 1 and files[1].path or #files .. " files"
+	local action = #files == 1 and files[1].status == "added" and "Delete " or "Discard changes to "
+	if vim.fn.confirm(action .. name .. "?", "&Discard\n&Cancel", 2, "Warning") ~= 1 then
+		return
+	end
+
+	local shown = self.renderer.current_file
+	self.session:discard_changes(files, function()
+		show_next_file(self, shown)
+	end)
+end
+
 function Viewer:find_file()
 	picker.select({
 		title = "Changed files",
@@ -559,6 +670,45 @@ local function setup_autocmds(viewer)
 	})
 end
 
+---@param viewer AtlasDiffViewer
+local function setup_live_reload(viewer)
+	local tabpage = viewer.renderer.tabpage
+	local pending = false
+	local function reload()
+		if pending or vim.api.nvim_get_current_tabpage() ~= tabpage then
+			return
+		end
+		pending = true
+		vim.defer_fn(function()
+			pending = false
+			if not viewer.session.closed then
+				viewer:reload_files()
+			end
+		end, 100)
+	end
+
+	vim.api.nvim_create_autocmd({ "BufWritePost", "TabEnter", "FocusGained" }, {
+		group = viewer.group,
+		callback = reload,
+	})
+
+	git.run({ "rev-parse", "--absolute-git-dir" }, { cwd = viewer.session.range.root }, function(result)
+		if result.code ~= 0 or viewer.session.closed then
+			return
+		end
+		local watcher = vim.uv.new_fs_event()
+		if not watcher then
+			return
+		end
+		watcher:start(vim.trim(result.stdout), {}, function(_, filename)
+			if filename == "index" then
+				vim.schedule(reload)
+			end
+		end)
+		viewer.index_watcher = watcher
+	end)
+end
+
 function Viewer:reload()
 	require("atlas.pulls.diff").reopen(self.session)
 	self:close("refresh")
@@ -658,7 +808,17 @@ function Viewer:open_file()
 		return
 	end
 
+	local win = vim.api.nvim_get_current_win()
+	local cursor
+	if win == self.renderer.right.win or win == self.renderer.left.win then
+		cursor = vim.api.nvim_win_get_cursor(win)
+	end
+
 	vim.cmd.tabedit({ args = { path } })
+	if cursor then
+		cursor[1] = math.min(cursor[1], vim.api.nvim_buf_line_count(0))
+		vim.api.nvim_win_set_cursor(0, cursor)
+	end
 	local options = vim.wo[0][0]
 	options.statusline = vim.go.statusline
 	options.winbar = vim.go.winbar
@@ -685,10 +845,7 @@ function Viewer:show_commits(from, to)
 		self.commits:set_active(session:shown_commits())
 		self.explorer:set_files(session.files)
 		update_panels(self)
-		local first = self.explorer.files[1]
-		if first then
-			select_file(self, first)
-		end
+		select_file(self, self.explorer.files[1])
 	end)
 end
 
@@ -836,6 +993,9 @@ local function setup(viewer)
 	resize(viewer)
 
 	setup_autocmds(viewer)
+	if session.source.kind == "worktree" then
+		setup_live_reload(viewer)
+	end
 	keymaps.setup(viewer)
 
 	for _, pane in pairs({ renderer.left, renderer.right, viewer.explorer, viewer.commits, viewer.review_panel }) do
@@ -845,10 +1005,7 @@ local function setup(viewer)
 	local focus_win = explorer_options.initial_focus == "explorer" and viewer.explorer.win or renderer.right.win
 	vim.api.nvim_set_current_win(focus_win)
 
-	local first = viewer.explorer.files[1]
-	if first then
-		select_file(viewer, first)
-	end
+	select_file(viewer, viewer.explorer.files[1])
 end
 
 ---@param session AtlasDiffSessionInternal

@@ -65,6 +65,16 @@ function Renderer:redraw()
 	end
 end
 
+function Renderer:clear()
+	self.on_done = nil
+	self.loading_buf = nil
+	annotation_ui.close(self.tabpage)
+	annotations.clear(self)
+	pcall(codediff.show_welcome, self.tabpage)
+	update_panes(self)
+	self.on_file(nil)
+end
+
 function Renderer:resize()
 	layout.arrange(self.tabpage)
 	self:redraw()
@@ -118,14 +128,48 @@ local function observe_rendering(renderer)
 	})
 end
 
+-- CodeDiff names the working tree "WORKING" and the index ":0".
+---@param session AtlasDiffSessionInternal
+---@param file AtlasDiffFile
+---@return string original, string modified
+local function revisions(session, file)
+	local range = session.range
+	if range.head_revision then
+		return range.base_revision, range.head_revision
+	end
+	if file.staged then
+		return range.base_revision, ":0"
+	end
+	if session.source.kind == "worktree" and not session.source.base then
+		return ":0", "WORKING"
+	end
+	return range.base_revision, "WORKING"
+end
+
+---@param a AtlasDiffFile
+---@param b AtlasDiffFile
+local function same_file(a, b)
+	return a.path == b.path and a.status == b.status and a.old_blob == b.old_blob and a.new_blob == b.new_blob
+end
+
 ---@param file AtlasDiffFile
 ---@param on_done fun(err?: string)
 function Renderer:show_file(file, on_done)
+	-- CodeDiff keeps the working tree side up to date itself, so a reload only needs a new diff for new blobs.
+	local working_tree = self.session.source.kind == "worktree"
+	if working_tree and self.current_file and same_file(self.current_file, file) then
+		self.on_file(file)
+		self.on_done = on_done
+		self:redraw()
+		return
+	end
+
 	self.on_done = nil
 	annotation_ui.close(self.tabpage)
 	annotations.clear(self)
 
 	local root = self.session.worktree_root or self.session.range.root
+	local original_revision, modified_revision = revisions(self.session, file)
 	local head_worktree = self.session:head_worktree()
 	local head_buf
 	if head_worktree and not file.binary and file.status ~= "deleted" then
@@ -133,6 +177,7 @@ function Renderer:show_file(file, on_done)
 		if head_buf then
 			-- Our own file switches should not be handled as LSP jumps.
 			self.right.buf = head_buf
+			modified_revision = "WORKING"
 		end
 	end
 
@@ -144,8 +189,8 @@ function Renderer:show_file(file, on_done)
 
 		local deleted = file.status == "deleted"
 		---@type string|nil
-		local revision = deleted and self.session.range.base_revision or self.session.range.head_revision
-		if head_buf then
+		local revision = deleted and original_revision or modified_revision
+		if revision == "WORKING" then
 			self.loading_buf = nil
 			revision = nil
 		else
@@ -164,7 +209,7 @@ function Renderer:show_file(file, on_done)
 				rel_path = file.path,
 				side = deleted and "original" or "modified",
 			})
-		elseif head_buf then
+		elseif not revision then
 			side_by_side.show_untracked_file(self.tabpage, vim.fs.joinpath(root, file.path))
 		elseif deleted then
 			-- These helpers show a single pane, even when they are in side-by-side mode.
@@ -178,8 +223,8 @@ function Renderer:show_file(file, on_done)
 			git_root = root,
 			original = path.make_ref(file.old_path or file.path, root),
 			modified = path.make_ref(file.path, root),
-			original_revision = self.session.range.base_revision,
-			modified_revision = head_buf and "WORKING" or self.session.range.head_revision,
+			original_revision = original_revision,
+			modified_revision = modified_revision,
 		}, config.options.diff.jump_to_first_change)
 
 		if not updated then
