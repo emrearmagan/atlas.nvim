@@ -14,9 +14,9 @@ query($path:ID!,$iid:String!){
 ]]
 
 ---@param pr PullRequest
----@return string project_path, integer|nil iid
+---@return string project_path, integer iid
 local function project_iid(pr)
-	return pr.repo_full_name, tonumber(pr.id)
+	return pr.repo_full_name, tonumber(pr.id) --[[@as integer]]
 end
 
 ---@param pr PullRequest
@@ -26,13 +26,6 @@ end
 function M.fetch_commits(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid MR identifier")
-		end)
-		return nil
-	end
-
 	local cache_key = string.format("gitlab_pulls:commits:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
@@ -81,13 +74,6 @@ end
 function M.fetch_diffstat(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid MR identifier")
-		end)
-		return nil
-	end
-
 	local cache_key = string.format("gitlab_pulls:diffstat:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)

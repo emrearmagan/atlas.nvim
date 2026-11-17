@@ -3,6 +3,7 @@ local M = {}
 local notify = require("atlas.core.notify")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
+local utils = require("atlas.ui.shared.utils")
 local resolver = require("atlas.core.keymaps")
 local renderer = require("atlas.ui.notifications.renderer")
 local state = require("atlas.ui.notifications.state")
@@ -67,16 +68,7 @@ local function flush(target_buf, lines, spans)
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
 	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = target_buf })
-
-	vim.api.nvim_buf_clear_namespace(target_buf, ns, 0, -1)
-
-	for _, span in ipairs(spans) do
-		pcall(vim.api.nvim_buf_set_extmark, target_buf, ns, span.line, span.start_col, {
-			end_row = span.line,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+	utils.apply_spans(target_buf, ns, spans)
 end
 
 ---@param provider PullsProvider|IssuesProvider

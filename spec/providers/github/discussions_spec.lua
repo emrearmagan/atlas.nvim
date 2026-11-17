@@ -1,6 +1,7 @@
 local github_client = require("spec.support.github_client_stub")
 
 local MODULE = "atlas.providers.github.discussions"
+local REPO = { full_name = "octo/repo", owner = "octo", repo_name = "repo" }
 
 local function fetch(repository, search)
 	local sent
@@ -12,7 +13,7 @@ local function fetch(repository, search)
 	})
 	package.loaded[MODULE] = nil
 	local page, err
-	require(MODULE).fetch({ full_name = "octo/repo" }, { query = "repo:octo/repo is:open" }, function(value, fetch_err)
+	require(MODULE).fetch(REPO, { query = "repo:octo/repo is:open" }, function(value, fetch_err)
 		page, err = value, fetch_err
 	end)
 	return page, err, sent
@@ -26,7 +27,7 @@ local function fetch_discussion(repository)
 	})
 	package.loaded[MODULE] = nil
 	local discussion, err
-	require(MODULE).fetch_discussion({ full_name = "octo/repo" }, 43, function(value, fetch_err)
+	require(MODULE).fetch_discussion(REPO, 43, function(value, fetch_err)
 		discussion, err = value, fetch_err
 	end)
 	return discussion, err

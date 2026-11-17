@@ -6,18 +6,16 @@ local keymaps = require("atlas.pulls.ui.detail.tabs.conversation.keymaps")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.pulls.ui.detail.state")
 
-function M.reset()
-	state.reset()
-	notify.clear()
-end
+M.reset = state.reset
 
 ---@param pr PullRequest
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, refresh, opts)
-	state.activate(pr)
-	notify.clear()
 	opts = opts or {}
+	if state.conversation ~= nil and not opts.force_refresh then
+		return
+	end
 
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
@@ -29,14 +27,10 @@ function M.on_select(pr, refresh, opts)
 
 	local id = tostring(pr.id or "")
 	state.conversation = "loading"
-	notify.loading(string.format("Loading conversation for #%s...", id))
 
 	state.requests.run(function(done)
 		return comments.fetch_conversation(pr, opts, done)
 	end, function(result, err)
-		if not state.is_current(pr) then
-			return
-		end
 		state.conversation = result
 			and {
 				description = result.description,
@@ -53,8 +47,6 @@ function M.on_select(pr, refresh, opts)
 			local message = result and "Conversation for #%s partially failed: %s"
 				or "Failed to load conversation for #%s: %s"
 			notify.error(string.format(message, id, tostring(err)))
-		else
-			notify.success(string.format("Conversation loaded for #%s", id), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -96,8 +88,6 @@ end
 ---@param buf integer
 function M.deactivate(buf)
 	keymaps.teardown(buf)
-	state.deactivate()
-	notify.clear()
 end
 
 return M

@@ -64,7 +64,7 @@ function M.fetch_file_diffs(pr, iteration, opts, on_done)
 		local query =
 			service.build_query({ iteration = iteration, baseIteration = 0, ["$top"] = 100, ["$skip"] = skip })
 		scope.run(function(done)
-			return service.request("GET", endpoint .. query, nil, done, context, "7.2-preview.1")
+			return service.request("GET", endpoint .. query, nil, done, context, { api_version = "7.2-preview.1" })
 		end, function(result, err)
 			if err then
 				on_done(nil, err)

@@ -27,7 +27,7 @@ end
 ---@param context AtlasIssueActionContext
 ---@return boolean, string|nil
 local function has_issue(context)
-	if not context.issue or tostring(context.issue.key or "") == "" then
+	if not context.issue then
 		return false, "No issue selected"
 	end
 	return true
@@ -91,6 +91,7 @@ local function custom_action(item)
 						return
 					end
 					if not output then
+						console.clear()
 						output = console.start(item.label)
 						console.open()
 					end

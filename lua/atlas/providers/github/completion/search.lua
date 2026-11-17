@@ -80,12 +80,6 @@ local VALUES = {
 	},
 }
 
----@param value string
----@return string
-local function lower_trim(value)
-	return vim.trim(tostring(value or "")):lower()
-end
-
 ---@param items string[]
 ---@param prefix string
 ---@param qualifier string|nil
@@ -93,7 +87,7 @@ end
 local function matches(items, prefix, qualifier)
 	local results = {}
 	for _, item in ipairs(items) do
-		local value = lower_trim(item)
+		local value = vim.trim(item):lower()
 		local matched = prefix == ""
 			or (#prefix <= 3 and value:sub(1, #prefix) == prefix)
 			or (#prefix > 3 and value:find(prefix, 1, true) ~= nil)
@@ -180,11 +174,11 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 		local qualifier, value_prefix = partial:match("^([%w%-]+):(.*)$")
 		if qualifier ~= nil then
 			local values = qualifier:lower() == "type" and type_values(query) or VALUES[qualifier:lower()]
-			return matches(values or {}, lower_trim(value_prefix), qualifier)
+			return matches(values or {}, vim.trim(value_prefix):lower(), qualifier)
 		end
 	end
 
-	return matches(QUALIFIERS, lower_trim(partial), nil)
+	return matches(QUALIFIERS, vim.trim(partial):lower(), nil)
 end
 
 ---@param default string

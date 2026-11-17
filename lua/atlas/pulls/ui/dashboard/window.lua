@@ -47,9 +47,8 @@ M.statusline = statusline.new({
 		components.help,
 	},
 	context = function(ctx)
-		local item = require("atlas.pulls.ui.dashboard.navigation").current_item()
 		ctx.user = pulls_state.current_user
-		ctx.pr = item and item.pr
+		ctx.pr = require("atlas.pulls.ui.detail.state").current_pr
 
 		if not pulls_state.is_loading then
 			ctx.list = { items = pulls_state.pulls }

@@ -63,7 +63,7 @@ end
 ---@param repo_paths table<string, string>|nil
 ---@return boolean ok
 ---@return string|nil err
-function M.validate_repo_paths(repo_paths)
+local function validate_repo_paths(repo_paths)
 	if repo_paths == nil then
 		return true, nil
 	end
@@ -87,13 +87,13 @@ function M.validate_repo_paths(repo_paths)
 	return true, nil
 end
 
----@param repo_paths table<string, string>
 ---@param repo_name string
 ---@param opts {require_existing: boolean|nil }
 ---@return string|nil repo_path
 ---@return string|nil err
-function M.resolve_repo_path(repo_paths, repo_name, opts)
-	local ok, err = M.validate_repo_paths(repo_paths)
+function M.resolve_repo_path(repo_name, opts)
+	local repo_paths = (config.options.pulls.repo_config or {}).paths or {}
+	local ok, err = validate_repo_paths(repo_paths)
 	if not ok then
 		return nil, err
 	end
@@ -145,14 +145,7 @@ end
 ---@param on_done fun(repo_path: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.resolve_repo_path_for_pr(pr, opts, on_done)
-	local repo_id = pr.repo_full_name
-	if repo_id == "" then
-		on_done(nil, "missing PR repo_full_name")
-		return nil
-	end
-
-	local mapping = (config.options.pulls.repo_config or {}).paths or {}
-	local root, err = M.resolve_repo_path(mapping, repo_id, opts)
+	local root, err = M.resolve_repo_path(pr.repo_full_name, opts)
 	if not root then
 		on_done(nil, err)
 		return nil
@@ -175,7 +168,7 @@ end
 ---@return string|nil base_revision
 ---@return string|nil head_revision
 ---@return string|nil err
-function M.pr_diff_revisions(pr)
+local function pr_diff_revisions(pr)
 	local base = pr.destination.commit_hash
 	local head = pr.source.commit_hash
 	if base == "" then
@@ -232,7 +225,7 @@ end
 ---@param opts AtlasGitFetchOptions|nil
 ---@return { cancel: fun() }|nil
 local function fetch_pr_refs(pr, repo_path, on_done, opts)
-	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
+	local base_revision, head_revision, revision_err = pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
 		on_done(revision_err)
 		return nil
@@ -466,23 +459,28 @@ function M.prune()
 	end
 end
 
----@param pr PullRequest
----@param root string|nil
----@param on_done fun(root: string|nil)
+---@param path string|nil Directory inside the checkout; nil uses the current working directory
+---@param repo_full_name string
+---@param repo_url string|nil
+---@param on_done fun(root: string|nil, err: string|nil, remote: string|nil)
 ---@return AtlasRequestScope
-local function current_repo_path(pr, root, on_done)
+local function matching_root(path, repo_full_name, repo_url, on_done)
 	local scope = requests.new()
 	scope.run(function(done)
-		return git.repo_root(root, done)
-	end, function(repo_path)
-		if not repo_path then
-			on_done(nil)
+		return git.repo_root(path, done)
+	end, function(root, root_err)
+		if not root then
+			on_done(nil, root_err)
 			return
 		end
 		scope.run(function(done)
-			return repository_remote(repo_path, pr.link and providers.resolve(pr.link.html) or nil, done)
+			return repository_remote(root, repo_url and providers.resolve(repo_url) or nil, done)
 		end, function(remote)
-			on_done(remote and repo_path or nil)
+			if not remote then
+				on_done(nil, string.format("no remote of %s matches %s", root, repo_full_name))
+				return
+			end
+			on_done(root, nil, remote.name)
 		end)
 	end)
 	return scope
@@ -494,7 +492,7 @@ end
 ---@param on_done fun(source: { root: string, base_revision: string, head_revision: string }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.prepare_diff(pr, root, on_progress, on_done)
-	local base, head, revision_err = M.pr_diff_revisions(pr)
+	local base, head, revision_err = pr_diff_revisions(pr)
 	if not base or not head then
 		on_done(nil, revision_err)
 		return nil
@@ -513,7 +511,7 @@ function M.prepare_diff(pr, root, on_progress, on_done)
 		end)
 	end
 	scope.run(function(done)
-		return current_repo_path(pr, root, done)
+		return matching_root(root, pr.repo_full_name, pr.link.html, done)
 	end, function(repo_path)
 		if repo_path then
 			prepare(repo_path)
@@ -577,7 +575,7 @@ function M.checkout_pr(pr, on_done)
 	-- Prefer the checkout or worktree the user is currently in. Falling back to repo_config.paths
 	-- keeps checkout working when Atlas is opened outside a matching repository.
 	scope.run(function(done)
-		return current_repo_path(pr, nil, done)
+		return matching_root(nil, pr.repo_full_name, pr.link.html, done)
 	end, function(repo_path)
 		if repo_path then
 			checkout_repo(repo_path)
@@ -609,35 +607,12 @@ end
 ---@param on_done fun(root: string|nil, err: string|nil, remote: string|nil)
 ---@return { cancel: fun() }|nil
 function M.resolve_repo_root(repo_full_name, repo_url, on_done)
-	local paths = (config.options.pulls.repo_config or {}).paths or {}
-	local path, err = M.resolve_repo_path(paths, repo_full_name, { require_existing = true })
+	local path, err = M.resolve_repo_path(repo_full_name, { require_existing = true })
 	if not path then
 		on_done(nil, err)
 		return nil
 	end
-
-	local scope = requests.new()
-	scope.run(function(done)
-		return git.repo_root(path, done)
-	end, function(root, root_err)
-		if not root then
-			on_done(nil, root_err)
-			return
-		end
-
-		scope.run(function(done)
-			return repository_remote(root, repo_url and providers.resolve(repo_url) or nil, done)
-		end, function(remote)
-			if not remote then
-				on_done(nil, string.format("no remote of %s matches %s", root, repo_full_name))
-				return
-			end
-
-			on_done(root, nil, remote.name)
-		end)
-	end)
-
-	return scope
+	return matching_root(path, repo_full_name, repo_url, on_done)
 end
 
 ---@param root string

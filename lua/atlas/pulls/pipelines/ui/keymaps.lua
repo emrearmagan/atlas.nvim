@@ -20,13 +20,11 @@ local function current_selection(pane, explorer_pane)
 end
 
 ---@param pane PullsPipelinesExplorer|PullsPipelinesLogs|PullsPipelinesOverview|PullsPipelinesConfig
----@param explorer_pane PullsPipelinesExplorer
----@param logs_pane PullsPipelinesLogs
----@param close fun()
----@param open_actions fun(selection: PullsPipelinesSelection|nil)
----@param toggle_config fun(selection: PullsPipelinesSelection|nil)
+---@param session PullsPipelinesSession
 ---@return AtlasHelpKeyItem[]
-local function shared_items(pane, explorer_pane, logs_pane, close, open_actions, toggle_config)
+local function shared_items(pane, session)
+	local explorer_pane = session.explorer
+	local logs_pane = session.logs
 	local bindings = {
 		{
 			keymap = keymaps.resolve("ui.refresh_view"),
@@ -84,20 +82,22 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions,
 		{
 			keymap = keymaps.resolve("pulls.pipelines.toggle_config"),
 			callback = function()
-				toggle_config(current_selection(pane, explorer_pane))
+				session:toggle_config(current_selection(pane, explorer_pane))
 			end,
 			index = 22,
 		},
 		{
 			keymap = keymaps.resolve("ui.open_actions"),
 			callback = function()
-				open_actions(current_selection(pane, explorer_pane))
+				session:open_actions(current_selection(pane, explorer_pane))
 			end,
 			index = 30,
 		},
 		{
 			keymap = keymaps.resolve("ui.close"),
-			callback = close,
+			callback = function()
+				session:close()
+			end,
 			index = 101,
 		},
 		{
@@ -151,20 +151,13 @@ local function references(items)
 end
 
 ---@param session PullsPipelinesSession
----@param close fun()
----@param open_actions fun(selection: PullsPipelinesSelection|nil)
----@param toggle_config fun(selection: PullsPipelinesSelection|nil)
-function M.setup(session, close, open_actions, toggle_config)
+function M.setup(session)
 	local explorer_items = explorer_keymaps.items(session.explorer, session.logs.win)
 	local logs_items = logs_keymaps.items(session.logs)
 	local overview_items = overview_keymaps.items(session.overview, session.explorer)
 
 	for _, pane in ipairs({ session.explorer, session.logs, session.overview, session.config }) do
-		help.register(
-			"General",
-			shared_items(pane, session.explorer, session.logs, close, open_actions, toggle_config),
-			{ buffer = pane.buf, index = 0 }
-		)
+		help.register("General", shared_items(pane, session), { buffer = pane.buf, index = 0 })
 		help.register(
 			"Explorer",
 			pane == session.explorer and explorer_items or references(explorer_items),

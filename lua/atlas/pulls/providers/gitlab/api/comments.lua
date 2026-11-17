@@ -121,9 +121,9 @@ mutation($id:DiscussionID!,$resolve:Boolean!){
 ]]
 
 ---@param pr PullRequest
----@return string project_path, integer|nil iid
+---@return string project_path, integer iid
 local function project_iid(pr)
-	return pr.repo_full_name, tonumber(pr.id)
+	return pr.repo_full_name, tonumber(pr.id) --[[@as integer]]
 end
 
 ---@param comment PullsComment
@@ -151,13 +151,6 @@ end
 function M.fetch_review_comments(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid MR identifier")
-		end)
-		return nil
-	end
-
 	local cache_key = string.format("gitlab_pulls:review-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
@@ -343,11 +336,6 @@ end
 function M.fetch_conversation_comments(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-
 	local cache_key = string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
@@ -561,10 +549,6 @@ end
 function M.add_comment(pr, content, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
 	if vim.trim(content) == "" then
 		on_done(nil, "Empty body")
 		return nil
@@ -630,10 +614,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, content, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
 	if comment.pending then
 		return service.request("PUT", draft_endpoint(path, iid, comment), { note = content }, function(result, err)
 			if err then
@@ -674,10 +654,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
 	if comment.pending then
 		return service.request("DELETE", draft_endpoint(path, iid, comment), nil, function(_, err)
 			on_done(err == nil, err)
@@ -702,10 +678,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
 	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
 	if not root.thread_id then
 		on_done(false, "Missing discussion id")
 		return nil

@@ -58,14 +58,14 @@
 
 ---@alias AtlasPullsDiffOpenCommand "auto"|"AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
--- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
--- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
--- the default location. `link` names directories symlinked from the main checkout (node_modules,
--- .venv, ...) so servers can resolve dependencies; they are the same directories on disk.
+-- Backs the diff with a `pulls.worktree` so language servers attach to the new side.
 ---@class AtlasPullsDiffLspConfig
 ---@field enabled boolean|nil
+
+---@class AtlasPullsWorktreeConfig
 ---@field dir string|(fun(ctx: AtlasWorktreeContext): string|nil)|nil
 ---@field link string[]|nil
+---@field on_create (fun(ctx: AtlasWorktreeContext, done: fun(result?: vim.SystemCompleted), write: fun(text: string)))|nil
 
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
@@ -110,6 +110,7 @@
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field description AtlasPullsDescriptionConfig|nil
+---@field worktree AtlasPullsWorktreeConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
@@ -198,6 +199,11 @@ local defaults = {
 				{ label = "Note", text = "note: " },
 			},
 		},
+		worktree = {
+			dir = nil,
+			link = {},
+			on_create = nil,
+		},
 		diff = {
 			open_cmd = "auto",
 			layout = "inline",
@@ -209,9 +215,6 @@ local defaults = {
 			},
 			lsp = {
 				enabled = false,
-				dir = nil,
-				-- Keep empty: setup() deep extends, which merges lists element-wise.
-				link = {},
 			},
 			explorer = {
 				grouped = true,
@@ -457,6 +460,20 @@ end
 function M.setup(opts)
 	local resolved = vim.deepcopy(opts or {})
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), resolved)
+
+	--TODO: Remove at some point. Worktree options used to live under pulls.diff.lsp.
+	local legacy = vim.tbl_get(resolved, "pulls", "diff", "lsp") or {}
+	local moved = {}
+	for _, key in ipairs({ "dir", "link" }) do
+		if legacy[key] ~= nil and vim.tbl_get(resolved, "pulls", "worktree", key) == nil then
+			M.options.pulls.worktree[key] = legacy[key]
+			table.insert(moved, "pulls.diff.lsp." .. key)
+		end
+	end
+	if #moved > 0 then
+		require("atlas.core.notify").warn(table.concat(moved, ", ") .. " moved to pulls.worktree")
+	end
+
 	if M.options.ui.statusline.enable ~= false then
 		vim.opt.laststatus = 3
 	end

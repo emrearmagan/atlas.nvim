@@ -259,11 +259,7 @@ end
 ---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_activity(issue, opts, on_done)
-	local issue_key = tostring(issue.key or "")
-	if issue_key == "" then
-		on_done(nil, "Missing issue key")
-		return nil
-	end
+	local issue_key = issue.key
 
 	opts = opts or {}
 	local cache_key = "jira:panel:history:" .. issue_key
@@ -346,11 +342,6 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.update_issue(issue_key, fields, callback)
-	if issue_key == "" then
-		callback(false, "Missing issue key")
-		return nil
-	end
-
 	local endpoint = string.format("/issue/%s", issue_key)
 	local payload = { fields = fields }
 
@@ -366,11 +357,6 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_issue(issue_key, callback)
-	if issue_key == "" then
-		callback(false, "Missing issue key")
-		return nil
-	end
-
 	local endpoint = string.format("/issue/%s", issue_key)
 
 	return service.request("DELETE", endpoint, nil, function(_, err)
@@ -606,11 +592,6 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.assign_issue(issue_key, account_id, callback)
-	if issue_key == "" then
-		callback(false, "Missing issue key")
-		return nil
-	end
-
 	local normalized_account_id = nil
 	if account_id and account_id ~= "" then
 		normalized_account_id = account_id
@@ -638,11 +619,6 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.change_reporter(issue_key, account_id, callback)
-	if issue_key == "" then
-		callback(false, "Missing issue key")
-		return nil
-	end
-
 	if account_id == "" then
 		callback(false, "Missing account id")
 		return nil

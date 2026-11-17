@@ -26,15 +26,7 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_commits(pr, _, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	local owner, repo = repo_slug:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
+	local owner, repo = pr.repo.owner, pr.repo.repo_name
 	return cli.gh({
 		"api",
 		"graphql",
@@ -85,20 +77,20 @@ function M.fetch_commits(pr, _, on_done)
 
 			table.insert(commits, {
 				hash = hash,
-				repo_full_name = repo_slug,
+				repo_full_name = pr.repo_full_name,
 				short_hash = #hash > 7 and hash:sub(1, 7) or hash,
 				message = message,
 				author_name = author_name,
 				author_nickname = author_login,
 				date = tostring(raw.authoredDate or raw.committedDate or ""),
-				html_url = string.format("https://%s/%s/commit/%s", cli.hostname(), repo_slug, hash),
+				html_url = string.format("https://%s/%s/commit/%s", cli.hostname(), pr.repo_full_name, hash),
 			})
 		end
 
 		on_done(commits, nil)
 	end, {
 		action = "Fetch PR commits",
-		repo = repo_slug,
+		repo = pr.repo_full_name,
 		number = pr.id,
 	})
 end

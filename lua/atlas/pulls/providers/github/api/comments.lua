@@ -193,14 +193,6 @@ mutation($threadId:ID!,$reviewId:ID!,$body:String!){
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function reply_comment(pr, parent, content, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
 	if parent.inline ~= nil or parent.file ~= nil then
 		local pending = opts.pending == true
 		local thread_id = tostring(parent.thread_id or "")
@@ -270,14 +262,6 @@ function M.add_comment(pr, content, opts, on_done)
 		return reply_comment(pr, opts.parent, content, opts, on_done)
 	end
 
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
 	local target = opts.inline or opts.file
 	if target then
 		local file_level = opts.file ~= nil
@@ -297,7 +281,7 @@ function M.add_comment(pr, content, opts, on_done)
 		"api",
 		"graphql",
 		"-f",
-		"id=" .. tostring(pr.node_id or ""),
+		"id=" .. pr.node_id,
 		"-f",
 		"body=" .. content,
 		"-f",

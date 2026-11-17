@@ -3,37 +3,26 @@ local git = require("atlas.core.git")
 local checkout = require("atlas.core.git.checkout")
 
 local function resolve(paths, repo)
-	return checkout.resolve_repo_path(paths, repo, {
-		require_existing = false,
-	})
+	local original = config.options
+	config.options = { pulls = { repo_config = { paths = paths } } }
+	local path, err = checkout.resolve_repo_path(repo, { require_existing = false })
+	config.options = original
+	return path, err
 end
 
 describe("core.git.checkout", function()
-	it("uses the pull request snapshot commits for diffs", function()
-		local pr = {
-			destination = { commit_hash = "base123" },
-			source = { commit_hash = "head456" },
-		}
-		local base, head = checkout.pr_diff_revisions(pr)
-
-		assert.equal("base123", base)
-
-		assert.equal("head456", head)
-	end)
-
 	describe("validate", function()
 		it("fails when wildcard parity is wrong", function()
-			local ok = checkout.validate_repo_paths({
-				["ws/*"] = "~/code/no-star",
-			})
-
-			assert.is_false(ok)
+			local path, err = resolve({ ["ws/*"] = "~/code/no-star" }, "ws/repo")
+			assert.is_nil(path)
+			assert.matches("wildcard parity mismatch", assert(err), 1, true)
 		end)
 
 		it("rejects missing or empty namespace and repository segments", function()
 			for _, key in ipairs({ "bad", "/group/repo", "group//repo", "group/subgroup/", "group/subgroup//repo" }) do
-				local ok = checkout.validate_repo_paths({ [key] = "~/x" })
-				assert.is_false(ok)
+				local mapped_path, mapped_err = resolve({ [key] = "~/x" }, "ws/repo")
+				assert.is_nil(mapped_path)
+				assert.matches("invalid key", assert(mapped_err), 1, true)
 				local path, err = resolve({}, key)
 				assert.is_nil(path)
 				assert.matches("invalid repository identifier", assert(err), 1, true)

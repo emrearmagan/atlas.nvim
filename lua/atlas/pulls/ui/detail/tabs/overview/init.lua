@@ -13,24 +13,9 @@ local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
 local pipeline_api = require("atlas.pulls.pipelines")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
-local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
 local MAX_DESCRIPTION_LINES = 15
-
----@param pr PullRequest
----@return boolean
-local function is_current(pr)
-	local current = detail.current_pr
-	return current ~= nil
-		and tostring(current.id or "") == tostring(pr.id or "")
-		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
-end
-
-local function reset_requests()
-	state.requests.cancel()
-	state.requests = request_scope.new()
-end
 
 function M.reset()
 	state.reset()
@@ -50,23 +35,15 @@ function M.on_select(pr, refresh, opts)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
-	local should_fetch_reviewers = can_fetch_reviewers
-		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
+	local should_fetch_reviewers = can_fetch_reviewers and (force_refresh or state.reviewers == nil)
 	local backend = pipeline_api.get(provider)
-	local should_fetch_pipelines = backend ~= nil
-		and (force_refresh or detail.pipelines == nil or detail.pipelines == "loading")
-	if should_fetch_reviewers or should_fetch_pipelines then
-		reset_requests()
-	end
+	local should_fetch_pipelines = backend ~= nil and (force_refresh or detail.pipelines == nil)
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
 		state.requests.run(function(done)
 			return core.fetch_reviewers(pr, opts, done)
 		end, function(reviewers, err)
-			if not is_current(pr) then
-				return
-			end
 			if err then
 				state.reviewers = err
 			else
@@ -86,9 +63,6 @@ function M.on_select(pr, refresh, opts)
 				done
 			)
 		end, function(items, err)
-			if not is_current(pr) then
-				return
-			end
 			detail.pipelines = err or items or {}
 			refresh()
 		end)
@@ -640,7 +614,6 @@ function M.deactivate(buf)
 		return
 	end
 	keymaps.teardown(buf)
-	reset_requests()
 end
 
 return M

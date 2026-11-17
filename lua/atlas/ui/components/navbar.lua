@@ -1,7 +1,7 @@
 local M = {}
 
-local ui_utils = require("atlas.ui.utils")
-local text_width = ui_utils.text_width
+local utils = require("atlas.ui.shared.utils")
+local text_width = utils.text_width
 
 function M.render(opts)
 	local width = opts.width or vim.o.columns

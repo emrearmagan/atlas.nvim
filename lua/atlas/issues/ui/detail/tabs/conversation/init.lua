@@ -7,8 +7,10 @@ local detail = require("atlas.issues.ui.detail.state")
 local notify = require("atlas.core.notify")
 
 function M.reset()
+	if state.is_loading() then
+		notify.clear()
+	end
 	state.reset()
-	notify.clear()
 end
 
 ---@param issue Issue
@@ -16,7 +18,6 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
 	state.activate(issue)
-	notify.clear()
 	opts = opts or {}
 
 	local provider = detail.provider
@@ -98,8 +99,7 @@ end
 ---@param buf integer
 function M.deactivate(buf)
 	keymaps.teardown(buf)
-	state.deactivate()
-	notify.clear()
+	M.reset()
 end
 
 return M

@@ -90,7 +90,7 @@ function M.fetch_conversation(issue, opts, on_done)
 			return service.request("GET", comments_endpoint(issue) .. query, nil, done, {
 				action = "Fetch work item comments",
 				issue_key = issue.key,
-			}, "7.1-preview.4")
+			}, { api_version = "7.1-preview.4" })
 		end, function(result, err)
 			if err then
 				on_done(nil, err)
@@ -166,7 +166,7 @@ function M.add_comment(issue, text, _opts, on_done)
 			on_done(to_comment(result, issue), nil)
 		end,
 		{ action = "Add work item comment", issue_key = issue.key },
-		"7.1-preview.4"
+		{ api_version = "7.1-preview.4" }
 	)
 end
 
@@ -188,7 +188,11 @@ function M.edit_comment(issue, comment, text, on_done)
 		local updated = to_comment(result, issue)
 		updated.reactions = comment.reactions
 		on_done(updated, nil)
-	end, { action = "Edit work item comment", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.4")
+	end, {
+		action = "Edit work item comment",
+		issue_key = issue.key,
+		comment_id = comment.id,
+	}, { api_version = "7.1-preview.4" })
 end
 
 ---@param issue Issue
@@ -204,7 +208,11 @@ function M.delete_comment(issue, comment, on_done)
 			return
 		end
 		on_done(true, nil)
-	end, { action = "Delete work item comment", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.4")
+	end, {
+		action = "Delete work item comment",
+		issue_key = issue.key,
+		comment_id = comment.id,
+	}, { api_version = "7.1-preview.4" })
 end
 
 ---@param issue Issue
@@ -221,7 +229,11 @@ function M.add_reaction(issue, comment, key, on_done)
 			return
 		end
 		on_done(true, nil)
-	end, { action = "Add work item comment reaction", issue_key = issue.key, comment_id = comment.id }, "7.1-preview.1")
+	end, {
+		action = "Add work item comment reaction",
+		issue_key = issue.key,
+		comment_id = comment.id,
+	}, { api_version = "7.1-preview.1" })
 end
 
 ---@param issue Issue
@@ -242,7 +254,7 @@ function M.remove_reaction(issue, comment, key, on_done)
 		action = "Remove work item comment reaction",
 		issue_key = issue.key,
 		comment_id = comment.id,
-	}, "7.1-preview.1")
+	}, { api_version = "7.1-preview.1" })
 end
 
 return M

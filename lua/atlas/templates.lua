@@ -17,95 +17,72 @@ local templates_root = vim.fs.joinpath(storage.root(), "issues", "templates")
 ---@field get_description fun(): string
 ---@field set_description fun(description: string): boolean
 
----@param name string|nil
----@return string|nil
----@return string|nil
-local function normalize_name(name)
-	local normalized = vim.trim(tostring(name or ""))
-	if normalized == "" then
-		return nil, "Template name is required"
-	end
-
-	normalized = normalized:gsub("%.md$", "")
-	normalized = normalized:gsub("[/\\]", "-")
-	normalized = vim.trim(normalized)
-
-	if normalized == "" then
-		return nil, "Template name is required"
-	end
-
-	return normalized, nil
-end
-
----@return boolean
----@return string|nil
-local function ensure_templates_dir()
-	if vim.fn.isdirectory(templates_root) == 0 then
-		vim.fn.mkdir(templates_root, "p")
-	end
-
-	if vim.fn.isdirectory(templates_root) == 0 then
-		return false, "Failed to create templates directory"
-	end
-
-	return true, nil
-end
-
----@param name string
----@return string|nil path
----@return string|nil normalized_name
----@return string|nil err
-local function path_for_name(name)
-	local normalized_name, normalize_err = normalize_name(name)
-	if normalized_name == nil then
-		return nil, nil, normalize_err
-	end
-
-	return string.format("%s/%s.md", templates_root, normalized_name), normalized_name, nil
-end
-
----@return AtlasTemplateInfo[]|nil
----@return string|nil
+---@return AtlasTemplateInfo[]
 local function list()
-	local ok, ensure_err = ensure_templates_dir()
-	if not ok then
-		return nil, ensure_err
-	end
-
-	local paths = vim.fn.globpath(templates_root, "*.md", false, true) or {}
+	local paths = vim.fn.globpath(templates_root, "*.md", false, true)
 	table.sort(paths, function(a, b)
 		return a:lower() < b:lower()
 	end)
-
-	---@type AtlasTemplateInfo[]
-	local templates = {}
-	for _, path in ipairs(paths) do
-		if vim.fn.filereadable(path) == 1 then
-			table.insert(templates, {
-				name = vim.fn.fnamemodify(path, ":t:r"),
-				path = path,
-			})
-		end
-	end
-
-	return templates, nil
+	return vim.tbl_map(function(path)
+		return { name = vim.fn.fnamemodify(path, ":t:r"), path = path }
+	end, paths)
 end
 
----@param name string
----@return string|nil
----@return string|nil
-local function read(name)
-	local path, normalized_name, path_err = path_for_name(name)
-	if path == nil then
-		return nil, path_err
+---@param template AtlasTemplateInfo
+---@return string|nil content
+---@return string|nil err
+local function read(template)
+	if vim.fn.filereadable(template.path) == 0 then
+		return nil, string.format('Template "%s" not found', template.name)
 	end
+	return table.concat(vim.fn.readfile(template.path), "\n"), nil
+end
 
-	if vim.fn.filereadable(path) == 0 then
-		return nil, string.format('Template "%s" not found', tostring(normalized_name))
-	end
+---@param path string
+---@param content string
+---@return string|nil err
+local function write(path, content)
+	vim.fn.mkdir(templates_root, "p")
+	local ok, err = pcall(vim.fn.writefile, vim.split(content, "\n", { plain = true }), path)
+	return not ok and tostring(err) or nil
+end
 
-	local lines = vim.fn.readfile(path)
-	return table.concat(lines, "\n"), nil
+---@param content string
+---@param on_done fun(name: string|nil, err: string|nil, overwritten: boolean|nil)
+local function save_as(content, on_done)
+	vim.ui.input({ prompt = "Template name: " }, function(input)
+		if input == nil then
+			on_done()
+			return
+		end
+		local name = vim.trim((vim.trim(input):gsub("%.md$", ""):gsub("[/\\]", "-")))
+		if name == "" then
+			on_done(nil, "Template name is required")
+			return
+		end
+
+		local path = string.format("%s/%s.md", templates_root, name)
+		local function save(overwritten)
+			local err = write(path, content)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done(name, nil, overwritten)
+		end
+		if vim.fn.filereadable(path) == 0 then
+			save(false)
+			return
+		end
+
+		vim.ui.input({ prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', name) }, function(confirm)
+			if vim.trim(confirm or ""):lower() == "y" then
+				save(true)
+			else
+				on_done()
+			end
+		end)
+	end)
 end
 
 ---@param title string
@@ -122,7 +99,7 @@ local function pick(title, templates, on_select)
 			return template.name
 		end,
 		preview_item = function(template, done, width)
-			local content, read_err = read(template.name)
+			local content, read_err = read(template)
 			done(picker_format.markdown({
 				title = template.name,
 				lines = vim.split(read_err or (content ~= "" and content or "Empty template"), "\n", { plain = true }),
@@ -132,91 +109,6 @@ local function pick(title, templates, on_select)
 	})
 end
 
----@param name string
----@param content string|nil
----@param opts? { overwrite?: boolean }
----@return boolean ok
----@return string|nil err
----@return boolean existed
----@return string|nil normalized_name
-local function write(name, content, opts)
-	opts = opts or {}
-
-	local path, normalized_name, path_err = path_for_name(name)
-	if path == nil then
-		return false, path_err, false, nil
-	end
-
-	local ok, ensure_err = ensure_templates_dir()
-	if not ok then
-		return false, ensure_err, false, normalized_name
-	end
-
-	local existed = vim.fn.filereadable(path) == 1
-	if existed and opts.overwrite ~= true then
-		return false, string.format('Template "%s" already exists', tostring(normalized_name)), true, normalized_name
-	end
-
-	local lines = vim.split(tostring(content or ""), "\n", { plain = true })
-	local write_ok, write_err = pcall(vim.fn.writefile, lines, path)
-	if not write_ok then
-		return false, tostring(write_err), existed, normalized_name
-	end
-
-	return true, nil, existed, normalized_name
-end
-
----@param name string
----@param content string
----@param on_done fun(name: string|nil, err: string|nil, overwritten: boolean|nil)
-local function write_with_confirmation(name, content, on_done)
-	local ok, err, existed, normalized_name = write(name, content, { overwrite = false })
-	local display_name = normalized_name or name
-	if ok then
-		on_done(display_name, nil, false)
-		return
-	end
-	if not existed then
-		on_done(nil, err or "Failed to create template")
-		return
-	end
-
-	vim.ui.input({ prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', display_name) }, function(confirm)
-		if vim.trim(confirm or ""):lower() ~= "y" then
-			on_done()
-			return
-		end
-
-		local overwrite_ok, overwrite_err, _, final_name = write(name, content, { overwrite = true })
-		if not overwrite_ok then
-			on_done(nil, overwrite_err or "Failed to overwrite template")
-			return
-		end
-		on_done(final_name or display_name, nil, true)
-	end)
-end
-
----@param name string
----@return boolean ok
----@return string|nil err
----@return string|nil normalized_name
-local function delete(name)
-	local path, normalized_name, path_err = path_for_name(name)
-	if path == nil then
-		return false, path_err, nil
-	end
-
-	if vim.fn.filereadable(path) == 0 then
-		return false, string.format('Template "%s" not found', tostring(normalized_name)), normalized_name
-	end
-
-	if vim.fn.delete(path) ~= 0 then
-		return false, string.format('Failed to delete template "%s"', tostring(normalized_name)), normalized_name
-	end
-
-	return true, nil, normalized_name
-end
-
 ---@param on_done fun(err: string|nil)
 local function create_template(on_done)
 	markdown_editor.open({
@@ -224,22 +116,8 @@ local function create_template(on_done)
 		title = " New Template ",
 		initial_text = "",
 		on_save = function(text)
-			local markdown = tostring(text or "")
-			vim.ui.input({ prompt = "Template name: " }, function(name_input)
-				if name_input == nil then
-					on_done()
-					return
-				end
-
-				local name = vim.trim(name_input)
-				if name == "" then
-					on_done("Template name is required")
-					return
-				end
-
-				write_with_confirmation(name, markdown, function(_, err)
-					on_done(err)
-				end)
+			save_as(text, function(_, err)
+				on_done(err)
 			end)
 		end,
 		on_cancel = function()
@@ -251,7 +129,7 @@ end
 ---@param selected AtlasTemplateInfo
 ---@param on_done fun(err: string|nil)
 local function edit_template(selected, on_done)
-	local content, read_err = read(selected.name)
+	local content, read_err = read(selected)
 	if read_err then
 		on_done(read_err)
 		return
@@ -272,9 +150,8 @@ local function edit_template(selected, on_done)
 						return
 					end
 
-					local deleted, delete_err = delete(selected.name)
-					if not deleted then
-						on_done(delete_err or "Failed to delete template")
+					if vim.fn.delete(selected.path) ~= 0 then
+						on_done(string.format('Failed to delete template "%s"', selected.name))
 						return
 					end
 
@@ -290,12 +167,7 @@ local function edit_template(selected, on_done)
 		initial_text = content,
 		actions = actions,
 		on_save = function(text)
-			local ok, write_err = write(selected.name, text, { overwrite = true })
-			if not ok then
-				on_done(write_err or "Failed to update template")
-				return
-			end
-			on_done()
+			on_done(write(selected.path, text))
 		end,
 		on_cancel = function()
 			on_done()
@@ -340,12 +212,8 @@ function M.manage(on_done)
 				return
 			end
 
-			local templates, list_err = list()
-			if list_err then
-				finish(list_err)
-				return
-			end
-			if templates == nil or #templates == 0 then
+			local templates = list()
+			if #templates == 0 then
 				finish()
 				return
 			end
@@ -364,12 +232,8 @@ end
 
 ---@param context AtlasTemplateContext
 local function apply_template(context)
-	local templates, err = list()
-	if err then
-		notify.error(err, { vim_notify = true })
-		return
-	end
-	if templates == nil or #templates == 0 then
+	local templates = list()
+	if #templates == 0 then
 		notify.warn("No templates found", { vim_notify = true })
 		return
 	end
@@ -379,7 +243,7 @@ local function apply_template(context)
 			return
 		end
 
-		local content, read_err = read(template.name)
+		local content, read_err = read(template)
 		if read_err then
 			notify.error(read_err, { vim_notify = true })
 			return
@@ -414,25 +278,13 @@ local function save_template(context)
 		return
 	end
 
-	vim.ui.input({ prompt = "Template name: " }, function(input)
-		if input == nil then
-			return
+	save_as(description, function(saved_name, err, overwritten)
+		if err then
+			notify.error(err, { vim_notify = true })
+		elseif saved_name then
+			local action = overwritten and "Updated" or "Created"
+			notify.info(action .. " template " .. saved_name, { vim_notify = true })
 		end
-
-		local name = vim.trim(input)
-		if name == "" then
-			notify.warn("Template name is required", { vim_notify = true })
-			return
-		end
-
-		write_with_confirmation(name, description, function(saved_name, err, overwritten)
-			if err then
-				notify.error(err, { vim_notify = true })
-			elseif saved_name then
-				local action = overwritten and "Updated" or "Created"
-				notify.info(action .. " template " .. saved_name, { vim_notify = true })
-			end
-		end)
 	end)
 end
 

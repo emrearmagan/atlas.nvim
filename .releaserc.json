@@ -32,6 +32,12 @@
       }
     ],
     [
+      "./.github/scripts/release-contributors.cjs",
+      {
+        "exclude": ["emrearmagan"]
+      }
+    ],
+    [
       "@semantic-release/github",
       {
         "successCommentCondition": false,
