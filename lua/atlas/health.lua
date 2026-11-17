@@ -163,9 +163,21 @@ local function check_azure()
 		vim.health.info("Azure DevOps not configured")
 		return
 	end
-	check_credentials(provider, { "base_url", "token" }, "Azure DevOps")
 	check_https_url(provider.base_url, "providers.azure.base_url")
 	check_provider_views("azure")
+
+	if provider.token and provider.token ~= "" then
+		vim.health.ok("Azure DevOps token configured")
+		return
+	end
+	if vim.fn.executable("az") ~= 1 then
+		vim.health.warn(
+			"Azure DevOps token missing and Azure CLI not found",
+			{ "Set providers.azure.token or install the Azure CLI and run: az login" }
+		)
+		return
+	end
+	vim.health.ok("No Azure DevOps token set, using the Azure CLI")
 end
 
 local function check_jira()
