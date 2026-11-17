@@ -165,7 +165,9 @@ end
 function M.start(title, cwd)
 	local output = latest or M.clear()
 	local separator = #output.chunks > 0 and "\r\n" or ""
-	output.finished = false
+	vim.schedule(function()
+		output.finished = false
+	end)
 	output:write(separator .. "> " .. title .. "\r\n" .. (cwd and cwd .. "\r\n\r\n" or ""))
 	return output
 end

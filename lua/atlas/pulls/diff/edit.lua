@@ -139,7 +139,7 @@ function M.start(review, suggestions)
 
 	notify.info("Preparing a worktree to edit in...")
 	session.requests.run(function(done)
-		return diff_worktree.prepare(session.range, source.pr, config.options.pulls.diff.lsp, done)
+		return diff_worktree.prepare(session.range, source.pr, done)
 	end, function(root)
 		if not root then
 			return

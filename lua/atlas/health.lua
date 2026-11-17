@@ -92,11 +92,13 @@ local function check_pulls()
 		)
 	end
 
+	local worktree_ok, worktree_err = require("atlas.core.git.worktree").validate(pulls.worktree)
+	if not worktree_ok then
+		vim.health.error(string.format("pulls.worktree is invalid: %s", tostring(worktree_err)))
+	end
+
 	local lsp = pulls.diff.lsp
-	local lsp_ok, lsp_err = require("atlas.core.git.worktree").validate(lsp)
-	if not lsp_ok then
-		vim.health.error(string.format("pulls.diff.lsp is invalid: %s", tostring(lsp_err)))
-	elseif not lsp.enabled then
+	if not lsp.enabled then
 		vim.health.info("pulls.diff.lsp.enabled is off (diff buffers have no language server)")
 	elseif diff_cmd ~= "AtlasDiff" and diff_cmd ~= "CodeDiff" then
 		vim.health.warn(

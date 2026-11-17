@@ -148,7 +148,7 @@ end
 ---@param root string
 ---@param base string
 ---@param head string|nil Nil for the working tree.
----@param opts { lsp?: AtlasPullsDiffLspConfig, on_progress: fun(message: string) }
+---@param opts { lsp?: boolean, on_progress: fun(message: string) }
 ---@param on_done fun(session: AtlasDiffSessionInternal|nil, err: string|nil)
 ---@return { cancel: fun() }
 function Session.new(source, root, base, head, opts, on_done)
@@ -212,7 +212,7 @@ function Session.new(source, root, base, head, opts, on_done)
 
 			opts.on_progress("Preparing worktree...")
 			session.requests.run(function(prepared)
-				return diff_worktree.prepare(result.range, pr, opts.lsp, prepared)
+				return diff_worktree.prepare(result.range, pr, prepared)
 			end, function(path)
 				session.worktree_root = path
 				done(true)
