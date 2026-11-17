@@ -132,7 +132,7 @@ function M.setup(renderer, viewer, groups)
 	})
 	bind_native(explorer.buf, native_keys.file_panel, explorer_actions)
 	if external_help then
-		help.register("Explorer", {
+		help.register("General", {
 			{
 				key = external_help.key,
 				desc = external_help.desc,
@@ -140,12 +140,12 @@ function M.setup(renderer, viewer, groups)
 				callback = diffview_actions.help("file_panel"),
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = explorer.buf, index = 1 })
+		}, { buffer = explorer.buf, index = 2 })
 	end
 
 	local details = resolver.resolve("pulls.review.show_details")
 	if details then
-		help.register("Explorer", {
+		help.register("General", {
 			{
 				key = details.key,
 				desc = details.desc,
@@ -155,7 +155,7 @@ function M.setup(renderer, viewer, groups)
 				end,
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = explorer.buf, index = 1 })
+		}, { buffer = explorer.buf, index = 2 })
 	end
 
 	-- Diffview defines refresh in its file panel; use those keys in the other panes too.
@@ -175,7 +175,7 @@ function M.setup(renderer, viewer, groups)
 			bind_native(pane.buf, refresh_keys, navigation)
 			bind_native(pane.buf, native_keys.view, shared)
 			if external_help then
-				help.register("View", {
+				help.register("General", {
 					{
 						key = external_help.key,
 						desc = external_help.desc,
@@ -183,7 +183,7 @@ function M.setup(renderer, viewer, groups)
 						callback = diffview_actions.help({ "view", "diff2" }),
 						opts = { nowait = true, silent = true },
 					},
-				}, { buffer = pane.buf, index = 1 })
+				}, { buffer = pane.buf, index = 2 })
 			end
 			for _, group in ipairs(groups) do
 				help.register(group.name, group.items, { buffer = pane.buf, index = group.index })

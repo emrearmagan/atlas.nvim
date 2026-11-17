@@ -98,6 +98,8 @@ Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL
 - Comment, suggest changes, manage threads, or leave notes.
 - Track tasks, checklists, and reviewed files.
 - Submit, approve, request changes, or merge.
+- Edit the pull request's files in a separate worktree, then commit and push them to its branch.
+- Apply review suggestions, one from the comment popup or several at once from the actions menu.
 
 > [!NOTE]
 > **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim) requires **v3.0.0 or newer**. [Diffview](https://github.com/sindrets/diffview.nvim) and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) are also supported. These viewers can display Atlas comment, task, and note overlays, but their integrations rely on plugin internals and may break after upstream changes.
@@ -457,7 +459,7 @@ pulls = {
     },
   },
 
-  -- Worktrees used by `diff.lsp`.
+  -- Worktrees used by `diff.lsp` and edit mode.
   worktree = {
     dir = nil, -- Absolute path or fun(ctx): string|nil. Defaults to the Neovim cache.
     link = {}, -- Folders symlinked from your checkout, e.g. { "node_modules", ".venv" }
@@ -1038,6 +1040,8 @@ keymaps = {
       reply = "c",
       edit = "e",
       react = "gr",
+      toggle_resolved = "x",
+      apply_suggestion = "ga",
       upvote = "gu", -- GitHub discussions only.
     },
     toggle_panel = "p",
@@ -1112,7 +1116,6 @@ keymaps = {
       submit_review = "<leader>gs",
       add_task = "<leader>t",
       comment_templates = "gT",
-      toggle_resolved = "x",
       next_comment = "]c",
       prev_comment = "[c",
       next_unresolved = "]x",
@@ -1132,6 +1135,7 @@ keymaps = {
         toggle_review_panel = "gR",
         toggle_detail_panel = "gD",
         toggle_comments = "gH",
+        toggle_edit = "gE",
       },
       explorer = {
         toggle_commits = "gC",

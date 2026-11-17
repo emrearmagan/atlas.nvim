@@ -73,7 +73,7 @@ local function emit_comments(lines, spans, line_map, nodes, width)
 			delete = action_key("ui.delete"),
 			add_task = tasks and tasks.add_task and action_key("pulls.review.add_task") or nil,
 			react = can_react and action_key("ui.comments.react") or nil,
-			toggle_resolved = action_key("pulls.review.toggle_resolved"),
+			toggle_resolved = action_key("ui.comments.toggle_resolved"),
 		},
 	})
 	local result = box.render({ { lines = thread_lines, spans = thread_spans, line_map = thread_map } }, {

@@ -131,7 +131,7 @@ function M.setup(buf, refresh)
 	end
 	utils.insert_if(
 		items,
-		from_action("pulls.review.toggle_resolved", {
+		from_action("ui.comments.toggle_resolved", {
 			index = 40,
 			opts = { nowait = true, silent = true },
 			callback = function()

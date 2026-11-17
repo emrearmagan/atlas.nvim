@@ -16,6 +16,7 @@ local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 ---@field reviewed_files table<string, boolean>|nil
 ---@field outdated_files table<string, string|true>|nil
 ---@field annotated_paths table<string, { comments?: boolean, notes?: boolean }>
+---@field editing boolean|nil Edit mode, see `atlas.pulls.diff.edit`.
 ---@field selected AtlasDiffFile|nil
 ---@field cursor_row integer|nil
 ---@field on_select fun(file: AtlasDiffFile, focus?: boolean)
@@ -98,10 +99,16 @@ end
 
 ---@param state AtlasDiffExplorer
 ---@param file AtlasDiffFile
----@return "files"|"staged"|"reviewed"
+---@return "files"|"staged"|"edited"|"reviewed"
 local function section_of(state, file)
 	if file.staged then
 		return "staged"
+	end
+	if state.editing then
+		---@cast file AtlasDiffEditFile
+		if file.edited then
+			return "edited"
+		end
 	end
 	if state.reviewed_files and state.reviewed_files[file.path] then
 		return "reviewed"
@@ -111,7 +118,7 @@ end
 
 ---@param state AtlasDiffExplorer
 local function build_rows(state)
-	local sections = { files = {}, staged = {}, reviewed = {} }
+	local sections = { files = {}, staged = {}, edited = {}, reviewed = {} }
 	for _, file in ipairs(state.source) do
 		local section = sections[section_of(state, file)]
 		section[#section + 1] = file
@@ -180,6 +187,10 @@ local function build_rows(state)
 		rows[#rows + 1] = { label = "" }
 		append_section("staged", "Staged")
 	end
+	if #sections.edited > 0 then
+		rows[#rows + 1] = { label = "" }
+		append_section("edited", "Changes")
+	end
 	if state.reviewed_files then
 		rows[#rows + 1] = { label = "" }
 		append_section("reviewed", "Reviewed")
@@ -234,9 +245,13 @@ local function file_chunks(state, file, prefix, available)
 		remaining = remaining - vim.fn.strdisplaywidth(chunk[1])
 	end
 
-	local outdated = state.outdated_files and state.outdated_files[file.path]
-	local label_hl = outdated and "AtlasLogWarn" or "Normal"
-	local mark = outdated and " ~" or ""
+	local marked = state.outdated_files and state.outdated_files[file.path]
+	if state.editing then
+		---@cast file AtlasDiffEditFile
+		marked = file.changed
+	end
+	local label_hl = marked and "AtlasLogWarn" or "Normal"
+	local mark = marked and " ~" or ""
 	remaining = remaining - #mark
 
 	local label = vim.fn.strtrans(name)
@@ -246,7 +261,7 @@ local function file_chunks(state, file, prefix, available)
 
 	label = utils.truncate(label, math.max(1, remaining - suffix_width - 1))
 	chunks[#chunks + 1] = { label, label_hl }
-	if outdated then
+	if marked then
 		chunks[#chunks + 1] = { mark, label_hl }
 	end
 	remaining = remaining - vim.fn.strdisplaywidth(label)
@@ -538,7 +553,7 @@ function Explorer:set_all_folders_collapsed(collapsed)
 	end
 
 	local before = self.rows[current_row(self)]
-	self.collapsed = { files = {}, staged = {}, reviewed = {} }
+	self.collapsed = { files = {}, staged = {}, edited = {}, reviewed = {} }
 	if collapsed then
 		local path = before and (before.path or before.file and before.file.path)
 		local rows = build_rows(self)
@@ -640,6 +655,7 @@ end
 --- review_context?: PullsReviewContext,
 --- review_data?: PullsReviewData,
 --- notes?: AtlasNote[],
+--- editing?: boolean,
 --- on_select: fun(file: AtlasDiffFile, focus?: boolean),
 ---}
 ---@return AtlasDiffExplorer
@@ -656,11 +672,12 @@ function Explorer.new(opts)
 		files = source,
 		options = vim.deepcopy(options),
 		rows = {},
-		collapsed = { files = {}, staged = {}, reviewed = {} },
+		collapsed = { files = {}, staged = {}, edited = {}, reviewed = {} },
 		flatten_dirs = true,
 		reviewed_files = opts.review_context and opts.review_context.reviewed_files,
 		outdated_files = opts.review_context and opts.review_context.outdated_files,
 		annotated_paths = annotations,
+		editing = opts.editing,
 		on_select = opts.on_select,
 		group = vim.api.nvim_create_augroup("AtlasDiffExplorer" .. buf, { clear = true }),
 	}, Explorer)

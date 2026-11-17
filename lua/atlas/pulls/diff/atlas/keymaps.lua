@@ -33,14 +33,14 @@ function M.setup(renderer, viewer, groups)
 	add(navigation_items, "pulls.review.atlas.next_file", 11, function()
 		viewer:navigate_file(1)
 	end)
-	add(navigation_items, "pulls.review.atlas.toggle_explorer", 40, function()
-		viewer:toggle_explorer()
-	end)
 	add(navigation_items, "pulls.review.atlas.focus_explorer", 41, function()
 		viewer:focus_explorer()
 	end)
 
 	local layout_items = {}
+	add(layout_items, "pulls.review.atlas.toggle_explorer", 40, function()
+		viewer:toggle_explorer()
+	end)
 	add(layout_items, "pulls.review.atlas.toggle_layout", 60, function()
 		renderer:toggle_layout()
 	end)
@@ -93,23 +93,18 @@ function M.setup(renderer, viewer, groups)
 		end)
 	end
 
-	for buf, name in pairs({
-		[explorer.buf] = "Explorer",
-		[viewer.commits.buf] = "Commits",
-		[renderer.left.buf] = "View",
-		[renderer.right.buf] = "View",
-	}) do
-		help.register(name, navigation_items, { buffer = buf, index = 1 })
-		help.register(name, layout_items, { buffer = buf })
+	for _, buf in ipairs({ explorer.buf, viewer.commits.buf, renderer.left.buf, renderer.right.buf }) do
+		help.register("Navigation", navigation_items, { buffer = buf, index = 1 })
+		help.register("General", layout_items, { buffer = buf, index = 2 })
 		if buf ~= viewer.commits.buf then
-			help.register(name, file_items, { buffer = buf })
+			help.register("General", file_items, { buffer = buf })
 		end
 	end
 
-	help.register("Explorer", explorer_items, { buffer = explorer.buf })
+	help.register("General", explorer_items, { buffer = explorer.buf })
 	for _, pane in pairs({ renderer.left, renderer.right }) do
-		help.register("View", hunk_items, { buffer = pane.buf })
-		help.register("Review", thread_items, { buffer = pane.buf, index = 2 })
+		help.register("Navigation", hunk_items, { buffer = pane.buf })
+		help.register("Comments", thread_items, { buffer = pane.buf, index = 4 })
 		for _, group in ipairs(groups) do
 			help.register(group.name, group.items, { buffer = pane.buf, index = group.index })
 		end
