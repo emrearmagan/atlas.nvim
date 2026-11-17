@@ -288,7 +288,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
           { label = "Nitpick", text = "nitpick: " },
         },
       },
-      -- Worktrees used by `diff.lsp`; see |atlas-pulls-lsp|.
+      -- Worktrees used by `diff.lsp` and edit mode; see |atlas-pulls-lsp|.
       worktree = {
         dir = nil,       -- absolute path or fun(ctx): string|nil
         link = {},       -- e.g. { "node_modules", ".venv" }

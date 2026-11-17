@@ -459,7 +459,7 @@ pulls = {
     },
   },
 
-  -- Worktrees used by `diff.lsp`.
+  -- Worktrees used by `diff.lsp` and edit mode.
   worktree = {
     dir = nil, -- Absolute path or fun(ctx): string|nil. Defaults to the Neovim cache.
     link = {}, -- Folders symlinked from your checkout, e.g. { "node_modules", ".venv" }
