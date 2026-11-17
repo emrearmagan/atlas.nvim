@@ -132,7 +132,21 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff or CodeDiff.
 
-The diff uses a temporary worktree, removed when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
+The diff uses a temporary worktree, removed when the diff closes. Configure it under `pulls.worktree`, for example to reuse your dependencies and generate code for each review:
+
+```lua
+pulls = {
+  worktree = {
+    link = { "node_modules" },
+    on_create = function(ctx, done, write)
+      local function output(_, data)
+        if data then write(data) end
+      end
+      vim.system({ "npm", "run", "codegen" }, { cwd = ctx.dir, stdout = output, stderr = output }, done)
+    end,
+  },
+},
+```
 
 <img alt="lsp-support" src="https://github.com/user-attachments/assets/a5a51c9d-0fd7-4141-828f-fd433435dbaf" />
 
@@ -443,6 +457,13 @@ pulls = {
     },
   },
 
+  -- Worktrees used by `diff.lsp`.
+  worktree = {
+    dir = nil, -- Absolute path or fun(ctx): string|nil. Defaults to the Neovim cache.
+    link = {}, -- Folders symlinked from your checkout, e.g. { "node_modules", ".venv" }
+    on_create = nil, -- fun(ctx, done, write), runs once per new worktree; files open after done().
+  },
+
   diff = {
     -- "auto", or a command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "auto", -- CodeDiff, DiffviewOpen or AtlasDiff
@@ -459,13 +480,6 @@ pulls = {
       -- Back the new side of the diff with a detached worktree at the PR head so it is made of
       -- real files and your language servers attach to it (AtlasDiff and CodeDiff). Off by default.
       enabled = false,
-      -- Defaults to `stdpath("cache")/atlas/worktrees/<repo>/pr-<id>` (or `<repo>/<sha>` without a PR).
-      -- May be an absolute path, or a function receiving
-      -- { repo_root, repo_full_name, pr_id, head_sha, default } that returns a path or nil.
-      dir = nil,
-      -- Directories symlinked from your checkout into the worktree so servers can resolve
-      -- dependencies. These are the same directories on disk, not copies.
-      link = {}, -- e.g. { "node_modules", ".venv" }
     },
     explorer = {
       grouped = true, -- Group changed files by directory.

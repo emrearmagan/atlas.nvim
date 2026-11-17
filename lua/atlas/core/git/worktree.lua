@@ -2,6 +2,7 @@ local M = {}
 
 local core_git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
+local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 
 local CACHE_SEGMENTS = "atlas/worktrees"
@@ -79,32 +80,34 @@ local function is_cache_path(dir)
 end
 
 ---@class AtlasWorktreeContext
+---@field dir string
 ---@field repo_root string
 ---@field repo_full_name string|nil
 ---@field pr_id string|integer|nil
 ---@field head_sha string
----@field default string|nil Only populated when handed to a user supplied `dir` function.
 
 -- Default location: <cache>/atlas/worktrees/<repo>/pr-<id>, or <repo>/<sha> without a PR.
----@param ctx AtlasWorktreeContext
+---@param repo_root string
+---@param head_sha string
+---@param pr PullRequest|nil
 ---@return string
-local function default_dir(ctx)
-	local name = trim(ctx.repo_full_name)
+local function default_dir(repo_root, head_sha, pr)
+	local name = trim(pr and pr.repo_full_name)
 	if name == "" then
-		local root = normalize_separators(trim(ctx.repo_root)):gsub("/+$", "")
+		local root = normalize_separators(trim(repo_root)):gsub("/+$", "")
 		name = vim.fs.basename(root)
 	end
 	-- These paths show up in pickers and statuslines, so prefer the pull request number over a
 	-- hash. A worktree whose head moved is rebuilt by ensure, so the number stays unambiguous.
-	local pr_id = trim(ctx.pr_id)
-	local leaf = pr_id ~= "" and "pr-" .. slugify(pr_id) or trim(ctx.head_sha):sub(1, SHA_LENGTH)
+	local pr_id = trim(pr and pr.id)
+	local leaf = pr_id ~= "" and "pr-" .. slugify(pr_id) or trim(head_sha):sub(1, SHA_LENGTH)
 	if leaf == "" then
 		leaf = "head"
 	end
 	return join(cache_root(), slugify(name), leaf)
 end
 
----@param cfg AtlasPullsDiffLspConfig|nil
+---@param cfg AtlasPullsWorktreeConfig|nil
 ---@return boolean ok
 ---@return string|nil err
 function M.validate(cfg)
@@ -112,35 +115,35 @@ function M.validate(cfg)
 		return true, nil
 	end
 	if type(cfg) ~= "table" then
-		return false, "diff.lsp must be a table"
-	end
-	if cfg.enabled ~= nil and type(cfg.enabled) ~= "boolean" then
-		return false, "diff.lsp.enabled must be a boolean"
+		return false, "worktree must be a table"
 	end
 	local dir = cfg.dir
 	if dir ~= nil and type(dir) ~= "string" and type(dir) ~= "function" then
-		return false, "diff.lsp.dir must be a string or a function"
+		return false, "worktree.dir must be a string or a function"
 	end
 	if type(dir) == "string" and not is_absolute(dir) then
-		return false, "diff.lsp.dir must be an absolute path"
+		return false, "worktree.dir must be an absolute path"
+	end
+	if cfg.on_create ~= nil and type(cfg.on_create) ~= "function" then
+		return false, "worktree.on_create must be a function"
 	end
 	if cfg.link ~= nil then
 		if type(cfg.link) ~= "table" then
-			return false, "diff.lsp.link must be a list of relative paths"
+			return false, "worktree.link must be a list of relative paths"
 		end
 		for _, entry in ipairs(cfg.link) do
 			if type(entry) ~= "string" or trim(entry) == "" then
-				return false, "diff.lsp.link entries must be non-empty strings"
+				return false, "worktree.link entries must be non-empty strings"
 			end
 			local value = normalize_separators(trim(entry))
 			if is_absolute(value) then
-				return false, string.format("diff.lsp.link entry must be relative: %s", entry)
+				return false, string.format("worktree.link entry must be relative: %s", entry)
 			end
 			if value == ".." or value:find("^%.%./") or value:find("/%.%./") or value:find("/%.%.$") then
-				return false, string.format("diff.lsp.link entry must not escape the repository: %s", entry)
+				return false, string.format("worktree.link entry must not escape the repository: %s", entry)
 			end
 			if value == ".git" or value:find("^%.git/") then
-				return false, "diff.lsp.link entry must not be .git"
+				return false, "worktree.link entry must not be .git"
 			end
 		end
 	end
@@ -149,7 +152,7 @@ end
 
 -- Resolve where the worktree for `ctx` should live, honouring a user supplied override.
 ---@param ctx AtlasWorktreeContext
----@param cfg AtlasPullsDiffLspConfig|nil
+---@param cfg AtlasPullsWorktreeConfig|nil
 ---@return string|nil dir
 ---@return string|nil err
 local function resolve_dir(ctx, cfg)
@@ -158,27 +161,22 @@ local function resolve_dir(ctx, cfg)
 		return nil, err
 	end
 
-	local default = default_dir(ctx)
 	local override = cfg and cfg.dir or nil
 	if override == nil then
-		return default, nil
+		return ctx.dir, nil
 	end
 
 	local resolved
 	if type(override) == "function" then
-		local argument = { default = default }
-		for key, value in pairs(ctx) do
-			argument[key] = value
-		end
-		local called, value = pcall(override, argument)
+		local called, value = pcall(override, vim.deepcopy(ctx))
 		if not called then
-			return nil, "diff.lsp.dir raised an error: " .. tostring(value)
+			return nil, "worktree.dir raised an error: " .. tostring(value)
 		end
 		if value == nil or trim(value) == "" then
-			return default, nil
+			return ctx.dir, nil
 		end
 		if type(value) ~= "string" then
-			return nil, "diff.lsp.dir must return a string or nil"
+			return nil, "worktree.dir must return a string or nil"
 		end
 		resolved = trim(value)
 	else
@@ -186,7 +184,7 @@ local function resolve_dir(ctx, cfg)
 	end
 
 	if not is_absolute(resolved) then
-		return nil, string.format("diff.lsp.dir must be an absolute path: %s", resolved)
+		return nil, string.format("worktree.dir must be an absolute path: %s", resolved)
 	end
 	return (normalize_separators(resolved):gsub("/+$", "")), nil
 end
@@ -210,29 +208,34 @@ end
 -- A worktree is only shared sequentially: while a session holds one, the next session gets its own
 -- suffixed directory. Sessions paint extmarks into these buffers with module level namespaces, so
 -- two sessions sharing one real buffer would overwrite each other's overlays.
----@param ctx AtlasWorktreeContext
----@param cfg AtlasPullsDiffLspConfig|nil
----@return string|nil dir
+---@param repo_root string
+---@param head_sha string
+---@param pr PullRequest|nil
+---@param cfg AtlasPullsWorktreeConfig|nil
+---@return AtlasWorktreeContext|nil ctx
 ---@return string|nil err
-function M.claim(ctx, cfg)
+function M.claim(repo_root, head_sha, pr, cfg)
+	---@type AtlasWorktreeContext
+	local ctx = {
+		dir = default_dir(repo_root, head_sha, pr),
+		repo_root = repo_root,
+		repo_full_name = pr and pr.repo_full_name,
+		pr_id = pr and pr.id,
+		head_sha = head_sha,
+	}
 	local base, err = resolve_dir(ctx, cfg)
 	if not base then
 		return nil, err
 	end
 
-	if not is_claimed(base) then
-		claims[base] = { repo_root = ctx.repo_root }
-		return base, nil
+	local candidate, index = base, 1
+	while is_claimed(candidate) do
+		index = index + 1
+		candidate = string.format("%s-%d", base, index)
 	end
-
-	for index = 2, 99 do
-		local candidate = string.format("%s-%d", base, index)
-		if not is_claimed(candidate) then
-			claims[candidate] = { repo_root = ctx.repo_root }
-			return candidate, nil
-		end
-	end
-	return nil, "too many active worktrees for " .. base
+	claims[candidate] = { repo_root = repo_root }
+	ctx.dir = candidate
+	return ctx, nil
 end
 
 -- Async helpers
@@ -293,10 +296,9 @@ end
 ---@param link string[]|nil
 local function apply_links(repo_root, dir, link)
 	for _, entry in ipairs(link or {}) do
-		local relative = normalize_separators(trim(entry)):gsub("^/+", ""):gsub("/+$", "")
-		local source = join(repo_root, relative)
-		local target = join(dir, relative)
-		if relative ~= "" and (directory_exists(source) or vim.uv.fs_stat(source)) and not vim.uv.fs_lstat(target) then
+		local source = join(repo_root, trim(entry))
+		local target = join(dir, trim(entry))
+		if vim.uv.fs_stat(source) and not vim.uv.fs_lstat(target) then
 			vim.fn.mkdir(vim.fs.dirname(target), "p")
 			local ok, err = vim.uv.fs_symlink(source, target, { dir = true, junction = true })
 			if not ok then
@@ -308,25 +310,32 @@ end
 
 ---@param repo_root string
 ---@param dir string
----@param on_done fun(err: string|nil)|nil
----@return { cancel: fun() }|nil
-local function remove(repo_root, dir, on_done)
-	on_done = on_done or function() end
-	if trim(dir) == "" then
-		on_done(nil)
-		return nil
-	end
+---@return string[]
+local function remove_args(repo_root, dir)
 	local args = { "-C", repo_root, "worktree", "remove", "--force", dir }
 	-- Interrupted checkouts leave Git's "initializing" lock. Only force-unlock our cache worktrees.
 	if is_cache_path(dir) then
 		table.insert(args, #args, "--force")
 	end
+	return args
+end
+
+---@param repo_root string
+---@param dir string
+---@param on_done fun()|nil
+---@return { cancel: fun() }|nil
+local function remove(repo_root, dir, on_done)
+	on_done = on_done or function() end
+	if trim(dir) == "" then
+		on_done()
+		return nil
+	end
 	local scope = requests.new()
 	scope.run(function(done)
-		return core_git.run(args, { text = true }, done)
+		return core_git.run(remove_args(repo_root, dir), { text = true }, done)
 	end, function(res)
 		if res.code == 0 then
-			on_done(nil)
+			on_done()
 			return
 		end
 		-- The worktree may already be gone or the metadata broken; clean up by hand, but only inside
@@ -339,7 +348,7 @@ local function remove(repo_root, dir, on_done)
 			if deleted then
 				logger.logwarn("worktree.remove fell back to manual delete", { dir = dir, error = error_message })
 			end
-			on_done(nil)
+			on_done()
 		end)
 	end)
 	return scope
@@ -363,10 +372,7 @@ end
 function M.shutdown()
 	for dir, info in pairs(claims) do
 		pcall(function()
-			local args = { "git", "-C", info.repo_root, "worktree", "remove", "--force", dir }
-			if is_cache_path(dir) then
-				table.insert(args, #args, "--force")
-			end
+			local args = vim.list_extend({ "git" }, remove_args(info.repo_root, dir))
 			vim.system(args, { text = true, detach = true })
 		end)
 	end
@@ -427,30 +433,64 @@ function M.prune()
 	end
 end
 
----@class AtlasWorktreeEnsureOptions
----@field repo_root string
----@field head_sha string
----@field dir string
----@field link string[]|nil
-
--- Create (or reuse) a detached worktree at `head_sha`. The caller must have fetched the ref first.
----@param opts AtlasWorktreeEnsureOptions
+-- Create (or reuse) a detached worktree at `ctx.head_sha`. The caller must have fetched the ref first.
+---@param ctx AtlasWorktreeContext
+---@param cfg AtlasPullsWorktreeConfig|nil
 ---@param on_done fun(dir: string|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.ensure(opts, on_done)
+function M.ensure(ctx, cfg, on_done)
 	local scope = requests.new()
-	local repo_root = trim(opts.repo_root)
-	local head_sha = trim(opts.head_sha)
-	local dir = trim(opts.dir)
+	local repo_root = trim(ctx.repo_root)
+	local head_sha = trim(ctx.head_sha)
+	local dir = trim(ctx.dir)
+	cfg = cfg or {}
 
 	if repo_root == "" or head_sha == "" or dir == "" then
 		on_done(nil, "Repository path, head revision, and worktree path are required")
 		return scope
 	end
 
-	local function succeed()
-		apply_links(repo_root, dir, opts.link)
-		on_done(dir, nil)
+	---@param created boolean|nil
+	local function succeed(created)
+		apply_links(repo_root, dir, cfg.link)
+		if not created or not cfg.on_create then
+			on_done(dir, nil)
+			return
+		end
+
+		scope.run(function(done)
+			---@type AtlasConsoleOutput|nil
+			local output
+			local ok, err = pcall(cfg.on_create, vim.deepcopy(ctx), function(result)
+				local code = type(result) == "table" and result.code or 0
+				if output then
+					output:finish(code)
+				end
+				if code ~= 0 then
+					notify.warn(
+						string.format("worktree.on_create failed with exit code %d, see :Atlas console", code),
+						{ vim_notify = true }
+					)
+				end
+				vim.schedule(done)
+			end, function(text)
+				if not output then
+					local console = require("atlas.ui.console")
+					output = console.start("Preparing worktree", dir)
+					console.open(false)
+				end
+				output:write(text)
+			end)
+			if not ok then
+				if output then
+					output:finish(1)
+				end
+				notify.warn("worktree.on_create raised an error: " .. tostring(err), { vim_notify = true })
+				done()
+			end
+		end, function()
+			on_done(dir, nil)
+		end)
 	end
 
 	local function create()
@@ -467,7 +507,7 @@ function M.ensure(opts, on_done)
 				return
 			end
 			logger.loginfo("worktree.ensure created", { dir = dir, head = head_sha })
-			succeed()
+			succeed(true)
 		end)
 	end
 
