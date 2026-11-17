@@ -1,8 +1,6 @@
 name: Feature request
 description: Suggest an improvement or new capability for Atlas.nvim
 type: Feature
-labels:
-  - needs-review
 body:
   - type: markdown
     attributes:

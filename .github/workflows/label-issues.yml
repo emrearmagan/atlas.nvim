@@ -43,8 +43,10 @@ jobs:
               ...matchLabels(areas, text),
             ];
 
-            await github.rest.issues.addLabels({
-              ...context.repo,
-              issue_number: context.issue.number,
-              labels: ["needs-review", ...labels],
-            });
+            if (labels.length) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: context.issue.number,
+                labels,
+              });
+            }
