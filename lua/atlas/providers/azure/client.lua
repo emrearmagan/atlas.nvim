@@ -149,11 +149,6 @@ local function authorization(on_done)
 			az.token = decoded.accessToken
 			az.expires_on = tonumber(decoded.expires_on) or 0
 			logger.loginfo("Fetched Azure CLI token", { expires_at = os.date("%Y-%m-%d %H:%M:%S", az.expires_on) })
-			-- TODO: remove me
-			require("atlas.core.notify").info(
-				"Azure CLI token refreshed, expires at " .. os.date("%H:%M", az.expires_on),
-				{ vim_notify = true }
-			)
 			resolve_waiting("Bearer " .. az.token, nil)
 		end)
 	)
