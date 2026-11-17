@@ -122,10 +122,9 @@ local function start_loading(message, context, on_done)
 		context.head = head
 
 		-- Diffview uses revision buffers, so it doesn't need an LSP worktree.
-		local lsp = options.lsp.enabled and options.open_cmd ~= "DiffviewOpen" and options.lsp or nil
 		requests.run(function(done)
 			return diff_session.new(source, root, base, head, {
-				lsp = lsp,
+				lsp = options.lsp.enabled and options.open_cmd ~= "DiffviewOpen",
 				on_progress = function(update)
 					view:update(update)
 				end,

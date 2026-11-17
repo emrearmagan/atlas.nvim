@@ -6,21 +6,21 @@ local DEFAULT = CACHE .. "/owner-repo/abcdef012345"
 
 local function fresh()
 	package.loaded["atlas.core.git.worktree"] = nil
-	return require("atlas.core.git.worktree")
+	return (require("atlas.core.git.worktree"))
 end
 
----@param overrides table|nil
----@return AtlasWorktreeContext
-local function context(overrides)
-	local ctx = {
-		repo_root = "/home/dev/code/repo.nvim",
-		repo_full_name = "owner/repo",
-		head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-	}
-	for key, value in pairs(overrides or {}) do
-		ctx[key] = value
-	end
-	return ctx
+---@param worktree table
+---@param cfg table|nil
+---@return string|nil dir
+---@return string|nil err
+local function claim(worktree, cfg)
+	local ctx, err = worktree.claim(
+		"/home/dev/code/repo.nvim",
+		"abcdef0123456789abcdef0123456789abcdef01",
+		{ repo_full_name = "owner/repo" },
+		cfg
+	)
+	return ctx and ctx.dir, err
 end
 
 -- Scripted git runner: answers each command from `responses`, keyed by the subcommand that follows
@@ -82,34 +82,35 @@ describe("worktree", function()
 
 	describe("claim directory", function()
 		it("separates commits and pull requests under the repository slug", function()
+			local root = "/home/dev/code/repo.nvim"
 			for _, case in ipairs({
-				{ {}, "abcdef012345" },
-				{ {}, "abcdef012345", { enabled = true } },
-				{ { head_sha = "0123456789abcdef0123456789abcdef01234567" }, "0123456789ab" },
-				{ { pr_id = 1234 }, "pr-1234" },
-				{ { pr_id = 2 }, "pr-2" },
+				{ "abcdef0123456789abcdef0123456789abcdef01", nil, "abcdef012345" },
+				{ "abcdef0123456789abcdef0123456789abcdef01", nil, "abcdef012345", { link = {} } },
+				{ "0123456789abcdef0123456789abcdef01234567", nil, "0123456789ab" },
+				{ "abcdef0123456789abcdef0123456789abcdef01", 1234, "pr-1234" },
+				{ "abcdef0123456789abcdef0123456789abcdef01", 2, "pr-2" },
 			}) do
-				assert.equal(CACHE .. "/owner-repo/" .. case[2], fresh().claim(context(case[1]), case[3]))
+				local ctx = fresh().claim(root, case[1], { repo_full_name = "owner/repo", id = case[2] }, case[4])
+				assert.equal(CACHE .. "/owner-repo/" .. case[3], ctx and ctx.dir)
 			end
 		end)
 
 		it("falls back to the repo root basename", function()
 			for _, root in ipairs({ "/home/dev/code/repo.nvim", "/home/dev/code/repo.nvim/" }) do
-				local ctx = context({ repo_root = root })
-				ctx.repo_full_name = nil
-				assert.equal(CACHE .. "/repo-nvim/abcdef012345", fresh().claim(ctx, nil))
+				local ctx = fresh().claim(root, "abcdef0123456789abcdef0123456789abcdef01", nil)
+				assert.equal(CACHE .. "/repo-nvim/abcdef012345", ctx and ctx.dir)
 			end
 		end)
 
 		it("accepts an absolute string override", function()
 			for _, dir in ipairs({ "/var/tmp/review", "/var/tmp/review/" }) do
-				assert.equal("/var/tmp/review", fresh().claim(context(), { dir = dir }))
+				assert.equal("/var/tmp/review", claim(fresh(), { dir = dir }))
 			end
 		end)
 
 		it("calls a function override with the context and the default", function()
 			local seen
-			local dir = worktree.claim(context(), {
+			local dir = claim(worktree, {
 				dir = function(ctx)
 					seen = ctx
 					return "/var/tmp/" .. ctx.head_sha:sub(1, 7)
@@ -119,13 +120,13 @@ describe("worktree", function()
 			assert.equal("/var/tmp/abcdef0", dir)
 			assert.equal("owner/repo", seen.repo_full_name)
 			assert.equal("/home/dev/code/repo.nvim", seen.repo_root)
-			assert.equal(DEFAULT, seen.default)
+			assert.equal(DEFAULT, seen.dir)
 		end)
 
 		it("uses the default when the function returns nil", function()
 			assert.equal(
 				DEFAULT,
-				worktree.claim(context(), {
+				claim(worktree, {
 					dir = function()
 						return nil
 					end,
@@ -134,7 +135,7 @@ describe("worktree", function()
 		end)
 
 		it("reports an error when the function raises", function()
-			local dir, err = worktree.claim(context(), {
+			local dir, err = claim(worktree, {
 				dir = function()
 					error("boom")
 				end,
@@ -149,7 +150,7 @@ describe("worktree", function()
 			local invalid_dir = function()
 				return 42
 			end
-			local dir, err = worktree.claim(context(), { dir = invalid_dir })
+			local dir, err = claim(worktree, { dir = invalid_dir })
 
 			assert.is_nil(dir)
 			assert.is_truthy(err)
@@ -161,17 +162,17 @@ describe("worktree", function()
 			assert.is_true(worktree.validate(nil))
 			assert.is_true(worktree.validate({}))
 			assert.is_true(worktree.validate({
-				enabled = true,
 				dir = "/var/tmp/review",
 				link = { "node_modules", ".venv", "packages/app/node_modules" },
+				on_create = function() end,
 			}))
 		end)
 
 		it("rejects invalid settings and links outside the repository or into .git", function()
 			for _, config in ipairs({
-				{ enabled = "yes" },
 				{ dir = 42 },
 				{ dir = "review" },
+				{ on_create = "cmake" },
 				{ link = { 42 } },
 				{ link = { "" } },
 				{ link = { "/etc" } },
@@ -226,16 +227,15 @@ describe("worktree", function()
 
 		it("isolates simultaneous sessions and reuses a directory only after discard", function()
 			fake_git({ ["worktree remove"] = { code = 0 } })
-			local ctx = context()
-			local first = assert(worktree.claim(ctx, nil))
-			local second = assert(worktree.claim(ctx, nil))
+			local first = assert(claim(worktree))
+			local second = assert(claim(worktree))
 
 			assert.equal(DEFAULT, first)
 			assert.equal(first .. "-2", second)
 
-			worktree.discard(ctx.repo_root, first)
-			assert.equal(first, worktree.claim(ctx, nil))
-			assert.equal(first .. "-3", worktree.claim(ctx, nil))
+			worktree.discard("/home/dev/code/repo.nvim", first)
+			assert.equal(first, claim(worktree))
+			assert.equal(first .. "-3", claim(worktree))
 		end)
 
 		it("remove deletes by hand only below the cache root", function()
@@ -277,13 +277,17 @@ describe("worktree", function()
 			end
 			local function ensure(dir)
 				local result, err
-				worktree.ensure({
-					repo_root = "/home/dev/code/repo.nvim",
-					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-					dir = dir,
-				}, function(value, ensure_err)
-					result, err = value, ensure_err
-				end)
+				worktree.ensure(
+					{
+						repo_root = "/home/dev/code/repo.nvim",
+						head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+						dir = dir,
+					},
+					nil,
+					function(value, ensure_err)
+						result, err = value, ensure_err
+					end
+				)
 				return result, err
 			end
 
@@ -302,13 +306,17 @@ describe("worktree", function()
 			})
 			local result, err
 
-			worktree.ensure({
-				repo_root = "/home/dev/code/repo.nvim",
-				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-				dir = "/home/dev/reviews",
-			}, function(dir, ensure_err)
-				result, err = dir, ensure_err
-			end)
+			worktree.ensure(
+				{
+					repo_root = "/home/dev/code/repo.nvim",
+					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+					dir = "/home/dev/reviews",
+				},
+				nil,
+				function(dir, ensure_err)
+					result, err = dir, ensure_err
+				end
+			)
 
 			assert.is_nil(result)
 			assert.is_truthy(err and err:find("not a worktree", 1, true))
@@ -327,13 +335,17 @@ describe("worktree", function()
 			})
 			local result
 
-			worktree.ensure({
-				repo_root = "/home/dev/code/repo.nvim",
-				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-				dir = dir,
-			}, function(created)
-				result = created
-			end)
+			worktree.ensure(
+				{
+					repo_root = "/home/dev/code/repo.nvim",
+					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+					dir = dir,
+				},
+				nil,
+				function(created)
+					result = created
+				end
+			)
 
 			assert.equal(dir, result)
 			assert.same({ dir }, deleted)
@@ -350,11 +362,16 @@ describe("worktree", function()
 				["rev-parse"] = { code = 0, stdout = "abcdef0123456789abcdef0123456789abcdef01\n" },
 			})
 			local result
+			local hooked = false
 
 			worktree.ensure({
 				repo_root = "/home/dev/code/repo.nvim",
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = dir,
+			}, {
+				on_create = function()
+					hooked = true
+				end,
 			}, function(created)
 				result = created
 			end)
@@ -363,6 +380,7 @@ describe("worktree", function()
 			assert.same({}, deleted)
 			assert.is_false(ran(calls.calls, "add"))
 			assert.is_false(ran(calls.calls, "remove"))
+			assert.is_false(hooked)
 		end)
 
 		it("ensure recreates a registered worktree at a different head", function()
@@ -374,11 +392,19 @@ describe("worktree", function()
 				["worktree add"] = { code = 0 },
 			})
 			local result
+			local hook_ctx
 
 			worktree.ensure({
 				repo_root = "/home/dev/code/repo.nvim",
+				repo_full_name = "owner/repo",
+				pr_id = 7,
 				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
 				dir = dir,
+			}, {
+				on_create = function(ctx, done)
+					hook_ctx = ctx
+					done()
+				end,
 			}, function(created)
 				result = created
 			end)
@@ -387,6 +413,13 @@ describe("worktree", function()
 			assert.same({}, deleted)
 			assert.is_true(ran(calls.calls, "remove"))
 			assert.is_true(ran(calls.calls, "add"))
+			assert.same({
+				dir = dir,
+				repo_root = "/home/dev/code/repo.nvim",
+				repo_full_name = "owner/repo",
+				pr_id = 7,
+				head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+			}, hook_ctx)
 		end)
 
 		it("cancels recreation during removal or fallback pruning", function()
@@ -408,13 +441,17 @@ describe("worktree", function()
 					}
 				end
 
-				local handle = worktree.ensure({
-					repo_root = "/home/dev/code/repo.nvim",
-					head_sha = "abcdef0123456789abcdef0123456789abcdef01",
-					dir = CACHE .. "/repo/pr-1",
-				}, function()
-					completed = true
-				end)
+				local handle = worktree.ensure(
+					{
+						repo_root = "/home/dev/code/repo.nvim",
+						head_sha = "abcdef0123456789abcdef0123456789abcdef01",
+						dir = CACHE .. "/repo/pr-1",
+					},
+					nil,
+					function()
+						completed = true
+					end
+				)
 
 				handle.cancel()
 				assert.is_true(cancelled)

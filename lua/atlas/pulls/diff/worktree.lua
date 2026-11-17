@@ -1,4 +1,5 @@
 -- Some helper functions for when lsp is enabled
+local config = require("atlas.config")
 local notify = require("atlas.core.notify")
 local worktree = require("atlas.core.git.worktree")
 
@@ -64,30 +65,20 @@ end
 
 ---@param range AtlasDiffRange
 ---@param pr PullRequest|nil
----@param lsp AtlasPullsDiffLspConfig
 ---@param on_done fun(root: string|nil)
 ---@return { cancel: fun() }|nil
-function M.prepare(range, pr, lsp, on_done)
-	local dir, claim_err = worktree.claim({
-		repo_root = range.root,
-		head_sha = range.head_revision,
-		repo_full_name = pr and pr.repo_full_name,
-		pr_id = pr and pr.id,
-	}, lsp)
-	if not dir then
+function M.prepare(range, pr, on_done)
+	local options = config.options.pulls.worktree
+	local ctx, claim_err = worktree.claim(range.root, range.head_revision, pr, options)
+	if not ctx then
 		notify.warn("LSP worktree unavailable: " .. claim_err)
 		on_done(nil)
 		return nil
 	end
 
-	local handle = worktree.ensure({
-		repo_root = range.root,
-		head_sha = range.head_revision,
-		dir = dir,
-		link = lsp.link,
-	}, function(path, err)
+	local handle = worktree.ensure(ctx, options, function(path, err)
 		if not path then
-			worktree.discard(range.root, dir)
+			worktree.discard(range.root, ctx.dir)
 			notify.warn("LSP worktree unavailable: " .. err)
 		end
 		on_done(path)
@@ -95,7 +86,7 @@ function M.prepare(range, pr, lsp, on_done)
 	return {
 		cancel = function()
 			handle.cancel()
-			worktree.discard(range.root, dir)
+			worktree.discard(range.root, ctx.dir)
 		end,
 	}
 end

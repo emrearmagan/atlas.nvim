@@ -288,6 +288,12 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
           { label = "Nitpick", text = "nitpick: " },
         },
       },
+      -- Worktrees used by `diff.lsp`; see |atlas-pulls-lsp|.
+      worktree = {
+        dir = nil,       -- absolute path or fun(ctx): string|nil
+        link = {},       -- e.g. { "node_modules", ".venv" }
+        on_create = nil, -- fun(ctx, done, write) run once per new worktree
+      },
       diff = {
         -- "auto", or a command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "auto", -- CodeDiff, DiffviewOpen or AtlasDiff
@@ -302,8 +308,6 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         compact = true, -- initially show hunks plus surrounding context
         lsp = {
           enabled = false, -- real files for LSP (AtlasDiff and CodeDiff)
-          dir = nil,       -- absolute path or fun(ctx): string|nil; see below
-          link = {},       -- e.g. { "node_modules", ".venv" }
         },
         explorer = {
           grouped = true, -- group changed files by directory
@@ -373,13 +377,20 @@ closes. The default directory is
 `stdpath("cache")/atlas/worktrees/<repo>/pr-<id>`, or
 `stdpath("cache")/atlas/worktrees/<repo>/<sha>` without a pull request.
 
-Set `pulls.diff.lsp.dir` to an absolute path, or a function receiving
-`{ repo_root, repo_full_name, pr_id, head_sha, default }` that returns a path
-or nil.
-
-Set `pulls.diff.lsp.link` to dependency folders such as `node_modules` or `.venv`.
-They are symlinked from your checkout into the worktree so language servers
-can resolve dependencies. These are the same directories on disk, not copies.
+Configure it under `pulls.worktree`, for example to reuse your dependencies and
+generate code for each review:
+>lua
+  worktree = {
+    link = { "node_modules" },
+    on_create = function(ctx, done, write)
+      local function output(_, data)
+        if data then write(data) end
+      end
+      vim.system({ "npm", "run", "codegen" }, { cwd = ctx.dir, stdout = output, stderr = output }, done)
+    end,
+  }
+<
+`ctx` is `{ dir, repo_root, repo_full_name, pr_id, head_sha }`.
 
 ------------------------------------------------------------------------------
 PIPELINES                                             *atlas-pulls-pipelines*
