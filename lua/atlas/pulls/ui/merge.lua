@@ -127,7 +127,6 @@ local function load_message(state)
 		end
 	end
 
-	-- Providers without fetch_merge_message keep the previous merge default.
 	if not core.fetch_merge_message and method == "merge" then
 		finish(state.pr.title)
 		return
