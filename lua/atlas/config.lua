@@ -7,6 +7,7 @@
 ---@alias AtlasGitTransport "https"|"ssh"
 ---@alias AtlasPullsViewLayout "compact"|"grouped"|"plain"
 ---@alias AtlasIssuesViewLayout "compact"|"plain"|"board"
+---@alias AtlasMergeMethod "merge"|"squash"
 
 ---@class AtlasPullsViewConfig
 ---@field name string
@@ -29,7 +30,7 @@
 ---@class AtlasPullsRepoSettings
 ---@field readme string|nil
 ---@field pr_template string|nil
----@field merge_method "merge"|"squash"|nil
+---@field merge_method AtlasMergeMethod|nil
 ---@field delete_source_branch boolean|nil
 
 ---@class AtlasPullsDescriptionConfig
@@ -113,7 +114,7 @@
 ---@field worktree AtlasPullsWorktreeConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
----@field default_merge_method "merge"|"squash"|nil
+---@field default_merge_method AtlasMergeMethod|nil
 ---@field default_delete_source_branch boolean|nil
 ---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
