@@ -37,7 +37,7 @@
 ---@field ui PullsUICapability|nil
 
 ---@class PullsMergeOpts
----@field method "merge"|"squash"
+---@field method AtlasMergeMethod
 ---@field delete_source_branch boolean
 ---@field subject string|nil
 ---@field body string|nil
@@ -52,6 +52,7 @@
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_merge_message (fun(pr: PullRequest, method: AtlasMergeMethod, on_done: fun(message: { title: string, body: string }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsWriteCapability
 ---@field create (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
