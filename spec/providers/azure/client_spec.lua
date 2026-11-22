@@ -96,4 +96,27 @@ describe("Azure client HTTP contract", function()
 		end)
 		assert.equal("TF401232: Work item 42 does not exist.", received_error)
 	end)
+
+	it("falls back to the Azure CLI token when no token is set", function()
+		config.options.providers.azure.token = nil
+		_G.vim = vim.tbl_extend("force", vim, {
+			fn = vim.tbl_extend("force", vim.fn, {
+				executable = function()
+					return 1
+				end,
+			}),
+			system = function(_, _, on_exit)
+				on_exit({ code = 0, stdout = "{}" })
+			end,
+			json = {
+				decode = function()
+					return { accessToken = "entra", expires_on = os.time() + 3600 }
+				end,
+			},
+		})
+		require("atlas.providers.azure.client").request("GET", "/_apis/projects", nil, function(_, err)
+			assert.is_nil(err)
+		end)
+		assert.equal("Bearer entra", captured.headers.Authorization)
+	end)
 end)

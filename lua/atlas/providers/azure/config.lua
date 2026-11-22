@@ -1,5 +1,5 @@
 ---@class AtlasAzureConfig
 ---@field base_url string Azure DevOps organization URL, for example https://dev.azure.com/your-organization.
----@field token string Personal Access Token used with Basic authentication.
+---@field token string|nil Personal Access Token used with Basic authentication. When unset, the Azure CLI sign-in (`az login`) is used.
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 ---@field ci AtlasPullsCIConfig|nil

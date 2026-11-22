@@ -125,6 +125,7 @@ return {
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
+			fetch_merge_message = pullrequests_api.fetch_merge_message,
 		},
 		write = {
 			create = pullrequests_api.create_pr,

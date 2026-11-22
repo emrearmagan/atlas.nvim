@@ -12,7 +12,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.pulls.merge")
 ---@field pr PullRequest
 ---@field callbacks { on_submit: fun(options: PullsMergeOpts, completed: fun(ok: boolean)), on_cancel: fun() }
 ---@field options PullsMergeOpts
----@field drafts { merge: string, squash?: string }
+---@field drafts { merge?: string, squash?: string }
 ---@field status "editing"|"loading"|"submitting"|"finished"
 ---@field buf integer
 ---@field footer string[]
@@ -105,26 +105,51 @@ end
 
 ---@param state PullsMergeState
 local function load_message(state)
-	local draft = state.drafts[state.options.method]
+	local method = state.options.method
+	local draft = state.drafts[method]
 	if draft then
 		state.status = "editing"
 		render(state, draft)
 		return
 	end
 
-	state.status = "loading"
-	render(state, "Loading commit messages...")
 	local core = providers.load(state.pr.provider, "pulls").capabilities.core
-	core.fetch_commits(state.pr, { force_refresh = true }, function(commits, err)
+
+	local function finish(message, err)
 		if not vim.api.nvim_buf_is_valid(state.buf) then
 			return
 		end
-		state.drafts.squash = squash_message(state.pr, commits or {})
+		state.drafts[method] = message
 		state.status = "editing"
-		render(state, state.drafts.squash)
+		render(state, message)
 		if err then
 			notify.error("Could not load commit messages: " .. err .. ". Enter a message manually.")
 		end
+	end
+
+	if not core.fetch_merge_message and method == "merge" then
+		finish(state.pr.title)
+		return
+	end
+
+	state.status = "loading"
+	render(state, "Loading commit messages...")
+
+	if core.fetch_merge_message then
+		core.fetch_merge_message(state.pr, method, function(message, err)
+			if not message then
+				finish(state.pr.title, err)
+			elseif message.body == "" then
+				finish(message.title)
+			else
+				finish(message.title .. "\n\n" .. message.body)
+			end
+		end)
+		return
+	end
+
+	core.fetch_commits(state.pr, { force_refresh = true }, function(commits, err)
+		finish(squash_message(state.pr, commits or {}), err)
 	end)
 end
 
@@ -333,7 +358,7 @@ function M.open(pr, callbacks, opts)
 		pr = pr,
 		callbacks = callbacks,
 		options = defaults(pr),
-		drafts = { merge = pr.title },
+		drafts = {},
 		status = "editing",
 		submit_label = opts.submit_label,
 		submitting_label = opts.submitting_label or "merging...",

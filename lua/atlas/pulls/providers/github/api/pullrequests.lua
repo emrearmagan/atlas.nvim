@@ -60,6 +60,17 @@ fragment PullRequestFields on PullRequest {
 }
 ]]
 
+local MERGE_MESSAGE_GQL = [[
+query($owner: String!, $repo: String!, $number: Int!, $mergeType: PullRequestMergeMethod!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      viewerMergeHeadlineText(mergeType: $mergeType)
+      viewerMergeBodyText(mergeType: $mergeType)
+    }
+  }
+}
+]]
+
 -- GitHub's stacked pull request API, including `stackEntry`, is available on
 -- github.com but not on GitHub Enterprise Server. Omit the fields there so the
 -- query remains valid.
@@ -815,6 +826,49 @@ function M.disable_auto_merge(pr, on_done)
 	return cli.gh(args, function(_, err)
 		on_done(not err, err)
 	end, { action = "Disable auto-merge", repo = pr.repo_full_name, number = pr.id })
+end
+
+---@param pr PullRequest
+---@param method AtlasMergeMethod
+---@param on_done fun(message: { title: string, body: string }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_merge_message(pr, method, on_done)
+	local owner, repo = pr.repo.owner, pr.repo.repo_name
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(MERGE_MESSAGE_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"-f",
+		"mergeType=" .. method:upper(),
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch merge message")
+			return
+		end
+
+		local repository = json.safe_table(result.data.repository)
+		local pull = json.nilify(repository.pullRequest)
+		if not pull then
+			on_done(nil, "Pull request not found")
+			return
+		end
+
+		local headline = json.safe_str(pull.viewerMergeHeadlineText)
+		local body = json.safe_str(pull.viewerMergeBodyText)
+		on_done({ title = headline or pr.title, body = body or "" }, nil)
+	end, {
+		action = "Fetch merge message",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
 end
 
 return M

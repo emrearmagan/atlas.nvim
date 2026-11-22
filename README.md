@@ -360,6 +360,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
     azure = {
       base_url = "https://dev.azure.com/your-organization",
       -- https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate
+      -- Leave unset to use the Azure CLI instead.
       token = vim.env.AZURE_DEVOPS_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
     },

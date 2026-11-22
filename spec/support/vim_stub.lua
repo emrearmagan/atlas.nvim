@@ -84,6 +84,9 @@ _G.vim = {
 	schedule = function(fn)
 		fn()
 	end,
+	schedule_wrap = function(fn)
+		return fn
+	end,
 
 	trim = function(value)
 		return value:match("^%s*(.-)%s*$")
