@@ -137,9 +137,15 @@ end
 
 ---@param renderer AtlasDiffNativeRenderer
 local function render_side_by_side(renderer, binary)
+	-- The bang also drops hidden buffers, like an earlier file's worktree buffer.
+	vim.api.nvim_win_call(renderer.right.win, function()
+		vim.cmd.diffoff({ bang = true })
+	end)
 	for _, pane in ipairs({ renderer.left, renderer.right }) do
 		vim.api.nvim_win_call(pane.win, function()
-			vim.cmd(binary and "diffoff" or "diffthis")
+			if not binary then
+				vim.cmd.diffthis()
+			end
 			local options = vim.wo[0][0]
 			options.foldenable = false
 			options.foldminlines = 1
@@ -218,6 +224,18 @@ end
 function M.clear(buf)
 	vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
 	vim.api.nvim_buf_clear_namespace(buf, deleted_namespace, 0, -1)
+end
+
+---@param win integer
+---@param text string
+function M.message(win, text)
+	local lines = {}
+	for _ = 1, math.floor(vim.api.nvim_win_get_height(win) / 2) - 1 do
+		lines[#lines + 1] = { { "" } }
+	end
+	local padding = math.max(0, math.floor((vim.api.nvim_win_get_width(win) - #text) / 2))
+	lines[#lines + 1] = { { string.rep(" ", padding) .. text, "AtlasTextMuted" } }
+	vim.api.nvim_buf_set_extmark(vim.api.nvim_win_get_buf(win), namespace, 0, 0, { virt_lines = lines })
 end
 
 return M

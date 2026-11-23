@@ -78,6 +78,7 @@ local config = require("atlas.config")
 ---@field toggle_explorer? AtlasKeymapValue
 ---@field focus_explorer? AtlasKeymapValue
 ---@field open_file? AtlasKeymapValue
+---@field discard_changes? AtlasKeymapValue
 ---@field toggle_view_mode? AtlasKeymapValue
 ---@field next_hunk? AtlasKeymapValue
 ---@field prev_hunk? AtlasKeymapValue
@@ -260,6 +261,7 @@ local config = require("atlas.config")
 ---| "pulls.review.atlas.toggle_explorer"
 ---| "pulls.review.atlas.focus_explorer"
 ---| "pulls.review.atlas.open_file"
+---| "pulls.review.atlas.discard_changes"
 ---| "pulls.review.atlas.toggle_view_mode"
 ---| "pulls.review.atlas.next_hunk"
 ---| "pulls.review.atlas.prev_hunk"
@@ -430,6 +432,7 @@ local descriptions = {
 				toggle_explorer = { desc = "Toggle explorer", label = "explorer" },
 				focus_explorer = { desc = "Focus explorer", label = "focus explorer" },
 				open_file = { desc = "Open local file", label = "open file" },
+				discard_changes = { desc = "Discard changes", label = "discard" },
 				toggle_view_mode = { desc = "Toggle explorer mode", label = "tree" },
 				next_hunk = { desc = "Next hunk", label = "next hunk" },
 				prev_hunk = { desc = "Previous hunk", label = "previous hunk" },

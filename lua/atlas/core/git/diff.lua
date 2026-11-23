@@ -11,17 +11,20 @@ local M = {}
 ---@class AtlasDiffRange
 ---@field root string
 ---@field base_revision string
----@field head_revision string
+---@field head_revision string|nil Nil for the working tree.
 
 ---@class AtlasDiffFile
 ---@field path string
 ---@field old_path string|nil
----@field status "added"|"deleted"|"modified"|"renamed"|"copied"|"type_changed"
+---@field status "added"|"deleted"|"modified"|"renamed"|"copied"|"type_changed"|"conflicted"
 ---@field additions integer|nil
 ---@field deletions integer|nil
 ---@field binary boolean
 ---@field old_blob string
 ---@field new_blob string
+---@field staged boolean|nil
+
+local NULL_OID = string.rep("0", 40)
 
 local statuses = {
 	A = "added",
@@ -51,6 +54,29 @@ end
 function M.read(root, revision, path, on_done)
 	-- TODO: Submodules point to commits, not file contents. Show their hashes instead.
 	return run(root, { "cat-file", "blob", revision .. ":" .. path }, on_done)
+end
+
+---@param root string
+---@param blob string A file's old_blob or new_blob. The null ID reads path from the working tree.
+---@param path string
+---@param on_done fun(content: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.read_blob(root, blob, path, on_done)
+	if blob ~= NULL_OID then
+		return run(root, { "cat-file", "blob", blob }, on_done)
+	end
+
+	local file = io.open(vim.fs.joinpath(root, path), "rb")
+	local content = file and file:read("*a")
+	if file then
+		file:close()
+	end
+	if not content then
+		on_done(nil, "Unable to read " .. path)
+		return nil
+	end
+	on_done(content, nil)
+	return nil
 end
 
 -- Returns changed lines between two revisions per file. Files without changes are left out.
@@ -145,6 +171,9 @@ local function parse_files(raw, numstat)
 	---@type table<string, AtlasDiffFile>
 	local files_by_path = {}
 
+	---@type table<string, boolean>
+	local unmerged = {}
+
 	local next_field = fields(raw)
 	for line in next_field do
 		local old_blob, new_blob, status = line:match("^:%d+ %d+ (%x+) (%x+) (%a)")
@@ -152,20 +181,31 @@ local function parse_files(raw, numstat)
 		if status == "R" or status == "C" then
 			old_path, path = path, next_field()
 		end
-		if not old_blob or not statuses[status] or not path then
+		if not old_blob or not path or not (statuses[status] or status == "U") then
 			return nil, "Unable to read git diff output"
 		end
 
-		local file = {
-			path = path,
-			old_path = old_path,
-			status = statuses[status],
-			binary = false,
-			old_blob = old_blob,
-			new_blob = new_blob,
-		}
-		files[#files + 1] = file
-		files_by_path[path] = file
+		-- Conflicts are listed as U, and git diff lists them again as M against the working tree. Keep only that one.
+		if status == "U" then
+			unmerged[path] = true
+		else
+			local file = {
+				path = path,
+				old_path = old_path,
+				status = statuses[status],
+				binary = false,
+				old_blob = old_blob,
+				new_blob = new_blob,
+			}
+			files[#files + 1] = file
+			files_by_path[path] = file
+		end
+	end
+
+	for path in pairs(unmerged) do
+		if files_by_path[path] then
+			files_by_path[path].status = "conflicted"
+		end
 	end
 
 	local next_stat = fields(numstat)
@@ -178,26 +218,95 @@ local function parse_files(raw, numstat)
 		end
 
 		local file = files_by_path[path]
-		if not file then
+		if file then
+			file.additions = tonumber(additions)
+			file.deletions = tonumber(deletions)
+			file.binary = additions == "-"
+		elseif not unmerged[path] then
 			return nil, "Unable to read git diff output"
 		end
-		file.additions = tonumber(additions)
-		file.deletions = tonumber(deletions)
-		file.binary = additions == "-"
 	end
 
 	return files, nil
 end
 
 ---@param root string
+---@param requests AtlasRequestScope
+---@param revisions string[] Passed to git diff, like { base, head } or { "--cached", base }.
+---@param on_done fun(files: AtlasDiffFile[]|nil, err: string|nil)
+local function changed_files(root, requests, revisions, on_done)
+	local function diff(format, done)
+		local args = {
+			"diff",
+			format,
+			"-z",
+			"--no-abbrev",
+			"--find-renames",
+			"--no-color",
+			"--no-ext-diff",
+			"--no-textconv",
+		}
+		vim.list_extend(args, revisions)
+		args[#args + 1] = "--"
+		return run(root, args, done)
+	end
+
+	requests.all({
+		raw = function(done)
+			return diff("--raw", done)
+		end,
+		numstat = function(done)
+			return diff("--numstat", done)
+		end,
+	}, function(outputs, errors)
+		local err = errors.raw or errors.numstat
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(parse_files(outputs.raw, outputs.numstat))
+	end)
+end
+
+---@param root string
+---@param requests AtlasRequestScope
+---@param on_done fun(files: AtlasDiffFile[]|nil, err: string|nil)
+local function untracked_files(root, requests, on_done)
+	requests.run(function(done)
+		return run(root, { "ls-files", "--others", "--exclude-standard", "-z" }, done)
+	end, function(output, err)
+		if not output then
+			on_done(nil, err)
+			return
+		end
+
+		local files = {}
+		for path in fields(output) do
+			files[#files + 1] = {
+				path = path,
+				status = "added",
+				binary = false,
+				old_blob = NULL_OID,
+				new_blob = NULL_OID,
+			}
+		end
+		on_done(files, nil)
+	end)
+end
+
+---@param root string
 ---@param base string
----@param head string
+---@param head string|nil Nil compares against the working tree
 ---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.load(root, base, head, on_done)
 	local requests = request_scope.new()
 
 	requests.run(function(done)
+		if not head then
+			done(base)
+			return nil
+		end
 		return run(root, { "merge-base", base, head }, done)
 	end, function(output, err)
 		if not output then
@@ -205,44 +314,63 @@ function M.load(root, base, head, on_done)
 			return
 		end
 
-		local merge_base = vim.trim(output)
-		local function diff(format, done)
-			return run(root, {
-				"diff",
-				format,
-				"-z",
-				"--no-abbrev",
-				"--find-renames",
-				"--no-color",
-				"--no-ext-diff",
-				"--no-textconv",
-				merge_base,
-				head,
-				"--",
-			}, done)
+		local from = vim.trim(output)
+		local starts = {
+			changed = function(done)
+				changed_files(root, requests, { from, head }, done)
+			end,
+		}
+		if not head then
+			starts.untracked = function(done)
+				untracked_files(root, requests, done)
+			end
 		end
 
-		requests.all({
-			raw = function(done)
-				return diff("--raw", done)
-			end,
-			numstat = function(done)
-				return diff("--numstat", done)
-			end,
-		}, function(outputs, errors)
-			local diff_err = errors.raw or errors.numstat
-			if diff_err then
-				on_done(nil, diff_err)
+		requests.all(starts, function(values, errors)
+			local _, files_err = next(errors)
+			if files_err then
+				on_done(nil, files_err)
 				return
 			end
 
-			local files, parse_err = parse_files(outputs.raw, outputs.numstat)
-			if not files then
-				on_done(nil, parse_err)
-				return
-			end
-			on_done({ range = { root = root, base_revision = merge_base, head_revision = head }, files = files }, nil)
+			local files = vim.list_extend(values.changed, values.untracked or {})
+			on_done({ range = { root = root, base_revision = from, head_revision = head }, files = files }, nil)
 		end)
+	end)
+
+	return { cancel = requests.cancel }
+end
+
+---@param root string
+---@param base string
+---@param on_done fun(result: { range: AtlasDiffRange, files: AtlasDiffFile[] }|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.load_status(root, base, on_done)
+	local requests = request_scope.new()
+
+	requests.all({
+		staged = function(done)
+			changed_files(root, requests, { "--cached", base }, done)
+		end,
+		unstaged = function(done)
+			changed_files(root, requests, {}, done)
+		end,
+		untracked = function(done)
+			untracked_files(root, requests, done)
+		end,
+	}, function(values, errors)
+		local _, files_err = next(errors)
+		if files_err then
+			on_done(nil, files_err)
+			return
+		end
+
+		local files = vim.list_extend(values.unstaged, values.untracked)
+		for _, file in ipairs(values.staged) do
+			file.staged = true
+			files[#files + 1] = file
+		end
+		on_done({ range = { root = root, base_revision = base }, files = files }, nil)
 	end)
 
 	return { cancel = requests.cancel }
